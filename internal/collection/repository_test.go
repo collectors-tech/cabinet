@@ -63,4 +63,11 @@ func TestCreateAndListItemsAndInstances(t *testing.T) {
 	if instances[0].Status != "sealed" {
 		t.Fatalf("unexpected instance status: %q", instances[0].Status)
 	}
+
+	if _, err := repo.CreateInstance(context.Background(), Instance{
+		ItemID: item.ID,
+		Status: "invalid_status",
+	}); err == nil {
+		t.Fatal("expected error for invalid status")
+	}
 }

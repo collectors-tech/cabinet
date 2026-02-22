@@ -45,6 +45,14 @@ type Repository struct {
 	db *sql.DB
 }
 
+var allowedStatuses = map[string]struct{}{
+	"sealed":   {},
+	"blister":  {},
+	"loose":    {},
+	"custom":   {},
+	"on_track": {},
+}
+
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -130,9 +138,12 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 
 func (r *Repository) CreateInstance(ctx context.Context, in Instance) (Instance, error) {
 	in.ItemID = strings.TrimSpace(in.ItemID)
-	in.Status = strings.TrimSpace(in.Status)
+	in.Status = strings.ToLower(strings.TrimSpace(in.Status))
 	if in.ItemID == "" || in.Status == "" {
 		return Instance{}, fmt.Errorf("item_id and status are required")
+	}
+	if _, ok := allowedStatuses[in.Status]; !ok {
+		return Instance{}, fmt.Errorf("invalid status %q", in.Status)
 	}
 	if in.Quantity <= 0 {
 		in.Quantity = 1
