@@ -45,6 +45,11 @@ export function App() {
   const [logCount, setLogCount] = useState(0);
   const [adminError, setAdminError] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [barcodes, setBarcodes] = useState<Array<{ id?: string; barcode: string }>>([]);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeLookupMatches, setBarcodeLookupMatches] = useState<Array<{ item_id?: string; part_number?: string }>>([]);
+  const [barcodeExternalURL, setBarcodeExternalURL] = useState("");
+  const [barcodeError, setBarcodeError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -498,6 +503,86 @@ export function App() {
     }
   }
 
+  async function loadItemBarcodes() {
+    if (!selectedItemID) {
+      setBarcodeError("item_id_required");
+      return;
+    }
+    setBarcodeError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/barcodes`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_barcodes");
+      }
+      const data = (await resp.json()) as { barcodes?: Array<{ id?: string; barcode: string }> };
+      setBarcodes(data.barcodes || []);
+      if ((data.barcodes || []).length > 0 && !barcodeInput) {
+        setBarcodeInput((data.barcodes || [])[0].barcode);
+      }
+    } catch (e) {
+      setBarcodeError(e instanceof Error ? e.message : "failed_to_list_barcodes");
+    }
+  }
+
+  async function addBarcode() {
+    if (!selectedItemID || !barcodeInput.trim()) {
+      setBarcodeError("item_and_barcode_required");
+      return;
+    }
+    setBarcodeError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/barcodes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode: barcodeInput.trim() }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_add_barcode");
+      }
+      await loadItemBarcodes();
+    } catch (e) {
+      setBarcodeError(e instanceof Error ? e.message : "failed_to_add_barcode");
+    }
+  }
+
+  async function lookupBarcode() {
+    if (!barcodeInput.trim()) {
+      setBarcodeError("barcode_required");
+      return;
+    }
+    setBarcodeError("");
+    try {
+      const resp = await fetch(`/api/barcodes/${encodeURIComponent(barcodeInput.trim())}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_lookup_barcode");
+      }
+      const data = (await resp.json()) as { matches?: Array<{ item_id?: string; part_number?: string }> };
+      setBarcodeLookupMatches(data.matches || []);
+    } catch (e) {
+      setBarcodeError(e instanceof Error ? e.message : "failed_to_lookup_barcode");
+    }
+  }
+
+  async function externalBarcodeSearch() {
+    if (!barcodeInput.trim()) {
+      setBarcodeError("barcode_required");
+      return;
+    }
+    setBarcodeError("");
+    try {
+      const resp = await fetch(
+        `/api/barcodes/${encodeURIComponent(barcodeInput.trim())}/external-search?source=ebay&region=US`,
+      );
+      if (!resp.ok) {
+        throw new Error("failed_to_build_external_search");
+      }
+      const data = (await resp.json()) as { url?: string };
+      setBarcodeExternalURL(data.url || "");
+    } catch (e) {
+      setBarcodeError(e instanceof Error ? e.message : "failed_to_build_external_search");
+    }
+  }
+
   async function beginWebAuthnRegistration() {
     if (!activeProfile?.id) {
       return;
@@ -939,6 +1024,40 @@ export function App() {
               <p>Log entries: {logCount}</p>
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Barcodes</h3>
+              <div>
+                <input
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  placeholder="Barcode"
+                  aria-label="Barcode"
+                />{" "}
+                <button type="button" onClick={addBarcode}>
+                  Add Barcode
+                </button>{" "}
+                <button type="button" onClick={loadItemBarcodes}>
+                  Load Barcodes
+                </button>{" "}
+                <button type="button" onClick={lookupBarcode}>
+                  Lookup Barcode
+                </button>{" "}
+                <button type="button" onClick={externalBarcodeSearch}>
+                  External Search
+                </button>
+              </div>
+              <p>Detect from image: use photos upload + lookup flow (UI hook ready).</p>
+              {barcodeError ? <p>Barcode error: {barcodeError}</p> : null}
+              <ul>
+                {barcodes.map((b, idx) => (
+                  <li key={b.id || `${b.barcode}-${idx}`}>{b.barcode}</li>
+                ))}
+              </ul>
+              <p>Local matches: {barcodeLookupMatches.length}</p>
+              {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

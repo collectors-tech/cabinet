@@ -269,4 +269,51 @@ describe("App shell", () => {
     expect(await screen.findByText(/license: valid \/ pro/i)).toBeInTheDocument();
     expect(await screen.findByText(/log entries: 1/i)).toBeInTheDocument();
   });
+
+  it("supports barcode lookup and external search link", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/barcodes") && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ barcodes: [{ id: "b1", barcode: "12345" }] }), { status: 200 });
+      }
+      if (url.includes("/api/barcodes/12345/external-search")) {
+        return new Response(JSON.stringify({ source: "ebay", url: "https://www.ebay.com/sch/i.html?_nkw=12345" }), { status: 200 });
+      }
+      if (url === "/api/barcodes/12345") {
+        return new Response(JSON.stringify({ matches: [{ item_id: "i1", part_number: "PN-1" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    const loadBarcodes = await screen.findByRole("button", { name: /load barcodes/i });
+    loadBarcodes.click();
+    expect(await screen.findByText(/12345/i)).toBeInTheDocument();
+
+    const lookupBtn = await screen.findByRole("button", { name: /lookup barcode/i });
+    lookupBtn.click();
+    expect(await screen.findByText(/local matches: 1/i)).toBeInTheDocument();
+
+    const externalBtn = await screen.findByRole("button", { name: /external search/i });
+    externalBtn.click();
+    expect(await screen.findByText(/ebay.com\/sch\/i.html/i)).toBeInTheDocument();
+  });
 });
