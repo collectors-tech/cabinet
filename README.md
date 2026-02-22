@@ -24,6 +24,25 @@ go run ./cmd/cabinet
 - `http://127.0.0.1:8080/healthz`
 - `http://127.0.0.1:8080/api/runtime`
 
+## Frontend Development
+- Frontend source: `web/`
+- Embedded output: `internal/ui/static/`
+
+Commands:
+
+```powershell
+cd web
+npm install
+npm run test
+npm run build
+```
+
+Then run Cabinet again:
+
+```powershell
+go run ./cmd/cabinet
+```
+
 ## API Documentation
 - OpenAPI source: `docs/api/openapi.yaml`
 - Preview docs: `docs/api/redoc.html`
