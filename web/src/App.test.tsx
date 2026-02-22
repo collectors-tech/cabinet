@@ -20,6 +20,16 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
   });
 
+  it("shows API Kitchen Sync quick link in utility links", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+    const link = await screen.findByRole("link", { name: /api kitchen sync/i });
+    expect(link).toHaveAttribute("href", "/redoc.html");
+  });
+
   it("shows onboarding create flow when no profiles exist", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

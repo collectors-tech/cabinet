@@ -2011,6 +2011,9 @@ export function App() {
             <li>
               <a href="/api/runtime/recovery">Recovery State</a>
             </li>
+            <li>
+              <a href="/redoc.html">API Kitchen Sync</a>
+            </li>
           </ul>
         </section>
       </section>
