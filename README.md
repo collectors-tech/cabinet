@@ -36,6 +36,7 @@ npm install
 npm run test
 npm run build
 npm run e2e:smoke
+npm run e2e:playwright
 ```
 
 Then run Cabinet again:

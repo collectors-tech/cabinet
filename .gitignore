@@ -1,4 +1,6 @@
 web/node_modules/
 web/.vite/
 web/coverage/
+web/playwright-report/
+web/test-results/
 *.tmp

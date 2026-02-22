@@ -9,8 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e:pw": "playwright test",
+    "e2e:playwright": "playwright test",
     "e2e": "cypress run --browser electron",
-    "serve:go": "\"C:\\Program Files\\Go\\bin\\go.exe\" run ../cmd/cabinet",
+    "serve:go": "go run ../cmd/cabinet",
     "e2e:run-smoke": "cypress run --browser electron --spec cypress/e2e/smoke.cy.ts",
     "e2e:smoke": "start-server-and-test serve:go http://127.0.0.1:8080 e2e:run-smoke"
   },
@@ -28,6 +30,7 @@
     "tailwind-merge": "^2.5.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^6.6.2",
     "@testing-library/react": "^16.0.1",
     "@types/react": "^18.3.12",
