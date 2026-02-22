@@ -1,0 +1,44 @@
+---
+description: MANDATORY test-first for every issue and feature; no fix work until test exists
+globs: 
+alwaysApply: true
+---
+# Project: Test first — no remediation without a test
+
+**This rule is mandatory.** It overrides any habit of "fix first, test later."
+
+## Rule
+
+1. **Every issue you mention or work on** must have a test written **first** that:
+   - **Reproduces the issue** (fails when the bug is present), **or**
+   - **Defines the requirement** (fails until the feature/behavior exists).
+2. **Only after** that test exists and **fails** (red) may implementation/remediation work start.
+3. Work continues until the test **passes** (green). The test is the proof that the issue is fixed or the feature works.
+
+## Workflow (strict order)
+
+| Step | Action | Done when |
+|------|--------|-----------|
+| 1 | **Create or identify the issue** (e.g. GitHub issue or user-reported bug). | Issue is clearly stated (what’s wrong or what’s needed). |
+| 2 | **Write the test** (Cypress E2E or API test in `cypress/e2e/`). The test must fail in the current state (bug present or feature missing). | Test runs and **fails** (red). |
+| 3 | **Implement the fix or feature.** | Test **passes** (green). |
+| 4 | **Refactor/clean up** if needed, keeping the test green. | Still passing. |
+
+**Do not** write fix/feature code before step 2 is done. **Do not** skip the failing test.
+
+## Where tests go
+
+- **UI/flow bugs or features:** `cypress/e2e/` under the right area (e.g. `settings/`, `posts/`, `regression/`).
+- **API-only:** `cypress/e2e/api/`.
+- **Regression for a fixed bug:** add to `cypress/e2e/regression/regression-fixed-issues.cy.ts` or a dedicated spec; document in `docs/TEST_COVERAGE_FIXED_ISSUES.md`.
+
+## All features must have tests
+
+- **Every feature** in the app must have at least one test that proves it works (user flow or API).
+- If a feature has no test, the first step is to **add a failing test** that defines the expected behavior, then implement until it passes.
+
+## Summary
+
+- **Test first.** Failing test that validates the issue or defines the requirement.
+- **Then remediate.** Only then write the code that makes the test pass.
+- **All features must have tests.** No exceptions.

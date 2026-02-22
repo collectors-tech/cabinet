@@ -1,0 +1,182 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Governance: Issue Management Workflow
+
+## Issue Management Strategy
+
+### Use GitHub CLI (gh) for Issues (MANDATORY)
+- **All issue create, list, close, and edit operations must be done with the GitHub CLI (`gh`)**. Use `gh` from the scheduling-assistant project directory; do not rely on the GitHub web UI for workflow.
+- Ensure `gh` is installed and authenticated (`gh auth status`). Create/list/close issues via `gh issue create`, `gh issue list`, `gh issue close`, `gh issue edit`, etc.
+
+### Creating Issues in the Repo (MANDATORY)
+- **All work is tracked by issues in the scheduling-assistant GitHub repository** (`softlystudio/scheduling-assistant`).
+- Create issues **in this repo** using **`gh` CLI** from the project directory: `gh issue create --title "..." --body "..." --label "..."`. This creates the issue in the current repository.
+- Every bug, feature, and development task must have a corresponding issue in the repo before any code is written.
+- Commit messages, project board cards, and completion reports must reference these repository issue numbers (`#N`).
+
+### Subtasks: Add New Work to the Same Issue (MANDATORY)
+- **Discover more work?** Add it as unchecked subtasks on the issue you are working on. Do not close until they are done.
+- **Use the issue body**: Add a **Subtasks** section with `- [ ] Description`. Update with `gh issue edit <num> --body-file file.md` as you add or complete items.
+- **Close only when all subtasks are done**: Every `- [ ]` must become `- [x]` before closing. Check issue body and comments for any checklist.
+
+### Source of Truth Rule (MANDATORY)
+- Source of truth is **repository issues** in `softlystudio/scheduling-assistant`.
+- GitHub Project cards must point to repository issues (link to issue URL); they do not replace repo issues.
+- Do not create or rely on project draft items for implementation tracking.
+
+### MANDATORY: Ticket Scope Review Process
+
+**CRITICAL RULE**: Before creating any new issue, you MUST review existing tickets for scope overlap.
+
+#### 1. Scope Review Process (MANDATORY)
+When receiving a request:
+1. **Review Current Work**: Check what you're currently working on
+2. **Identify Ticket Scope**: Determine if request fits within existing GitHub issue
+3. **Add to Existing Ticket**: If related, add new detail to existing issue
+4. **Create New Ticket**: If no existing ticket covers the scope, create new one
+
+#### 2. Scope Management Rules
+- **Related Work**: Group related functionality in same ticket
+- **Different Scope**: Create separate tickets for different functionality areas
+- **No Duplicates**: Avoid creating multiple tickets for same scope
+- **Complete Tracking**: Ensure all work is properly documented
+
+#### 3. Scope Identification Criteria
+- **Feature Area**: Same feature or component
+- **Functionality**: Related functionality or behavior
+- **Dependencies**: Work that depends on each other
+- **Timeline**: Work that should be completed together
+
+### Issue Creation Process
+- **Create issues in the repo via `gh` CLI**: Run `gh issue create` from the scheduling-assistant project root so issues are created in `softlystudio/scheduling-assistant`. Do not create issues only in the web UI for workflow tracking.
+- Create a repo issue for every bug, feature, and development task before implementation (using `gh issue create`).
+- Use appropriate labels (e.g. `bug`, `feature`, `enhancement`, `documentation`) and optional assignees.
+- Reference existing issues when creating related ones (e.g. "Blocks #N" or "Related to #N" in body). List open issues with `gh issue list --state open`.
+
+### Issue Categories
+- **Bug Reports**: Issues with existing functionality
+- **Feature Requests**: New functionality or improvements
+- **Development Tasks**: Technical debt, refactoring, testing
+- **Documentation**: README updates, code comments, guides
+
+### GitHub CLI Commands (use these; gh is required)
+```bash
+# Create issue (inline body)
+gh issue create --title "Title" --body "Description" --label "type,priority"
+
+# Create issue (body from file)
+gh issue create --title "Title" --body-file issue_body.txt --label "bug,high-priority"
+
+# List open issues
+gh issue list --state open
+gh issue list --state open --label "bug"
+
+# Close issue when work is complete
+gh issue close 123 --reason completed
+
+# Update issue
+gh issue edit 123 --body "Updated description"
+```
+Run the above from the project root so the issue is created in this repository.
+
+## Issue Templates
+
+### Bug Report Template
+```markdown
+## Bug Description
+Brief description of the issue
+
+## Steps to Reproduce
+1. Step 1
+2. Step 2
+3. Step 3
+
+## Expected Behavior
+What should happen
+
+## Actual Behavior
+What actually happens
+
+## Environment
+- OS: Windows/Linux/macOS
+- Version: X.X.X
+
+## Additional Context
+Any other relevant information
+```
+
+### Feature Request Template
+```markdown
+## Feature Description
+Brief description of the requested feature
+
+## Use Case
+Why this feature is needed
+
+## Proposed Implementation
+How this could be implemented
+
+## Acceptance Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+## Additional Context
+Any other relevant information
+```
+
+## Issue Tracking Integration
+
+### Task List Integration
+- Task list tracks high-level project status
+- GitHub issues track specific implementation details
+- Keep task list focused on project milestones
+- Move detailed development tasks to GitHub issues
+
+### Label Strategy
+- **Priority**: `high-priority`, `medium-priority`, `low-priority`
+- **Type**: `bug`, `feature`, `enhancement`, `documentation`
+- **Component**: `core`, `testing`, `pipeline`, `api`
+- **Status**: `ready`, `in-progress`, `blocked`, `needs-review`
+
+## Workflow Integration
+
+### Development Workflow
+1. Review existing tickets for scope overlap
+2. Add to existing ticket or create new one
+3. Reference issue in commit messages
+4. Update issue status as work progresses
+5. Close issue when complete
+
+### Testing Integration
+- Create issues for test failures
+- Reference test files in issue descriptions
+- Track test improvements as separate issues
+
+### Pipeline Integration
+- Monitor CI/CD for failures
+- Create issues for pipeline problems
+- Track deployment and release issues
+
+## Issue Maintenance
+
+### Regular Reviews
+- Review open issues weekly
+- Update stale issues
+- Close completed issues
+- Merge duplicate issues
+
+### Issue Cleanup
+- Remove outdated labels
+- Update issue templates
+- Archive resolved issues
+- Maintain issue searchability
+
+### Scope Management
+- Group related issues together
+- Avoid scope creep in individual issues
+- Split large issues into smaller, focused ones
+- Maintain clear scope boundaries

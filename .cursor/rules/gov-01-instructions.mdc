@@ -1,0 +1,39 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Governance: Instructions
+
+**For core workflow principles and autonomous execution rules, see [gov-02-workflow.mdc](mdc:.cursor/rules/gov-02-workflow.mdc)**
+
+## Rule Naming Structure
+
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `gov-NN-` | Governance (universal) rule; `NN` = zero-padded number 01, 02, … for order | `gov-02-workflow.mdc` |
+| `proj-NN-` | Project-specific rule; `NN` = zero-padded number 01, 02, … for order | `proj-01-ticket-and-testing.mdc` |
+
+- **Format**: `{prefix}{topic}.mdc` — topic in kebab-case (e.g. `workflow`, `ticket-and-testing`).
+- **Gov order**: gov-01 = index/instructions; gov-02 through gov-07 = workflow, communication, quality, testing, issues, tasks. Add new gov as next number (e.g. gov-08) if needed.
+- **Project**: Use `proj-NN-` for project-only rules; add as proj-01, proj-02, etc. Keep governance in `gov-*`.
+
+## Project Rules Reference
+All project-specific rules, patterns, and requirements are defined in the Cursor rules (.mdc files).
+
+**Governance Rules (Universal):**
+- [gov-02-workflow.mdc](mdc:.cursor/rules/gov-02-workflow.mdc) - Core workflow principles
+- [gov-03-communication.mdc](mdc:.cursor/rules/gov-03-communication.mdc) - Communication patterns
+- [gov-04-quality.mdc](mdc:.cursor/rules/gov-04-quality.mdc) - Quality assurance standards
+- [gov-05-testing.mdc](mdc:.cursor/rules/gov-05-testing.mdc) - Universal testing principles
+- [gov-06-issues.mdc](mdc:.cursor/rules/gov-06-issues.mdc) - Issue management workflow
+- [gov-07-tasks.mdc](mdc:.cursor/rules/gov-07-tasks.mdc) - Task management principles
+- [gov-08-agent-verification.mdc](mdc:.cursor/rules/gov-08-agent-verification.mdc) - **MANDATORY: Run tests yourself; never claim success without running; do not hand off verification to the user**
+
+**Project Rules:**
+- [proj-01-ticket-and-testing.mdc](mdc:.cursor/rules/proj-01-ticket-and-testing.mdc) - Ticket lifecycle and success-criteria/testing (points to gov + docs)
+- [proj-02-test-first-no-remediation-without-test.mdc](mdc:.cursor/rules/proj-02-test-first-no-remediation-without-test.mdc) - **MANDATORY: Test first for every issue/feature; no remediation until a failing test exists**
+- Project-specific rules use `proj-NN-` prefix (e.g. proj-03-… when adding another).
+- See `docs/` for architecture, scheduling, development, and features.
+
+**Always consult the appropriate Cursor rule or project docs before implementing any feature or test.**

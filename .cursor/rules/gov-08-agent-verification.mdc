@@ -1,0 +1,45 @@
+---
+description: Agent must run tests and verify; never tell user to run or claim success without running
+globs: 
+alwaysApply: true
+---
+
+# Governance: Agent verification — run tests, never hand off
+
+**CRITICAL**: These rules prevent the agent from reverting to "tell the user to run tests" or claiming things work without evidence.
+
+## MANDATORY: Run tests yourself
+
+- **You run the tests.** Use the terminal/shell to execute the relevant test command. Do not output instructions for the user to run tests (e.g. "Run `npm run test`" or "You can verify by running …").
+- **You run checks after changes.** After adding or changing code or tests, run the relevant suite (e.g. `.\scripts\run-checks.ps1` or `npx cypress run --spec ...`) in this environment. Fix any failures before reporting completion.
+- **No handoff.** Do not say "run the test suite to verify" or "you should run checks." You have the tools; you run them.
+
+## MANDATORY: Never claim success without running
+
+- **Do not claim something "works" or "should work"** unless you have just run the tests/checks and seen a passing result in the same session.
+- **Do not say** "tests have been added and should pass," "this should work," "the suite should pass," or similar. Only report **actual** outcomes: e.g. "I ran `run-checks.ps1`; 125 tests passed" or "I ran the API specs; 2 failed, I fixed X and re-ran; all pass."
+- **If you did not run it, do not say it works.** Either run it now or say "I have not run the full suite; run `.\scripts\run-checks.ps1` to verify" only when you are genuinely blocked from running (e.g. no server). Prefer starting the server and running checks yourself when possible.
+
+## MANDATORY: Evidence block in completion report
+
+- Any completion report must include an explicit evidence block:
+  - issue number
+  - exact test/check command(s) executed
+  - observed result (pass/fail + count if available)
+  - commit SHA
+  - push status
+- If any evidence item is missing, do **not** report completion.
+
+## MANDATORY: Do not stop testing
+
+- After implementing a fix or adding tests, **run the affected specs** (or full checks). If any fail, **fix the failures** and re-run. Do not report completion with failing tests.
+- For this project, "run the relevant tests" means at least: run the specs you changed or that cover the changed behavior, or run `.\scripts\run-checks.ps1` for full typecheck, lint, build, and API regression. Continue until the run is green or you are blocked.
+
+## Summary
+
+| Do | Do not |
+|----|--------|
+| Run `run-checks.ps1` or Cypress in the terminal yourself | Tell the user "run npm run test" or "run the checks" |
+| Report only actual results ("I ran X; N passed") | Say "this should work" or "tests should pass" without running |
+| Fix failing tests and re-run until green | Stop after writing code and assume it works |
+| Use your tools to execute and verify | Hand off verification to the user |

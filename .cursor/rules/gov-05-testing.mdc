@@ -1,0 +1,218 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Governance: Universal Testing Principles
+
+## Core Testing Philosophy
+
+### MANDATORY: Test-Driven Development (TDD)
+
+**CRITICAL RULE**: Every code change MUST follow TDD approach with issue creation first.
+
+#### 1. Issue-First TDD Workflow (MANDATORY)
+1. **Create GitHub Issue**: Document requirement before any code
+2. **E2E Test First**: Create end-to-end test that reflects real user flow (purpose: define acceptance criteria)
+3. **Minimal Implementation**: Implement only what makes the E2E test pass (purpose: avoid over-engineering)
+4. **Unit Test Coverage**: Add unit tests for reusable logic (purpose: ensure code reliability)
+5. **Test Maintenance**: Update existing tests for changed behavior (purpose: maintain test integrity)
+
+#### 2. TDD Enforcement Rules
+- **No Code Without Test**: Never write implementation code without a failing test first
+- **Red-Green-Refactor**: Follow the classic TDD cycle strictly
+- **Test Defines Requirements**: Let tests drive the implementation design
+- **Minimal Implementation**: Only implement what's needed to make tests pass
+
+### Testing Hierarchy
+- **E2E Tests**: Validate complete user workflows (MUST be written first)
+- **Integration Tests**: Test component interactions
+- **Unit Tests**: Test individual functions and methods
+- **Regression Tests**: Ensure existing functionality remains intact
+
+## Test Organization
+
+### Test Structure
+- Use isolated test directories to prevent interference
+- Follow consistent naming conventions
+- Organize tests by functionality and scope
+- Maintain clear test descriptions
+
+### Test Execution
+- Run tests in isolation to prevent side effects
+- Use cleanup procedures to maintain clean state
+- Execute tests in predictable order
+- Capture and report test results consistently
+
+### Test Artifacts
+- Generate comprehensive test reports
+- Log test execution details
+- Preserve test outputs for analysis
+- Clean up test artifacts after completion
+
+## Quality Standards
+
+### Test Reliability
+- Tests must be deterministic and repeatable
+- Avoid flaky tests and race conditions
+- Use proper setup and teardown procedures
+- Handle external dependencies appropriately
+
+### Test Coverage
+- Aim for comprehensive coverage of critical paths
+- Focus on business logic and edge cases
+- Test error conditions and failure scenarios
+- Validate both positive and negative test cases
+
+### Test Performance
+- Keep tests fast and efficient
+- Use parallel execution where appropriate
+- Minimize external dependencies
+- Cache test data when possible
+
+## Testing Workflow
+
+### MANDATORY: TDD Development Process
+
+#### 1. Issue Creation Phase
+- Create GitHub issue with detailed requirements
+- Define acceptance criteria clearly
+- Plan implementation approach
+
+#### 2. Test Creation Phase
+- Write E2E test that defines user flow
+- Ensure test fails initially (red phase)
+- Define clear acceptance criteria in test
+
+#### 3. Implementation Phase
+- Write minimal code to make test pass (green phase)
+- Focus only on making the test pass
+- Avoid over-engineering
+
+#### 4. Refactoring Phase
+- Clean up code while keeping tests passing
+- Improve design without changing behavior
+- Add unit tests for reusable logic
+
+#### 5. Validation Phase
+- Run full test suite to ensure no regressions
+- Verify all acceptance criteria are met
+- Document any changes made
+
+### Local Development
+1. **Quick Test**: Run individual test files for rapid iteration
+2. **Full Test**: Run complete test suite for comprehensive validation
+3. **Specific Test**: Use targeted test execution for focused validation
+4. **Clean Test**: Use cleanup to ensure clean test environment
+
+### Continuous Integration
+1. **Automated Testing**: Run tests on every code change
+2. **Cross-Platform**: Test across different environments
+3. **Artifact Collection**: Capture test outputs and reports
+4. **Status Reporting**: Provide clear pass/fail indicators
+
+### Regression Testing
+- **Base Tests**: Always run to ensure core functionality remains intact
+- **Progressive Testing**: Each new feature adds its tests to the regression suite
+- **Full Suite Execution**: Run comprehensive testing for all changes
+- **Isolated Testing**: Use specific test execution for targeted validation
+
+## Test Maintenance
+
+### MANDATORY: Test Updates for Feature Changes
+
+**CRITICAL RULE**: Tests MUST be updated whenever features are added, modified, or enhanced.
+
+#### When to Update Tests (MANDATORY)
+- ✅ **New features added** - Add E2E tests covering the new functionality
+- ✅ **Feature enhancements** - Update existing tests to cover new behavior
+- ✅ **Behavior changes** - Update tests to reflect new behavior
+- ✅ **UI/UX improvements** - Add tests for new interactions (hover, preview, animations)
+- ✅ **Bug fixes** - Add tests to prevent regression
+- ✅ **Performance improvements** - Update tests if behavior changes
+- ✅ **Accessibility improvements** - Add tests for new accessibility features
+
+#### Test Update Requirements
+1. **E2E Tests First**: Always add/update E2E tests for user-facing features
+2. **Coverage**: Ensure all new functionality is covered by tests
+3. **Regression**: Update existing tests if behavior changes
+4. **Documentation**: Update test descriptions to reflect new functionality
+5. **Real Context**: Prefer tests that run against the running app (http://localhost:3000) where applicable
+6. **Track via issue checklist/TASK_LIST.md**: Do not depend on unavailable tooling; track test tasks in repo issue checklist and/or TASK_LIST.md.
+
+#### Test Update Workflow
+1. **Identify Changes**: List all features/behaviors that changed
+2. **Update Tests**: Add new tests or modify existing ones
+3. **Run Tests**: Verify all tests pass with new functionality
+4. **Review Coverage**: Ensure no functionality is untested
+5. **Commit Together**: Commit test updates with feature code
+
+### Test Updates
+- Update tests when functionality changes
+- Maintain test relevance and accuracy
+- Remove obsolete or redundant tests
+- Refactor tests for better maintainability
+
+### Test Documentation
+- Document test purpose and scope
+- Explain complex test scenarios
+- Provide setup and execution instructions
+- Keep test documentation current
+
+### Test Review
+- Review tests for completeness and accuracy
+- Validate test coverage and effectiveness
+- Ensure tests follow established patterns
+- Identify opportunities for improvement
+
+## TDD Best Practices
+
+### Test Writing Guidelines
+- Write tests that reflect real user behavior
+- Focus on behavior, not implementation details
+- Keep tests simple and readable
+- Use descriptive test names
+
+### Implementation Guidelines
+- Write the simplest code that makes tests pass
+- Don't add features not covered by tests
+- Refactor frequently to improve design
+- Keep implementation focused and minimal
+
+### Quality Assurance
+- Ensure all tests pass before committing
+- Run full test suite after any changes
+- Maintain test coverage metrics
+- Review test quality regularly
+
+## Scheduling Assistant: Test Setup and Commands
+
+### Test Stack
+- **E2E**: Cypress; specs live under `cypress/e2e/` (e.g. `api/`, `auth/`, `media/`, `posts/`, `scheduling/`, `e2e/`).
+- **App URL**: Frontend and API at http://localhost:3000 (start with `npm run dev` before running E2E).
+
+### npm Test Scripts (from project root)
+| Script | Purpose |
+|--------|--------|
+| `npm run test` | Run full Cypress suite |
+| `npm run test:open` | Open Cypress Test Runner (interactive) |
+| `npm run test:api` | API-focused specs (health, auth, media, posts) |
+| `npm run test:ui` | UI-focused specs (`cypress/e2e/ui-*.cy.ts`) |
+| `npm run test:e2e` | End-to-end workflow spec |
+| `npm run test:regression` | Regression subset (api + auth + media + posts) |
+| `npm run test:report` | Run tests and generate report |
+
+### Quality and Checks
+- **Lint/typecheck**: `npm run lint`, `npm run typecheck`
+- **Full checks**: `.\scripts\run-checks.ps1` (PowerShell, from project root)
+
+### Writing E2E Tests
+- Add or extend specs under `cypress/e2e/` following existing patterns (e.g. `api/health.cy.ts`, `auth/auth.cy.ts`, `media/*.cy.ts`).
+- Ensure the app is running (`npm run dev`) when running Cypress; baseUrl is typically http://localhost:3000 (see `cypress.config.*` if present).
+
+### Testing Checklist (Before Reporting Completion or Committing)
+- [ ] App runs (`npm run dev`) and manual check at http://localhost:3000 (for UI changes).
+- [ ] **Agent runs** the relevant test suite (do not tell the user to run; run it in the session). See [gov-08-agent-verification.mdc](mdc:.cursor/rules/gov-08-agent-verification.mdc).
+- [ ] Relevant test suite **has been run and passed**: e.g. `.\scripts\run-checks.ps1` or `npm run test` / `npm run test:api` etc. Report only actual results ("I ran X; N passed").
+- [ ] New or updated tests added for the change where applicable.
+- [ ] Lint/typecheck pass: `npm run lint`, `npm run typecheck`.

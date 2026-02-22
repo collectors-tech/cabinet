@@ -1,0 +1,18 @@
+---
+description: Project ticket lifecycle and success-criteria/testing (references gov + docs)
+globs: 
+alwaysApply: true
+---
+# Project: Ticket and testing
+
+**Governance is authoritative.** Follow [gov-02-workflow.mdc](mdc:.cursor/rules/gov-02-workflow.mdc) (lifecycle, subtasks, close only when all done), [gov-05-testing.mdc](mdc:.cursor/rules/gov-05-testing.mdc) (TDD, E2E first, Cypress), and [gov-06-issues.mdc](mdc:.cursor/rules/gov-06-issues.mdc) (gh CLI, issue body, subtasks).
+
+**Test first (mandatory):** For every issue or feature, write a failing test that validates the issue or defines the requirement before any remediation. See [proj-02-test-first-no-remediation-without-test.mdc](mdc:.cursor/rules/proj-02-test-first-no-remediation-without-test.mdc).
+
+**Project docs (detail):**
+- **Process**: `docs/TICKET_LIFECYCLE.md` — steps from triage to done.
+- **Success criteria, test cases, sample data, "test as user would"**: `docs/SUCCESS_CRITERIA_AND_TESTING.md` — map acceptance criteria to tests, use test user and fixtures (`cypress/fixtures/test-user.json`), verify before merge.
+
+**Conventions:** Commit with `#<issue-number>` at start; one issue per commit; add/update Cypress specs in `cypress/e2e/` for UI/API changes; run `npm run checks` (and smoke/api as relevant) before closing. Ensure test user exists (e.g. `scripts/reset-user-password.js`).
+
+**MANDATORY: Always commit.** After any code or file changes, run `git status` and commit all changes before ending. Never leave uncommitted files in the repo.

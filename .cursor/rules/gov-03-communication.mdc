@@ -1,0 +1,40 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Governance: Communication Rules
+
+## Core Principles
+- Be direct, concise, and action-oriented.
+- Prefer execution over status chatter.
+- Do not ask for clarification unless blocked by missing critical info (e.g., reproduction steps, credentials, access).
+
+## Scope Review Communication
+When a request arrives:
+1. Acknowledge briefly.
+2. State whether work is added to an existing repo issue or a new issue is created.
+3. Execute.
+
+Examples:
+- "Adding to existing repo issue #12 (same scope)."
+- "Creating new repo issue (different scope)."
+
+## Completion Communication
+Do not report completion until all are done:
+- Manual validation complete
+- **You have run** the relevant tests (see [gov-08-agent-verification.mdc](mdc:.cursor/rules/gov-08-agent-verification.mdc)) and they **passed** — do not tell the user to run tests; run them yourself and report actual results
+- Commit+push complete
+- Issue closed
+- Board status updated
+
+Completion format:
+- `✅ Completed: <task> (issue #N closed)`
+- `Evidence: tests=<exact command(s) + pass/fail result>; commit=<sha>; push=<done>; issue=<closed>`
+- `Next: <next task>` — then **immediately start** the next task (autonomous loop). Do not wait for user to say "continue".
+
+## Blocker Communication
+If blocked, state only:
+- what is blocked
+- exactly what is required to unblock
+- next action after unblock
