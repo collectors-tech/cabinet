@@ -269,7 +269,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		code := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/barcodes/"))
+		rest := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/barcodes/"))
+		parts := strings.Split(rest, "/")
+		code := strings.TrimSpace(parts[0])
 		if code == "" {
 			http.Error(w, `{"error":"invalid_barcode"}`, http.StatusBadRequest)
 			return
@@ -625,6 +627,25 @@ func New(cfg config.Config) (*App, error) {
 					return
 				}
 				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			if len(parts) == 4 && parts[3] == "file" {
+				photoID := strings.TrimSpace(parts[2])
+				if photoID == "" {
+					http.Error(w, `{"error":"invalid_photo_id"}`, http.StatusBadRequest)
+					return
+				}
+				if r.Method != http.MethodGet {
+					http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+					return
+				}
+				path, err := mediaService.ResolveVariantPath(r.Context(), itemID, photoID, r.URL.Query().Get("variant"))
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_resolve_photo_variant"}`, http.StatusBadRequest)
+					return
+				}
+				w.Header().Del("Content-Type")
+				http.ServeFile(w, r, path)
 				return
 			}
 			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)

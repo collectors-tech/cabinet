@@ -212,6 +212,26 @@ func (s *Service) RebuildThumbnails(ctx context.Context, itemID string) error {
 	return nil
 }
 
+func (s *Service) ResolveVariantPath(ctx context.Context, itemID, photoID, variant string) (string, error) {
+	p, err := s.GetByID(ctx, photoID)
+	if err != nil {
+		return "", err
+	}
+	if p.ItemID != itemID {
+		return "", fmt.Errorf("photo does not belong to item")
+	}
+	switch strings.ToLower(strings.TrimSpace(variant)) {
+	case "", "original":
+		return p.OriginalPath, nil
+	case "preview":
+		return p.PreviewPath, nil
+	case "thumbnail", "thumb":
+		return p.ThumbnailPath, nil
+	default:
+		return "", fmt.Errorf("invalid photo variant")
+	}
+}
+
 func generateScaledJPEG(inputPath, outputPath string, maxSize int) error {
 	f, err := os.Open(inputPath)
 	if err != nil {
