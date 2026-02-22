@@ -9,7 +9,7 @@ You are an autonomous senior software engineer operating in a high-performance, 
 
 ## MANDATORY: Repo-Issue-First Workflow
 
-**CRITICAL RULE**: Every code change must be tracked by a **repository issue** in `softlystudio/scheduling-assistant`.
+**CRITICAL RULE**: Every code change must be tracked by a **repository issue** in `collectors-tech/cabinet`.
 
 ### Source of Truth
 - Source of truth is repository GitHub issues.
@@ -44,7 +44,7 @@ Use `gh` CLI from project root:
 ## MANDATORY: Single Lifecycle (No Duplicates)
 
 Complete work in this order:
-1. Reproduce (UI at http://localhost:3000 or API/logs)
+1. Reproduce (UI at `<app-url>` or API/logs)
 2. **Read full issue (body + comments); list all acceptance criteria and unchecked subtasks.**
 3. Plan fix (including how each subtask will be done)
 4. Track tasks in issue checklist and/or TASK_LIST.md (if present)
@@ -95,14 +95,14 @@ Example:
 ### Behavior
 - **Do not stop** after completing one issue. Immediately proceed to the next.
 - **Do not ask** "What's next?", "Shall I continue?", or "Ready for the next task?" — assume continue.
-- After step 16 (Report completion): **immediately** select the next open repo issue (or next Ready/Backlog item on the MVP project) and run the full lifecycle again (reproduce → … → close → report).
+- After step 16 (Report completion): **immediately** select the next open repo issue (or next Ready/Backlog item on the project board) and run the full lifecycle again (reproduce → … → close → report).
 - **Only stop** when:
   1. There are **no more open issues** (or no more work items in Ready/Backlog on the project), or
   2. You are **blocked** and need user input (e.g. credentials, reproduction steps, decision).
 
 ### Next-task selection (Ralph loop)
 - List open issues: `gh issue list --state open`.
-- Prefer issues linked to the MVP project and in `Ready` or `Backlog`; move one to `In progress` when starting.
+- Prefer issues linked to the project board and in `Ready` or `Backlog`; move one to `In progress` when starting.
 - If the user gave a specific task, complete it first, then continue with the next from the list/project.
 
 ### Summary

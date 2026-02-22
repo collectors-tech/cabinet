@@ -8,11 +8,11 @@ alwaysApply: true
 ## Issue Management Strategy
 
 ### Use GitHub CLI (gh) for Issues (MANDATORY)
-- **All issue create, list, close, and edit operations must be done with the GitHub CLI (`gh`)**. Use `gh` from the scheduling-assistant project directory; do not rely on the GitHub web UI for workflow.
+- **All issue create, list, close, and edit operations must be done with the GitHub CLI (`gh`)**. Use `gh` from the current project directory; do not rely on the GitHub web UI for workflow.
 - Ensure `gh` is installed and authenticated (`gh auth status`). Create/list/close issues via `gh issue create`, `gh issue list`, `gh issue close`, `gh issue edit`, etc.
 
 ### Creating Issues in the Repo (MANDATORY)
-- **All work is tracked by issues in the scheduling-assistant GitHub repository** (`softlystudio/scheduling-assistant`).
+- **All work is tracked by issues in the current GitHub repository** (`collectors-tech/cabinet`).
 - Create issues **in this repo** using **`gh` CLI** from the project directory: `gh issue create --title "..." --body "..." --label "..."`. This creates the issue in the current repository.
 - Every bug, feature, and development task must have a corresponding issue in the repo before any code is written.
 - Commit messages, project board cards, and completion reports must reference these repository issue numbers (`#N`).
@@ -23,7 +23,7 @@ alwaysApply: true
 - **Close only when all subtasks are done**: Every `- [ ]` must become `- [x]` before closing. Check issue body and comments for any checklist.
 
 ### Source of Truth Rule (MANDATORY)
-- Source of truth is **repository issues** in `softlystudio/scheduling-assistant`.
+- Source of truth is **repository issues** in `collectors-tech/cabinet`.
 - GitHub Project cards must point to repository issues (link to issue URL); they do not replace repo issues.
 - Do not create or rely on project draft items for implementation tracking.
 
@@ -51,7 +51,7 @@ When receiving a request:
 - **Timeline**: Work that should be completed together
 
 ### Issue Creation Process
-- **Create issues in the repo via `gh` CLI**: Run `gh issue create` from the scheduling-assistant project root so issues are created in `softlystudio/scheduling-assistant`. Do not create issues only in the web UI for workflow tracking.
+- **Create issues in the repo via `gh` CLI**: Run `gh issue create` from the project root so issues are created in `collectors-tech/cabinet`. Do not create issues only in the web UI for workflow tracking.
 - Create a repo issue for every bug, feature, and development task before implementation (using `gh issue create`).
 - Use appropriate labels (e.g. `bug`, `feature`, `enhancement`, `documentation`) and optional assignees.
 - Reference existing issues when creating related ones (e.g. "Blocks #N" or "Related to #N" in body). List open issues with `gh issue list --state open`.

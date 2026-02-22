@@ -137,7 +137,7 @@ alwaysApply: true
 2. **Coverage**: Ensure all new functionality is covered by tests
 3. **Regression**: Update existing tests if behavior changes
 4. **Documentation**: Update test descriptions to reflect new functionality
-5. **Real Context**: Prefer tests that run against the running app (http://localhost:3000) where applicable
+5. **Real Context**: Prefer tests that run against the running app (`<app-url>`) where applicable
 6. **Track via issue checklist/TASK_LIST.md**: Do not depend on unavailable tooling; track test tasks in repo issue checklist and/or TASK_LIST.md.
 
 #### Test Update Workflow
@@ -185,11 +185,11 @@ alwaysApply: true
 - Maintain test coverage metrics
 - Review test quality regularly
 
-## Scheduling Assistant: Test Setup and Commands
+## Project Test Setup and Commands
 
 ### Test Stack
 - **E2E**: Cypress; specs live under `cypress/e2e/` (e.g. `api/`, `auth/`, `media/`, `posts/`, `scheduling/`, `e2e/`).
-- **App URL**: Frontend and API at http://localhost:3000 (start with `npm run dev` before running E2E).
+- **App URL**: Frontend and API at `<app-url>` (start with `npm run dev` before running E2E).
 
 ### npm Test Scripts (from project root)
 | Script | Purpose |
@@ -208,10 +208,10 @@ alwaysApply: true
 
 ### Writing E2E Tests
 - Add or extend specs under `cypress/e2e/` following existing patterns (e.g. `api/health.cy.ts`, `auth/auth.cy.ts`, `media/*.cy.ts`).
-- Ensure the app is running (`npm run dev`) when running Cypress; baseUrl is typically http://localhost:3000 (see `cypress.config.*` if present).
+- Ensure the app is running (`npm run dev`) when running Cypress; baseUrl should match `<app-url>` (see `cypress.config.*` if present).
 
 ### Testing Checklist (Before Reporting Completion or Committing)
-- [ ] App runs (`npm run dev`) and manual check at http://localhost:3000 (for UI changes).
+- [ ] App runs (`npm run dev`) and manual check at `<app-url>` (for UI changes).
 - [ ] **Agent runs** the relevant test suite (do not tell the user to run; run it in the session). See [gov-08-agent-verification.mdc](mdc:.cursor/rules/gov-08-agent-verification.mdc).
 - [ ] Relevant test suite **has been run and passed**: e.g. `.\scripts\run-checks.ps1` or `npm run test` / `npm run test:api` etc. Report only actual results ("I ran X; N passed").
 - [ ] New or updated tests added for the change where applicable.
