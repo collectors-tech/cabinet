@@ -20,6 +20,11 @@ type Snapshot struct {
 	LatestPrice  float64 `json:"latest_price"`
 }
 
+type TrendPoint struct {
+	Date   string  `json:"date"`
+	Latest float64 `json:"latest"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -168,4 +173,30 @@ func (s *Service) ExportCSV(ctx context.Context, itemID string) (string, error) 
 		return "", err
 	}
 	return b.String(), nil
+}
+
+func (s *Service) Trend(ctx context.Context, itemID string) ([]TrendPoint, error) {
+	history, err := s.History(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	byDate := map[string]TrendPoint{}
+	for _, snap := range history {
+		p := byDate[snap.SnapshotDate]
+		p.Date = snap.SnapshotDate
+		if snap.LatestPrice > p.Latest {
+			p.Latest = snap.LatestPrice
+		}
+		byDate[snap.SnapshotDate] = p
+	}
+	var dates []string
+	for d := range byDate {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+	out := make([]TrendPoint, 0, len(dates))
+	for _, d := range dates {
+		out = append(out, byDate[d])
+	}
+	return out, nil
 }

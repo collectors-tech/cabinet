@@ -774,6 +774,20 @@ func New(cfg config.Config) (*App, error) {
 			"latest": latest.LatestPrice,
 		})
 	})
+	mux.HandleFunc("/api/pricing/trend", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		points, err := pricingSvc.Trend(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_price_trend"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"points": points})
+	})
 	mux.HandleFunc("/api/pricing/history/export", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)

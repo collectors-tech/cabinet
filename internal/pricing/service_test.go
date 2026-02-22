@@ -62,4 +62,11 @@ func TestDailySnapshotAndExport(t *testing.T) {
 	if !strings.Contains(csv, "snapshot_date,min_price,median_price,latest_price,source") {
 		t.Fatalf("unexpected csv export: %s", csv)
 	}
+	trend, err := svc.Trend(context.Background(), "i1")
+	if err != nil {
+		t.Fatalf("Trend() error = %v", err)
+	}
+	if len(trend) == 0 || trend[0].Latest <= 0 {
+		t.Fatalf("unexpected trend output: %+v", trend)
+	}
 }

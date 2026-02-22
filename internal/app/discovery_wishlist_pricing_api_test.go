@@ -91,6 +91,10 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	if stats.Code != http.StatusOK {
 		t.Fatalf("stats status=%d body=%s", stats.Code, stats.Body.String())
 	}
+	trend := doRequest(t, a, http.MethodGet, "/api/pricing/trend?item_id=i1", nil, nil)
+	if trend.Code != http.StatusOK {
+		t.Fatalf("trend status=%d body=%s", trend.Code, trend.Body.String())
+	}
 	export := doRequest(t, a, http.MethodGet, "/api/pricing/history/export?item_id=i1", nil, nil)
 	if export.Code != http.StatusOK {
 		t.Fatalf("export status=%d body=%s", export.Code, export.Body.String())
