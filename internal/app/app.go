@@ -21,13 +21,16 @@ import (
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
+	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/matching"
 	"github.com/collectors-tech/cabinet/internal/media"
+	"github.com/collectors-tech/cabinet/internal/pricing"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
 	"github.com/collectors-tech/cabinet/internal/ui"
+	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
 type App struct {
@@ -65,6 +68,9 @@ func New(cfg config.Config) (*App, error) {
 	searchRepo := search.NewRepository(conn)
 	scannerSvc := scanner.NewService(conn)
 	matchingSvc := matching.NewService(conn)
+	discoverySvc := discovery.NewService(conn)
+	wishlistSvc := wishlist.NewService(conn)
+	pricingSvc := pricing.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
 	if err != nil {
 		conn.Close()
@@ -561,6 +567,190 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": items})
+	})
+	mux.HandleFunc("/api/discovery/not-in-collection", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		priceMax, _ := strconv.ParseFloat(r.URL.Query().Get("price_max"), 64)
+		items, err := discoverySvc.ListNotInCollection(r.Context(), discovery.Filter{
+			Query:    r.URL.Query().Get("q"),
+			PriceMax: priceMax,
+			DateFrom: r.URL.Query().Get("date_from"),
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_not_in_collection"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+	})
+	mux.HandleFunc("/api/discovery/action", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req discovery.Action
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := discoverySvc.ApplyAction(r.Context(), req); err != nil {
+			http.Error(w, `{"error":"failed_to_apply_discovery_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/settings/reset-ignore-rules", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if err := discoverySvc.ResetIgnored(r.Context()); err != nil {
+			http.Error(w, `{"error":"failed_to_reset_ignore_rules"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/wishlist", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			items, err := wishlistSvc.List(r.Context())
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_wishlist"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+		case http.MethodPost:
+			var req wishlist.Entry
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, err := wishlistSvc.Create(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_wishlist"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(created)
+		case http.MethodPut:
+			var req wishlist.Entry
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if err := wishlistSvc.Update(r.Context(), req); err != nil {
+				http.Error(w, `{"error":"failed_to_update_wishlist"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		case http.MethodDelete:
+			id := strings.TrimSpace(r.URL.Query().Get("id"))
+			if id == "" {
+				http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
+				return
+			}
+			if err := wishlistSvc.Delete(r.Context(), id); err != nil {
+				http.Error(w, `{"error":"failed_to_delete_wishlist"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ItemID string `json:"item_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := pricingSvc.TrackItem(r.Context(), req.ItemID); err != nil {
+			http.Error(w, `{"error":"failed_to_track_item"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/pricing/snapshot/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if err := pricingSvc.RunDailySnapshot(r.Context()); err != nil {
+			http.Error(w, `{"error":"failed_to_run_price_snapshot"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/pricing/history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		history, err := pricingSvc.History(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_price_history"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"history": history})
+	})
+	mux.HandleFunc("/api/pricing/graph", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		history, err := pricingSvc.History(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_price_graph"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"points": history})
+	})
+	mux.HandleFunc("/api/pricing/by-source", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		bySource, err := pricingSvc.BySource(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_price_by_source"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"sources": bySource})
+	})
+	mux.HandleFunc("/api/pricing/history/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		csvText, err := pricingSvc.ExportCSV(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_export_price_history"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(csvText))
 	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

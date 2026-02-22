@@ -215,6 +215,47 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			message TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS discovery_actions (
+			id TEXT PRIMARY KEY,
+			candidate_id TEXT NOT NULL,
+			action_type TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS ignored_candidates (
+			candidate_id TEXT PRIMARY KEY,
+			ignored_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS wishlist_entries (
+			id TEXT PRIMARY KEY,
+			item_id TEXT NOT NULL UNIQUE,
+			target_price REAL NOT NULL DEFAULT 0,
+			priority TEXT NOT NULL DEFAULT 'normal',
+			notes TEXT NOT NULL DEFAULT '',
+			highlight_hit INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS tracked_items (
+			item_id TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS price_snapshots (
+			id TEXT PRIMARY KEY,
+			item_id TEXT NOT NULL,
+			snapshot_date TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT '',
+			min_price REAL NOT NULL DEFAULT 0,
+			median_price REAL NOT NULL DEFAULT 0,
+			latest_price REAL NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_price_snapshots_item_id ON price_snapshots(item_id);`,
 	}
 
 	for _, q := range queries {
