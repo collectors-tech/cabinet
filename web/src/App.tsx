@@ -32,6 +32,11 @@ export function App() {
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photosError, setPhotosError] = useState("");
+  const [querySets, setQuerySets] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
+  const [candidates, setCandidates] = useState<Array<{ id: string; title?: string; listing_id?: string; status?: string }>>([]);
+  const [scannerError, setScannerError] = useState("");
+  const [newQuerySet, setNewQuerySet] = useState({ name: "", keywords: "afx" });
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -296,6 +301,109 @@ export function App() {
       await loadPhotos();
     } catch (e) {
       setPhotosError(e instanceof Error ? e.message : "failed_to_delete_photo");
+    }
+  }
+
+  async function loadQuerySets() {
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/scanner/query-sets");
+      if (!resp.ok) {
+        throw new Error("failed_to_list_query_sets");
+      }
+      const data = (await resp.json()) as { query_sets?: Array<{ id: string; name: string }> };
+      const listed = data.query_sets || [];
+      setQuerySets(listed);
+      if (listed.length > 0 && !selectedQuerySetID) {
+        setSelectedQuerySetID(listed[0].id);
+      }
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_list_query_sets");
+    }
+  }
+
+  async function createQuerySet() {
+    setScannerError("");
+    try {
+      const payload = {
+        name: newQuerySet.name || "Query Set",
+        keywords: newQuerySet.keywords
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+      };
+      const resp = await fetch("/api/scanner/query-sets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_create_query_set");
+      }
+      const created = (await resp.json()) as { id: string; name: string };
+      setQuerySets((current) => [...current, created]);
+      if (!selectedQuerySetID) {
+        setSelectedQuerySetID(created.id);
+      }
+      setNewQuerySet({ name: "", keywords: "afx" });
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_create_query_set");
+    }
+  }
+
+  async function runScannerNow() {
+    if (!selectedQuerySetID) {
+      setScannerError("query_set_required");
+      return;
+    }
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/scanner/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query_set_id: selectedQuerySetID }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_run_scanner");
+      }
+      await loadCandidates();
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_run_scanner");
+    }
+  }
+
+  async function loadCandidates() {
+    if (!selectedQuerySetID) {
+      setScannerError("query_set_required");
+      return;
+    }
+    setScannerError("");
+    try {
+      const resp = await fetch(`/api/scanner/candidates?query_set_id=${encodeURIComponent(selectedQuerySetID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_candidates");
+      }
+      const data = (await resp.json()) as { candidates?: Array<{ id: string; title?: string; listing_id?: string; status?: string }> };
+      setCandidates(data.candidates || []);
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_list_candidates");
+    }
+  }
+
+  async function discoveryAction(candidateID: string, actionType: string) {
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/discovery/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: candidateID, type: actionType }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_apply_discovery_action");
+      }
+      await loadCandidates();
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_apply_discovery_action");
     }
   }
 
@@ -619,6 +727,69 @@ export function App() {
                     </button>{" "}
                     <button type="button" onClick={() => deletePhoto(p.id)}>
                       Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Discovery Scanner</h3>
+              <div>
+                <input
+                  value={newQuerySet.name}
+                  onChange={(e) => setNewQuerySet((current) => ({ ...current, name: e.target.value }))}
+                  placeholder="Query set name"
+                  aria-label="Query set name"
+                />{" "}
+                <input
+                  value={newQuerySet.keywords}
+                  onChange={(e) => setNewQuerySet((current) => ({ ...current, keywords: e.target.value }))}
+                  placeholder="Keywords comma separated"
+                  aria-label="Query set keywords"
+                />{" "}
+                <button type="button" onClick={createQuerySet}>
+                  Create Query Set
+                </button>{" "}
+                <button type="button" onClick={loadQuerySets}>
+                  Load Query Sets
+                </button>
+              </div>
+              <div>
+                <input
+                  value={selectedQuerySetID}
+                  onChange={(e) => setSelectedQuerySetID(e.target.value)}
+                  placeholder="Query set ID"
+                  aria-label="Selected query set id"
+                />{" "}
+                <button type="button" onClick={runScannerNow}>
+                  Run Now
+                </button>{" "}
+                <button type="button" onClick={loadCandidates}>
+                  Load Candidates
+                </button>
+              </div>
+              {scannerError ? <p>Scanner error: {scannerError}</p> : null}
+              <ul>
+                {querySets.map((q) => (
+                  <li key={q.id}>
+                    {q.name} ({q.id})
+                  </li>
+                ))}
+              </ul>
+              <ul>
+                {candidates.map((c) => (
+                  <li key={c.id}>
+                    {(c.title || c.listing_id || c.id) + " "}
+                    <button type="button" onClick={() => discoveryAction(c.id, "ignore")}>
+                      Ignore
+                    </button>{" "}
+                    <button type="button" onClick={() => discoveryAction(c.id, "add_to_wishlist")}>
+                      Wishlist
+                    </button>{" "}
+                    <button type="button" onClick={() => discoveryAction(c.id, "track_price")}>
+                      Track
                     </button>
                   </li>
                 ))}
