@@ -70,6 +70,12 @@ export function App() {
   const [logCount, setLogCount] = useState(0);
   const [adminError, setAdminError] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [profileSettingsDraft, setProfileSettingsDraft] = useState({
+    scanner_schedule: "",
+    backup_frequency: "",
+    db_path: "",
+  });
+  const [openAIKeyInput, setOpenAIKeyInput] = useState("");
   const [exportBytes, setExportBytes] = useState(0);
   const [barcodes, setBarcodes] = useState<Array<{ id?: string; barcode: string }>>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -765,6 +771,105 @@ export function App() {
       setLogCount((logs.activity || []).length);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_load_admin_status");
+    }
+  }
+
+  async function loadProfileSettings() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/settings`);
+      if (!resp.ok) {
+        throw new Error("failed_to_get_settings");
+      }
+      const data = (await resp.json()) as { settings?: Record<string, string> };
+      const settings = data.settings || {};
+      setProfileSettingsDraft({
+        scanner_schedule: settings.scanner_schedule || "",
+        backup_frequency: settings.backup_frequency || "",
+        db_path: settings["storage.db_path"] || "",
+      });
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_get_settings");
+    }
+  }
+
+  async function saveProfileSettings() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const payload = {
+        settings: {
+          scanner_schedule: profileSettingsDraft.scanner_schedule,
+          backup_frequency: profileSettingsDraft.backup_frequency,
+          "storage.db_path": profileSettingsDraft.db_path,
+        },
+      };
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_update_settings");
+      }
+      setSettingsStatus("settings_saved");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_update_settings");
+    }
+  }
+
+  async function saveOpenAIKey() {
+    if (!activeProfile?.id || !openAIKeyInput.trim()) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/secrets`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "openai_api_key", value: openAIKeyInput.trim() }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_put_secret");
+      }
+      setSettingsStatus("openai_key_saved");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_put_secret");
+    }
+  }
+
+  async function resetIgnoreRules() {
+    setAdminError("");
+    try {
+      const resp = await fetch("/api/settings/reset-ignore-rules", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error("failed_to_reset_ignore_rules");
+      }
+      setSettingsStatus("ignore_rules_reset_ok");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_reset_ignore_rules");
+    }
+  }
+
+  async function rebuildThumbnails() {
+    if (!selectedItemID) {
+      setAdminError("item_id_required_for_rebuild");
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos-rebuild`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error("failed_to_rebuild_thumbnails");
+      }
+      setSettingsStatus("thumbnails_rebuild_ok");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_rebuild_thumbnails");
     }
   }
 
@@ -1658,6 +1763,21 @@ export function App() {
             <div>
               <h3>Settings and Diagnostics</h3>
               <div>
+                <button type="button" onClick={loadProfileSettings}>
+                  Load Profile Settings
+                </button>{" "}
+                <button type="button" onClick={saveProfileSettings}>
+                  Save Profile Settings
+                </button>{" "}
+                <button type="button" onClick={saveOpenAIKey}>
+                  Save OpenAI Key
+                </button>{" "}
+                <button type="button" onClick={resetIgnoreRules}>
+                  Reset Ignore Rules
+                </button>{" "}
+                <button type="button" onClick={rebuildThumbnails}>
+                  Rebuild Thumbnails
+                </button>{" "}
                 <button type="button" onClick={loadAdminStatus}>
                   Load Admin Status
                 </button>{" "}
@@ -1676,6 +1796,32 @@ export function App() {
                 <button type="button" onClick={() => exportText("/api/data/export/json", "json")}>
                   Export JSON
                 </button>
+              </div>
+              <div>
+                <input
+                  value={profileSettingsDraft.scanner_schedule}
+                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, scanner_schedule: e.target.value }))}
+                  placeholder="Scanner schedule"
+                  aria-label="Scanner schedule"
+                />{" "}
+                <input
+                  value={profileSettingsDraft.backup_frequency}
+                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, backup_frequency: e.target.value }))}
+                  placeholder="Backup frequency"
+                  aria-label="Backup frequency"
+                />{" "}
+                <input
+                  value={profileSettingsDraft.db_path}
+                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, db_path: e.target.value }))}
+                  placeholder="Database path"
+                  aria-label="Database path"
+                />{" "}
+                <input
+                  value={openAIKeyInput}
+                  onChange={(e) => setOpenAIKeyInput(e.target.value)}
+                  placeholder="OpenAI API Key"
+                  aria-label="OpenAI API Key"
+                />
               </div>
               {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
               <p>Log entries: {logCount}</p>

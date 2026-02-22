@@ -314,6 +314,74 @@ describe("App shell", () => {
     expect(await screen.findByText(/export bytes: 24/i)).toBeInTheDocument();
   });
 
+  it("loads and saves profile settings and secrets", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/settings") && (!init || init.method === undefined)) {
+        return new Response(
+          JSON.stringify({ settings: { scanner_schedule: "0 6 * * *", backup_frequency: "daily", "storage.db_path": "/tmp/p1.db" } }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/api/profiles/p1/settings") && init?.method === "PUT") {
+        return new Response(
+          JSON.stringify({ settings: { scanner_schedule: "0 12 * * *", backup_frequency: "hourly", "storage.db_path": "/tmp/new.db" } }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/api/profiles/p1/secrets") && init?.method === "PUT") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes("/api/settings/reset-ignore-rules") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/photos-rebuild") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const loadProfileSettings = await screen.findByRole("button", { name: /load profile settings/i });
+    loadProfileSettings.click();
+    expect(await screen.findByDisplayValue(/0 6 \* \* \*/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/scanner schedule/i), { target: { value: "0 12 * * *" } });
+    fireEvent.change(await screen.findByLabelText(/backup frequency/i), { target: { value: "hourly" } });
+    fireEvent.change(await screen.findByLabelText(/database path/i), { target: { value: "/tmp/new.db" } });
+    const saveProfileSettings = await screen.findByRole("button", { name: /save profile settings/i });
+    saveProfileSettings.click();
+    expect(await screen.findByText(/settings_saved/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/openai api key/i), { target: { value: "sk-test" } });
+    const saveOpenAIKey = await screen.findByRole("button", { name: /save openai key/i });
+    saveOpenAIKey.click();
+    expect(await screen.findByText(/openai_key_saved/i)).toBeInTheDocument();
+
+    const resetIgnore = await screen.findByRole("button", { name: /reset ignore rules/i });
+    resetIgnore.click();
+    expect(await screen.findByText(/ignore_rules_reset_ok/i)).toBeInTheDocument();
+  });
+
   it("supports barcode lookup and external search link", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
