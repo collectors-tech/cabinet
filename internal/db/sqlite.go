@@ -96,6 +96,8 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			series TEXT NOT NULL DEFAULT '',
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
+			for_sale INTEGER NOT NULL DEFAULT 0,
+			structured_offers_json TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,

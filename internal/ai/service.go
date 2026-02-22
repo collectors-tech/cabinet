@@ -27,6 +27,10 @@ type Service struct {
 	client  *http.Client
 }
 
+func (s *Service) Name() string {
+	return "openai"
+}
+
 func NewService(cfg Config) *Service {
 	base := strings.TrimSpace(cfg.BaseURL)
 	if base == "" {
