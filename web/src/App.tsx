@@ -42,6 +42,9 @@ export function App() {
   const [selectedItemID, setSelectedItemID] = useState("");
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<{ id: string; filename: string } | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState("idle");
   const [photosError, setPhotosError] = useState("");
   const [querySets, setQuerySets] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
@@ -417,6 +420,22 @@ export function App() {
       await loadPhotos();
     } catch (e) {
       setPhotosError(e instanceof Error ? e.message : "failed_to_upload_photo");
+    }
+  }
+
+  async function openCamera() {
+    setCameraOpen(true);
+    setCameraStatus("requesting_camera");
+    setPhotosError("");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("camera_not_supported");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setCameraStatus("camera_ready");
+    } catch {
+      setCameraStatus("camera_unavailable");
     }
   }
 
@@ -1400,6 +1419,27 @@ export function App() {
                   Upload Photo
                 </button>
               </div>
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const dropped = e.dataTransfer.files?.[0];
+                  if (dropped) {
+                    setPhotoFile(dropped);
+                  }
+                }}
+              >
+                Drop photo here to stage upload.
+              </div>
+              <div>
+                <button type="button" onClick={openCamera}>
+                  Open Camera
+                </button>{" "}
+                <button type="button" onClick={() => setCameraOpen(false)}>
+                  Close Camera
+                </button>
+                {cameraOpen ? <p>{cameraStatus}</p> : null}
+              </div>
               {photosError ? <p>Photo error: {photosError}</p> : null}
               <ul>
                 {photos.map((p) => (
@@ -1410,10 +1450,21 @@ export function App() {
                     </button>{" "}
                     <button type="button" onClick={() => deletePhoto(p.id)}>
                       Delete
+                    </button>{" "}
+                    <button type="button" onClick={() => setFullscreenPhoto({ id: p.id, filename: p.filename })}>
+                      Open Fullscreen Preview
                     </button>
                   </li>
                 ))}
               </ul>
+              {fullscreenPhoto ? (
+                <div role="dialog" aria-label="Fullscreen photo preview">
+                  <p>Fullscreen: {fullscreenPhoto.filename}</p>
+                  <button type="button" onClick={() => setFullscreenPhoto(null)}>
+                    Close Fullscreen
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {activeProfile ? (

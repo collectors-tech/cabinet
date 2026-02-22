@@ -159,6 +159,44 @@ describe("App shell", () => {
     expect(await screen.findByText(/a.jpg/i)).toBeInTheDocument();
   });
 
+  it("opens fullscreen photo preview and handles camera permission errors", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockRejectedValue(new Error("denied")),
+      },
+    });
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    const loadPhotos = await screen.findByRole("button", { name: /load photos/i });
+    loadPhotos.click();
+    const openFullscreen = await screen.findByRole("button", { name: /open fullscreen preview/i });
+    openFullscreen.click();
+    expect(await screen.findByText(/fullscreen: a.jpg/i)).toBeInTheDocument();
+
+    const openCamera = await screen.findByRole("button", { name: /open camera/i });
+    openCamera.click();
+    expect(await screen.findByText(/camera_unavailable/i)).toBeInTheDocument();
+  });
+
   it("loads scanner query sets", async () => {
     const fetchMock = vi
       .fn()
