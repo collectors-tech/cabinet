@@ -1,0 +1,54 @@
+name: Publish API Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/api/**"
+      - ".github/workflows/publish-api-docs.yml"
+      - "scripts/generate-api-docs.ps1"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout cabinet
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build API docs
+        run: npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html
+
+      - name: Checkout cabinet-docs docs branch
+        uses: actions/checkout@v4
+        with:
+          repository: collectors-tech/cabinet-docs
+          ref: docs
+          token: ${{ secrets.CABINET_DOCS_PAT }}
+          path: cabinet-docs
+
+      - name: Sync generated docs
+        run: |
+          mkdir -p cabinet-docs/cabinet/api
+          cp docs/api/openapi.yaml cabinet-docs/cabinet/api/openapi.yaml
+          cp docs/api/index.html cabinet-docs/cabinet/api/index.html
+
+      - name: Commit and push if changed
+        run: |
+          cd cabinet-docs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git status --porcelain | grep .; then
+            git add cabinet/api/openapi.yaml cabinet/api/index.html
+            git commit -m "docs: publish cabinet API docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            git push origin docs
+          else
+            echo "No docs changes to publish."
+          fi
