@@ -30,6 +30,11 @@ func newTestApp(t *testing.T) *App {
 		WebAuthnName:   "Cabinet Test",
 		BackupInterval: 60,
 	}
+	return newTestAppWithConfig(t, cfg)
+}
+
+func newTestAppWithConfig(t *testing.T, cfg config.Config) *App {
+	t.Helper()
 	a, err := New(cfg)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

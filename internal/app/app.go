@@ -14,15 +14,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/ai"
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/backup"
 	"github.com/collectors-tech/cabinet/internal/barcode"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/matching"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/pricing"
@@ -71,6 +74,9 @@ func New(cfg config.Config) (*App, error) {
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
+	dashboardSvc := dashboard.NewService(conn)
+	aiSvc := ai.NewService(ai.Config{})
+	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	authService, err := auth.NewService(cfg, conn, profiles)
 	if err != nil {
 		conn.Close()
@@ -333,6 +339,18 @@ func New(cfg config.Config) (*App, error) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 		case http.MethodPost:
+			if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+				if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+					status, _ := licenseSvc.Status(r.Context(), active.ID)
+					if status.State != "valid" || status.Tier != "pro" {
+						var count int
+						if err := conn.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM canonical_items`).Scan(&count); err == nil && count >= 150 {
+							http.Error(w, `{"error":"free_tier_item_limit_reached"}`, http.StatusPaymentRequired)
+							return
+						}
+					}
+				}
+			}
 			var req collection.Item
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
@@ -482,6 +500,13 @@ func New(cfg config.Config) (*App, error) {
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
 			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "scanner_automation")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_scanner_automation"}`, http.StatusPaymentRequired)
+				return
+			}
 		}
 		provider := ebay.NewProvider(ebay.ProviderConfig{
 			BaseURL:     settings["ebay_base_url"],
@@ -691,6 +716,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		if err := pricingSvc.TrackItem(r.Context(), req.ItemID); err != nil {
 			http.Error(w, `{"error":"failed_to_track_item"}`, http.StatusBadRequest)
 			return
@@ -703,6 +740,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		if err := pricingSvc.RunDailySnapshot(r.Context()); err != nil {
 			http.Error(w, `{"error":"failed_to_run_price_snapshot"}`, http.StatusInternalServerError)
 			return
@@ -714,6 +763,18 @@ func New(cfg config.Config) (*App, error) {
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		history, err := pricingSvc.History(r.Context(), itemID)
@@ -729,6 +790,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		history, err := pricingSvc.History(r.Context(), itemID)
 		if err != nil {
@@ -743,6 +816,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		bySource, err := pricingSvc.BySource(r.Context(), itemID)
 		if err != nil {
@@ -756,6 +841,18 @@ func New(cfg config.Config) (*App, error) {
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		history, err := pricingSvc.History(r.Context(), itemID)
@@ -780,6 +877,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		points, err := pricingSvc.Trend(r.Context(), itemID)
 		if err != nil {
@@ -793,6 +902,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		csvText, err := pricingSvc.ExportCSV(r.Context(), itemID)
 		if err != nil {
@@ -802,6 +923,201 @@ func New(cfg config.Config) (*App, error) {
 		w.Header().Set("Content-Type", "text/csv")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(csvText))
+	})
+	mux.HandleFunc("/api/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		sum, err := dashboardSvc.Summary(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_load_dashboard"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(sum)
+	})
+	mux.HandleFunc("/api/license/import", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string         `json:"profile_id"`
+			License   licensing.File `json:"license"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := licenseSvc.Import(r.Context(), req.ProfileID, req.License); err != nil {
+			http.Error(w, `{"error":"failed_to_import_license"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/license/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		st, err := licenseSvc.Status(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_license_status"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(st)
+	})
+	mux.HandleFunc("/api/ai/toggle", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Enabled   bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		val := "false"
+		if req.Enabled {
+			val = "true"
+		}
+		if err := profiles.PutSettings(r.Context(), req.ProfileID, map[string]string{"ai_enabled": val}); err != nil {
+			http.Error(w, `{"error":"failed_to_toggle_ai"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/ai/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
+		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
+		if settings["ai_enabled"] == "false" {
+			http.Error(w, `{"error":"ai_disabled"}`, http.StatusBadRequest)
+			return
+		}
+		key, err := profiles.GetSecret(r.Context(), req.ProfileID, "openai_api_key")
+		if err != nil {
+			http.Error(w, `{"error":"missing_openai_api_key"}`, http.StatusBadRequest)
+			return
+		}
+		localAISvc := aiSvc
+		if baseURL := strings.TrimSpace(settings["openai_base_url"]); baseURL != "" {
+			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
+		}
+		if err := localAISvc.TestConnectivity(r.Context(), key); err != nil {
+			http.Error(w, `{"error":"failed_ai_connectivity_test"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/ai/suggest/title", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Title     string `json:"title"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
+		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
+		if settings["ai_enabled"] == "false" {
+			http.Error(w, `{"error":"ai_disabled"}`, http.StatusBadRequest)
+			return
+		}
+		key, err := profiles.GetSecret(r.Context(), req.ProfileID, "openai_api_key")
+		if err != nil {
+			http.Error(w, `{"error":"missing_openai_api_key"}`, http.StatusBadRequest)
+			return
+		}
+		localAISvc := aiSvc
+		if baseURL := strings.TrimSpace(settings["openai_base_url"]); baseURL != "" {
+			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
+		}
+		suggestion, err := localAISvc.SuggestFromTitle(r.Context(), key, req.Title)
+		if err != nil {
+			http.Error(w, `{"error":"failed_ai_suggest_title"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(suggestion)
+	})
+	mux.HandleFunc("/api/ai/suggest/photo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			ImageURL  string `json:"image_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
+			if !allowed {
+				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
+				return
+			}
+		}
+		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
+		if settings["ai_enabled"] == "false" {
+			http.Error(w, `{"error":"ai_disabled"}`, http.StatusBadRequest)
+			return
+		}
+		key, err := profiles.GetSecret(r.Context(), req.ProfileID, "openai_api_key")
+		if err != nil {
+			http.Error(w, `{"error":"missing_openai_api_key"}`, http.StatusBadRequest)
+			return
+		}
+		localAISvc := aiSvc
+		if baseURL := strings.TrimSpace(settings["openai_base_url"]); baseURL != "" {
+			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
+		}
+		suggestion, err := localAISvc.SuggestFromPhoto(r.Context(), key, req.ImageURL)
+		if err != nil {
+			http.Error(w, `{"error":"failed_ai_suggest_photo"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(suggestion)
 	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
