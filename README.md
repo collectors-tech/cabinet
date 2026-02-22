@@ -109,6 +109,7 @@ go run ./cmd/cabinet
 - `POST /api/auth/recovery/reset/begin` with `{ "profile_id": "<id>", "passphrase": "..." }`
 - `POST /api/auth/session/validate` with `{ "session_token": "..." }`
 - `POST /api/auth/session/lock` with `{ "session_token": "..." }`
+- `POST /api/onboarding/sample-data`
 
 ## Environment Variables
 - `CABINET_ADDR` default: `127.0.0.1:8080`

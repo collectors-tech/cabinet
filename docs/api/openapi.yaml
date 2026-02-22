@@ -7,6 +7,7 @@ info:
     This specification is the source of truth for API documentation.
 servers:
   - url: http://127.0.0.1:8080
+security: []
 tags:
   - name: Runtime
   - name: Profiles
@@ -24,6 +25,7 @@ tags:
   - name: Logs
   - name: Data
   - name: Backup
+  - name: Onboarding
 paths:
   /healthz:
     get:
@@ -760,6 +762,32 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/onboarding/sample-data:
+    post:
+      tags: [Onboarding]
+      summary: Seed starter sample data for first-run onboarding
+      responses:
+        "200":
+          description: Sample seeding result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_items:
+                    type: integer
+                  created_instances:
+                    type: integer
+                  created_wishlist_entries:
+                    type: integer
+                  total_items:
+                    type: integer
+                  total_wishlist_entries:
+                    type: integer
+                  already_seeded_for_profile:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/Error"
 components:
   parameters:
     ProfileID:
