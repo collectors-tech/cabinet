@@ -1242,11 +1242,11 @@ export function App() {
         </header>
         <section className="cabinet-card">
           <h2>Cabinet Frontend Foundation</h2>
-          <p>Next: onboarding, WebAuthn flows, collection workspace, and Cypress E2E.</p>
+          <p>Local-first onboarding, WebAuthn auth, collection workflows, and automated E2E coverage are active.</p>
           {loading ? <p>Loading profiles...</p> : null}
           {!loading && profiles.length === 0 ? (
             <div>
-              <p>No local profiles found. Create your first profile to continue.</p>
+              <p>No local profiles found yet. Create your first local profile to initialize Cabinet on this device.</p>
               <button type="button" onClick={createFirstProfile}>
                 Create First Profile
               </button>
