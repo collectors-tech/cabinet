@@ -276,6 +276,18 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_barcode"}`, http.StatusBadRequest)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "external-search" {
+			url, err := barcode.BuildExternalSearchURL(r.URL.Query().Get("source"), r.URL.Query().Get("region"), code)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_build_external_search_url"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"source": "ebay",
+				"url":    url,
+			})
+			return
+		}
 		matches, err := barcodeRepo.Lookup(r.Context(), code)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_lookup_barcode"}`, http.StatusBadRequest)
