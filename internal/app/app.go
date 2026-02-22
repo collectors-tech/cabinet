@@ -664,6 +664,20 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/wishlist/hits", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		hits, err := wishlistSvc.Hits(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_wishlist_hits"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
+	})
 	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -736,6 +750,29 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"sources": bySource})
+	})
+	mux.HandleFunc("/api/pricing/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		history, err := pricingSvc.History(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_price_stats"}`, http.StatusBadRequest)
+			return
+		}
+		if len(history) == 0 {
+			_ = json.NewEncoder(w).Encode(map[string]any{"min": 0, "median": 0, "latest": 0})
+			return
+		}
+		latest := history[len(history)-1]
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"min":    latest.MinPrice,
+			"median": latest.MedianPrice,
+			"latest": latest.LatestPrice,
+		})
 	})
 	mux.HandleFunc("/api/pricing/history/export", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

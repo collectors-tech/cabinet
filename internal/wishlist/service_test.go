@@ -20,6 +20,12 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('i1','AFX','Slot','P-1','AFX P-1')`); err != nil {
 		t.Fatalf("seed item: %v", err)
 	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Q','["afx"]','[]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source) VALUES ('c1','q1','L1','AFX P-1',35,0,'http://x/1','','s',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay')`); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
 	svc := NewService(conn)
 	created, err := svc.Create(context.Background(), Entry{
 		ItemID:       "i1",
@@ -37,6 +43,16 @@ func TestWishlistCRUDAndBelowTarget(t *testing.T) {
 	}
 	if len(all) != 1 || all[0].ID != created.ID {
 		t.Fatalf("unexpected list: %+v", all)
+	}
+	if !all[0].BelowTargetNow {
+		t.Fatal("expected below-target indicator true")
+	}
+	hits, err := svc.Hits(context.Background(), "i1")
+	if err != nil {
+		t.Fatalf("Hits() error = %v", err)
+	}
+	if len(hits) == 0 {
+		t.Fatal("expected scanner hits for wishlist item")
 	}
 	if err := svc.Update(context.Background(), Entry{
 		ID:          created.ID,

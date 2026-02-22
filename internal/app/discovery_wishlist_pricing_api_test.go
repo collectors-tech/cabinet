@@ -63,6 +63,10 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	if listWish.Code != http.StatusOK {
 		t.Fatalf("list wishlist status=%d body=%s", listWish.Code, listWish.Body.String())
 	}
+	hits := doRequest(t, a, http.MethodGet, "/api/wishlist/hits?item_id=i1", nil, nil)
+	if hits.Code != http.StatusOK {
+		t.Fatalf("wishlist hits status=%d body=%s", hits.Code, hits.Body.String())
+	}
 	track := doRequest(t, a, http.MethodPost, "/api/pricing/track", strings.NewReader(`{"item_id":"i1"}`), map[string]string{"Content-Type": "application/json"})
 	if track.Code != http.StatusOK {
 		t.Fatalf("track price status=%d body=%s", track.Code, track.Body.String())
@@ -82,6 +86,10 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	bySource := doRequest(t, a, http.MethodGet, "/api/pricing/by-source?item_id=i1", nil, nil)
 	if bySource.Code != http.StatusOK {
 		t.Fatalf("by-source status=%d body=%s", bySource.Code, bySource.Body.String())
+	}
+	stats := doRequest(t, a, http.MethodGet, "/api/pricing/stats?item_id=i1", nil, nil)
+	if stats.Code != http.StatusOK {
+		t.Fatalf("stats status=%d body=%s", stats.Code, stats.Body.String())
 	}
 	export := doRequest(t, a, http.MethodGet, "/api/pricing/history/export?item_id=i1", nil, nil)
 	if export.Code != http.StatusOK {

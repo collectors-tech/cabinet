@@ -21,6 +21,15 @@ type Entry struct {
 	UpdatedAt      string  `json:"updated_at"`
 }
 
+type Hit struct {
+	CandidateID string  `json:"candidate_id"`
+	ItemID      string  `json:"item_id"`
+	Title       string  `json:"title"`
+	Price       float64 `json:"price"`
+	URL         string  `json:"url"`
+	LastSeen    string  `json:"last_seen"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -107,6 +116,30 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 			return nil, err
 		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) Hits(ctx context.Context, itemID string) ([]Hit, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT c.id, w.item_id, c.title, c.price, c.url, c.last_seen
+		FROM wishlist_entries w
+		JOIN canonical_items i ON i.id = w.item_id
+		JOIN scanner_candidates c ON LOWER(c.title) LIKE '%' || LOWER(i.part_number) || '%'
+		WHERE w.highlight_hit = 1 AND (? = '' OR w.item_id = ?)
+		ORDER BY c.last_seen DESC
+	`, itemID, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Hit
+	for rows.Next() {
+		var h Hit
+		if err := rows.Scan(&h.CandidateID, &h.ItemID, &h.Title, &h.Price, &h.URL, &h.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
 	}
 	return out, rows.Err()
 }
