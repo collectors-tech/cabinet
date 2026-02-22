@@ -182,6 +182,17 @@ func (s *Service) ParseCSVToSnapshot(req CSVImportRequest) (Snapshot, error) {
 		}
 		return i, nil
 	}
+	resolveOptional := func(field, fallback string) int {
+		key := strings.TrimSpace(strings.ToLower(mapping[field]))
+		if key == "" {
+			key = fallback
+		}
+		i, ok := index[key]
+		if !ok {
+			return -1
+		}
+		return i
+	}
 
 	brandIdx, err := resolve("brand", "brand")
 	if err != nil {
@@ -199,12 +210,12 @@ func (s *Service) ParseCSVToSnapshot(req CSVImportRequest) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	makeIdx, _ := resolve("make", "make")
-	modelIdx, _ := resolve("model", "model")
-	yearIdx, _ := resolve("year", "year")
-	scaleIdx, _ := resolve("scale", "scale")
-	seriesIdx, _ := resolve("series", "series")
-	descIdx, _ := resolve("description", "description")
+	makeIdx := resolveOptional("make", "make")
+	modelIdx := resolveOptional("model", "model")
+	yearIdx := resolveOptional("year", "year")
+	scaleIdx := resolveOptional("scale", "scale")
+	seriesIdx := resolveOptional("series", "series")
+	descIdx := resolveOptional("description", "description")
 
 	snap := Snapshot{
 		SchemaVersion: 1,

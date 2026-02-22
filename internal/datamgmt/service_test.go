@@ -87,3 +87,28 @@ func TestParseCSVToSnapshot(t *testing.T) {
 		t.Fatalf("unexpected part number: %q", snap.Items[0].PartNumber)
 	}
 }
+
+func TestParseCSVToSnapshotWithMappingAndMissingOptionalColumns(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(nil)
+	csvInput := "maker,kind,pn,name\nAFX,Slot Car,P-201,Mapped Car\n"
+	snap, err := svc.ParseCSVToSnapshot(CSVImportRequest{
+		CSV: csvInput,
+		Mapping: map[string]string{
+			"brand":       "maker",
+			"category":    "kind",
+			"part_number": "pn",
+			"title":       "name",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseCSVToSnapshot() with mapping error = %v", err)
+	}
+	if len(snap.Items) != 1 {
+		t.Fatalf("expected 1 item from mapped csv, got %d", len(snap.Items))
+	}
+	if snap.Items[0].Make != "" || snap.Items[0].Description != "" {
+		t.Fatalf("optional fields should be empty when not present: %#v", snap.Items[0])
+	}
+}
