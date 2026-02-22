@@ -41,6 +41,10 @@ export function App() {
   const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
   const [insightError, setInsightError] = useState("");
+  const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string } | null>(null);
+  const [logCount, setLogCount] = useState(0);
+  const [adminError, setAdminError] = useState("");
+  const [settingsStatus, setSettingsStatus] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -454,6 +458,43 @@ export function App() {
       setPricingPoints(data.points || []);
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_graph");
+    }
+  }
+
+  async function loadAdminStatus() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const licenseResp = await fetch(`/api/license/status?profile_id=${encodeURIComponent(activeProfile.id)}`);
+      if (!licenseResp.ok) {
+        throw new Error("failed_to_load_license_status");
+      }
+      const license = (await licenseResp.json()) as { state?: string; tier?: string };
+      setLicenseStatus(license);
+
+      const logsResp = await fetch("/api/logs/activity?limit=10");
+      if (!logsResp.ok) {
+        throw new Error("failed_to_load_activity_logs");
+      }
+      const logs = (await logsResp.json()) as { activity?: Array<unknown> };
+      setLogCount((logs.activity || []).length);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_load_admin_status");
+    }
+  }
+
+  async function runDataMaintenance(path: string, label: string) {
+    setAdminError("");
+    try {
+      const resp = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error(`failed_${label}`);
+      }
+      setSettingsStatus(`${label}_ok`);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : `failed_${label}`);
     }
   }
 
@@ -875,6 +916,29 @@ export function App() {
               </ul>
               <p>Pricing points: {pricingPoints.length}</p>
               {insightError ? <p>Insight error: {insightError}</p> : null}
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Settings and Diagnostics</h3>
+              <div>
+                <button type="button" onClick={loadAdminStatus}>
+                  Load Admin Status
+                </button>{" "}
+                <button type="button" onClick={() => runDataMaintenance("/api/data/reindex", "reindex")}>
+                  Reindex
+                </button>{" "}
+                <button type="button" onClick={() => runDataMaintenance("/api/data/repair", "repair")}>
+                  Repair
+                </button>{" "}
+                <button type="button" onClick={() => runDataMaintenance("/api/backup/run", "backup")}>
+                  Run Backup
+                </button>
+              </div>
+              {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
+              <p>Log entries: {logCount}</p>
+              <p>Settings status: {settingsStatus || "idle"}</p>
+              {adminError ? <p>Admin error: {adminError}</p> : null}
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

@@ -232,4 +232,41 @@ describe("App shell", () => {
     loadGraph.click();
     expect(await screen.findByText(/pricing points: 2/i)).toBeInTheDocument();
   });
+
+  it("loads settings admin status and logs", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.includes("/api/license/status?profile_id=p1")) {
+        return new Response(JSON.stringify({ state: "valid", tier: "pro" }), { status: 200 });
+      }
+      if (url === "/api/logs/activity?limit=10") {
+        return new Response(JSON.stringify({ activity: [{ event: "scanner_run_completed" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    const loadAdmin = await screen.findByRole("button", { name: /load admin status/i });
+    loadAdmin.click();
+    expect(await screen.findByText(/license: valid \/ pro/i)).toBeInTheDocument();
+    expect(await screen.findByText(/log entries: 1/i)).toBeInTheDocument();
+  });
 });
