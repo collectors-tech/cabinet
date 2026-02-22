@@ -3,12 +3,15 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +28,9 @@ type Service struct {
 
 	mu       sync.Mutex
 	sessions map[string]pendingSession
+
+	unlockedSessions map[string]unlockedSession
+	autoLockTimeout  time.Duration
 }
 
 type pendingSession struct {
@@ -32,6 +38,12 @@ type pendingSession struct {
 	Kind      string
 	Session   webauthn.SessionData
 	ExpiresAt time.Time
+}
+
+type unlockedSession struct {
+	ProfileID  string
+	LastActive time.Time
+	ExpiresAt  time.Time
 }
 
 type WebAuthnStartResponse struct {
@@ -50,14 +62,20 @@ func NewService(cfg config.Config, db *sql.DB, profiles *profile.Repository) (*S
 	}
 
 	return &Service{
-		wa:       wa,
-		db:       db,
-		profiles: profiles,
-		sessions: map[string]pendingSession{},
+		wa:               wa,
+		db:               db,
+		profiles:         profiles,
+		sessions:         map[string]pendingSession{},
+		unlockedSessions: map[string]unlockedSession{},
+		autoLockTimeout:  15 * time.Minute,
 	}, nil
 }
 
 func (s *Service) BeginRegistration(ctx context.Context, profileID string) (WebAuthnStartResponse, error) {
+	return s.beginRegistrationWithKind(ctx, profileID, "registration")
+}
+
+func (s *Service) beginRegistrationWithKind(ctx context.Context, profileID, kind string) (WebAuthnStartResponse, error) {
 	user, err := s.loadUser(ctx, profileID)
 	if err != nil {
 		return WebAuthnStartResponse{}, err
@@ -75,7 +93,7 @@ func (s *Service) BeginRegistration(ctx context.Context, profileID string) (WebA
 
 	s.storeSession(token, pendingSession{
 		ProfileID: profileID,
-		Kind:      "registration",
+		Kind:      kind,
 		Session:   *session,
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	})
@@ -87,7 +105,7 @@ func (s *Service) BeginRegistration(ctx context.Context, profileID string) (WebA
 }
 
 func (s *Service) FinishRegistration(ctx context.Context, sessionID string, credentialPayload any) error {
-	sess, err := s.popSession(sessionID, "registration")
+	sess, err := s.popSessionAny(sessionID, "registration", "recovery_registration")
 	if err != nil {
 		return err
 	}
@@ -115,6 +133,9 @@ func (s *Service) BeginLogin(ctx context.Context, profileID string) (WebAuthnSta
 	user, err := s.loadUser(ctx, profileID)
 	if err != nil {
 		return WebAuthnStartResponse{}, err
+	}
+	if len(user.WebAuthnCredentials()) == 0 {
+		return WebAuthnStartResponse{}, fmt.Errorf("registration required")
 	}
 
 	options, session, err := s.wa.BeginLogin(user)
@@ -159,7 +180,8 @@ func (s *Service) FinishLogin(ctx context.Context, sessionID string, credentialP
 	if err := s.upsertCredential(ctx, sess.ProfileID, *cred); err != nil {
 		return err
 	}
-	return nil
+	_, err = s.CreateUnlockedSession(sess.ProfileID)
+	return err
 }
 
 func (s *Service) storeSession(sessionID string, p pendingSession) {
@@ -169,6 +191,10 @@ func (s *Service) storeSession(sessionID string, p pendingSession) {
 }
 
 func (s *Service) popSession(sessionID, kind string) (pendingSession, error) {
+	return s.popSessionAny(sessionID, kind)
+}
+
+func (s *Service) popSessionAny(sessionID string, kinds ...string) (pendingSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ps, ok := s.sessions[sessionID]
@@ -176,13 +202,123 @@ func (s *Service) popSession(sessionID, kind string) (pendingSession, error) {
 		return pendingSession{}, fmt.Errorf("invalid session")
 	}
 	delete(s.sessions, sessionID)
-	if ps.Kind != kind {
+	match := false
+	for _, kind := range kinds {
+		if ps.Kind == kind {
+			match = true
+			break
+		}
+	}
+	if !match {
 		return pendingSession{}, fmt.Errorf("unexpected session kind")
 	}
 	if time.Now().After(ps.ExpiresAt) {
 		return pendingSession{}, fmt.Errorf("session expired")
 	}
 	return ps, nil
+}
+
+func (s *Service) CreateUnlockedSession(profileID string) (string, error) {
+	token, err := randomToken()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unlockedSessions[token] = unlockedSession{
+		ProfileID:  profileID,
+		LastActive: now,
+		ExpiresAt:  now.Add(24 * time.Hour),
+	}
+	return token, nil
+}
+
+func (s *Service) ValidateUnlockedSession(token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return fmt.Errorf("session token is required")
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.unlockedSessions[token]
+	if !ok {
+		return fmt.Errorf("session not found")
+	}
+	if now.After(st.ExpiresAt) || now.Sub(st.LastActive) > s.autoLockTimeout {
+		delete(s.unlockedSessions, token)
+		return fmt.Errorf("session locked")
+	}
+	st.LastActive = now
+	s.unlockedSessions[token] = st
+	return nil
+}
+
+func (s *Service) LockUnlockedSession(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.unlockedSessions, token)
+}
+
+func (s *Service) SetRecoveryPassphrase(ctx context.Context, profileID, passphrase string) error {
+	if _, err := s.profiles.GetByID(ctx, profileID); err != nil {
+		return err
+	}
+	passphrase = strings.TrimSpace(passphrase)
+	if passphrase == "" {
+		return fmt.Errorf("passphrase is required")
+	}
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return fmt.Errorf("random salt: %w", err)
+	}
+	sum := sha256.Sum256(append(salt, []byte(passphrase)...))
+	stored := base64.RawStdEncoding.EncodeToString(salt) + ":" + base64.RawStdEncoding.EncodeToString(sum[:])
+	return s.profiles.PutSecret(ctx, profileID, "recovery_passphrase_hash", stored)
+}
+
+func (s *Service) VerifyRecoveryPassphrase(ctx context.Context, profileID, passphrase string) (bool, error) {
+	stored, err := s.profiles.GetSecret(ctx, profileID, "recovery_passphrase_hash")
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return false, nil
+		}
+		return false, err
+	}
+	parts := strings.Split(stored, ":")
+	if len(parts) != 2 {
+		return false, nil
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false, nil
+	}
+	expected, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false, nil
+	}
+	sum := sha256.Sum256(append(salt, []byte(passphrase)...))
+	return hmac.Equal(expected, sum[:]), nil
+}
+
+func (s *Service) BeginRecoveryRegistration(ctx context.Context, profileID, passphrase string) (WebAuthnStartResponse, error) {
+	ok, err := s.VerifyRecoveryPassphrase(ctx, profileID, passphrase)
+	if err != nil {
+		return WebAuthnStartResponse{}, err
+	}
+	if !ok {
+		return WebAuthnStartResponse{}, fmt.Errorf("invalid recovery passphrase")
+	}
+	return s.beginRegistrationWithKind(ctx, profileID, "recovery_registration")
+}
+
+func (s *Service) RequiresRegistration(ctx context.Context, profileID string) (bool, error) {
+	user, err := s.loadUser(ctx, profileID)
+	if err != nil {
+		return false, err
+	}
+	return len(user.WebAuthnCredentials()) == 0, nil
 }
 
 func (s *Service) loadUser(ctx context.Context, profileID string) (*user, error) {

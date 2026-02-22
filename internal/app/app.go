@@ -102,6 +102,13 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_profile"}`, http.StatusBadRequest)
 				return
 			}
+			profileDir := filepath.Join(cfg.DataDir, "profiles", created.ID)
+			_ = os.MkdirAll(profileDir, 0o755)
+			_ = os.MkdirAll(filepath.Join(profileDir, "media"), 0o755)
+			_ = profiles.PutSettings(r.Context(), created.ID, map[string]string{
+				"storage.db_path":   filepath.Join(profileDir, "cabinet.db"),
+				"storage.media_dir": filepath.Join(profileDir, "media"),
+			})
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(created)
 		default:
@@ -232,6 +239,74 @@ func New(cfg config.Config) (*App, error) {
 			default:
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			}
+		case "storage":
+			if r.Method != http.MethodGet {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			settings, err := profiles.GetSettings(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_get_storage"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"db_path":   settings["storage.db_path"],
+				"media_dir": settings["storage.media_dir"],
+			})
+		case "secrets":
+			if r.Method == http.MethodPut {
+				var req struct {
+					Key   string `json:"key"`
+					Value string `json:"value"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				if err := profiles.PutSecret(r.Context(), profileID, req.Key, req.Value); err != nil {
+					http.Error(w, `{"error":"failed_to_put_secret"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+				return
+			}
+			if r.Method == http.MethodGet {
+				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				value, err := profiles.GetSecret(r.Context(), profileID, key)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_get_secret"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "value": value})
+				return
+			}
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		case "license":
+			if r.Method == http.MethodPut {
+				var req struct {
+					LicenseJSON string `json:"license_json"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				if err := profiles.PutLicense(r.Context(), profileID, req.LicenseJSON); err != nil {
+					http.Error(w, `{"error":"failed_to_put_license"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+				return
+			}
+			if r.Method == http.MethodGet {
+				value, err := profiles.GetLicense(r.Context(), profileID)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_get_license"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"license_json": value})
+				return
+			}
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		default:
 			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
 		}
@@ -715,6 +790,61 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
+	mux.HandleFunc("/api/auth/requirements", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		required, err := authService.RequiresRegistration(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_requirements"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"requires_registration": required})
+	})
+	mux.HandleFunc("/api/auth/recovery/passphrase", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID  string `json:"profile_id"`
+			Passphrase string `json:"passphrase"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := authService.SetRecoveryPassphrase(r.Context(), req.ProfileID, req.Passphrase); err != nil {
+			http.Error(w, `{"error":"failed_to_set_recovery_passphrase"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/auth/recovery/reset/begin", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID  string `json:"profile_id"`
+			Passphrase string `json:"passphrase"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		resp, err := authService.BeginRecoveryRegistration(r.Context(), req.ProfileID, req.Passphrase)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_begin_recovery_reset"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
 	mux.HandleFunc("/api/auth/webauthn/login/begin", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -753,6 +883,41 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_finish_login"}`, http.StatusBadRequest)
 			return
 		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/auth/session/validate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SessionToken string `json:"session_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if err := authService.ValidateUnlockedSession(req.SessionToken); err != nil {
+			http.Error(w, `{"error":"session_locked"}`, http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/auth/session/lock", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SessionToken string `json:"session_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		authService.LockUnlockedSession(req.SessionToken)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 
