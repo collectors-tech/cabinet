@@ -28,6 +28,10 @@ export function App() {
     brand: "",
     category: "General",
   });
+  const [selectedItemID, setSelectedItemID] = useState("");
+  const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photosError, setPhotosError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -90,7 +94,11 @@ export function App() {
         throw new Error("failed_to_list_items");
       }
       const data = (await resp.json()) as { items?: Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }> };
-      setItems(data.items || []);
+      const listed = data.items || [];
+      setItems(listed);
+      if (listed.length > 0 && !selectedItemID) {
+        setSelectedItemID(listed[0].id);
+      }
     } catch (e) {
       setItemsError(e instanceof Error ? e.message : "failed_to_list_items");
     } finally {
@@ -206,9 +214,88 @@ export function App() {
       }
       const created = (await resp.json()) as { id: string; part_number: string; title: string; brand?: string; category?: string };
       setItems((current) => [...current, created]);
+      if (!selectedItemID) {
+        setSelectedItemID(created.id);
+      }
       setNewItem({ part_number: "", title: "", brand: "", category: "General" });
     } catch (e) {
       setItemsError(e instanceof Error ? e.message : "failed_to_create_item");
+    }
+  }
+
+  async function loadPhotos() {
+    if (!selectedItemID) {
+      setPhotosError("item_id_required");
+      return;
+    }
+    setPhotosError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_photos");
+      }
+      const data = (await resp.json()) as { photos?: Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }> };
+      setPhotos(data.photos || []);
+    } catch (e) {
+      setPhotosError(e instanceof Error ? e.message : "failed_to_list_photos");
+    }
+  }
+
+  async function uploadPhoto() {
+    if (!selectedItemID || !photoFile) {
+      setPhotosError("item_and_file_required");
+      return;
+    }
+    setPhotosError("");
+    try {
+      const form = new FormData();
+      form.append("file", photoFile);
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos`, {
+        method: "POST",
+        body: form,
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_upload_photo");
+      }
+      await loadPhotos();
+    } catch (e) {
+      setPhotosError(e instanceof Error ? e.message : "failed_to_upload_photo");
+    }
+  }
+
+  async function setPrimaryPhoto(photoID: string) {
+    if (!selectedItemID || !photoID) {
+      return;
+    }
+    setPhotosError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos/${encodeURIComponent(photoID)}/primary`, {
+        method: "PUT",
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_set_primary_photo");
+      }
+      await loadPhotos();
+    } catch (e) {
+      setPhotosError(e instanceof Error ? e.message : "failed_to_set_primary_photo");
+    }
+  }
+
+  async function deletePhoto(photoID: string) {
+    if (!selectedItemID || !photoID) {
+      return;
+    }
+    setPhotosError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos/${encodeURIComponent(photoID)}`, {
+        method: "DELETE",
+      });
+      if (!resp.ok && resp.status !== 204) {
+        throw new Error("failed_to_delete_photo");
+      }
+      await loadPhotos();
+    } catch (e) {
+      setPhotosError(e instanceof Error ? e.message : "failed_to_delete_photo");
     }
   }
 
@@ -496,6 +583,46 @@ export function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Photos</h3>
+              <div>
+                <input
+                  value={selectedItemID}
+                  onChange={(e) => setSelectedItemID(e.target.value)}
+                  placeholder="Item ID"
+                  aria-label="Photo item id"
+                />{" "}
+                <button type="button" onClick={loadPhotos}>
+                  Load Photos
+                </button>
+              </div>
+              <div>
+                <input
+                  type="file"
+                  onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                  aria-label="Photo file"
+                />{" "}
+                <button type="button" onClick={uploadPhoto}>
+                  Upload Photo
+                </button>
+              </div>
+              {photosError ? <p>Photo error: {photosError}</p> : null}
+              <ul>
+                {photos.map((p) => (
+                  <li key={p.id}>
+                    {p.filename} {p.is_primary ? "(Primary)" : ""}{" "}
+                    <button type="button" onClick={() => setPrimaryPhoto(p.id)}>
+                      Set Primary
+                    </button>{" "}
+                    <button type="button" onClick={() => deletePhoto(p.id)}>
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}
