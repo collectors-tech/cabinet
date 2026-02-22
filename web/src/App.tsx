@@ -37,6 +37,10 @@ export function App() {
   const [candidates, setCandidates] = useState<Array<{ id: string; title?: string; listing_id?: string; status?: string }>>([]);
   const [scannerError, setScannerError] = useState("");
   const [newQuerySet, setNewQuerySet] = useState({ name: "", keywords: "afx" });
+  const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
+  const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number }>>([]);
+  const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
+  const [insightError, setInsightError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -404,6 +408,52 @@ export function App() {
       await loadCandidates();
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_apply_discovery_action");
+    }
+  }
+
+  async function loadDashboard() {
+    setInsightError("");
+    try {
+      const resp = await fetch("/api/dashboard");
+      if (!resp.ok) {
+        throw new Error("failed_to_load_dashboard");
+      }
+      const data = (await resp.json()) as Record<string, unknown>;
+      setDashboard(data);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_dashboard");
+    }
+  }
+
+  async function loadWishlist() {
+    setInsightError("");
+    try {
+      const resp = await fetch("/api/wishlist");
+      if (!resp.ok) {
+        throw new Error("failed_to_load_wishlist");
+      }
+      const data = (await resp.json()) as { wishlist?: Array<{ id: string; item_id: string; target_price?: number }> };
+      setWishlist(data.wishlist || []);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_wishlist");
+    }
+  }
+
+  async function loadPricingGraph() {
+    setInsightError("");
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing");
+      return;
+    }
+    try {
+      const resp = await fetch(`/api/pricing/graph?item_id=${encodeURIComponent(selectedItemID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_pricing_graph");
+      }
+      const data = (await resp.json()) as { points?: Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }> };
+      setPricingPoints(data.points || []);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_graph");
     }
   }
 
@@ -794,6 +844,37 @@ export function App() {
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Dashboard and Pricing</h3>
+              <div>
+                <button type="button" onClick={loadDashboard}>
+                  Load Dashboard
+                </button>{" "}
+                <button type="button" onClick={loadWishlist}>
+                  Load Wishlist
+                </button>{" "}
+                <button type="button" onClick={loadPricingGraph}>
+                  Load Pricing Graph
+                </button>
+              </div>
+              {dashboard ? (
+                <div>
+                  <p>New Discoveries: {String(dashboard.new_discoveries ?? 0)}</p>
+                  <p>Wishlist Hits: {String(dashboard.wishlist_hits ?? 0)}</p>
+                  <p>Price Drops: {String(dashboard.price_drops ?? 0)}</p>
+                  <p>Total Items: {String(dashboard.total_items ?? 0)}</p>
+                </div>
+              ) : null}
+              <ul>
+                {wishlist.map((w) => (
+                  <li key={w.id}>Wishlist Item: {w.item_id} target {String(w.target_price ?? "")}</li>
+                ))}
+              </ul>
+              <p>Pricing points: {pricingPoints.length}</p>
+              {insightError ? <p>Insight error: {insightError}</p> : null}
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

@@ -179,4 +179,57 @@ describe("App shell", () => {
     loadQuerySets.click();
     expect(await screen.findByText(/afx search/i)).toBeInTheDocument();
   });
+
+  it("loads dashboard, wishlist, and pricing graph", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/dashboard") {
+        return new Response(
+          JSON.stringify({ new_discoveries: 3, wishlist_hits: 1, price_drops: 2, total_items: 10, total_instances: 12 }),
+          { status: 200 },
+        );
+      }
+      if (url === "/api/wishlist") {
+        return new Response(JSON.stringify({ wishlist: [{ id: "w1", item_id: "i1", target_price: 25 }] }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/graph?item_id=i1")) {
+        return new Response(JSON.stringify({ points: [{ day: "2026-02-20", price: 20 }, { day: "2026-02-21", price: 18 }] }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const loadDashboard = await screen.findByRole("button", { name: /load dashboard/i });
+    loadDashboard.click();
+    expect(await screen.findByText(/new discoveries: 3/i)).toBeInTheDocument();
+
+    const loadWishlist = await screen.findByRole("button", { name: /load wishlist/i });
+    loadWishlist.click();
+    expect(await screen.findByText(/wishlist item: i1 target 25/i)).toBeInTheDocument();
+
+    const loadGraph = await screen.findByRole("button", { name: /load pricing graph/i });
+    loadGraph.click();
+    expect(await screen.findByText(/pricing points: 2/i)).toBeInTheDocument();
+  });
 });
