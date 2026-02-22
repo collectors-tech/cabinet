@@ -12,11 +12,76 @@ function detectInitialTheme(): Theme {
 
 export function App() {
   const [theme, setTheme] = useState<Theme>(detectInitialTheme);
+  const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [activeProfile, setActiveProfile] = useState<{ id: string; name: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem("cabinet.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    let disposed = false;
+    async function loadProfiles() {
+      setLoading(true);
+      setError("");
+      try {
+        const resp = await fetch("/api/profiles");
+        if (!resp.ok) {
+          throw new Error("failed_to_list_profiles");
+        }
+        const data = (await resp.json()) as { profiles?: Array<{ id: string; name: string }> };
+        if (disposed) {
+          return;
+        }
+        setProfiles(data.profiles ?? []);
+      } catch (e) {
+        if (disposed) {
+          return;
+        }
+        setError(e instanceof Error ? e.message : "failed_to_load_profiles");
+      } finally {
+        if (!disposed) {
+          setLoading(false);
+        }
+      }
+    }
+    loadProfiles();
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  async function createFirstProfile() {
+    setError("");
+    try {
+      const createResp = await fetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Default" }),
+      });
+      if (!createResp.ok) {
+        throw new Error("failed_to_create_profile");
+      }
+      const created = (await createResp.json()) as { id: string; name: string };
+      setProfiles([created]);
+
+      const activateResp = await fetch("/api/profiles/active", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: created.id }),
+      });
+      if (!activateResp.ok) {
+        throw new Error("failed_to_activate_profile");
+      }
+      const active = (await activateResp.json()) as { id: string; name: string };
+      setActiveProfile(active);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_setup_profile");
+    }
+  }
 
   return (
     <main data-testid="app-shell" className="cabinet-shell">
@@ -44,6 +109,17 @@ export function App() {
         <section className="cabinet-card">
           <h2>Cabinet Frontend Foundation</h2>
           <p>Next: onboarding, WebAuthn flows, collection workspace, and Cypress E2E.</p>
+          {loading ? <p>Loading profiles...</p> : null}
+          {!loading && profiles.length === 0 ? (
+            <div>
+              <p>No local profiles found. Create your first profile to continue.</p>
+              <button type="button" onClick={createFirstProfile}>
+                Create First Profile
+              </button>
+            </div>
+          ) : null}
+          {activeProfile ? <p>Active profile: {activeProfile.name}</p> : null}
+          {error ? <p>Profile error: {error}</p> : null}
           <ul>
             <li>
               <a href="/healthz">Health Check</a>
