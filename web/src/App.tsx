@@ -90,6 +90,7 @@ export function App() {
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
+  const [onboardingStatus, setOnboardingStatus] = useState("");
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
@@ -1098,6 +1099,7 @@ export function App() {
       const parsed = JSON.parse(credentialJSON || "{}");
       await postJSON("/api/auth/webauthn/register/finish", { session_id: authSessionID, credential: parsed });
       setAuthStatus("registration_finished");
+      await seedOnboardingSampleData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_finish_registration");
     }
@@ -1131,8 +1133,26 @@ export function App() {
         setSessionToken(token);
       }
       setAuthStatus("login_finished");
+      await seedOnboardingSampleData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_finish_login");
+    }
+  }
+
+  async function seedOnboardingSampleData() {
+    setOnboardingStatus("");
+    try {
+      const data = await postJSON("/api/onboarding/sample-data", {});
+      const createdItems = Number(data.created_items || 0);
+      if (createdItems > 0) {
+        setOnboardingStatus(`Onboarding sample data loaded (${createdItems} starter items).`);
+      } else {
+        setOnboardingStatus("Onboarding sample data already available.");
+      }
+      await loadItems();
+    } catch (e) {
+      setOnboardingStatus("Onboarding sample data failed to load.");
+      setError(e instanceof Error ? e.message : "failed_to_seed_onboarding_sample_data");
     }
   }
 
@@ -1329,6 +1349,7 @@ export function App() {
                 </button>
               </div>
               <p>Auth status: {authStatus || "idle"}</p>
+              {onboardingStatus ? <p>{onboardingStatus}</p> : null}
             </div>
           ) : null}
           {activeProfile ? (

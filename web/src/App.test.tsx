@@ -95,6 +95,58 @@ describe("App shell", () => {
     expect(await screen.findByText(/auth session: sess-reg-1/i)).toBeInTheDocument();
   });
 
+  it("auto-loads onboarding sample data after registration finish", async () => {
+    let sampleSeeded = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        if (sampleSeeded) {
+          return new Response(JSON.stringify({ items: [{ id: "seed-1", part_number: "CAB-DEMO-001", title: "Starter Item" }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/begin" && init?.method === "POST") {
+        return new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/finish" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/onboarding/sample-data" && init?.method === "POST") {
+        sampleSeeded = true;
+        return new Response(
+          JSON.stringify({ created_items: 1, created_wishlist_entries: 1, total_items: 1, total_wishlist_entries: 1, already_seeded_for_profile: false }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const begin = await screen.findByRole("button", { name: /begin webauthn registration/i });
+    begin.click();
+    const finish = await screen.findByRole("button", { name: /finish registration/i });
+    finish.click();
+
+    expect(await screen.findByText(/onboarding sample data loaded/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/cab-demo-001/i)).length).toBeGreaterThan(0);
+  });
+
   it("lists and creates collection items", async () => {
     const fetchMock = vi
       .fn()
