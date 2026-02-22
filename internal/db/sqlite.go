@@ -59,6 +59,21 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_saved_filters_profile_id ON saved_filters(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS profile_secrets (
+			profile_id TEXT NOT NULL,
+			key TEXT NOT NULL,
+			value TEXT NOT NULL,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (profile_id, key),
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_profile_secrets_profile_id ON profile_secrets(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS profile_licenses (
+			profile_id TEXT PRIMARY KEY,
+			license_json TEXT NOT NULL,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
 		`CREATE TABLE IF NOT EXISTS webauthn_credentials (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,

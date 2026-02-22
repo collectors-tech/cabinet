@@ -9,6 +9,7 @@ Desktop-first collector intelligence app.
 - SQLite initialization + baseline migrations
 - Config system with update channel support
 - Signed update signature verification primitives
+- Installer packaging workflow for Windows and macOS artifacts (`.github/workflows/release-installers.yml`)
 
 ## Run Locally
 1. Install Go 1.24+.
@@ -34,6 +35,11 @@ go run ./cmd/cabinet
 - `POST /api/profiles/{profileID}/saved-filters` with `{ "name": "...", "query": {...} }`
 - `PUT /api/profiles/{profileID}/saved-filters` with `{ "id": "...", "name": "...", "query": {...} }`
 - `DELETE /api/profiles/{profileID}/saved-filters?id=<filterID>`
+- `GET /api/profiles/{profileID}/storage`
+- `PUT /api/profiles/{profileID}/secrets` with `{ "key": "...", "value": "..." }`
+- `GET /api/profiles/{profileID}/secrets?key=<key>`
+- `PUT /api/profiles/{profileID}/license` with `{ "license_json": "{...}" }`
+- `GET /api/profiles/{profileID}/license`
 - `GET /api/items`
 - `POST /api/items` with canonical item payload
 - `GET /api/items/{itemID}/instances`
@@ -60,8 +66,13 @@ go run ./cmd/cabinet
 - `POST /api/items/{itemID}/photos-rebuild`
 - `POST /api/auth/webauthn/register/begin` with `{ "profile_id": "<id>" }`
 - `POST /api/auth/webauthn/register/finish` with `{ "session_id": "...", "credential": {...} }`
+- `GET /api/auth/requirements?profile_id=<id>`
 - `POST /api/auth/webauthn/login/begin` with `{ "profile_id": "<id>" }`
-- `POST /api/auth/webauthn/login/finish` with `{ "session_id": "...", "credential": {...} }`
+- `POST /api/auth/webauthn/login/finish` with `{ "session_id": "...", "credential": {...} }` returns session token
+- `POST /api/auth/recovery/passphrase` with `{ "profile_id": "<id>", "passphrase": "..." }`
+- `POST /api/auth/recovery/reset/begin` with `{ "profile_id": "<id>", "passphrase": "..." }`
+- `POST /api/auth/session/validate` with `{ "session_token": "..." }`
+- `POST /api/auth/session/lock` with `{ "session_token": "..." }`
 
 ## Environment Variables
 - `CABINET_ADDR` default: `127.0.0.1:8080`
