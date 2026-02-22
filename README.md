@@ -48,6 +48,15 @@ go run ./cmd/cabinet
 - `POST /api/items/{itemID}/barcodes` with `{ "barcode": "..." }`
 - `GET /api/barcodes/{barcode}` for local matches
 - `GET /api/search/items?q=...&brand=...&category=...&condition=...&status=...&tags=...&scale=...&sort=...&limit=...`
+- `GET /api/scanner/query-sets`
+- `POST /api/scanner/query-sets` with query set payload
+- `POST /api/scanner/run` with `{ "query_set_id": "<id>" }`
+- `POST /api/scanner/run/scheduled`
+- `GET /api/scanner/candidates?query_set_id=<id>`
+- `GET /api/scanner/failures`
+- `GET /api/provider/health?provider=ebay`
+- `POST /api/matching/run`
+- `GET /api/matching/results`
 - `GET /api/data/export/json`
 - `GET /api/data/export/csv/items`
 - `POST /api/data/import/json/dry-run` with `{ "snapshot": {...} }`
@@ -86,3 +95,8 @@ go run ./cmd/cabinet
 - `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:8080`
 - `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
+
+eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
+- `ebay_bearer_token`
+- `ebay_marketplace` (example: `EBAY_US`)
+- `ebay_base_url` (optional override)

@@ -21,8 +21,11 @@ import (
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
+	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/matching"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/profile"
+	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
 	"github.com/collectors-tech/cabinet/internal/ui"
 )
@@ -60,6 +63,8 @@ func New(cfg config.Config) (*App, error) {
 	dataService := datamgmt.NewService(conn)
 	backupSvc := backup.NewService(cfg.DBPath, filepath.Join(cfg.DataDir, "backups"), cfg.BackupInterval)
 	searchRepo := search.NewRepository(conn)
+	scannerSvc := scanner.NewService(conn)
+	matchingSvc := matching.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
 	if err != nil {
 		conn.Close()
@@ -393,6 +398,169 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+	})
+	mux.HandleFunc("/api/scanner/query-sets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			items, err := scannerSvc.ListQuerySets(r.Context())
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_query_sets"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"query_sets": items})
+		case http.MethodPost:
+			var req scanner.QuerySet
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, err := scannerSvc.CreateQuerySet(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_query_set"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(created)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/scanner/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		provider := ebay.NewProvider(ebay.ProviderConfig{
+			BaseURL:     settings["ebay_base_url"],
+			BearerToken: settings["ebay_bearer_token"],
+			Marketplace: settings["ebay_marketplace"],
+		})
+		out, err := scannerSvc.RunNow(r.Context(), req.QuerySetID, provider)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("/api/scanner/run/scheduled", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		provider := ebay.NewProvider(ebay.ProviderConfig{
+			BaseURL:     settings["ebay_base_url"],
+			BearerToken: settings["ebay_bearer_token"],
+			Marketplace: settings["ebay_marketplace"],
+		})
+		ran, err := scannerSvc.RunScheduled(r.Context(), provider)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_run_scheduled_scanner"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"runs": ran})
+	})
+	mux.HandleFunc("/api/scanner/candidates", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		querySetID := strings.TrimSpace(r.URL.Query().Get("query_set_id"))
+		if querySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		items, err := scannerSvc.ListCandidates(r.Context(), querySetID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": items})
+	})
+	mux.HandleFunc("/api/scanner/failures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		items, err := scannerSvc.ListFailures(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_failures"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"failures": items})
+	})
+	mux.HandleFunc("/api/provider/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+		if provider == "" {
+			provider = "ebay"
+		}
+		health, err := scannerSvc.ProviderHealth(r.Context(), provider)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_provider_health"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(health)
+	})
+	mux.HandleFunc("/api/matching/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if err := matchingSvc.Run(r.Context()); err != nil {
+			http.Error(w, `{"error":"failed_to_run_matching"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/matching/results", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		items, err := matchingSvc.List(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_matching_results"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": items})
 	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
