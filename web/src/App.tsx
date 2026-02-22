@@ -83,6 +83,24 @@ export function App() {
     }
   }
 
+  async function activateProfile(profileID: string) {
+    setError("");
+    try {
+      const activateResp = await fetch("/api/profiles/active", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profileID }),
+      });
+      if (!activateResp.ok) {
+        throw new Error("failed_to_activate_profile");
+      }
+      const active = (await activateResp.json()) as { id: string; name: string };
+      setActiveProfile(active);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_activate_profile");
+    }
+  }
+
   return (
     <main data-testid="app-shell" className="cabinet-shell">
       <aside className="cabinet-sidebar">
@@ -116,6 +134,21 @@ export function App() {
               <button type="button" onClick={createFirstProfile}>
                 Create First Profile
               </button>
+            </div>
+          ) : null}
+          {!loading && profiles.length > 0 ? (
+            <div>
+              <p>Select a profile to continue:</p>
+              <ul>
+                {profiles.map((p) => (
+                  <li key={p.id}>
+                    <span>{p.name}</span>{" "}
+                    <button type="button" onClick={() => activateProfile(p.id)}>
+                      Use {p.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {activeProfile ? <p>Active profile: {activeProfile.name}</p> : null}

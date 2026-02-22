@@ -32,4 +32,21 @@ describe("App shell", () => {
     create.click();
     expect(await screen.findByText(/active profile: default/i)).toBeInTheDocument();
   });
+
+  it("allows activating an existing profile", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }, { id: "p2", name: "Beta" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use beta/i });
+    activate.click();
+    expect(await screen.findByText(/active profile: beta/i)).toBeInTheDocument();
+  });
 });
