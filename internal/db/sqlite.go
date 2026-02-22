@@ -161,6 +161,60 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_item_photos_item_id ON item_photos(item_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_query_sets (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			keywords_json TEXT NOT NULL,
+			exclusions_json TEXT NOT NULL DEFAULT '[]',
+			max_price REAL NOT NULL DEFAULT 0,
+			region TEXT NOT NULL DEFAULT '',
+			condition_filter TEXT NOT NULL DEFAULT '',
+			schedule_cron TEXT NOT NULL DEFAULT '',
+			enabled INTEGER NOT NULL DEFAULT 1,
+			rate_limit_rps INTEGER NOT NULL DEFAULT 2,
+			max_retry_count INTEGER NOT NULL DEFAULT 2,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS scanner_candidates (
+			id TEXT PRIMARY KEY,
+			query_set_id TEXT NOT NULL,
+			listing_id TEXT NOT NULL UNIQUE,
+			title TEXT NOT NULL,
+			price REAL NOT NULL DEFAULT 0,
+			shipping REAL NOT NULL DEFAULT 0,
+			url TEXT NOT NULL,
+			image TEXT NOT NULL DEFAULT '',
+			seller TEXT NOT NULL DEFAULT '',
+			first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			status TEXT NOT NULL DEFAULT 'new',
+			source TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
+		`CREATE TABLE IF NOT EXISTS scanner_matches (
+			candidate_id TEXT PRIMARY KEY,
+			item_id TEXT NOT NULL DEFAULT '',
+			state TEXT NOT NULL,
+			confidence REAL NOT NULL DEFAULT 0,
+			needs_review INTEGER NOT NULL DEFAULT 1,
+			extracted_part_number TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (candidate_id) REFERENCES scanner_candidates(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS provider_health (
+			provider TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			message TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS scanner_failures (
+			id TEXT PRIMARY KEY,
+			provider TEXT NOT NULL,
+			message TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, q := range queries {
