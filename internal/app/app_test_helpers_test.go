@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -35,6 +36,7 @@ func newTestApp(t *testing.T) *App {
 
 func newTestAppWithConfig(t *testing.T, cfg config.Config) *App {
 	t.Helper()
+	_ = os.Setenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK", "1")
 	a, err := New(cfg)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

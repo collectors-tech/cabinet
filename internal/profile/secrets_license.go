@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
+
+	"github.com/collectors-tech/cabinet/internal/securestore"
 )
 
 func (r *Repository) PutSecret(ctx context.Context, profileID, key, value string) error {
@@ -14,6 +17,13 @@ func (r *Repository) PutSecret(ctx context.Context, profileID, key, value string
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return fmt.Errorf("secret key is required")
+	}
+	if isAPISecretKey(key) {
+		if err := securestore.Set(profileID, key, value); err == nil {
+			return nil
+		} else if os.Getenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK") != "1" {
+			return fmt.Errorf("secure store set failed: %w", err)
+		}
 	}
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO profile_secrets(profile_id, key, value, updated_at)
@@ -35,6 +45,13 @@ func (r *Repository) GetSecret(ctx context.Context, profileID, key string) (stri
 	if key == "" {
 		return "", fmt.Errorf("secret key is required")
 	}
+	if isAPISecretKey(key) {
+		if value, err := securestore.Get(profileID, key); err == nil {
+			return value, nil
+		} else if os.Getenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK") != "1" {
+			return "", fmt.Errorf("secure store get failed: %w", err)
+		}
+	}
 	var value string
 	if err := r.db.QueryRowContext(ctx, `SELECT value FROM profile_secrets WHERE profile_id = ? AND key = ?`, profileID, key).Scan(&value); err != nil {
 		if err == sql.ErrNoRows {
@@ -43,6 +60,11 @@ func (r *Repository) GetSecret(ctx context.Context, profileID, key string) (stri
 		return "", fmt.Errorf("get secret: %w", err)
 	}
 	return value, nil
+}
+
+func isAPISecretKey(key string) bool {
+	lk := strings.ToLower(strings.TrimSpace(key))
+	return strings.Contains(lk, "api_key") || strings.Contains(lk, "token")
 }
 
 func (r *Repository) PutLicense(ctx context.Context, profileID, licenseJSON string) error {

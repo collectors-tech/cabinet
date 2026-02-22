@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -19,6 +20,7 @@ func TestPerProfileSecretAndLicenseIsolation(t *testing.T) {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	repo := NewRepository(conn)
+	_ = os.Setenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK", "1")
 	p1, err := repo.Create(context.Background(), "A")
 	if err != nil {
 		t.Fatalf("Create A error = %v", err)
