@@ -50,6 +50,11 @@ export function App() {
   const [barcodeLookupMatches, setBarcodeLookupMatches] = useState<Array<{ item_id?: string; part_number?: string }>>([]);
   const [barcodeExternalURL, setBarcodeExternalURL] = useState("");
   const [barcodeError, setBarcodeError] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiTitleInput, setAiTitleInput] = useState("");
+  const [aiPhotoURL, setAiPhotoURL] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<{ title?: string; confidence?: number; [key: string]: unknown } | null>(null);
+  const [aiError, setAiError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -583,6 +588,100 @@ export function App() {
     }
   }
 
+  async function toggleAI(enabled: boolean) {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAiError("");
+    try {
+      const resp = await fetch("/api/ai/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: activeProfile.id, enabled }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_toggle_ai");
+      }
+      setAiEnabled(enabled);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "failed_to_toggle_ai");
+    }
+  }
+
+  async function testAI() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAiError("");
+    try {
+      const resp = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: activeProfile.id }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_ai_test");
+      }
+      setAiSuggestion({ title: "AI connectivity ok", confidence: 1 });
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "failed_ai_test");
+    }
+  }
+
+  async function suggestFromTitle() {
+    if (!activeProfile?.id || !aiTitleInput.trim()) {
+      setAiError("profile_and_title_required");
+      return;
+    }
+    setAiError("");
+    try {
+      const resp = await fetch("/api/ai/suggest/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: activeProfile.id, title: aiTitleInput.trim() }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_ai_suggest_title");
+      }
+      const suggestion = (await resp.json()) as { title?: string; confidence?: number; [key: string]: unknown };
+      setAiSuggestion(suggestion);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "failed_ai_suggest_title");
+    }
+  }
+
+  async function suggestFromPhoto() {
+    if (!activeProfile?.id || !aiPhotoURL.trim()) {
+      setAiError("profile_and_photo_required");
+      return;
+    }
+    setAiError("");
+    try {
+      const resp = await fetch("/api/ai/suggest/photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: activeProfile.id, image_url: aiPhotoURL.trim() }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_ai_suggest_photo");
+      }
+      const suggestion = (await resp.json()) as { title?: string; confidence?: number; [key: string]: unknown };
+      setAiSuggestion(suggestion);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "failed_ai_suggest_photo");
+    }
+  }
+
+  function applySuggestion() {
+    if (!aiSuggestion?.title) {
+      return;
+    }
+    if (!window.confirm("Apply AI suggestion to item title draft?")) {
+      return;
+    }
+    setNewItem((current) => ({ ...current, title: String(aiSuggestion.title) }));
+  }
+
   async function beginWebAuthnRegistration() {
     if (!activeProfile?.id) {
       return;
@@ -1058,6 +1157,55 @@ export function App() {
               </ul>
               <p>Local matches: {barcodeLookupMatches.length}</p>
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>AI Assist</h3>
+              <div>
+                <button type="button" onClick={() => toggleAI(true)}>
+                  Enable AI
+                </button>{" "}
+                <button type="button" onClick={() => toggleAI(false)}>
+                  Disable AI
+                </button>{" "}
+                <button type="button" onClick={testAI}>
+                  Test AI
+                </button>
+              </div>
+              <p>AI enabled: {String(aiEnabled)}</p>
+              <div>
+                <input
+                  value={aiTitleInput}
+                  onChange={(e) => setAiTitleInput(e.target.value)}
+                  placeholder="Listing title"
+                  aria-label="AI title input"
+                />{" "}
+                <button type="button" onClick={suggestFromTitle}>
+                  Suggest From Title
+                </button>
+              </div>
+              <div>
+                <input
+                  value={aiPhotoURL}
+                  onChange={(e) => setAiPhotoURL(e.target.value)}
+                  placeholder="Image URL"
+                  aria-label="AI photo url"
+                />{" "}
+                <button type="button" onClick={suggestFromPhoto}>
+                  Suggest From Photo
+                </button>
+              </div>
+              {aiSuggestion ? (
+                <div>
+                  <p>AI confidence: {String(aiSuggestion.confidence ?? "")}</p>
+                  <p>AI title: {String(aiSuggestion.title ?? "")}</p>
+                  <button type="button" onClick={applySuggestion}>
+                    Apply Suggestion
+                  </button>
+                </div>
+              ) : null}
+              {aiError ? <p>AI error: {aiError}</p> : null}
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

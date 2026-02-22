@@ -316,4 +316,49 @@ describe("App shell", () => {
     externalBtn.click();
     expect(await screen.findByText(/ebay.com\/sch\/i.html/i)).toBeInTheDocument();
   });
+
+  it("toggles AI and applies suggestion with confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/ai/toggle" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/ai/suggest/title" && init?.method === "POST") {
+        return new Response(JSON.stringify({ title: "Suggested Title", confidence: 0.92 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    const toggleAi = await screen.findByRole("button", { name: /enable ai/i });
+    toggleAi.click();
+    const titleInput = await screen.findByLabelText(/ai title input/i);
+    fireEvent.change(titleInput, { target: { value: "AFX P-1 listing" } });
+    const suggest = await screen.findByRole("button", { name: /suggest from title/i });
+    suggest.click();
+    expect(await screen.findByText(/ai confidence: 0.92/i)).toBeInTheDocument();
+    const apply = await screen.findByRole("button", { name: /apply suggestion/i });
+    apply.click();
+    expect(await screen.findByDisplayValue(/suggested title/i)).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
 });
