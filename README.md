@@ -35,6 +35,7 @@ cd web
 npm install
 npm run test
 npm run build
+npm run e2e:smoke
 ```
 
 Then run Cabinet again:

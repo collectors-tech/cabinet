@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "cypress run --browser electron",
+    "serve:go": "\"C:\\Program Files\\Go\\bin\\go.exe\" run ../cmd/cabinet",
+    "e2e:run-smoke": "cypress run --browser electron --spec cypress/e2e/smoke.cy.ts",
+    "e2e:smoke": "start-server-and-test serve:go http://127.0.0.1:8080 e2e:run-smoke"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -30,8 +34,10 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "cypress": "^13.15.2",
     "jsdom": "^25.0.1",
     "postcss": "^8.4.47",
+    "start-server-and-test": "^2.0.8",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
     "vite": "^5.4.9",
