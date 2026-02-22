@@ -27,6 +27,13 @@
       h1 {
         margin-top: 0;
       }
+      ul {
+        margin: 0.75rem 0 0;
+        padding-left: 1.25rem;
+      }
+      a {
+        color: #93c5fd;
+      }
       code {
         background: #1f2937;
         padding: 0.2rem 0.4rem;
@@ -38,11 +45,17 @@
     <main>
       <section class="card">
         <h1>Cabinet</h1>
-        <p>Runtime scaffold is active.</p>
+        <p>Application runtime is active.</p>
         <p>
-          Next step: implement profile setup and WebAuthn flow from issue
-          <code>#2</code>.
+          Core APIs for profiles, WebAuthn auth, collection, scanner, matching,
+          discovery, wishlist, pricing, dashboard, licensing, AI assist, backup,
+          and diagnostics are available.
         </p>
+        <ul>
+          <li><a href="/healthz">Health Check</a> <code>/healthz</code></li>
+          <li><a href="/api/runtime">Runtime</a> <code>/api/runtime</code></li>
+          <li><a href="/api/runtime/recovery">Recovery State</a> <code>/api/runtime/recovery</code></li>
+        </ul>
       </section>
     </main>
   </body>
