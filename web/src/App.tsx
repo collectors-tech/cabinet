@@ -91,6 +91,7 @@ export function App() {
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState("");
+  const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
@@ -279,6 +280,8 @@ export function App() {
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
       await loadProfileStorage(active.id);
+      localStorage.setItem(workspacePreferenceKey(active.id), "0");
+      setAdvancedWorkspace(false);
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
@@ -299,10 +302,32 @@ export function App() {
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
       await loadProfileStorage(active.id);
+      await loadWorkspacePreference(active.id);
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_activate_profile");
     }
+  }
+
+  async function loadWorkspacePreference(profileID: string) {
+    const value = localStorage.getItem(workspacePreferenceKey(profileID));
+    if (value === null) {
+      setAdvancedWorkspace(true);
+      return;
+    }
+    setAdvancedWorkspace(value === "1" || value.toLowerCase() === "true");
+  }
+
+  async function setWorkspaceMode(nextAdvanced: boolean) {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdvancedWorkspace(nextAdvanced);
+    localStorage.setItem(workspacePreferenceKey(activeProfile.id), nextAdvanced ? "1" : "0");
+  }
+
+  function workspacePreferenceKey(profileID: string) {
+    return `cabinet.workspace.${profileID}`;
   }
 
   async function addItem() {
@@ -1236,6 +1261,7 @@ export function App() {
   const matchedCount = matchingResults.filter((result) => result.state === "matched").length;
   const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
   const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
+  const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
 
   return (
     <main data-testid="app-shell" className="cabinet-shell">
@@ -1352,9 +1378,50 @@ export function App() {
               {onboardingStatus ? <p>{onboardingStatus}</p> : null}
             </div>
           ) : null}
-          {activeProfile ? (
+          {activeProfile && !showAdvancedWorkspace ? (
+            <div>
+              <h3>Starter Onboarding</h3>
+              <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
+              <div>
+                <button type="button" onClick={() => setWorkspaceMode(true)}>
+                  Open Advanced Workspace
+                </button>
+              </div>
+              <div>
+                <input
+                  value={newItem.part_number}
+                  onChange={(e) => setNewItem((current) => ({ ...current, part_number: e.target.value }))}
+                  placeholder="Part Number"
+                  aria-label="Starter part number"
+                />{" "}
+                <input
+                  value={newItem.title}
+                  onChange={(e) => setNewItem((current) => ({ ...current, title: e.target.value }))}
+                  placeholder="Item Title"
+                  aria-label="Starter item title"
+                />{" "}
+                <input
+                  value={newItem.brand}
+                  onChange={(e) => setNewItem((current) => ({ ...current, brand: e.target.value }))}
+                  placeholder="Brand"
+                  aria-label="Starter brand"
+                />{" "}
+                <button type="button" onClick={addItem}>
+                  Add First Item
+                </button>
+              </div>
+              <p>Current items: {items.length}</p>
+              {itemsError ? <p>Item error: {itemsError}</p> : null}
+            </div>
+          ) : null}
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Collection</h3>
+              <div>
+                <button type="button" onClick={() => setWorkspaceMode(false)}>
+                  Back to Starter View
+                </button>
+              </div>
               <div>
                 <input
                   value={collectionQuery.text}
@@ -1521,7 +1588,7 @@ export function App() {
               </div>
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Photos</h3>
               <div>
@@ -1593,7 +1660,7 @@ export function App() {
               ) : null}
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Discovery Scanner</h3>
               <div>
@@ -1706,7 +1773,7 @@ export function App() {
               </ul>
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Dashboard and Pricing</h3>
               <div>
@@ -1780,7 +1847,7 @@ export function App() {
               {insightError ? <p>Insight error: {insightError}</p> : null}
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Settings and Diagnostics</h3>
               <div>
@@ -1850,7 +1917,7 @@ export function App() {
               {adminError ? <p>Admin error: {adminError}</p> : null}
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>Barcodes</h3>
               <div>
@@ -1884,7 +1951,7 @@ export function App() {
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
             </div>
           ) : null}
-          {activeProfile ? (
+          {showAdvancedWorkspace ? (
             <div>
               <h3>AI Assist</h3>
               <div>

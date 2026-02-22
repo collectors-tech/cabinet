@@ -5,6 +5,7 @@ import { App } from "./App";
 describe("App shell", () => {
   afterEach(() => {
     cleanup();
+    localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -20,17 +21,25 @@ describe("App shell", () => {
   });
 
   it("shows onboarding create flow when no profiles exist", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 201 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ db_path: "C:/Cabinet/profiles/p1/cabinet.db", media_dir: "C:/Cabinet/profiles/p1/media" }), {
-          status: 200,
-        }),
-      );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [] }), { status: 200 });
+      }
+      if (url === "/api/profiles" && init?.method === "POST") {
+        return new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 201 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "C:/Cabinet/profiles/p1/cabinet.db", media_dir: "C:/Cabinet/profiles/p1/media" }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -145,6 +154,41 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/onboarding sample data loaded/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/cab-demo-001/i)).length).toBeGreaterThan(0);
+  });
+
+  it("defaults to starter view and reveals advanced workspace on demand", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    expect(await screen.findByRole("button", { name: /open advanced workspace/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /discovery scanner/i })).not.toBeInTheDocument();
+
+    const openAdvanced = await screen.findByRole("button", { name: /open advanced workspace/i });
+    openAdvanced.click();
+    expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
   });
 
   it("lists and creates collection items", async () => {
