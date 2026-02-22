@@ -17,7 +17,7 @@ export function App() {
   const [profileStorage, setProfileStorage] = useState<{ db_path?: string; media_dir?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [items, setItems] = useState<Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }>>(
+  const [items, setItems] = useState<Array<{ id: string; part_number: string; title: string; brand?: string; category?: string; series?: string }>>(
     [],
   );
   const [itemsLoading, setItemsLoading] = useState(false);
@@ -28,6 +28,17 @@ export function App() {
     brand: "",
     category: "General",
   });
+  const [collectionQuery, setCollectionQuery] = useState({
+    text: "",
+    brand: "",
+    category: "",
+    sort_by: "date_added",
+  });
+  const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; query?: Record<string, unknown> }>>([]);
+  const [savedFilterName, setSavedFilterName] = useState("");
+  const [columnBrand, setColumnBrand] = useState("");
+  const [columnCategory, setColumnCategory] = useState("");
+  const [columnSeries, setColumnSeries] = useState("");
   const [selectedItemID, setSelectedItemID] = useState("");
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -35,6 +46,13 @@ export function App() {
   const [querySets, setQuerySets] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
   const [candidates, setCandidates] = useState<Array<{ id: string; title?: string; listing_id?: string; status?: string }>>([]);
+  const [matchingResults, setMatchingResults] = useState<Array<{ candidate_id?: string; state?: string; part_number?: string; item_id?: string }>>(
+    [],
+  );
+  const [notInCollectionItems, setNotInCollectionItems] = useState<Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string }>>(
+    [],
+  );
+  const [notInCollectionFilter, setNotInCollectionFilter] = useState({ query: "", maxPrice: "", dateFrom: "" });
   const [scannerError, setScannerError] = useState("");
   const [newQuerySet, setNewQuerySet] = useState({ name: "", keywords: "afx" });
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
@@ -45,6 +63,7 @@ export function App() {
   const [logCount, setLogCount] = useState(0);
   const [adminError, setAdminError] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [exportBytes, setExportBytes] = useState(0);
   const [barcodes, setBarcodes] = useState<Array<{ id?: string; barcode: string }>>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [barcodeLookupMatches, setBarcodeLookupMatches] = useState<Array<{ item_id?: string; part_number?: string }>>([]);
@@ -116,7 +135,7 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_list_items");
       }
-      const data = (await resp.json()) as { items?: Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }> };
+      const data = (await resp.json()) as { items?: Array<{ id: string; part_number: string; title: string; brand?: string; category?: string; series?: string }> };
       const listed = data.items || [];
       setItems(listed);
       if (listed.length > 0 && !selectedItemID) {
@@ -128,6 +147,58 @@ export function App() {
       setItemsLoading(false);
     }
   }
+
+  async function searchItems() {
+    setItemsLoading(true);
+    setItemsError("");
+    try {
+      const params = new URLSearchParams();
+      if (collectionQuery.text.trim()) {
+        params.set("q", collectionQuery.text.trim());
+      }
+      if (collectionQuery.brand.trim()) {
+        params.set("brand", collectionQuery.brand.trim());
+      }
+      if (collectionQuery.category.trim()) {
+        params.set("category", collectionQuery.category.trim());
+      }
+      if (collectionQuery.sort_by.trim()) {
+        params.set("sort", collectionQuery.sort_by.trim());
+      }
+      const resp = await fetch(`/api/search/items?${params.toString()}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_search_items");
+      }
+      const data = (await resp.json()) as { items?: Array<{ id: string; part_number: string; title: string; brand?: string; category?: string; series?: string }> };
+      const listed = data.items || [];
+      setItems(listed);
+      if (listed.length > 0 && !selectedItemID) {
+        setSelectedItemID(listed[0].id);
+      }
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_search_items");
+    } finally {
+      setItemsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!activeProfile?.id) {
+      return;
+    }
+    const hasSearch =
+      collectionQuery.text.trim() ||
+      collectionQuery.brand.trim() ||
+      collectionQuery.category.trim() ||
+      collectionQuery.sort_by !== "date_added";
+    if (!hasSearch) {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void searchItems();
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [activeProfile?.id, collectionQuery.text, collectionQuery.brand, collectionQuery.category, collectionQuery.sort_by]);
 
   useEffect(() => {
     let disposed = false;
@@ -235,7 +306,7 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_create_item");
       }
-      const created = (await resp.json()) as { id: string; part_number: string; title: string; brand?: string; category?: string };
+      const created = (await resp.json()) as { id: string; part_number: string; title: string; brand?: string; category?: string; series?: string };
       setItems((current) => [...current, created]);
       if (!selectedItemID) {
         setSelectedItemID(created.id);
@@ -244,6 +315,65 @@ export function App() {
     } catch (e) {
       setItemsError(e instanceof Error ? e.message : "failed_to_create_item");
     }
+  }
+
+  async function loadSavedFilters() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setItemsError("");
+    try {
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/saved-filters`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_saved_filters");
+      }
+      const data = (await resp.json()) as { saved_filters?: Array<{ id: string; name: string; query?: Record<string, unknown> }> };
+      setSavedFilters(data.saved_filters || []);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_list_saved_filters");
+    }
+  }
+
+  async function saveCurrentFilter() {
+    if (!activeProfile?.id || !savedFilterName.trim()) {
+      setItemsError("saved_filter_name_required");
+      return;
+    }
+    setItemsError("");
+    try {
+      const payload = {
+        name: savedFilterName.trim(),
+        query: {
+          text: collectionQuery.text,
+          brand: collectionQuery.brand,
+          category: collectionQuery.category,
+          sort_by: collectionQuery.sort_by,
+        },
+      };
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/saved-filters`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_save_filter");
+      }
+      const created = (await resp.json()) as { id: string; name: string; query?: Record<string, unknown> };
+      setSavedFilters((current) => [...current, created]);
+      setSavedFilterName("");
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_save_filter");
+    }
+  }
+
+  function applySavedFilter(filter: { query?: Record<string, unknown> }) {
+    const q = filter.query || {};
+    setCollectionQuery({
+      text: String(q.text || ""),
+      brand: String(q.brand || ""),
+      category: String(q.category || ""),
+      sort_by: String(q.sort_by || "date_added"),
+    });
   }
 
   async function loadPhotos() {
@@ -425,6 +555,65 @@ export function App() {
     }
   }
 
+  async function loadMatchingResults() {
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/matching/results");
+      if (!resp.ok) {
+        throw new Error("failed_to_list_matching_results");
+      }
+      const data = (await resp.json()) as {
+        results?: Array<{ candidate_id?: string; state?: string; part_number?: string; item_id?: string }>;
+      };
+      setMatchingResults(data.results || []);
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_list_matching_results");
+    }
+  }
+
+  async function loadNotInCollection() {
+    setScannerError("");
+    try {
+      const params = new URLSearchParams();
+      if (notInCollectionFilter.query.trim()) {
+        params.set("q", notInCollectionFilter.query.trim());
+      }
+      if (notInCollectionFilter.maxPrice.trim()) {
+        params.set("price_max", notInCollectionFilter.maxPrice.trim());
+      }
+      if (notInCollectionFilter.dateFrom.trim()) {
+        params.set("date_from", notInCollectionFilter.dateFrom.trim());
+      }
+      const resp = await fetch(`/api/discovery/not-in-collection?${params.toString()}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_not_in_collection");
+      }
+      const data = (await resp.json()) as {
+        items?: Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string }>;
+      };
+      setNotInCollectionItems(data.items || []);
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_list_not_in_collection");
+    }
+  }
+
+  async function notInCollectionAction(candidateID: string, actionType: "ignore" | "add_to_wishlist" | "track_price" | "create_item") {
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/discovery/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: candidateID, type: actionType }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_apply_discovery_action");
+      }
+      await loadNotInCollection();
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_apply_discovery_action");
+    }
+  }
+
   async function loadDashboard() {
     setInsightError("");
     try {
@@ -505,6 +694,20 @@ export function App() {
       setSettingsStatus(`${label}_ok`);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : `failed_${label}`);
+    }
+  }
+
+  async function exportText(path: string, label: string) {
+    try {
+      const resp = await fetch(path);
+      if (!resp.ok) {
+        throw new Error(`failed_export_${label}`);
+      }
+      const text = await resp.text();
+      setExportBytes(text.length);
+      setSettingsStatus(`${label}_export_ok`);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : `failed_export_${label}`);
     }
   }
 
@@ -800,6 +1003,31 @@ export function App() {
     }
   }
 
+  const brands = Array.from(new Set(items.map((item) => item.brand || "Unknown")));
+  const categoriesForBrand = Array.from(
+    new Set(items.filter((item) => (columnBrand ? (item.brand || "Unknown") === columnBrand : true)).map((item) => item.category || "Unknown")),
+  );
+  const seriesForCategory = Array.from(
+    new Set(
+      items
+        .filter((item) => {
+          const brandOK = columnBrand ? (item.brand || "Unknown") === columnBrand : true;
+          const categoryOK = columnCategory ? (item.category || "Unknown") === columnCategory : true;
+          return brandOK && categoryOK;
+        })
+        .map((item) => (item as { series?: string }).series || "Unknown"),
+    ),
+  );
+  const columnItems = items.filter((item) => {
+    const brandOK = columnBrand ? (item.brand || "Unknown") === columnBrand : true;
+    const categoryOK = columnCategory ? (item.category || "Unknown") === columnCategory : true;
+    const seriesOK = columnSeries ? ((item as { series?: string }).series || "Unknown") === columnSeries : true;
+    return brandOK && categoryOK && seriesOK;
+  });
+  const matchedCount = matchingResults.filter((result) => result.state === "matched").length;
+  const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
+  const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
+
   return (
     <main data-testid="app-shell" className="cabinet-shell">
       <aside className="cabinet-sidebar">
@@ -919,6 +1147,58 @@ export function App() {
               <h3>Collection</h3>
               <div>
                 <input
+                  value={collectionQuery.text}
+                  onChange={(e) => setCollectionQuery((current) => ({ ...current, text: e.target.value }))}
+                  placeholder="Search items"
+                  aria-label="Collection search"
+                />{" "}
+                <input
+                  value={collectionQuery.brand}
+                  onChange={(e) => setCollectionQuery((current) => ({ ...current, brand: e.target.value }))}
+                  placeholder="Brand filter"
+                  aria-label="Collection brand filter"
+                />{" "}
+                <input
+                  value={collectionQuery.category}
+                  onChange={(e) => setCollectionQuery((current) => ({ ...current, category: e.target.value }))}
+                  placeholder="Category filter"
+                  aria-label="Collection category filter"
+                />{" "}
+                <select
+                  value={collectionQuery.sort_by}
+                  onChange={(e) => setCollectionQuery((current) => ({ ...current, sort_by: e.target.value }))}
+                  aria-label="Collection sort"
+                >
+                  <option value="date_added">Date Added</option>
+                  <option value="part_number">Part Number</option>
+                  <option value="price">Price</option>
+                </select>
+              </div>
+              <div>
+                <input
+                  value={savedFilterName}
+                  onChange={(e) => setSavedFilterName(e.target.value)}
+                  placeholder="Saved filter name"
+                  aria-label="Saved filter name"
+                />{" "}
+                <button type="button" onClick={saveCurrentFilter}>
+                  Save Current Filter
+                </button>{" "}
+                <button type="button" onClick={loadSavedFilters}>
+                  Load Saved Filters
+                </button>
+              </div>
+              <ul>
+                {savedFilters.map((filter) => (
+                  <li key={filter.id}>
+                    <button type="button" onClick={() => applySavedFilter(filter)}>
+                      {filter.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div>
+                <input
                   value={newItem.part_number}
                   onChange={(e) => setNewItem((current) => ({ ...current, part_number: e.target.value }))}
                   placeholder="Part Number"
@@ -948,6 +1228,7 @@ export function App() {
               </div>
               {itemsLoading ? <p>Loading items...</p> : null}
               {itemsError ? <p>Item error: {itemsError}</p> : null}
+              {!itemsLoading && items.length === 0 ? <p>No items found for current filters.</p> : null}
               <table>
                 <thead>
                   <tr>
@@ -966,6 +1247,68 @@ export function App() {
                   ))}
                 </tbody>
               </table>
+              <h4>Column View</h4>
+              <div>
+                <div>
+                  <p>Brands</p>
+                  <ul>
+                    {brands.map((brand) => (
+                      <li key={brand}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setColumnBrand(brand);
+                            setColumnCategory("");
+                            setColumnSeries("");
+                          }}
+                        >
+                          {brand}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p>Categories</p>
+                  <ul>
+                    {categoriesForBrand.map((category) => (
+                      <li key={category}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setColumnCategory(category);
+                            setColumnSeries("");
+                          }}
+                        >
+                          {category}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p>Series</p>
+                  <ul>
+                    {seriesForCategory.map((series) => (
+                      <li key={series}>
+                        <button type="button" onClick={() => setColumnSeries(series)}>
+                          {series}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p>Items</p>
+                  <ul>
+                    {columnItems.map((item) => (
+                      <li key={item.id}>
+                        {item.part_number} - {item.title}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           ) : null}
           {activeProfile ? (
@@ -1069,6 +1412,56 @@ export function App() {
                   </li>
                 ))}
               </ul>
+              <div>
+                <button type="button" onClick={loadMatchingResults}>
+                  Load Matching Results
+                </button>
+                <p>Matched: {matchedCount}</p>
+                <p>Suggested: {suggestedCount}</p>
+                <p>Not In Collection: {notInCollectionCount}</p>
+              </div>
+              <div>
+                <input
+                  value={notInCollectionFilter.query}
+                  onChange={(e) => setNotInCollectionFilter((current) => ({ ...current, query: e.target.value }))}
+                  placeholder="Query"
+                  aria-label="Not in collection query"
+                />{" "}
+                <input
+                  value={notInCollectionFilter.maxPrice}
+                  onChange={(e) => setNotInCollectionFilter((current) => ({ ...current, maxPrice: e.target.value }))}
+                  placeholder="Max price"
+                  aria-label="Not in collection max price"
+                />{" "}
+                <input
+                  type="date"
+                  value={notInCollectionFilter.dateFrom}
+                  onChange={(e) => setNotInCollectionFilter((current) => ({ ...current, dateFrom: e.target.value }))}
+                  aria-label="Not in collection date from"
+                />{" "}
+                <button type="button" onClick={loadNotInCollection}>
+                  Load Not In Collection
+                </button>
+              </div>
+              <ul>
+                {notInCollectionItems.map((item) => (
+                  <li key={item.candidate_id}>
+                    {item.title || item.candidate_id} - {String(item.price || "")}{" "}
+                    <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "ignore")}>
+                      Ignore
+                    </button>{" "}
+                    <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "add_to_wishlist")}>
+                      Wishlist
+                    </button>{" "}
+                    <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "track_price")}>
+                      Track
+                    </button>{" "}
+                    <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "create_item")}>
+                      Create Item
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {activeProfile ? (
@@ -1083,6 +1476,9 @@ export function App() {
                 </button>{" "}
                 <button type="button" onClick={loadPricingGraph}>
                   Load Pricing Graph
+                </button>{" "}
+                <button type="button" onClick={() => exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history")}>
+                  Export Pricing History
                 </button>
               </div>
               {dashboard ? (
@@ -1099,6 +1495,7 @@ export function App() {
                 ))}
               </ul>
               <p>Pricing points: {pricingPoints.length}</p>
+              <p>Export bytes: {exportBytes}</p>
               {insightError ? <p>Insight error: {insightError}</p> : null}
             </div>
           ) : null}
@@ -1117,6 +1514,12 @@ export function App() {
                 </button>{" "}
                 <button type="button" onClick={() => runDataMaintenance("/api/backup/run", "backup")}>
                   Run Backup
+                </button>{" "}
+                <button type="button" onClick={() => exportText("/api/logs/export", "logs")}>
+                  Export Logs
+                </button>{" "}
+                <button type="button" onClick={() => exportText("/api/data/export/json", "json")}>
+                  Export JSON
                 </button>
               </div>
               {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}

@@ -117,11 +117,11 @@ describe("App shell", () => {
     render(<App />);
     const activate = await screen.findByRole("button", { name: /use alpha/i });
     activate.click();
-    expect(await screen.findByText(/pn-001/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/pn-001/i)).length).toBeGreaterThan(0);
 
     const partInput = await screen.findByLabelText(/part number/i);
     const titleInput = await screen.findByLabelText(/item title/i);
-    const brandInput = await screen.findByLabelText(/brand/i);
+    const brandInput = await screen.findByLabelText(/^brand$/i);
     const addButton = await screen.findByRole("button", { name: /add item/i });
 
     fireEvent.change(partInput, { target: { value: "PN-002" } });
@@ -129,7 +129,7 @@ describe("App shell", () => {
     fireEvent.change(brandInput, { target: { value: "Hot Wheels" } });
     addButton.click();
 
-    expect(await screen.findByText(/pn-002/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/pn-002/i)).length).toBeGreaterThan(0);
   });
 
   it("loads photos for selected item", async () => {
@@ -257,6 +257,9 @@ describe("App shell", () => {
       if (url === "/api/logs/activity?limit=10") {
         return new Response(JSON.stringify({ activity: [{ event: "scanner_run_completed" }] }), { status: 200 });
       }
+      if (url.includes("/api/pricing/history/export?item_id=")) {
+        return new Response("date,price\n2026-02-21,18", { status: 200 });
+      }
       return new Response(JSON.stringify({}), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -268,6 +271,9 @@ describe("App shell", () => {
     loadAdmin.click();
     expect(await screen.findByText(/license: valid \/ pro/i)).toBeInTheDocument();
     expect(await screen.findByText(/log entries: 1/i)).toBeInTheDocument();
+    const exportPricing = await screen.findByRole("button", { name: /export pricing history/i });
+    exportPricing.click();
+    expect(await screen.findByText(/export bytes: 24/i)).toBeInTheDocument();
   });
 
   it("supports barcode lookup and external search link", async () => {
@@ -360,5 +366,133 @@ describe("App shell", () => {
     apply.click();
     expect(await screen.findByDisplayValue(/suggested title/i)).toBeInTheDocument();
     confirmSpy.mockRestore();
+  });
+
+  it("supports debounced collection search and saved filters", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.startsWith("/api/search/items?")) {
+        return new Response(JSON.stringify({ items: [{ id: "i777", part_number: "PN-777", title: "AFX Search Hit", brand: "AFX" }] }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/api/profiles/p1/saved-filters") && (!init || init.method === undefined)) {
+        return new Response(
+          JSON.stringify({ saved_filters: [{ id: "f1", name: "AFX Only", query: { text: "AFX", brand: "AFX", sort_by: "part_number" } }] }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/api/profiles/p1/saved-filters") && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({ id: "f2", name: "My Filter", query: { text: "AFX", brand: "AFX", sort_by: "part_number" } }),
+          { status: 201 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    fireEvent.change(await screen.findByLabelText(/collection search/i), { target: { value: "AFX" } });
+    fireEvent.change(await screen.findByLabelText(/collection brand filter/i), { target: { value: "AFX" } });
+    fireEvent.change(await screen.findByLabelText(/collection sort/i), { target: { value: "part_number" } });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect((await screen.findAllByText(/pn-777/i)).length).toBeGreaterThan(0);
+
+    const loadSaved = await screen.findByRole("button", { name: /load saved filters/i });
+    loadSaved.click();
+    expect(await screen.findByText(/afx only/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/saved filter name/i), { target: { value: "My Filter" } });
+    const saveFilter = await screen.findByRole("button", { name: /save current filter/i });
+    saveFilter.click();
+    expect(await screen.findByText(/my filter/i)).toBeInTheDocument();
+
+  });
+
+  it("loads matching results and not-in-collection panel", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/matching/results") {
+        return new Response(
+          JSON.stringify({
+            results: [
+              { candidate_id: "c1", state: "matched", part_number: "PN-1" },
+              { candidate_id: "c2", state: "suggested", part_number: "PN-2" },
+              { candidate_id: "c3", state: "not_in_collection", part_number: "PN-3" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.startsWith("/api/discovery/not-in-collection?")) {
+        return new Response(
+          JSON.stringify({
+            items: [{ candidate_id: "c3", title: "AFX P-9", price: 12, url: "http://example.local/listing/c3", last_seen: "2026-02-21" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url === "/api/discovery/action" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const loadMatching = await screen.findByRole("button", { name: /load matching results/i });
+    loadMatching.click();
+    expect(await screen.findByText(/matched: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/suggested: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/not in collection: 1/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/not in collection query/i), { target: { value: "AFX" } });
+    fireEvent.change(await screen.findByLabelText(/not in collection max price/i), { target: { value: "20" } });
+    fireEvent.change(await screen.findByLabelText(/not in collection date from/i), { target: { value: "2026-02-01" } });
+
+    const loadNotOwned = await screen.findByRole("button", { name: /load not in collection/i });
+    loadNotOwned.click();
+    expect(await screen.findByText(/afx p-9/i)).toBeInTheDocument();
+
+    const createItem = await screen.findByRole("button", { name: /create item/i });
+    createItem.click();
   });
 });
