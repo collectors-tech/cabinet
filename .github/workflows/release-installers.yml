@@ -1,0 +1,35 @@
+name: Release Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version tag value (e.g. v0.1.0)
+        required: true
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-installers:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test ./...
+      - name: Build installers
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}"
+          }
+          ./scripts/package-installers.ps1 -Version $version
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers
+          path: dist/*.zip
