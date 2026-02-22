@@ -495,4 +495,56 @@ describe("App shell", () => {
     const createItem = await screen.findByRole("button", { name: /create item/i });
     createItem.click();
   });
+
+  it("loads pricing source breakdown and wishlist below-target indicator", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/wishlist") {
+        return new Response(
+          JSON.stringify({ wishlist: [{ id: "w1", item_id: "i1", target_price: 25, below_target_now: true, priority: "high" }] }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/api/pricing/by-source?item_id=i1")) {
+        return new Response(
+          JSON.stringify({
+            by_source: {
+              ebay: [{ snapshot_date: "2026-02-21", min_price: 10, median_price: 11, latest_price: 12, source: "ebay" }],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const loadWishlist = await screen.findByRole("button", { name: /load wishlist/i });
+    loadWishlist.click();
+    expect(await screen.findByText(/below target/i)).toBeInTheDocument();
+
+    const loadSources = await screen.findByRole("button", { name: /load pricing sources/i });
+    loadSources.click();
+    expect(await screen.findByText(/source groups: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ebay: 1 snapshots/i)).toBeInTheDocument();
+  });
 });

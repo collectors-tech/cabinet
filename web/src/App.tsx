@@ -56,8 +56,12 @@ export function App() {
   const [scannerError, setScannerError] = useState("");
   const [newQuerySet, setNewQuerySet] = useState({ name: "", keywords: "afx" });
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
-  const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number }>>([]);
+  const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
+  const [pricingBySource, setPricingBySource] = useState<Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>>(
+    {},
+  );
+  const [wishlistDraft, setWishlistDraft] = useState({ item_id: "", target_price: "0", priority: "normal", notes: "" });
   const [insightError, setInsightError] = useState("");
   const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string } | null>(null);
   const [logCount, setLogCount] = useState(0);
@@ -635,10 +639,51 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_load_wishlist");
       }
-      const data = (await resp.json()) as { wishlist?: Array<{ id: string; item_id: string; target_price?: number }> };
+      const data = (await resp.json()) as { wishlist?: Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }> };
       setWishlist(data.wishlist || []);
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_wishlist");
+    }
+  }
+
+  async function createWishlistEntry() {
+    setInsightError("");
+    const itemID = wishlistDraft.item_id.trim() || selectedItemID;
+    if (!itemID) {
+      setInsightError("wishlist_item_id_required");
+      return;
+    }
+    try {
+      const payload = {
+        item_id: itemID,
+        target_price: Number(wishlistDraft.target_price || "0"),
+        priority: wishlistDraft.priority || "normal",
+        notes: wishlistDraft.notes || "",
+      };
+      const resp = await fetch("/api/wishlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_create_wishlist_entry");
+      }
+      await loadWishlist();
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_create_wishlist_entry");
+    }
+  }
+
+  async function deleteWishlistEntry(id: string) {
+    setInsightError("");
+    try {
+      const resp = await fetch(`/api/wishlist?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) {
+        throw new Error("failed_to_delete_wishlist_entry");
+      }
+      await loadWishlist();
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_delete_wishlist_entry");
     }
   }
 
@@ -657,6 +702,26 @@ export function App() {
       setPricingPoints(data.points || []);
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_graph");
+    }
+  }
+
+  async function loadPricingBySource() {
+    setInsightError("");
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing");
+      return;
+    }
+    try {
+      const resp = await fetch(`/api/pricing/by-source?item_id=${encodeURIComponent(selectedItemID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_pricing_by_source");
+      }
+      const data = (await resp.json()) as {
+        by_source?: Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>;
+      };
+      setPricingBySource(data.by_source || {});
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_by_source");
     }
   }
 
@@ -1474,12 +1539,38 @@ export function App() {
                 <button type="button" onClick={loadWishlist}>
                   Load Wishlist
                 </button>{" "}
+                <button type="button" onClick={createWishlistEntry}>
+                  Add Wishlist Item
+                </button>{" "}
                 <button type="button" onClick={loadPricingGraph}>
                   Load Pricing Graph
+                </button>{" "}
+                <button type="button" onClick={loadPricingBySource}>
+                  Load Pricing Sources
                 </button>{" "}
                 <button type="button" onClick={() => exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history")}>
                   Export Pricing History
                 </button>
+              </div>
+              <div>
+                <input
+                  value={wishlistDraft.item_id}
+                  onChange={(e) => setWishlistDraft((current) => ({ ...current, item_id: e.target.value }))}
+                  placeholder="Wishlist item id"
+                  aria-label="Wishlist item id"
+                />{" "}
+                <input
+                  value={wishlistDraft.target_price}
+                  onChange={(e) => setWishlistDraft((current) => ({ ...current, target_price: e.target.value }))}
+                  placeholder="Target price"
+                  aria-label="Wishlist target price"
+                />{" "}
+                <input
+                  value={wishlistDraft.priority}
+                  onChange={(e) => setWishlistDraft((current) => ({ ...current, priority: e.target.value }))}
+                  placeholder="Priority"
+                  aria-label="Wishlist priority"
+                />
               </div>
               {dashboard ? (
                 <div>
@@ -1491,10 +1582,23 @@ export function App() {
               ) : null}
               <ul>
                 {wishlist.map((w) => (
-                  <li key={w.id}>Wishlist Item: {w.item_id} target {String(w.target_price ?? "")}</li>
+                  <li key={w.id}>
+                    Wishlist Item: {w.item_id} target {String(w.target_price ?? "")} {w.below_target_now ? "(Below Target)" : ""}{" "}
+                    <button type="button" onClick={() => deleteWishlistEntry(w.id)}>
+                      Remove
+                    </button>
+                  </li>
                 ))}
               </ul>
               <p>Pricing points: {pricingPoints.length}</p>
+              <p>Source groups: {Object.keys(pricingBySource).length}</p>
+              <ul>
+                {Object.entries(pricingBySource).map(([source, snapshots]) => (
+                  <li key={source}>
+                    {source}: {snapshots.length} snapshots
+                  </li>
+                ))}
+              </ul>
               <p>Export bytes: {exportBytes}</p>
               {insightError ? <p>Insight error: {insightError}</p> : null}
             </div>
