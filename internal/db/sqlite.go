@@ -256,6 +256,20 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_price_snapshots_item_id ON price_snapshots(item_id);`,
+		`CREATE TABLE IF NOT EXISTS ai_failures (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			message TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS activity_logs (
+			id TEXT PRIMARY KEY,
+			level TEXT NOT NULL,
+			action TEXT NOT NULL,
+			details TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, q := range queries {

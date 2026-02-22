@@ -26,6 +26,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/licensing"
+	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
 	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/pricing"
@@ -77,6 +78,7 @@ func New(cfg config.Config) (*App, error) {
 	dashboardSvc := dashboard.NewService(conn)
 	aiSvc := ai.NewService(ai.Config{})
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
+	logSvc := logging.NewService(conn)
 	authService, err := auth.NewService(cfg, conn, profiles)
 	if err != nil {
 		conn.Close()
@@ -84,6 +86,20 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	mux := http.NewServeMux()
+	var previousClean string
+	_ = conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'clean_shutdown'`).Scan(&previousClean)
+	if previousClean == "0" {
+		_, _ = conn.ExecContext(ctx, `
+			INSERT INTO app_state(key, value, updated_at)
+			VALUES('recovery_required', '1', CURRENT_TIMESTAMP)
+			ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP
+		`)
+	}
+	_, _ = conn.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES('clean_shutdown', '0', CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value='0', updated_at=CURRENT_TIMESTAMP
+	`)
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -95,6 +111,16 @@ func New(cfg config.Config) (*App, error) {
 			"update_channel":               cfg.UpdateChannel,
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 		})
+	})
+	mux.HandleFunc("/api/runtime/recovery", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var value string
+		_ = conn.QueryRowContext(r.Context(), `SELECT value FROM app_state WHERE key = 'recovery_required'`).Scan(&value)
+		_ = json.NewEncoder(w).Encode(map[string]any{"recovery_required": value == "1"})
 	})
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -480,9 +506,11 @@ func New(cfg config.Config) (*App, error) {
 		})
 		out, err := scannerSvc.RunNow(r.Context(), req.QuerySetID, provider)
 		if err != nil {
+			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
+		logSvc.Log(r.Context(), "info", "scanner_run_completed", out)
 		_ = json.NewEncoder(w).Encode(out)
 	})
 	mux.HandleFunc("/api/scanner/run/scheduled", func(w http.ResponseWriter, r *http.Request) {
@@ -515,9 +543,11 @@ func New(cfg config.Config) (*App, error) {
 		})
 		ran, err := scannerSvc.RunScheduled(r.Context(), provider)
 		if err != nil {
+			logSvc.Log(r.Context(), "error", "scanner_run_scheduled_failed", map[string]any{"error": err.Error()})
 			http.Error(w, `{"error":"failed_to_run_scheduled_scanner"}`, http.StatusBadRequest)
 			return
 		}
+		logSvc.Log(r.Context(), "info", "scanner_run_scheduled_completed", map[string]any{"runs": ran})
 		_ = json.NewEncoder(w).Encode(map[string]any{"runs": ran})
 	})
 	mux.HandleFunc("/api/scanner/candidates", func(w http.ResponseWriter, r *http.Request) {
@@ -937,6 +967,58 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(sum)
 	})
+	mux.HandleFunc("/api/logs/activity", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		items, err := logSvc.List(r.Context(), limit)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_activity_logs"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"logs": items})
+	})
+	mux.HandleFunc("/api/logs/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		text, err := logSvc.Export(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_export_logs"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(text))
+	})
+	mux.HandleFunc("/api/logs/debug", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Enabled   bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		val := "false"
+		if req.Enabled {
+			val = "true"
+		}
+		if err := profiles.PutSettings(r.Context(), req.ProfileID, map[string]string{"debug_mode": val}); err != nil {
+			http.Error(w, `{"error":"failed_to_toggle_debug_mode"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
 	mux.HandleFunc("/api/license/import", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -1030,9 +1112,12 @@ func New(cfg config.Config) (*App, error) {
 			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
 		}
 		if err := localAISvc.TestConnectivity(r.Context(), key); err != nil {
+			_, _ = conn.ExecContext(r.Context(), `INSERT INTO ai_failures(id, profile_id, message, created_at) VALUES (hex(randomblob(16)), ?, ?, CURRENT_TIMESTAMP)`, req.ProfileID, err.Error())
+			logSvc.Log(r.Context(), "error", "ai_connectivity_failed", map[string]any{"profile_id": req.ProfileID, "error": err.Error()})
 			http.Error(w, `{"error":"failed_ai_connectivity_test"}`, http.StatusBadRequest)
 			return
 		}
+		logSvc.Log(r.Context(), "info", "ai_connectivity_ok", map[string]any{"profile_id": req.ProfileID})
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/api/ai/suggest/title", func(w http.ResponseWriter, r *http.Request) {
@@ -1072,9 +1157,12 @@ func New(cfg config.Config) (*App, error) {
 		}
 		suggestion, err := localAISvc.SuggestFromTitle(r.Context(), key, req.Title)
 		if err != nil {
+			_, _ = conn.ExecContext(r.Context(), `INSERT INTO ai_failures(id, profile_id, message, created_at) VALUES (hex(randomblob(16)), ?, ?, CURRENT_TIMESTAMP)`, req.ProfileID, err.Error())
+			logSvc.Log(r.Context(), "error", "ai_suggest_title_failed", map[string]any{"profile_id": req.ProfileID, "error": err.Error()})
 			http.Error(w, `{"error":"failed_ai_suggest_title"}`, http.StatusBadRequest)
 			return
 		}
+		logSvc.Log(r.Context(), "info", "ai_suggest_title_ok", map[string]any{"profile_id": req.ProfileID, "confidence": suggestion.Confidence})
 		_ = json.NewEncoder(w).Encode(suggestion)
 	})
 	mux.HandleFunc("/api/ai/suggest/photo", func(w http.ResponseWriter, r *http.Request) {
@@ -1114,9 +1202,12 @@ func New(cfg config.Config) (*App, error) {
 		}
 		suggestion, err := localAISvc.SuggestFromPhoto(r.Context(), key, req.ImageURL)
 		if err != nil {
+			_, _ = conn.ExecContext(r.Context(), `INSERT INTO ai_failures(id, profile_id, message, created_at) VALUES (hex(randomblob(16)), ?, ?, CURRENT_TIMESTAMP)`, req.ProfileID, err.Error())
+			logSvc.Log(r.Context(), "error", "ai_suggest_photo_failed", map[string]any{"profile_id": req.ProfileID, "error": err.Error()})
 			http.Error(w, `{"error":"failed_ai_suggest_photo"}`, http.StatusBadRequest)
 			return
 		}
+		logSvc.Log(r.Context(), "info", "ai_suggest_photo_ok", map[string]any{"profile_id": req.ProfileID, "confidence": suggestion.Confidence})
 		_ = json.NewEncoder(w).Encode(suggestion)
 	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
@@ -1690,5 +1781,6 @@ func (a *App) close() error {
 	if a.db == nil {
 		return nil
 	}
+	_, _ = a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('clean_shutdown','1',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP`)
 	return a.db.Close()
 }
