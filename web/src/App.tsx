@@ -14,8 +14,15 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(detectInitialTheme);
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [activeProfile, setActiveProfile] = useState<{ id: string; name: string } | null>(null);
+  const [profileStorage, setProfileStorage] = useState<{ db_path?: string; media_dir?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+  const [authSessionID, setAuthSessionID] = useState("");
+  const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
+  const [credentialJSON, setCredentialJSON] = useState("{}");
+  const [sessionToken, setSessionToken] = useState("");
+  const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -54,6 +61,55 @@ export function App() {
     };
   }, []);
 
+  async function loadProfileStorage(profileID: string) {
+    const storageResp = await fetch(`/api/profiles/${profileID}/storage`);
+    if (!storageResp.ok) {
+      throw new Error("failed_to_load_profile_storage");
+    }
+    const storage = (await storageResp.json()) as { db_path?: string; media_dir?: string };
+    setProfileStorage(storage);
+  }
+
+  useEffect(() => {
+    let disposed = false;
+    async function loadRequirements() {
+      if (!activeProfile?.id) {
+        setRequiresRegistration(null);
+        return;
+      }
+      try {
+        const reqResp = await fetch(`/api/auth/requirements?profile_id=${encodeURIComponent(activeProfile.id)}`);
+        if (!reqResp.ok) {
+          throw new Error("failed_to_get_auth_requirements");
+        }
+        const reqs = (await reqResp.json()) as { requires_registration?: boolean };
+        if (!disposed) {
+          setRequiresRegistration(Boolean(reqs.requires_registration));
+        }
+      } catch {
+        if (!disposed) {
+          setRequiresRegistration(null);
+        }
+      }
+    }
+    loadRequirements();
+    return () => {
+      disposed = true;
+    };
+  }, [activeProfile?.id]);
+
+  async function postJSON(path: string, payload: unknown) {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      throw new Error(`request_failed:${path}`);
+    }
+    return (await resp.json()) as Record<string, unknown>;
+  }
+
   async function createFirstProfile() {
     setError("");
     try {
@@ -78,6 +134,7 @@ export function App() {
       }
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
+      await loadProfileStorage(active.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
     }
@@ -96,8 +153,127 @@ export function App() {
       }
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
+      await loadProfileStorage(active.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_activate_profile");
+    }
+  }
+
+  async function beginWebAuthnRegistration() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setError("");
+    try {
+      const data = await postJSON("/api/auth/webauthn/register/begin", { profile_id: activeProfile.id });
+      const sid = String(data.session_id || "");
+      setAuthSessionID(sid);
+      setAuthStatus("registration_begin_ready");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_begin_registration");
+    }
+  }
+
+  async function finishWebAuthnRegistration() {
+    if (!authSessionID) {
+      return;
+    }
+    setError("");
+    try {
+      const parsed = JSON.parse(credentialJSON || "{}");
+      await postJSON("/api/auth/webauthn/register/finish", { session_id: authSessionID, credential: parsed });
+      setAuthStatus("registration_finished");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_finish_registration");
+    }
+  }
+
+  async function beginWebAuthnLogin() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setError("");
+    try {
+      const data = await postJSON("/api/auth/webauthn/login/begin", { profile_id: activeProfile.id });
+      const sid = String(data.session_id || "");
+      setAuthSessionID(sid);
+      setAuthStatus("login_begin_ready");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_begin_login");
+    }
+  }
+
+  async function finishWebAuthnLogin() {
+    if (!authSessionID) {
+      return;
+    }
+    setError("");
+    try {
+      const parsed = JSON.parse(credentialJSON || "{}");
+      const data = await postJSON("/api/auth/webauthn/login/finish", { session_id: authSessionID, credential: parsed });
+      const token = String(data.session_token || "");
+      if (token) {
+        setSessionToken(token);
+      }
+      setAuthStatus("login_finished");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_finish_login");
+    }
+  }
+
+  async function saveRecoveryPassphrase() {
+    if (!activeProfile?.id || !recoveryPassphrase) {
+      return;
+    }
+    setError("");
+    try {
+      await postJSON("/api/auth/recovery/passphrase", { profile_id: activeProfile.id, passphrase: recoveryPassphrase });
+      setAuthStatus("recovery_passphrase_set");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_set_recovery_passphrase");
+    }
+  }
+
+  async function beginRecoveryReset() {
+    if (!activeProfile?.id || !recoveryPassphrase) {
+      return;
+    }
+    setError("");
+    try {
+      const data = await postJSON("/api/auth/recovery/reset/begin", {
+        profile_id: activeProfile.id,
+        passphrase: recoveryPassphrase,
+      });
+      setAuthSessionID(String(data.session_id || ""));
+      setAuthStatus("recovery_begin_ready");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_begin_recovery_reset");
+    }
+  }
+
+  async function validateSession() {
+    if (!sessionToken) {
+      return;
+    }
+    setError("");
+    try {
+      await postJSON("/api/auth/session/validate", { session_token: sessionToken });
+      setAuthStatus("session_valid");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "session_invalid_or_locked");
+    }
+  }
+
+  async function lockSession() {
+    if (!sessionToken) {
+      return;
+    }
+    setError("");
+    try {
+      await postJSON("/api/auth/session/lock", { session_token: sessionToken });
+      setAuthStatus("session_locked");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_lock_session");
     }
   }
 
@@ -152,6 +328,69 @@ export function App() {
             </div>
           ) : null}
           {activeProfile ? <p>Active profile: {activeProfile.name}</p> : null}
+          {profileStorage ? (
+            <div>
+              <p>Database: {profileStorage.db_path || "not set"}</p>
+              <p>Media: {profileStorage.media_dir || "not set"}</p>
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Authentication</h3>
+              <p>Requires registration: {requiresRegistration === null ? "unknown" : String(requiresRegistration)}</p>
+              <div>
+                <button type="button" onClick={beginWebAuthnRegistration}>
+                  Begin WebAuthn Registration
+                </button>{" "}
+                <button type="button" onClick={finishWebAuthnRegistration}>
+                  Finish Registration
+                </button>{" "}
+                <button type="button" onClick={beginWebAuthnLogin}>
+                  Begin WebAuthn Login
+                </button>{" "}
+                <button type="button" onClick={finishWebAuthnLogin}>
+                  Finish Login
+                </button>
+              </div>
+              <p>Auth session: {authSessionID || "none"}</p>
+              <textarea
+                value={credentialJSON}
+                onChange={(e) => setCredentialJSON(e.target.value)}
+                rows={4}
+                cols={60}
+                aria-label="Credential JSON"
+              />
+              <div>
+                <input
+                  value={recoveryPassphrase}
+                  onChange={(e) => setRecoveryPassphrase(e.target.value)}
+                  placeholder="Recovery passphrase"
+                  aria-label="Recovery passphrase"
+                />{" "}
+                <button type="button" onClick={saveRecoveryPassphrase}>
+                  Save Recovery Passphrase
+                </button>{" "}
+                <button type="button" onClick={beginRecoveryReset}>
+                  Begin Recovery Reset
+                </button>
+              </div>
+              <div>
+                <input
+                  value={sessionToken}
+                  onChange={(e) => setSessionToken(e.target.value)}
+                  placeholder="Session token"
+                  aria-label="Session token"
+                />{" "}
+                <button type="button" onClick={validateSession}>
+                  Validate Session
+                </button>{" "}
+                <button type="button" onClick={lockSession}>
+                  Lock Session
+                </button>
+              </div>
+              <p>Auth status: {authStatus || "idle"}</p>
+            </div>
+          ) : null}
           {error ? <p>Profile error: {error}</p> : null}
           <ul>
             <li>
