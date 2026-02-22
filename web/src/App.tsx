@@ -17,6 +17,17 @@ export function App() {
   const [profileStorage, setProfileStorage] = useState<{ db_path?: string; media_dir?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [items, setItems] = useState<Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }>>(
+    [],
+  );
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemsError, setItemsError] = useState("");
+  const [newItem, setNewItem] = useState({
+    part_number: "",
+    title: "",
+    brand: "",
+    category: "General",
+  });
   const [authStatus, setAuthStatus] = useState("");
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
@@ -68,6 +79,23 @@ export function App() {
     }
     const storage = (await storageResp.json()) as { db_path?: string; media_dir?: string };
     setProfileStorage(storage);
+  }
+
+  async function loadItems() {
+    setItemsLoading(true);
+    setItemsError("");
+    try {
+      const resp = await fetch("/api/items");
+      if (!resp.ok) {
+        throw new Error("failed_to_list_items");
+      }
+      const data = (await resp.json()) as { items?: Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }> };
+      setItems(data.items || []);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_list_items");
+    } finally {
+      setItemsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -135,6 +163,7 @@ export function App() {
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
       await loadProfileStorage(active.id);
+      await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
     }
@@ -154,8 +183,32 @@ export function App() {
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
       await loadProfileStorage(active.id);
+      await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_activate_profile");
+    }
+  }
+
+  async function addItem() {
+    setItemsError("");
+    if (!newItem.part_number.trim() || !newItem.title.trim()) {
+      setItemsError("part_number_and_title_required");
+      return;
+    }
+    try {
+      const resp = await fetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newItem),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_create_item");
+      }
+      const created = (await resp.json()) as { id: string; part_number: string; title: string; brand?: string; category?: string };
+      setItems((current) => [...current, created]);
+      setNewItem({ part_number: "", title: "", brand: "", category: "General" });
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_create_item");
     }
   }
 
@@ -389,6 +442,60 @@ export function App() {
                 </button>
               </div>
               <p>Auth status: {authStatus || "idle"}</p>
+            </div>
+          ) : null}
+          {activeProfile ? (
+            <div>
+              <h3>Collection</h3>
+              <div>
+                <input
+                  value={newItem.part_number}
+                  onChange={(e) => setNewItem((current) => ({ ...current, part_number: e.target.value }))}
+                  placeholder="Part Number"
+                  aria-label="Part number"
+                />{" "}
+                <input
+                  value={newItem.title}
+                  onChange={(e) => setNewItem((current) => ({ ...current, title: e.target.value }))}
+                  placeholder="Item Title"
+                  aria-label="Item title"
+                />{" "}
+                <input
+                  value={newItem.brand}
+                  onChange={(e) => setNewItem((current) => ({ ...current, brand: e.target.value }))}
+                  placeholder="Brand"
+                  aria-label="Brand"
+                />{" "}
+                <input
+                  value={newItem.category}
+                  onChange={(e) => setNewItem((current) => ({ ...current, category: e.target.value }))}
+                  placeholder="Category"
+                  aria-label="Category"
+                />{" "}
+                <button type="button" onClick={addItem}>
+                  Add Item
+                </button>
+              </div>
+              {itemsLoading ? <p>Loading items...</p> : null}
+              {itemsError ? <p>Item error: {itemsError}</p> : null}
+              <table>
+                <thead>
+                  <tr>
+                    <th>Part Number</th>
+                    <th>Title</th>
+                    <th>Brand</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.part_number}</td>
+                      <td>{item.title}</td>
+                      <td>{item.brand || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

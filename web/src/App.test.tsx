@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -25,6 +25,7 @@ describe("App shell", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 201 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ db_path: "C:/Cabinet/profiles/p1/cabinet.db", media_dir: "C:/Cabinet/profiles/p1/media" }), {
           status: 200,
@@ -39,15 +40,27 @@ describe("App shell", () => {
   });
 
   it("allows activating an existing profile", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }, { id: "p2", name: "Beta" }] }), {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }, { id: "p2", name: "Beta" }] }), {
           status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 }));
+        });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p2/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p2")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -67,6 +80,7 @@ describe("App shell", () => {
         }),
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 }));
@@ -79,5 +93,42 @@ describe("App shell", () => {
     const begin = await screen.findByRole("button", { name: /begin webauthn registration/i });
     begin.click();
     expect(await screen.findByText(/auth session: sess-reg-1/i)).toBeInTheDocument();
+  });
+
+  it("lists and creates collection items", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "i2", part_number: "PN-002", title: "New Item", brand: "Hot Wheels" }), {
+          status: 201,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    expect(await screen.findByText(/pn-001/i)).toBeInTheDocument();
+
+    const partInput = await screen.findByLabelText(/part number/i);
+    const titleInput = await screen.findByLabelText(/item title/i);
+    const brandInput = await screen.findByLabelText(/brand/i);
+    const addButton = await screen.findByRole("button", { name: /add item/i });
+
+    fireEvent.change(partInput, { target: { value: "PN-002" } });
+    fireEvent.change(titleInput, { target: { value: "New Item" } });
+    fireEvent.change(brandInput, { target: { value: "Hot Wheels" } });
+    addButton.click();
+
+    expect(await screen.findByText(/pn-002/i)).toBeInTheDocument();
   });
 });
