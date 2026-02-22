@@ -1,0 +1,975 @@
+openapi: 3.1.0
+info:
+  title: Cabinet API
+  version: 0.1.0
+  description: |
+    Local-first API for Cabinet.
+    This specification is the source of truth for API documentation.
+servers:
+  - url: http://127.0.0.1:8080
+tags:
+  - name: Runtime
+  - name: Profiles
+  - name: Collection
+  - name: Search
+  - name: Scanner
+  - name: Matching
+  - name: Discovery
+  - name: Wishlist
+  - name: Pricing
+  - name: Dashboard
+  - name: Auth
+  - name: Licensing
+  - name: AI
+  - name: Logs
+  - name: Data
+  - name: Backup
+paths:
+  /healthz:
+    get:
+      tags: [Runtime]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/runtime:
+    get:
+      tags: [Runtime]
+      summary: Runtime configuration
+      responses:
+        "200":
+          description: Runtime details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  update_channel:
+                    type: string
+                  update_public_key_configured:
+                    type: boolean
+  /api/runtime/recovery:
+    get:
+      tags: [Runtime]
+      summary: Crash recovery state
+      responses:
+        "200":
+          description: Recovery flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery_required:
+                    type: boolean
+  /api/profiles:
+    get:
+      tags: [Profiles]
+      summary: List profiles
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Profile"
+    post:
+      tags: [Profiles]
+      summary: Create profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/active:
+    get:
+      tags: [Profiles]
+      summary: Get active profile
+      responses:
+        "200":
+          description: Active profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+    put:
+      tags: [Profiles]
+      summary: Set active profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id:
+                  type: string
+      responses:
+        "200":
+          description: Updated active profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/settings:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    get:
+      tags: [Profiles]
+      summary: Get profile settings
+      responses:
+        "200":
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    type: object
+                    additionalProperties:
+                      type: string
+    put:
+      tags: [Profiles]
+      summary: Update profile settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [settings]
+              properties:
+                settings:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    type: object
+                    additionalProperties:
+                      type: string
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/profiles/{profileID}/secrets:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    get:
+      tags: [Profiles]
+      summary: Get profile secret
+      parameters:
+        - in: query
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Secret value
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  value:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Profiles]
+      summary: Upsert profile secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, value]
+              properties:
+                key:
+                  type: string
+                value:
+                  type: string
+      responses:
+        "200":
+          description: Secret updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/items:
+    get:
+      tags: [Collection]
+      summary: List canonical items
+      responses:
+        "200":
+          description: Item list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
+    post:
+      tags: [Collection]
+      summary: Create canonical item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemInput"
+      responses:
+        "201":
+          description: Created item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
+        "402":
+          $ref: "#/components/responses/Error"
+  /api/items/{itemID}/instances:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    get:
+      tags: [Collection]
+      summary: List instances for item
+      responses:
+        "200":
+          description: Instance list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instances:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Instance"
+    post:
+      tags: [Collection]
+      summary: Create instance for item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceInput"
+      responses:
+        "201":
+          description: Created instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instance"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/search/items:
+    get:
+      tags: [Search]
+      summary: Search items
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: brand
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: condition
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: tags
+          schema: { type: string }
+        - in: query
+          name: scale
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
+  /api/scanner/query-sets:
+    get:
+      tags: [Scanner]
+      summary: List scanner query sets
+      responses:
+        "200":
+          description: Query set list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query_sets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScannerQuerySet"
+    post:
+      tags: [Scanner]
+      summary: Create scanner query set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScannerQuerySetInput"
+      responses:
+        "201":
+          description: Created query set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerQuerySet"
+  /api/scanner/run:
+    post:
+      tags: [Scanner]
+      summary: Run scanner now
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query_set_id]
+              properties:
+                query_set_id:
+                  type: string
+      responses:
+        "200":
+          description: Scanner run result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attempts:
+                    type: integer
+                  saved:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/scanner/candidates:
+    get:
+      tags: [Scanner]
+      summary: List scanner candidates for query set
+      parameters:
+        - in: query
+          name: query_set_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Candidate list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Candidate"
+  /api/matching/run:
+    post:
+      tags: [Matching]
+      summary: Run candidate matching
+      responses:
+        "200":
+          description: Matching run completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/matching/results:
+    get:
+      tags: [Matching]
+      summary: List matching results
+      responses:
+        "200":
+          description: Matching result list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchResult"
+  /api/discovery/not-in-collection:
+    get:
+      tags: [Discovery]
+      summary: List not-in-collection candidates
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: price_max
+          schema: { type: number }
+        - in: query
+          name: date_from
+          schema: { type: string }
+      responses:
+        "200":
+          description: Discovery list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DiscoveryItem"
+  /api/discovery/action:
+    post:
+      tags: [Discovery]
+      summary: Apply discovery action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [candidate_id, type]
+              properties:
+                candidate_id:
+                  type: string
+                type:
+                  type: string
+                  enum: [ignore, add_to_wishlist, track_price, create_item]
+                payload:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Action applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/wishlist:
+    get:
+      tags: [Wishlist]
+      summary: List wishlist entries
+      responses:
+        "200":
+          description: Wishlist entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WishlistEntry"
+    post:
+      tags: [Wishlist]
+      summary: Create wishlist entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WishlistEntryInput"
+      responses:
+        "201":
+          description: Created wishlist entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WishlistEntry"
+    put:
+      tags: [Wishlist]
+      summary: Update wishlist entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WishlistEntry"
+      responses:
+        "200":
+          description: Wishlist entry updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+    delete:
+      tags: [Wishlist]
+      summary: Delete wishlist entry
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+  /api/pricing/track:
+    post:
+      tags: [Pricing]
+      summary: Track item for price snapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id]
+              properties:
+                item_id:
+                  type: string
+      responses:
+        "200":
+          description: Tracked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/pricing/history:
+    get:
+      tags: [Pricing]
+      summary: Price history
+      parameters:
+        - in: query
+          name: item_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Price history list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PriceSnapshot"
+  /api/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard summary
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /api/license/import:
+    post:
+      tags: [Licensing]
+      summary: Import signed license
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, license]
+              properties:
+                profile_id:
+                  type: string
+                license:
+                  type: object
+                  required: [payload_base64, signature_base64]
+                  properties:
+                    payload_base64:
+                      type: string
+                    signature_base64:
+                      type: string
+      responses:
+        "200":
+          description: Imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/license/status:
+    get:
+      tags: [Licensing]
+      summary: License status
+      parameters:
+        - in: query
+          name: profile_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: License status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  tier:
+                    type: string
+                  features:
+                    type: array
+                    items: { type: string }
+                  expires_at:
+                    type: string
+  /api/ai/test:
+    post:
+      tags: [AI]
+      summary: Test AI connectivity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties:
+                profile_id:
+                  type: string
+      responses:
+        "200":
+          description: AI test success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/ai/suggest/title:
+    post:
+      tags: [AI]
+      summary: AI suggestion from title
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, title]
+              properties:
+                profile_id:
+                  type: string
+                title:
+                  type: string
+      responses:
+        "200":
+          description: AI suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AISuggestion"
+  /api/logs/activity:
+    get:
+      tags: [Logs]
+      summary: Activity logs
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LogEntry"
+  /api/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export logs bundle
+      responses:
+        "200":
+          description: Logs JSON bundle
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  parameters:
+    ProfileID:
+      in: path
+      name: profileID
+      required: true
+      schema:
+        type: string
+    ItemID:
+      in: path
+      name: itemID
+      required: true
+      schema:
+        type: string
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+    Profile:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: string }
+    ItemInput:
+      type: object
+      required: [brand, category, part_number, title]
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        part_number: { type: string }
+        title: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: string }
+        scale: { type: string }
+        series: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    Item:
+      allOf:
+        - $ref: "#/components/schemas/ItemInput"
+        - type: object
+          properties:
+            id: { type: string }
+            created_at: { type: string }
+            updated_at: { type: string }
+    InstanceInput:
+      type: object
+      required: [status]
+      properties:
+        condition: { type: string }
+        status:
+          type: string
+          enum: [sealed, blister, loose, custom, on_track]
+        quantity: { type: integer }
+        storage_location: { type: string }
+        acquisition_price: { type: number }
+        acquisition_date: { type: string }
+        notes: { type: string }
+    Instance:
+      allOf:
+        - $ref: "#/components/schemas/InstanceInput"
+        - type: object
+          properties:
+            id: { type: string }
+            item_id: { type: string }
+            created_at: { type: string }
+            updated_at: { type: string }
+    ScannerQuerySetInput:
+      type: object
+      required: [name, keywords]
+      properties:
+        name: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        exclusions:
+          type: array
+          items: { type: string }
+        max_price: { type: number }
+        region: { type: string }
+        condition: { type: string }
+        schedule_cron: { type: string }
+        enabled: { type: boolean }
+        rate_limit_rps: { type: integer }
+        max_retry_count: { type: integer }
+    ScannerQuerySet:
+      allOf:
+        - $ref: "#/components/schemas/ScannerQuerySetInput"
+        - type: object
+          properties:
+            id: { type: string }
+            created_at: { type: string }
+            updated_at: { type: string }
+    Candidate:
+      type: object
+      properties:
+        id: { type: string }
+        query_set_id: { type: string }
+        listing_id: { type: string }
+        title: { type: string }
+        price: { type: number }
+        shipping: { type: number }
+        url: { type: string }
+        image: { type: string }
+        seller: { type: string }
+        first_seen: { type: string }
+        last_seen: { type: string }
+        status: { type: string }
+        source: { type: string }
+    MatchResult:
+      type: object
+      properties:
+        candidate_id: { type: string }
+        item_id: { type: string }
+        state:
+          type: string
+          enum: [matched, suggested, not_in_collection]
+        confidence: { type: number }
+        needs_review: { type: boolean }
+        part_number: { type: string }
+        last_updated: { type: string }
+    DiscoveryItem:
+      type: object
+      properties:
+        candidate_id: { type: string }
+        title: { type: string }
+        price: { type: number }
+        url: { type: string }
+        last_seen: { type: string }
+    WishlistEntryInput:
+      type: object
+      required: [item_id]
+      properties:
+        item_id: { type: string }
+        target_price: { type: number }
+        priority: { type: string }
+        notes: { type: string }
+        highlight_hit: { type: boolean }
+    WishlistEntry:
+      allOf:
+        - $ref: "#/components/schemas/WishlistEntryInput"
+        - type: object
+          properties:
+            id: { type: string }
+            below_target_now: { type: boolean }
+            created_at: { type: string }
+            updated_at: { type: string }
+    PriceSnapshot:
+      type: object
+      properties:
+        snapshot_date: { type: string }
+        source: { type: string }
+        min_price: { type: number }
+        median_price: { type: number }
+        latest_price: { type: number }
+    DashboardSummary:
+      type: object
+      properties:
+        new_discoveries: { type: integer }
+        wishlist_hits: { type: integer }
+        price_drops: { type: integer }
+        recently_added:
+          type: array
+          items: { type: string }
+        collection:
+          type: object
+          properties:
+            total_items: { type: integer }
+            total_instances: { type: integer }
+            estimated_value: { type: number }
+        cards:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              value: { type: integer }
+              link: { type: string }
+    AISuggestion:
+      type: object
+      properties:
+        part_number: { type: string }
+        brand: { type: string }
+        title: { type: string }
+        confidence: { type: number }
+        requires_confirmation: { type: boolean }
+    LogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        level: { type: string }
+        action: { type: string }
+        details: { type: string }
+        created_at: { type: string }

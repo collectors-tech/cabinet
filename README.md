@@ -24,6 +24,12 @@ go run ./cmd/cabinet
 - `http://127.0.0.1:8080/healthz`
 - `http://127.0.0.1:8080/api/runtime`
 
+## API Documentation
+- OpenAPI source: `docs/api/openapi.yaml`
+- Preview docs: `docs/api/redoc.html`
+- Validate spec: `./scripts/validate-openapi.ps1`
+- Generate static docs: `./scripts/generate-api-docs.ps1`
+
 ## API (Current Scaffold)
 - `GET /api/profiles`
 - `POST /api/profiles` with `{ "name": "Default" }`

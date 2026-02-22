@@ -1,0 +1,20 @@
+name: OpenAPI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@latest lint docs/api/openapi.yaml
+      - name: Build API Docs
+        run: npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html
