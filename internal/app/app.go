@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1915,6 +1916,9 @@ func loadOpenAPISpec(cfg config.Config) []byte {
 		filepath.Join("docs", "api", "openapi.yaml"),
 		filepath.Join("..", "..", "docs", "api", "openapi.yaml"),
 		filepath.Join(filepath.Dir(cfg.DBPath), "docs", "api", "openapi.yaml"),
+	}
+	if _, sourceFile, _, ok := runtime.Caller(0); ok {
+		candidates = append(candidates, filepath.Join(filepath.Dir(sourceFile), "..", "..", "docs", "api", "openapi.yaml"))
 	}
 	if exePath, err := os.Executable(); err == nil {
 		candidates = append(candidates, filepath.Join(filepath.Dir(exePath), "docs", "api", "openapi.yaml"))
