@@ -25,3 +25,33 @@ func TestRootServesAppShell(t *testing.T) {
 		t.Fatalf("expected SPA entry script in root page")
 	}
 }
+
+func TestAPIDocsRoutes(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	docs := doRequest(t, a, http.MethodGet, "/apidocs", nil, nil)
+	if docs.Code != http.StatusOK {
+		t.Fatalf("apidocs status = %d, want %d", docs.Code, http.StatusOK)
+	}
+	if !strings.Contains(docs.Body.String(), "Cabinet API Docs") {
+		t.Fatalf("expected docs page content in /apidocs")
+	}
+
+	legacy := doRequest(t, a, http.MethodGet, "/redoc.html", nil, nil)
+	if legacy.Code != http.StatusMovedPermanently {
+		t.Fatalf("redoc redirect status = %d, want %d", legacy.Code, http.StatusMovedPermanently)
+	}
+	if location := legacy.Header().Get("Location"); location != "/apidocs" {
+		t.Fatalf("redoc redirect location = %q, want %q", location, "/apidocs")
+	}
+
+	spec := doRequest(t, a, http.MethodGet, "/api/openapi.yaml", nil, nil)
+	if spec.Code != http.StatusOK {
+		t.Fatalf("openapi status = %d, want %d", spec.Code, http.StatusOK)
+	}
+	if !strings.Contains(spec.Body.String(), "openapi:") {
+		t.Fatalf("expected openapi yaml payload from /api/openapi.yaml")
+	}
+}

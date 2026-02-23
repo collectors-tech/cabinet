@@ -43,6 +43,7 @@ type App struct {
 	srv         *http.Server
 	backupSvc   *backup.Service
 	authService *auth.Service
+	openapiSpec []byte
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -101,6 +102,34 @@ func New(cfg config.Config) (*App, error) {
 		VALUES('clean_shutdown', '0', CURRENT_TIMESTAMP)
 		ON CONFLICT(key) DO UPDATE SET value='0', updated_at=CURRENT_TIMESTAMP
 	`)
+	openapiSpec := loadOpenAPISpec(cfg)
+	mux.HandleFunc("/apidocs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(apiDocsHTML))
+	})
+	mux.HandleFunc("/redoc.html", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		http.Redirect(w, r, "/apidocs", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/api/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if len(openapiSpec) == 0 {
+			http.Error(w, "openapi spec not available", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		_, _ = w.Write(openapiSpec)
+	})
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -1854,9 +1883,49 @@ func New(cfg config.Config) (*App, error) {
 		srv:         srv,
 		backupSvc:   backupSvc,
 		authService: authService,
+		openapiSpec: openapiSpec,
 	}
 
 	return a, nil
+}
+
+const apiDocsHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cabinet API Docs</title>
+  <style>
+    body { margin: 0; font-family: Aptos, "Segoe UI", sans-serif; background: #f3f6fb; }
+    header { padding: 12px 16px; border-bottom: 1px solid #dbe5f4; background: #fff; }
+    header a { color: #1d4ed8; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Cabinet API Docs</strong> - <a href="/api/openapi.yaml">OpenAPI YAML</a>
+  </header>
+  <redoc spec-url="/api/openapi.yaml"></redoc>
+  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+</body>
+</html>`
+
+func loadOpenAPISpec(cfg config.Config) []byte {
+	candidates := []string{
+		filepath.Join("docs", "api", "openapi.yaml"),
+		filepath.Join("..", "..", "docs", "api", "openapi.yaml"),
+		filepath.Join(filepath.Dir(cfg.DBPath), "docs", "api", "openapi.yaml"),
+	}
+	if exePath, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exePath), "docs", "api", "openapi.yaml"))
+	}
+	for _, path := range candidates {
+		b, err := os.ReadFile(path)
+		if err == nil && len(b) > 0 {
+			return b
+		}
+	}
+	return nil
 }
 
 func requiresUnlockedSession(r *http.Request) bool {

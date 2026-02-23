@@ -27,7 +27,7 @@ describe("App shell", () => {
     );
     render(<App />);
     const link = await screen.findByRole("link", { name: /api kitchen sync/i });
-    expect(link).toHaveAttribute("href", "/redoc.html");
+    expect(link).toHaveAttribute("href", "/apidocs");
   });
 
   it("opens and closes mobile navigation drawer", async () => {

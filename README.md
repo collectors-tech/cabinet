@@ -48,7 +48,9 @@ go run ./cmd/cabinet
 
 ## API Documentation
 - OpenAPI source: `docs/api/openapi.yaml`
-- Preview docs: `docs/api/redoc.html`
+- Runtime docs UI: `http://127.0.0.1:17880/apidocs`
+- Runtime OpenAPI spec: `http://127.0.0.1:17880/api/openapi.yaml`
+- Generated static docs output: `docs/api/index.html`
 - Validate spec: `./scripts/validate-openapi.ps1`
 - Generate static docs: `./scripts/generate-api-docs.ps1`
 
