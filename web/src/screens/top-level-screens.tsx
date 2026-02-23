@@ -42,6 +42,10 @@ export function BarcodesScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-barcodes" title="Barcodes" id={props.id}>{props.children}</ScreenContainer>;
 }
 
+export function PhotosScreen(props: PropsWithChildren<{ id?: string }>) {
+  return <ScreenContainer testId="screen-photos" title="Photos" id={props.id}>{props.children}</ScreenContainer>;
+}
+
 export function SettingsScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-settings" title="Settings" id={props.id}>{props.children}</ScreenContainer>;
 }

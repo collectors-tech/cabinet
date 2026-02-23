@@ -7,11 +7,11 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PhotosScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "pricing" | "settings";
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "photos" | "pricing" | "settings";
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -2377,6 +2377,15 @@ export function App() {
       </button>
       <button
         type="button"
+        className={`cabinet-nav-link${activeScreen === "photos" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "photos" ? "page" : undefined}
+        onClick={() => selectScreen("photos")}
+        disabled={!navEnabled}
+      >
+        Photos
+      </button>
+      <button
+        type="button"
         className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
         aria-current={activeScreen === "pricing" ? "page" : undefined}
         onClick={() => selectScreen("pricing")}
@@ -2850,8 +2859,8 @@ export function App() {
               </div>
             </CollectionScreen>
           ) : null}
-          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
-            <div>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "photos") ? (
+            <PhotosScreen id="photos">
               <h3>Photos</h3>
               <div>
                 <input
@@ -2920,7 +2929,7 @@ export function App() {
                   </button>
                 </div>
               ) : null}
-            </div>
+            </PhotosScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "scanner") ? (
             <ScannerScreen>
