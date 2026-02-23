@@ -80,6 +80,10 @@ export function App() {
   const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
   const [editingQuerySetID, setEditingQuerySetID] = useState("");
   const [querySetSubmitting, setQuerySetSubmitting] = useState(false);
+  const [scheduledRunStatus, setScheduledRunStatus] = useState("");
+  const [scannerFailures, setScannerFailures] = useState<Array<{ id?: string; query_set_id?: string; reason?: string; attempts?: number; last_error_at?: string }>>([]);
+  const [providerHealth, setProviderHealth] = useState<{ provider?: string; state?: string; healthy?: boolean } | null>(null);
+  const [matchingRunStatus, setMatchingRunStatus] = useState("");
   const [candidates, setCandidates] = useState<Array<{ id: string; title?: string; listing_id?: string; status?: string }>>([]);
   const [matchingResults, setMatchingResults] = useState<Array<{ candidate_id?: string; state?: string; part_number?: string; item_id?: string }>>(
     [],
@@ -1026,6 +1030,65 @@ export function App() {
       await loadCandidates();
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_run_scanner");
+    }
+  }
+
+  async function runScheduledScans() {
+    setScannerError("");
+    setScheduledRunStatus("");
+    try {
+      const resp = await fetch("/api/scanner/run/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error("failed_to_run_scheduled_scans");
+      }
+      setScheduledRunStatus("scheduled_scans_triggered");
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_run_scheduled_scans");
+    }
+  }
+
+  async function loadScannerFailures() {
+    setScannerError("");
+    try {
+      const resp = await fetch("/api/scanner/failures");
+      if (!resp.ok) {
+        throw new Error("failed_to_load_scanner_failures");
+      }
+      const data = (await resp.json()) as { failures?: Array<{ id?: string; query_set_id?: string; reason?: string; attempts?: number; last_error_at?: string }> };
+      setScannerFailures(data.failures || []);
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_load_scanner_failures");
+    }
+  }
+
+  async function loadProviderHealth(provider = "ebay") {
+    setScannerError("");
+    try {
+      const resp = await fetch(`/api/provider/health?provider=${encodeURIComponent(provider)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_provider_health");
+      }
+      const data = (await resp.json()) as { provider?: string; state?: string; healthy?: boolean };
+      setProviderHealth(data);
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_load_provider_health");
+    }
+  }
+
+  async function runMatchingNow() {
+    setScannerError("");
+    setMatchingRunStatus("");
+    try {
+      const resp = await fetch("/api/matching/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error("failed_to_run_matching");
+      }
+      const data = (await resp.json()) as { matched?: number; suggested?: number; not_in_collection?: number; processed?: number };
+      const processed = Number(data.processed || 0);
+      setMatchingRunStatus(`matching_run_ok:${processed}`);
+      await loadMatchingResults();
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_run_matching");
     }
   }
 
@@ -2481,11 +2544,35 @@ export function App() {
                 <button type="button" onClick={runScannerNow}>
                   Run Now
                 </button>{" "}
+                <button type="button" onClick={runScheduledScans}>
+                  Run Scheduled
+                </button>{" "}
                 <button type="button" onClick={loadCandidates}>
                   Load Candidates
                 </button>
               </div>
+              <div>
+                <button type="button" onClick={loadScannerFailures}>
+                  Load Scanner Failures
+                </button>{" "}
+                <button type="button" onClick={() => loadProviderHealth("ebay")}>
+                  Check Provider Health
+                </button>{" "}
+                <button type="button" onClick={runMatchingNow}>
+                  Run Matching
+                </button>
+              </div>
               {scannerError ? <p>Scanner error: {scannerError}</p> : null}
+              {scheduledRunStatus ? <p>Scheduled run: {scheduledRunStatus}</p> : null}
+              {matchingRunStatus ? <p>Matching run status: {matchingRunStatus}</p> : null}
+              {providerHealth ? <p>Provider health: {providerHealth.provider || "unknown"} / {providerHealth.state || String(providerHealth.healthy)}</p> : null}
+              <ul>
+                {scannerFailures.map((failure, idx) => (
+                  <li key={failure.id || `${failure.query_set_id || "qs"}-${idx}`}>
+                    Failure: {failure.query_set_id || "unknown"} / {failure.reason || "n/a"} / attempts {String(failure.attempts || 0)}
+                  </li>
+                ))}
+              </ul>
               <ul>
                 {querySets.map((q) => (
                   <li key={q.id}>

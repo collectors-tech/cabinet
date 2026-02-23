@@ -53,6 +53,21 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     if (path === "/api/dashboard" && method === "GET") {
       return respondJSON({ new_discoveries: 2, wishlist_hits: 1, price_drops: 1, recently_added: 3, total_items: 10, total_instances: 14 });
     }
+    if (path === "/api/scanner/run/scheduled" && method === "POST") {
+      return respondJSON({ ok: true });
+    }
+    if (path === "/api/scanner/failures" && method === "GET") {
+      return respondJSON({ failures: [{ id: "f1", query_set_id: "q1", reason: "rate_limited", attempts: 2 }] });
+    }
+    if (path === "/api/provider/health" && method === "GET") {
+      return respondJSON({ provider: "ebay", state: "healthy", healthy: true });
+    }
+    if (path === "/api/matching/run" && method === "POST") {
+      return respondJSON({ processed: 3 });
+    }
+    if (path === "/api/matching/results" && method === "GET") {
+      return respondJSON({ results: [{ candidate_id: "c1", state: "matched" }] });
+    }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
       if (state.registerBeginFailsOnce && state.registerBeginCalls === 1) {
@@ -124,6 +139,15 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await drawer.getByRole("button", { name: /^scanner$/i }).click();
   await expect(page.getByRole("dialog", { name: /navigation menu/i })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /discovery scanner/i })).toBeVisible();
+  await page.getByRole("button", { name: /run scheduled/i }).click();
+  await expect(page.getByText(/scheduled run: scheduled_scans_triggered/i)).toBeVisible();
+  await page.getByRole("button", { name: /load scanner failures/i }).click();
+  await expect(page.getByText(/failure: q1 \/ rate_limited \/ attempts 2/i)).toBeVisible();
+  await page.getByRole("button", { name: /check provider health/i }).click();
+  await expect(page.getByText(/provider health: ebay \/ healthy/i)).toBeVisible();
+  await page.getByRole("button", { name: /run matching/i }).click();
+  await expect(page.getByText(/matching run status: matching_run_ok:3/i)).toBeVisible();
+  await expect(page.getByText(/matched: 1/i)).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {

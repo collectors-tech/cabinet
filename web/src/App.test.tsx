@@ -930,6 +930,62 @@ describe("App shell", () => {
     expect(await screen.findByText(/afx search/i)).toBeInTheDocument();
   });
 
+  it("runs scanner scheduled workflows, provider health, and matching", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/scanner/run/scheduled" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/scanner/failures") {
+        return new Response(JSON.stringify({ failures: [{ id: "f1", query_set_id: "q1", reason: "rate_limited", attempts: 2 }] }), { status: 200 });
+      }
+      if (url.startsWith("/api/provider/health?provider=ebay")) {
+        return new Response(JSON.stringify({ provider: "ebay", state: "healthy", healthy: true }), { status: 200 });
+      }
+      if (url === "/api/matching/run" && init?.method === "POST") {
+        return new Response(JSON.stringify({ processed: 3 }), { status: 200 });
+      }
+      if (url === "/api/matching/results") {
+        return new Response(JSON.stringify({ results: [{ candidate_id: "c1", state: "matched" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^scanner$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /run scheduled/i }));
+    expect(await screen.findByText(/scheduled run: scheduled_scans_triggered/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load scanner failures/i }));
+    expect(await screen.findByText(/failure: q1 \/ rate_limited \/ attempts 2/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /check provider health/i }));
+    expect(await screen.findByText(/provider health: ebay \/ healthy/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /run matching/i }));
+    expect(await screen.findByText(/matching run status: matching_run_ok:3/i)).toBeInTheDocument();
+    expect(await screen.findByText(/matched: 1/i)).toBeInTheDocument();
+  });
+
   it("auto-loads dedicated dashboard view and supports pricing actions", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
