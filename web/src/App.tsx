@@ -7,11 +7,11 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import { AIScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "pricing" | "settings";
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "pricing" | "settings";
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -2359,6 +2359,15 @@ export function App() {
       </button>
       <button
         type="button"
+        className={`cabinet-nav-link${activeScreen === "ai" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "ai" ? "page" : undefined}
+        onClick={() => selectScreen("ai")}
+        disabled={!navEnabled}
+      >
+        AI Assist
+      </button>
+      <button
+        type="button"
         className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
         aria-current={activeScreen === "pricing" ? "page" : undefined}
         onClick={() => selectScreen("pricing")}
@@ -3071,6 +3080,9 @@ export function App() {
                 <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
                   Open Discoveries Workspace
                 </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("ai")}>
+                  Open AI Workspace
+                </button>{" "}
                 <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
                   Open Pricing Workspace
                 </button>{" "}
@@ -3370,8 +3382,8 @@ export function App() {
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
-            <div>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "ai") ? (
+            <AIScreen id="ai">
               <h3>AI Assist</h3>
               <AIAssistForms
                 aiEnabled={aiEnabled}
@@ -3385,7 +3397,7 @@ export function App() {
                 onApplySuggestion={applySuggestion}
                 onRetry={retryLastAIAction}
               />
-            </div>
+            </AIScreen>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}
           <ul>

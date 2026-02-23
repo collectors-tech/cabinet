@@ -86,6 +86,11 @@ describe("App shell", () => {
     expect(discoveriesNav).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("heading", { name: /^not in my collection$/i })).toBeInTheDocument();
 
+    const aiAssistNav = await screen.findByRole("button", { name: /^ai assist$/i });
+    fireEvent.click(aiAssistNav);
+    expect(aiAssistNav).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: /^ai assist$/i })).toBeInTheDocument();
+
     const settingsNav = await screen.findByRole("button", { name: /^settings$/i });
     fireEvent.click(settingsNav);
     expect(settingsNav).toHaveAttribute("aria-current", "page");
@@ -1654,6 +1659,9 @@ describe("App shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^discoveries$/i }));
     expect(await screen.findByTestId("screen-discoveries")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^ai assist$/i }));
+    expect(await screen.findByTestId("screen-ai")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /^pricing$/i }));
     expect(await screen.findByTestId("screen-pricing")).toBeInTheDocument();

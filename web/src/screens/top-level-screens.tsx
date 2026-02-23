@@ -34,6 +34,10 @@ export function DiscoveriesScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-discoveries" title="Discoveries" id={props.id}>{props.children}</ScreenContainer>;
 }
 
+export function AIScreen(props: PropsWithChildren<{ id?: string }>) {
+  return <ScreenContainer testId="screen-ai" title="AI Assist" id={props.id}>{props.children}</ScreenContainer>;
+}
+
 export function SettingsScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-settings" title="Settings" id={props.id}>{props.children}</ScreenContainer>;
 }
