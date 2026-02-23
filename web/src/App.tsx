@@ -100,6 +100,12 @@ export function App() {
   const [pricingBySource, setPricingBySource] = useState<Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>>(
     {},
   );
+  const [pricingHistory, setPricingHistory] = useState<Array<{ day?: string; date?: string; min?: number; median?: number; latest?: number }>>([]);
+  const [pricingStats, setPricingStats] = useState<Record<string, unknown> | null>(null);
+  const [pricingTrend, setPricingTrend] = useState<Record<string, unknown> | null>(null);
+  const [wishlistHits, setWishlistHits] = useState<Array<{ item_id?: string; listing_id?: string; title?: string; price?: number }>>([]);
+  const [pricingTrackStatus, setPricingTrackStatus] = useState("");
+  const [snapshotStatus, setSnapshotStatus] = useState("");
   const [wishlistDraft, setWishlistDraft] = useState({ item_id: "", target_price: "0", priority: "normal", notes: "" });
   const [insightError, setInsightError] = useState("");
   const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string } | null>(null);
@@ -1293,6 +1299,110 @@ export function App() {
       setPricingBySource(data.by_source || {});
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_by_source");
+    }
+  }
+
+  async function trackPricingItem() {
+    setInsightError("");
+    setPricingTrackStatus("");
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing_track");
+      return;
+    }
+    try {
+      const resp = await fetch("/api/pricing/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: selectedItemID }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_track_pricing_item");
+      }
+      setPricingTrackStatus("pricing_track_enabled");
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_track_pricing_item");
+    }
+  }
+
+  async function loadPricingHistory() {
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing_history");
+      return;
+    }
+    setInsightError("");
+    try {
+      const resp = await fetch(`/api/pricing/history?item_id=${encodeURIComponent(selectedItemID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_pricing_history");
+      }
+      const data = (await resp.json()) as { history?: Array<{ day?: string; date?: string; min?: number; median?: number; latest?: number }> };
+      setPricingHistory(data.history || []);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_history");
+    }
+  }
+
+  async function loadPricingStats() {
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing_stats");
+      return;
+    }
+    setInsightError("");
+    try {
+      const resp = await fetch(`/api/pricing/stats?item_id=${encodeURIComponent(selectedItemID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_pricing_stats");
+      }
+      const data = (await resp.json()) as Record<string, unknown>;
+      setPricingStats(data);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_stats");
+    }
+  }
+
+  async function loadPricingTrend() {
+    if (!selectedItemID) {
+      setInsightError("item_id_required_for_pricing_trend");
+      return;
+    }
+    setInsightError("");
+    try {
+      const resp = await fetch(`/api/pricing/trend?item_id=${encodeURIComponent(selectedItemID)}`);
+      if (!resp.ok) {
+        throw new Error("failed_to_load_pricing_trend");
+      }
+      const data = (await resp.json()) as Record<string, unknown>;
+      setPricingTrend(data);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_pricing_trend");
+    }
+  }
+
+  async function loadWishlistHits() {
+    setInsightError("");
+    try {
+      const resp = await fetch("/api/wishlist/hits");
+      if (!resp.ok) {
+        throw new Error("failed_to_load_wishlist_hits");
+      }
+      const data = (await resp.json()) as { hits?: Array<{ item_id?: string; listing_id?: string; title?: string; price?: number }> };
+      setWishlistHits(data.hits || []);
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_load_wishlist_hits");
+    }
+  }
+
+  async function runPricingSnapshot() {
+    setInsightError("");
+    setSnapshotStatus("");
+    try {
+      const resp = await fetch("/api/pricing/snapshot/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!resp.ok) {
+        throw new Error("failed_to_run_pricing_snapshot");
+      }
+      setSnapshotStatus("pricing_snapshot_completed");
+    } catch (e) {
+      setInsightError(e instanceof Error ? e.message : "failed_to_run_pricing_snapshot");
     }
   }
 
@@ -2689,14 +2799,32 @@ export function App() {
                 <button type="button" onClick={loadWishlist}>
                   Load Wishlist
                 </button>{" "}
+                <button type="button" onClick={loadWishlistHits}>
+                  Load Wishlist Hits
+                </button>{" "}
                 <button type="button" onClick={createWishlistEntry}>
                   Add Wishlist Item
+                </button>{" "}
+                <button type="button" onClick={trackPricingItem}>
+                  Track Pricing
                 </button>{" "}
                 <button type="button" onClick={loadPricingGraph}>
                   Load Pricing Graph
                 </button>{" "}
                 <button type="button" onClick={loadPricingBySource}>
                   Load Pricing Sources
+                </button>{" "}
+                <button type="button" onClick={loadPricingHistory}>
+                  Load Pricing History
+                </button>{" "}
+                <button type="button" onClick={loadPricingStats}>
+                  Load Pricing Stats
+                </button>{" "}
+                <button type="button" onClick={loadPricingTrend}>
+                  Load Pricing Trend
+                </button>{" "}
+                <button type="button" onClick={runPricingSnapshot}>
+                  Run Pricing Snapshot
                 </button>{" "}
                 <button type="button" onClick={() => exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history")}>
                   Export Pricing History
@@ -2732,8 +2860,20 @@ export function App() {
                   </li>
                 ))}
               </ul>
+              <ul>
+                {wishlistHits.map((hit, idx) => (
+                  <li key={`${hit.item_id || "item"}-${hit.listing_id || idx}`}>
+                    Wishlist Hit: {hit.item_id || "unknown"} / {hit.title || hit.listing_id || "listing"} / {String(hit.price ?? "")}
+                  </li>
+                ))}
+              </ul>
+              {pricingTrackStatus ? <p>Pricing track status: {pricingTrackStatus}</p> : null}
+              {snapshotStatus ? <p>Snapshot status: {snapshotStatus}</p> : null}
               <p>Pricing points: {pricingPoints.length}</p>
+              <p>Pricing history points: {pricingHistory.length}</p>
               <p>Source groups: {Object.keys(pricingBySource).length}</p>
+              {pricingStats ? <p>Pricing stats loaded: yes</p> : null}
+              {pricingTrend ? <p>Pricing trend loaded: yes</p> : null}
               <ul>
                 {Object.entries(pricingBySource).map(([source, snapshots]) => (
                   <li key={source}>

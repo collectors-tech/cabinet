@@ -1031,7 +1031,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/new discoveries: 3/i)).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /^pricing$/i }));
-    const loadWishlist = await screen.findByRole("button", { name: /load wishlist/i });
+    const loadWishlist = await screen.findByRole("button", { name: /^load wishlist$/i });
     loadWishlist.click();
     expect(await screen.findByText(/wishlist item: i1 target 25/i)).toBeInTheDocument();
 
@@ -1462,7 +1462,7 @@ describe("App shell", () => {
     const activate = await screen.findByRole("button", { name: /use alpha/i });
     activate.click();
 
-    const loadWishlist = await screen.findByRole("button", { name: /load wishlist/i });
+    const loadWishlist = await screen.findByRole("button", { name: /^load wishlist$/i });
     loadWishlist.click();
     expect(await screen.findByText(/below target/i)).toBeInTheDocument();
 
@@ -1470,5 +1470,69 @@ describe("App shell", () => {
     loadSources.click();
     expect(await screen.findByText(/source groups: 1/i)).toBeInTheDocument();
     expect(await screen.findByText(/ebay: 1 snapshots/i)).toBeInTheDocument();
+  });
+
+  it("supports pricing track/history/stats/trend/snapshot and wishlist hits workflows", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/pricing/track" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/history?item_id=i1")) {
+        return new Response(JSON.stringify({ history: [{ day: "2026-02-21", min: 10, median: 11, latest: 12 }] }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/stats?item_id=i1")) {
+        return new Response(JSON.stringify({ min: 10, median: 11, latest: 12 }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/trend?item_id=i1")) {
+        return new Response(JSON.stringify({ trend: "down" }), { status: 200 });
+      }
+      if (url === "/api/pricing/snapshot/run" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/wishlist/hits") {
+        return new Response(JSON.stringify({ hits: [{ item_id: "i1", listing_id: "l1", title: "Hit Item", price: 18 }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^pricing$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /track pricing/i }));
+    expect(await screen.findByText(/pricing track status: pricing_track_enabled/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load pricing history/i }));
+    expect(await screen.findByText(/pricing history points: 1/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load pricing stats/i }));
+    expect(await screen.findByText(/pricing stats loaded: yes/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load pricing trend/i }));
+    expect(await screen.findByText(/pricing trend loaded: yes/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /run pricing snapshot/i }));
+    expect(await screen.findByText(/snapshot status: pricing_snapshot_completed/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load wishlist hits/i }));
+    expect(await screen.findByText(/wishlist hit: i1 \/ hit item \/ 18/i)).toBeInTheDocument();
   });
 });

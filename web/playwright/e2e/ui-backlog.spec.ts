@@ -8,7 +8,7 @@ type WizardMockOptions = {
 
 async function installWizardMocks(page: Parameters<typeof test>[0]["page"], options: WizardMockOptions = {}) {
   const state = {
-    items: [] as Array<{ id: string; part_number: string; title: string; brand?: string }>,
+    items: [{ id: "i1", part_number: "PN-001", title: "Existing Item", brand: "AFX" }] as Array<{ id: string; part_number: string; title: string; brand?: string }>,
     sampleCalls: 0,
     registerBeginCalls: 0,
     registerBeginFailsOnce: Boolean(options.registerBeginFailsOnce),
@@ -67,6 +67,24 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     }
     if (path === "/api/matching/results" && method === "GET") {
       return respondJSON({ results: [{ candidate_id: "c1", state: "matched" }] });
+    }
+    if (path === "/api/pricing/track" && method === "POST") {
+      return respondJSON({ ok: true });
+    }
+    if (path === "/api/pricing/history" && method === "GET") {
+      return respondJSON({ history: [{ day: "2026-02-21", min: 10, median: 11, latest: 12 }] });
+    }
+    if (path === "/api/pricing/stats" && method === "GET") {
+      return respondJSON({ min: 10, median: 11, latest: 12 });
+    }
+    if (path === "/api/pricing/trend" && method === "GET") {
+      return respondJSON({ trend: "down" });
+    }
+    if (path === "/api/pricing/snapshot/run" && method === "POST") {
+      return respondJSON({ ok: true });
+    }
+    if (path === "/api/wishlist/hits" && method === "GET") {
+      return respondJSON({ hits: [{ item_id: "i1", listing_id: "l1", title: "Hit Item", price: 18 }] });
     }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
@@ -148,6 +166,21 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await page.getByRole("button", { name: /run matching/i }).click();
   await expect(page.getByText(/matching run status: matching_run_ok:3/i)).toBeVisible();
   await expect(page.getByText(/matched: 1/i)).toBeVisible();
+
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.getByRole("button", { name: /^pricing$/i }).first().click();
+  await page.getByRole("button", { name: /track pricing/i }).click();
+  await expect(page.getByText(/pricing track status: pricing_track_enabled/i)).toBeVisible();
+  await page.getByRole("button", { name: /load pricing history/i }).click();
+  await expect(page.getByText(/pricing history points: 1/i)).toBeVisible();
+  await page.getByRole("button", { name: /load pricing stats/i }).click();
+  await expect(page.getByText(/pricing stats loaded: yes/i)).toBeVisible();
+  await page.getByRole("button", { name: /load pricing trend/i }).click();
+  await expect(page.getByText(/pricing trend loaded: yes/i)).toBeVisible();
+  await page.getByRole("button", { name: /run pricing snapshot/i }).click();
+  await expect(page.getByText(/snapshot status: pricing_snapshot_completed/i)).toBeVisible();
+  await page.getByRole("button", { name: /load wishlist hits/i }).click();
+  await expect(page.getByText(/wishlist hit: i1 \/ hit item \/ 18/i)).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
