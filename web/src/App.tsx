@@ -2257,6 +2257,12 @@ export function App() {
     }
     setActiveScreen(screen);
   }
+  function openWorkspaceFromDashboard(screen: Exclude<TopLevelScreen, "all">) {
+    selectScreen(screen);
+    if (screen === "pricing") {
+      void loadWishlist();
+    }
+  }
   const navLinks = (
     <>
       <button
@@ -2958,6 +2964,18 @@ export function App() {
                 <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
                   {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
                 </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("collection")}>
+                  Open Collection Workspace
+                </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
+                  Open Scanner Workspace
+                </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
+                  Open Pricing Workspace
+                </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("settings")}>
+                  Open Settings Workspace
+                </button>
               </div>
               {dashboardLoading ? <p>Loading dashboard...</p> : null}
               {dashboard ? (
