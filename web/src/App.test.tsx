@@ -528,9 +528,11 @@ describe("App shell", () => {
     expect(await screen.findByText(/settings_saved/i)).toBeInTheDocument();
 
     fireEvent.change(await screen.findByLabelText(/openai api key/i), { target: { value: "sk-test" } });
-    const saveOpenAIKey = await screen.findByRole("button", { name: /save openai key/i });
-    saveOpenAIKey.click();
-    expect(await screen.findByText(/openai_key_saved/i)).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText(/ebay app id/i), { target: { value: "app-id" } });
+    fireEvent.change(await screen.findByLabelText(/ebay auth token/i), { target: { value: "token" } });
+    const saveSecrets = await screen.findByRole("button", { name: /save secrets/i });
+    saveSecrets.click();
+    expect(await screen.findByText(/secrets_saved/i)).toBeInTheDocument();
 
     const resetIgnore = await screen.findByRole("button", { name: /reset ignore rules/i });
     resetIgnore.click();

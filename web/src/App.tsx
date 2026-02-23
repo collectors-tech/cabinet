@@ -3,6 +3,7 @@ import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-form
 import { CollectionItemForm, type CollectionItemValues } from "./components/collection-item-form";
 import { InstanceForm, type InstanceFormValues } from "./components/instance-form";
 import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/scanner-query-set-form";
+import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
@@ -95,12 +96,17 @@ export function App() {
   const [logCount, setLogCount] = useState(0);
   const [adminError, setAdminError] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
-  const [profileSettingsDraft, setProfileSettingsDraft] = useState({
+  const [profileSettingsInitial, setProfileSettingsInitial] = useState<ProfileSettingsValues>({
     scanner_schedule: "",
-    backup_frequency: "",
+    backup_frequency: "daily",
     db_path: "",
+    update_channel: "stable",
   });
-  const [openAIKeyInput, setOpenAIKeyInput] = useState("");
+  const [secretsInitial, setSecretsInitial] = useState<Partial<SecretsValues>>({
+    openai_api_key: "",
+    ebay_app_id: "",
+    ebay_auth_token: "",
+  });
   const [exportBytes, setExportBytes] = useState(0);
   const [barcodes, setBarcodes] = useState<Array<{ id?: string; barcode: string }>>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -1038,17 +1044,18 @@ export function App() {
       }
       const data = (await resp.json()) as { settings?: Record<string, string> };
       const settings = data.settings || {};
-      setProfileSettingsDraft({
+      setProfileSettingsInitial({
         scanner_schedule: settings.scanner_schedule || "",
-        backup_frequency: settings.backup_frequency || "",
+        backup_frequency: (settings.backup_frequency as ProfileSettingsValues["backup_frequency"]) || "daily",
         db_path: settings["storage.db_path"] || "",
+        update_channel: (settings.update_channel as ProfileSettingsValues["update_channel"]) || "stable",
       });
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_get_settings");
     }
   }
 
-  async function saveProfileSettings() {
+  async function saveProfileSettings(values: ProfileSettingsValues) {
     if (!activeProfile?.id) {
       return;
     }
@@ -1056,9 +1063,10 @@ export function App() {
     try {
       const payload = {
         settings: {
-          scanner_schedule: profileSettingsDraft.scanner_schedule,
-          backup_frequency: profileSettingsDraft.backup_frequency,
-          "storage.db_path": profileSettingsDraft.db_path,
+          scanner_schedule: values.scanner_schedule,
+          backup_frequency: values.backup_frequency,
+          "storage.db_path": values.db_path,
+          update_channel: values.update_channel,
         },
       };
       const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/settings`, {
@@ -1075,21 +1083,29 @@ export function App() {
     }
   }
 
-  async function saveOpenAIKey() {
-    if (!activeProfile?.id || !openAIKeyInput.trim()) {
+  async function saveSecrets(values: SecretsValues) {
+    if (!activeProfile?.id) {
       return;
     }
     setAdminError("");
     try {
-      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/secrets`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "openai_api_key", value: openAIKeyInput.trim() }),
-      });
-      if (!resp.ok) {
-        throw new Error("failed_to_put_secret");
+      const writes = [
+        { key: "openai_api_key", value: values.openai_api_key },
+        { key: "ebay_app_id", value: values.ebay_app_id },
+        { key: "ebay_auth_token", value: values.ebay_auth_token },
+      ];
+      for (const write of writes) {
+        const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/secrets`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(write),
+        });
+        if (!resp.ok) {
+          throw new Error("failed_to_put_secret");
+        }
       }
-      setSettingsStatus("openai_key_saved");
+      setSecretsInitial(values);
+      setSettingsStatus("secrets_saved");
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_put_secret");
     }
@@ -2157,12 +2173,6 @@ export function App() {
                 <button type="button" onClick={loadProfileSettings}>
                   Load Profile Settings
                 </button>{" "}
-                <button type="button" onClick={saveProfileSettings}>
-                  Save Profile Settings
-                </button>{" "}
-                <button type="button" onClick={saveOpenAIKey}>
-                  Save OpenAI Key
-                </button>{" "}
                 <button type="button" onClick={resetIgnoreRules}>
                   Reset Ignore Rules
                 </button>{" "}
@@ -2189,30 +2199,8 @@ export function App() {
                 </button>
               </div>
               <div>
-                <input
-                  value={profileSettingsDraft.scanner_schedule}
-                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, scanner_schedule: e.target.value }))}
-                  placeholder="Scanner schedule"
-                  aria-label="Scanner schedule"
-                />{" "}
-                <input
-                  value={profileSettingsDraft.backup_frequency}
-                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, backup_frequency: e.target.value }))}
-                  placeholder="Backup frequency"
-                  aria-label="Backup frequency"
-                />{" "}
-                <input
-                  value={profileSettingsDraft.db_path}
-                  onChange={(e) => setProfileSettingsDraft((current) => ({ ...current, db_path: e.target.value }))}
-                  placeholder="Database path"
-                  aria-label="Database path"
-                />{" "}
-                <input
-                  value={openAIKeyInput}
-                  onChange={(e) => setOpenAIKeyInput(e.target.value)}
-                  placeholder="OpenAI API Key"
-                  aria-label="OpenAI API Key"
-                />
+                <ProfileSettingsForm initialValues={profileSettingsInitial} onSubmit={saveProfileSettings} />
+                <SecretsForm initialValues={secretsInitial} onSubmit={saveSecrets} />
               </div>
               {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
               <p>Log entries: {logCount}</p>
