@@ -344,10 +344,19 @@ export function App() {
       return;
     }
     const key = workspacePreferenceKey(activeProfile.id);
-    if (localStorage.getItem(key) !== null) {
+    const onboardingCompletedValue = localStorage.getItem(onboardingCompletedPreferenceKey(activeProfile.id));
+    const onboardingStepValue = localStorage.getItem(onboardingStepPreferenceKey(activeProfile.id));
+    const hasOnboardingState = onboardingCompletedValue !== null || onboardingStepValue !== null;
+    const onboardingComplete = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true";
+    if (onboardingComplete) {
       return;
     }
     setAdvancedWorkspace(false);
+    localStorage.setItem(key, "0");
+    if (!hasOnboardingState) {
+      localStorage.setItem(onboardingCompletedPreferenceKey(activeProfile.id), "0");
+      localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), "1");
+    }
   }, [activeProfile?.id, requiresRegistration]);
 
   async function postJSON(path: string, payload: unknown) {
@@ -436,7 +445,11 @@ export function App() {
     const onboardingIdentityValue = localStorage.getItem(onboardingIdentityPreferenceKey(profileID));
     const onboardingStarterDataValue = localStorage.getItem(onboardingStarterDataPreferenceKey(profileID));
     const workspaceValue = localStorage.getItem(workspacePreferenceKey(profileID));
-    const completed = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true" || workspaceValue === "1";
+    const hasExplicitOnboardingState = onboardingCompletedValue !== null || onboardingStepValue !== null;
+    const completed =
+      onboardingCompletedValue === "1" ||
+      onboardingCompletedValue?.toLowerCase() === "true" ||
+      (!hasExplicitOnboardingState && workspaceValue === "1");
     setOnboardingCompleted(Boolean(completed));
 
     const savedStep = Number(onboardingStepValue || "1");
@@ -460,16 +473,23 @@ export function App() {
     setOnboardingScannerPreset("manual");
     setOnboardingTheme(theme);
 
-    const value = localStorage.getItem(workspacePreferenceKey(profileID));
-    if (value === null) {
-      if (onboardingCompletedValue === null && onboardingStepValue === null) {
-        setAdvancedWorkspace(true);
-        return;
-      }
-      setAdvancedWorkspace(Boolean(completed));
+    if (!completed && !hasExplicitOnboardingState && workspaceValue === null) {
+      setAdvancedWorkspace(true);
       return;
     }
-    setAdvancedWorkspace(value === "1" || value.toLowerCase() === "true");
+
+    if (!completed) {
+      setAdvancedWorkspace(false);
+      localStorage.setItem(workspacePreferenceKey(profileID), "0");
+      return;
+    }
+
+    if (workspaceValue === null) {
+      setAdvancedWorkspace(false);
+      localStorage.setItem(workspacePreferenceKey(profileID), "0");
+      return;
+    }
+    setAdvancedWorkspace(workspaceValue === "1" || workspaceValue.toLowerCase() === "true");
   }
 
   async function setWorkspaceMode(nextAdvanced: boolean) {
@@ -2073,9 +2093,11 @@ export function App() {
                     </button>
                   </>
                 ) : null}
-                <button type="button" onClick={() => setWorkspaceMode(true)}>
-                  Open Advanced Workspace
-                </button>
+                {onboardingCompleted ? (
+                  <button type="button" onClick={() => setWorkspaceMode(true)}>
+                    Open Advanced Workspace
+                  </button>
+                ) : null}
               </div>
               {onboardingStep === 4 ? (
                 <>

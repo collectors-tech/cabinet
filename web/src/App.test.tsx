@@ -183,7 +183,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/current items: 1/i)).toBeInTheDocument();
   });
 
-  it("defaults to starter view and reveals advanced workspace on demand", async () => {
+  it("shows advanced workspace controls only after onboarding completion", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -205,6 +205,8 @@ describe("App shell", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "1");
+    localStorage.setItem("cabinet.onboarding.step.p1", "5");
 
     render(<App />);
     const activate = await screen.findByRole("button", { name: /use alpha/i });
@@ -215,6 +217,73 @@ describe("App shell", () => {
 
     const openAdvanced = await screen.findByRole("button", { name: /open advanced workspace/i });
     openAdvanced.click();
+    expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
+  });
+
+  it("keeps advanced workspace hidden pre-completion even when workspace flag is set", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "2");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    expect(await screen.findByRole("heading", { name: /starter onboarding wizard/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open advanced workspace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /discovery scanner/i })).not.toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.workspace.p1")).toBe("0");
+  });
+
+  it("supports legacy migration path by honoring workspace flag when onboarding state is absent", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.removeItem("cabinet.onboarding.completed.p1");
+    localStorage.removeItem("cabinet.onboarding.step.p1");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
     expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
   });
 
@@ -250,7 +319,7 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("button", { name: /complete identity/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /load sample data/i })).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /open advanced workspace/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open advanced workspace/i })).not.toBeInTheDocument();
   });
 
   it("persists onboarding wizard step and resumes from last incomplete step", async () => {
@@ -1027,8 +1096,10 @@ describe("App shell", () => {
     localStorage.setItem("cabinet.workspace.p1", "1");
     const activate = await screen.findByRole("button", { name: /use alpha/i });
     activate.click();
-    const openAdvanced = await screen.findByRole("button", { name: /open advanced workspace/i });
-    openAdvanced.click();
+    const openAdvanced = screen.queryByRole("button", { name: /open advanced workspace/i });
+    if (openAdvanced) {
+      openAdvanced.click();
+    }
     const toggleAi = await screen.findByRole("button", { name: /enable ai/i });
     toggleAi.click();
     const titleInput = await screen.findByLabelText(/title normalization input/i);
