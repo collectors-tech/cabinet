@@ -7,11 +7,11 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { AIScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "pricing" | "settings";
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "pricing" | "settings";
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -2368,6 +2368,15 @@ export function App() {
       </button>
       <button
         type="button"
+        className={`cabinet-nav-link${activeScreen === "barcodes" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "barcodes" ? "page" : undefined}
+        onClick={() => selectScreen("barcodes")}
+        disabled={!navEnabled}
+      >
+        Barcodes
+      </button>
+      <button
+        type="button"
         className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
         aria-current={activeScreen === "pricing" ? "page" : undefined}
         onClick={() => selectScreen("pricing")}
@@ -3348,8 +3357,8 @@ export function App() {
               {adminError === "failed_to_restore_backup" ? <p>Restore failed: verify the selected backup file is valid and readable.</p> : null}
             </SettingsScreen>
           ) : null}
-          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
-            <div>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "barcodes") ? (
+            <BarcodesScreen id="barcodes">
               <h3>Barcodes</h3>
               <div>
                 <input
@@ -3380,7 +3389,7 @@ export function App() {
               </ul>
               <p>Local matches: {barcodeLookupMatches.length}</p>
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
-            </div>
+            </BarcodesScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "ai") ? (
             <AIScreen id="ai">

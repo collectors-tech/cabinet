@@ -91,6 +91,11 @@ describe("App shell", () => {
     expect(aiAssistNav).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("heading", { name: /^ai assist$/i })).toBeInTheDocument();
 
+    const barcodesNav = await screen.findByRole("button", { name: /^barcodes$/i });
+    fireEvent.click(barcodesNav);
+    expect(barcodesNav).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: /^barcodes$/i })).toBeInTheDocument();
+
     const settingsNav = await screen.findByRole("button", { name: /^settings$/i });
     fireEvent.click(settingsNav);
     expect(settingsNav).toHaveAttribute("aria-current", "page");
@@ -1662,6 +1667,9 @@ describe("App shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^ai assist$/i }));
     expect(await screen.findByTestId("screen-ai")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^barcodes$/i }));
+    expect(await screen.findByTestId("screen-barcodes")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /^pricing$/i }));
     expect(await screen.findByTestId("screen-pricing")).toBeInTheDocument();
