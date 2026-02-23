@@ -58,6 +58,10 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) CreateItem(ctx context.Context, in Item) (Item, error) {
+	return r.CreateItemForProfile(ctx, "", in)
+}
+
+func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string, in Item) (Item, error) {
 	in.Brand = strings.TrimSpace(in.Brand)
 	in.Category = strings.TrimSpace(in.Category)
 	in.PartNumber = strings.TrimSpace(in.PartNumber)
@@ -74,9 +78,9 @@ func (r *Repository) CreateItem(ctx context.Context, in Item) (Item, error) {
 	in.ID = uuid.NewString()
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO canonical_items (
-			id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, in.Brand, in.Category, in.PartNumber, in.Title, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
+			id, profile_id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
 		return Item{}, fmt.Errorf("create item: %w", err)
 	}
 
@@ -106,10 +110,22 @@ func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	return r.listItemsByQuery(ctx, `
 		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items ORDER BY created_at ASC
 	`)
+}
+
+func (r *Repository) ListItemsByProfile(ctx context.Context, profileID string) ([]Item, error) {
+	return r.listItemsByQuery(ctx, `
+		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		FROM canonical_items WHERE profile_id = ? ORDER BY created_at ASC
+	`, strings.TrimSpace(profileID))
+}
+
+func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ...any) ([]Item, error) {
+	rows, err := r.db.QueryContext(ctx, `
+	`+query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list items: %w", err)
 	}

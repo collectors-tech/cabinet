@@ -281,5 +281,45 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		}
 	}
 
+	if err := ensureColumn(ctx, conn, "canonical_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.profile_id: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
+	}
+
 	return conn, nil
+}
+
+func ensureColumn(ctx context.Context, conn *sql.DB, table, column, definition string) error {
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("pragma table_info %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan pragma table_info %s: %w", table, err)
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate pragma table_info %s: %w", table, err)
+	}
+
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+		return fmt.Errorf("alter table %s add column %s: %w", table, column, err)
+	}
+	return nil
 }

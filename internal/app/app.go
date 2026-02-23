@@ -359,6 +359,9 @@ func New(cfg config.Config) (*App, error) {
 		switch r.Method {
 		case http.MethodGet:
 			items, err := collectionRepo.ListItems(r.Context())
+			if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+				items, err = collectionRepo.ListItemsByProfile(r.Context(), active.ID)
+			}
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_list_items"}`, http.StatusInternalServerError)
 				return
@@ -382,7 +385,8 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			created, err := collectionRepo.CreateItem(r.Context(), req)
+			active, _ := profiles.GetActiveProfile(r.Context())
+			created, err := collectionRepo.CreateItemForProfile(r.Context(), active.ID, req)
 			if err != nil {
 				http.Error(w, `{"error":"invalid_item"}`, http.StatusBadRequest)
 				return
