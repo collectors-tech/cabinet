@@ -1367,6 +1367,83 @@ describe("App shell", () => {
     expect(await screen.findByText(/settings status: debug_mode_disabled/i)).toBeInTheDocument();
   });
 
+  it("loads runtime and recovery diagnostics in settings", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/runtime") {
+        return new Response(JSON.stringify({ update_channel: "stable", update_public_key_configured: true }), { status: 200 });
+      }
+      if (url === "/api/runtime/recovery") {
+        return new Response(JSON.stringify({ recovery_required: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load runtime diagnostics/i }));
+
+    expect(await screen.findByText(/runtime channel: stable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/runtime signing key configured: yes/i)).toBeInTheDocument();
+    expect(await screen.findByText(/recovery required: no/i)).toBeInTheDocument();
+  });
+
+  it("shows runtime diagnostics error when runtime endpoints fail", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/runtime") {
+        return new Response(JSON.stringify({ message: "failed" }), { status: 500 });
+      }
+      if (url === "/api/runtime/recovery") {
+        return new Response(JSON.stringify({ recovery_required: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load runtime diagnostics/i }));
+
+    expect(await screen.findByText(/admin error: failed_to_load_runtime_diagnostics/i)).toBeInTheDocument();
+    expect(await screen.findByText(/runtime channel: unknown/i)).toBeInTheDocument();
+  });
+
   it("mounts explicit top-level screen containers during nav transitions", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

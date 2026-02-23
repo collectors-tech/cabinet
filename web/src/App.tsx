@@ -116,6 +116,8 @@ export function App() {
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [logCount, setLogCount] = useState(0);
   const [activityLogs, setActivityLogs] = useState<Array<Record<string, unknown>>>([]);
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<{ update_channel?: string; update_public_key_configured?: boolean } | null>(null);
+  const [recoveryDiagnostics, setRecoveryDiagnostics] = useState<{ recovery_required?: boolean } | null>(null);
   const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -1433,6 +1435,25 @@ export function App() {
       setLogCount(entries.length);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_load_admin_status");
+    }
+  }
+
+  async function loadRuntimeDiagnostics() {
+    setAdminError("");
+    try {
+      const [runtimeResp, recoveryResp] = await Promise.all([fetch("/api/runtime"), fetch("/api/runtime/recovery")]);
+      if (!runtimeResp.ok || !recoveryResp.ok) {
+        throw new Error("failed_to_load_runtime_diagnostics");
+      }
+      const runtime = (await runtimeResp.json()) as { update_channel?: string; update_public_key_configured?: boolean };
+      const recovery = (await recoveryResp.json()) as { recovery_required?: boolean };
+      setRuntimeDiagnostics(runtime);
+      setRecoveryDiagnostics(recovery);
+      setSettingsStatus("runtime_diagnostics_loaded");
+    } catch (e) {
+      setRuntimeDiagnostics(null);
+      setRecoveryDiagnostics(null);
+      setAdminError(e instanceof Error ? e.message : "failed_to_load_runtime_diagnostics");
     }
   }
 
@@ -3065,7 +3086,13 @@ export function App() {
                 <button type="button" onClick={loadAdminStatus}>
                   Refresh Diagnostics
                 </button>
+                <button type="button" onClick={loadRuntimeDiagnostics}>
+                  Load Runtime Diagnostics
+                </button>
                 <p>Debug mode: {debugModeEnabled ? "enabled" : "disabled"}</p>
+                <p>Runtime channel: {runtimeDiagnostics?.update_channel || "unknown"}</p>
+                <p>Runtime signing key configured: {runtimeDiagnostics ? (runtimeDiagnostics.update_public_key_configured ? "yes" : "no") : "unknown"}</p>
+                <p>Recovery required: {recoveryDiagnostics ? (recoveryDiagnostics.recovery_required ? "yes" : "no") : "unknown"}</p>
               </div>
               <div>
                 <h4>Maintenance</h4>
