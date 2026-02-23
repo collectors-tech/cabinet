@@ -446,6 +446,60 @@ describe("App shell", () => {
     expect(sampleCalls).toBe(2);
   });
 
+  it("handles step-4 quick add validation and advances to preferences after success", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/items" && init?.method === "POST") {
+        return new Response(JSON.stringify({ id: "i1", part_number: "PN-900", title: "Wizard Item", brand: "AFX" }), { status: 201 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "4");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+    localStorage.setItem("cabinet.onboarding.identity_completed.p1", "1");
+    localStorage.setItem("cabinet.onboarding.starter_data.p1", "empty");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    expect(await screen.findByText(/step 4 of 5/i)).toBeInTheDocument();
+    expect(await screen.findByText(/current items: 0/i)).toBeInTheDocument();
+    const advanced = screen.getByText(/advanced fields \(optional\)/i).closest("details");
+    expect(advanced).not.toHaveAttribute("open");
+
+    fireEvent.click(await screen.findByRole("button", { name: /add first item/i }));
+    expect(await screen.findByText(/part number is required/i)).toBeInTheDocument();
+    expect(await screen.findByText(/title is required/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/part number/i), { target: { value: "PN-900" } });
+    fireEvent.change(screen.getByLabelText(/item title/i), { target: { value: "Wizard Item" } });
+    fireEvent.change(screen.getByLabelText(/^brand$/i), { target: { value: "AFX" } });
+    fireEvent.click(screen.getByRole("button", { name: /add first item/i }));
+
+    expect(await screen.findByText(/first item added\. continue to preferences\./i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 5 of 5/i)).toBeInTheDocument();
+    expect(await screen.findByText(/current items: 1/i)).toBeInTheDocument();
+  });
+
   it("requires successful identity completion before progressing past step 2", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

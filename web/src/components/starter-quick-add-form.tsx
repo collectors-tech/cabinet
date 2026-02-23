@@ -7,6 +7,9 @@ const starterQuickAddSchema = z.object({
   part_number: z.string().trim().min(1, "Part number is required"),
   title: z.string().trim().min(1, "Title is required"),
   brand: z.string().trim().optional(),
+  category: z.string().trim().optional(),
+  series: z.string().trim().optional(),
+  description: z.string().trim().optional(),
 });
 
 export type StarterQuickAddValues = z.infer<typeof starterQuickAddSchema>;
@@ -24,6 +27,9 @@ export function StarterQuickAddForm({
       part_number: "",
       title: "",
       brand: "",
+      category: "",
+      series: "",
+      description: "",
     },
   });
 
@@ -32,7 +38,14 @@ export function StarterQuickAddForm({
       <form
         onSubmit={form.handleSubmit(async (values) => {
           await onSubmit(values);
-          form.reset({ part_number: "", title: "", brand: "" });
+          form.reset({
+            part_number: "",
+            title: "",
+            brand: "",
+            category: "",
+            series: "",
+            description: "",
+          });
         })}
       >
         <BoundTextInput<StarterQuickAddValues, "part_number">
@@ -50,9 +63,27 @@ export function StarterQuickAddForm({
           label="Brand"
           placeholder="Brand"
         />
+        <details>
+          <summary>Advanced Fields (Optional)</summary>
+          <BoundTextInput<StarterQuickAddValues, "category">
+            name="category"
+            label="Category"
+            placeholder="Category"
+          />
+          <BoundTextInput<StarterQuickAddValues, "series">
+            name="series"
+            label="Series"
+            placeholder="Series"
+          />
+          <div className="cabinet-form-item">
+            <label className="cabinet-form-label" htmlFor="description">
+              Description
+            </label>
+            <textarea id="description" className="cabinet-textarea" placeholder="Description" {...form.register("description")} />
+          </div>
+        </details>
         <SubmitButton isSubmitting={Boolean(isSubmitting)}>Add First Item</SubmitButton>
       </form>
     </Form>
   );
 }
-

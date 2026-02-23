@@ -594,8 +594,16 @@ export function App() {
         part_number: values.part_number,
         title: values.title,
         brand: values.brand || "",
-        category: "General",
+        category: values.category || "General",
+        series: values.series || "",
+        description: values.description || "",
       });
+      if (activeProfile?.id && onboardingStep === 4) {
+        const next: OnboardingStep = 5;
+        setOnboardingStep(next);
+        localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), String(next));
+        setOnboardingStatus("First item added. Continue to preferences.");
+      }
     } finally {
       setStarterSubmitting(false);
     }
@@ -2015,7 +2023,11 @@ export function App() {
                   Open Advanced Workspace
                 </button>
               </div>
-              <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} />
+              {onboardingStep === 4 ? (
+                <>
+                  <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} />
+                </>
+              ) : null}
               <p>Current items: {items.length}</p>
               {itemsError ? <p>Item error: {itemsError}</p> : null}
             </div>
