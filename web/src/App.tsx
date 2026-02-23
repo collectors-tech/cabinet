@@ -108,7 +108,10 @@ export function App() {
   const [snapshotStatus, setSnapshotStatus] = useState("");
   const [wishlistDraft, setWishlistDraft] = useState({ item_id: "", target_price: "0", priority: "normal", notes: "" });
   const [insightError, setInsightError] = useState("");
-  const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string } | null>(null);
+  const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string; features?: string[]; expires_at?: string } | null>(null);
+  const [profileLicenseJSON, setProfileLicenseJSON] = useState("");
+  const [licenseImportDraft, setLicenseImportDraft] = useState({ payload_base64: "", signature_base64: "" });
+  const [licenseImportStatus, setLicenseImportStatus] = useState("");
   const [logCount, setLogCount] = useState(0);
   const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
@@ -1415,12 +1418,7 @@ export function App() {
     }
     setAdminError("");
     try {
-      const licenseResp = await fetch(`/api/license/status?profile_id=${encodeURIComponent(activeProfile.id)}`);
-      if (!licenseResp.ok) {
-        throw new Error("failed_to_load_license_status");
-      }
-      const license = (await licenseResp.json()) as { state?: string; tier?: string };
-      setLicenseStatus(license);
+      await refreshLicenseStatus(activeProfile.id);
 
       const logsResp = await fetch("/api/logs/activity?limit=10");
       if (!logsResp.ok) {
@@ -1430,6 +1428,89 @@ export function App() {
       setLogCount((logs.activity || []).length);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_load_admin_status");
+    }
+  }
+
+  async function refreshLicenseStatus(profileID = activeProfile?.id || "") {
+    if (!profileID) {
+      return;
+    }
+    const licenseResp = await fetch(`/api/license/status?profile_id=${encodeURIComponent(profileID)}`);
+    if (!licenseResp.ok) {
+      throw new Error("failed_to_load_license_status");
+    }
+    const license = (await licenseResp.json()) as { state?: string; tier?: string; features?: string[]; expires_at?: string };
+    setLicenseStatus(license);
+  }
+
+  async function loadProfileLicense() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/license`);
+      if (!resp.ok) {
+        throw new Error("failed_to_get_profile_license");
+      }
+      const data = (await resp.json()) as { license_json?: string };
+      setProfileLicenseJSON(data.license_json || "");
+      setSettingsStatus("license_profile_loaded");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_get_profile_license");
+    }
+  }
+
+  async function saveProfileLicense() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/license`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ license_json: profileLicenseJSON }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_put_profile_license");
+      }
+      setSettingsStatus("license_profile_saved");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_put_profile_license");
+    }
+  }
+
+  async function importLicenseFile() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    setLicenseImportStatus("");
+    if (!licenseImportDraft.payload_base64 || !licenseImportDraft.signature_base64) {
+      setAdminError("license_file_fields_required");
+      return;
+    }
+    try {
+      const resp = await fetch("/api/license/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile_id: activeProfile.id,
+          license: {
+            payload_base64: licenseImportDraft.payload_base64,
+            signature_base64: licenseImportDraft.signature_base64,
+          },
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_import_license");
+      }
+      setLicenseImportStatus("license_imported");
+      await refreshLicenseStatus(activeProfile.id);
+      setSettingsStatus("license_imported");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_import_license");
     }
   }
 
@@ -2965,6 +3046,18 @@ export function App() {
                 <button type="button" onClick={() => runDataMaintenance("/api/backup/run", "backup")}>
                   Run Backup
                 </button>{" "}
+                <button type="button" onClick={loadProfileLicense}>
+                  Load Profile License
+                </button>{" "}
+                <button type="button" onClick={saveProfileLicense}>
+                  Save Profile License
+                </button>{" "}
+                <button type="button" onClick={importLicenseFile}>
+                  Import License File
+                </button>{" "}
+                <button type="button" onClick={() => refreshLicenseStatus()}>
+                  Refresh License Status
+                </button>{" "}
                 <button type="button" onClick={loadBackups}>
                   Load Backups
                 </button>{" "}
@@ -2974,6 +3067,33 @@ export function App() {
                 <button type="button" onClick={() => exportText("/api/data/export/json", "json")}>
                   Export JSON
                 </button>
+              </div>
+              <div>
+                <label htmlFor="profile-license-json">Profile license JSON</label>
+                <textarea
+                  id="profile-license-json"
+                  aria-label="Profile license JSON"
+                  value={profileLicenseJSON}
+                  onChange={(e) => setProfileLicenseJSON(e.target.value)}
+                  rows={3}
+                  cols={60}
+                />
+              </div>
+              <div>
+                <label htmlFor="license-payload">License payload base64</label>{" "}
+                <input
+                  id="license-payload"
+                  aria-label="License payload base64"
+                  value={licenseImportDraft.payload_base64}
+                  onChange={(e) => setLicenseImportDraft((current) => ({ ...current, payload_base64: e.target.value }))}
+                />{" "}
+                <label htmlFor="license-signature">License signature base64</label>{" "}
+                <input
+                  id="license-signature"
+                  aria-label="License signature base64"
+                  value={licenseImportDraft.signature_base64}
+                  onChange={(e) => setLicenseImportDraft((current) => ({ ...current, signature_base64: e.target.value }))}
+                />
               </div>
               <div>
                 <label htmlFor="backup-selection">Available backups</label>{" "}
@@ -3012,6 +3132,10 @@ export function App() {
                 <DataImportExportWizard onDryRun={dataImportDryRun} onApply={dataImportApply} onExport={dataExportRun} />
               </div>
               {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
+              {licenseStatus ? <p>License validation: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
+              {licenseStatus?.features?.length ? <p>License features: {licenseStatus.features.join(", ")}</p> : null}
+              {licenseStatus?.expires_at ? <p>License expires: {licenseStatus.expires_at}</p> : null}
+              {licenseImportStatus ? <p>License import status: {licenseImportStatus}</p> : null}
               <p>Log entries: {logCount}</p>
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}

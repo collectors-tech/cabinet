@@ -92,6 +92,22 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     if (path === "/api/backup/restore" && method === "POST") {
       return respondJSON({ ok: true });
     }
+    if (path === "/api/profiles/p1/license" && method === "GET") {
+      return respondJSON({ license_json: "{\"tier\":\"pro\"}" });
+    }
+    if (path === "/api/profiles/p1/license" && method === "PUT") {
+      return respondJSON({ ok: true });
+    }
+    if (path === "/api/license/import" && method === "POST") {
+      const payload = (body?.license ?? {}) as Record<string, unknown>;
+      if (String(payload.payload_base64 || "") === "bad") {
+        return respondJSON({ error: "failed_to_import_license" }, 400);
+      }
+      return respondJSON({ ok: true });
+    }
+    if (path === "/api/license/status" && method === "GET") {
+      return respondJSON({ state: "valid", tier: "pro", features: ["ai_assist", "price_tracking"], expires_at: "2030-01-01T00:00:00Z" });
+    }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
       if (state.registerBeginFailsOnce && state.registerBeginCalls === 1) {
@@ -196,6 +212,14 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await page.getByLabel(/confirm restore/i).check();
   await page.getByRole("button", { name: /restore selected backup/i }).click();
   await expect(page.getByText(/settings status: backup_restored/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /load profile license/i }).click();
+  await expect(page.getByLabel(/profile license json/i)).toHaveValue(/"tier":"pro"/i);
+  await page.getByLabel(/license payload base64/i).fill("good");
+  await page.getByLabel(/license signature base64/i).fill("sig");
+  await page.getByRole("button", { name: /import license file/i }).click();
+  await expect(page.getByText(/license import status: license_imported/i)).toBeVisible();
+  await expect(page.getByText(/license validation: valid \/ pro/i)).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {

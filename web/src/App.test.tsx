@@ -1252,6 +1252,72 @@ describe("App shell", () => {
     expect(await screen.findByText(/ignore_rules_reset_ok/i)).toBeInTheDocument();
   });
 
+  it("supports license import, status validation, and profile license sync", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/license") && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ license_json: "{\"tier\":\"pro\"}" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/license") && init?.method === "PUT") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/license/import" && init?.method === "POST") {
+        const payload = JSON.parse(String(init.body || "{}")) as { license?: { payload_base64?: string } };
+        if (payload.license?.payload_base64 === "bad") {
+          return new Response(JSON.stringify({ error: "failed_to_import_license" }), { status: 400 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes("/api/license/status?profile_id=p1")) {
+        return new Response(
+          JSON.stringify({ state: "valid", tier: "pro", features: ["ai_assist", "price_tracking"], expires_at: "2030-01-01T00:00:00Z" }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /load profile license/i }));
+    expect(await screen.findByDisplayValue(/\{"tier":"pro"\}/i)).toBeInTheDocument();
+
+    const payloadInput = await screen.findByLabelText(/license payload base64/i);
+    fireEvent.change(payloadInput, { target: { value: "bad" } });
+    fireEvent.change(await screen.findByLabelText(/license signature base64/i), { target: { value: "sig" } });
+    fireEvent.click(await screen.findByRole("button", { name: /import license file/i }));
+    expect(await screen.findByText(/admin error: failed_to_import_license/i)).toBeInTheDocument();
+
+    fireEvent.change(payloadInput, { target: { value: "good" } });
+    fireEvent.click(await screen.findByRole("button", { name: /import license file/i }));
+    expect(await screen.findByText(/license import status: license_imported/i)).toBeInTheDocument();
+    expect(await screen.findByText(/license validation: valid \/ pro/i)).toBeInTheDocument();
+    expect(await screen.findByText(/license features: ai_assist, price_tracking/i)).toBeInTheDocument();
+    expect(await screen.findByText(/license expires: 2030-01-01T00:00:00Z/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /save profile license/i }));
+    expect(await screen.findByText(/settings status: license_profile_saved/i)).toBeInTheDocument();
+  });
+
   it("supports barcode lookup and external search link", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
