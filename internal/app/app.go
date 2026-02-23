@@ -459,9 +459,11 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/scanner/query-sets", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
 		switch r.Method {
 		case http.MethodGet:
-			items, err := scannerSvc.ListQuerySets(r.Context())
+			items, err := scannerSvc.ListQuerySetsByProfile(r.Context(), profileID)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_list_query_sets"}`, http.StatusInternalServerError)
 				return
@@ -473,7 +475,7 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			created, err := scannerSvc.CreateQuerySet(r.Context(), req)
+			created, err := scannerSvc.CreateQuerySetForProfile(r.Context(), profileID, req)
 			if err != nil {
 				http.Error(w, `{"error":"invalid_query_set"}`, http.StatusBadRequest)
 				return
@@ -512,7 +514,7 @@ func New(cfg config.Config) (*App, error) {
 			BearerToken: settings["ebay_bearer_token"],
 			Marketplace: settings["ebay_marketplace"],
 		})
-		out, err := scannerSvc.RunNow(r.Context(), req.QuerySetID, provider)
+		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
@@ -549,7 +551,7 @@ func New(cfg config.Config) (*App, error) {
 			BearerToken: settings["ebay_bearer_token"],
 			Marketplace: settings["ebay_marketplace"],
 		})
-		ran, err := scannerSvc.RunScheduled(r.Context(), provider)
+		ran, err := scannerSvc.RunScheduledForProfile(r.Context(), strings.TrimSpace(active.ID), provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_scheduled_failed", map[string]any{"error": err.Error()})
 			http.Error(w, `{"error":"failed_to_run_scheduled_scanner"}`, http.StatusBadRequest)
@@ -569,7 +571,8 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
 			return
 		}
-		items, err := scannerSvc.ListCandidates(r.Context(), querySetID)
+		active, _ := profiles.GetActiveProfile(r.Context())
+		items, err := scannerSvc.ListCandidatesByProfile(r.Context(), strings.TrimSpace(active.ID), querySetID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_candidates"}`, http.StatusBadRequest)
 			return

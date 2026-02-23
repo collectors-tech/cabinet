@@ -160,3 +160,46 @@ func TestWishlistDataIsIsolatedByActiveProfile(t *testing.T) {
 		t.Fatalf("expected no wishlist items for p2 profile, got %d", len(payload.Items))
 	}
 }
+
+func TestScannerQuerySetsAreIsolatedByActiveProfile(t *testing.T) {
+	a := newTestApp(t)
+
+	createP1 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	createP2 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P2"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1.Code != http.StatusCreated || createP2.Code != http.StatusCreated {
+		t.Fatalf("create profiles failed p1=%d p2=%d", createP1.Code, createP2.Code)
+	}
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createP1.Body).Decode(&p1); err != nil {
+		t.Fatalf("decode p1: %v", err)
+	}
+	if err := json.NewDecoder(createP2.Body).Decode(&p2); err != nil {
+		t.Fatalf("decode p2: %v", err)
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p1.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createQS := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"P1 Set","keywords":["afx"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQS.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQS.Code, createQS.Body.String())
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p2.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	listP2 := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if listP2.Code != http.StatusOK {
+		t.Fatalf("list query sets p2 status=%d body=%s", listP2.Code, listP2.Body.String())
+	}
+	var payload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(listP2.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode query sets payload: %v", err)
+	}
+	if len(payload.QuerySets) != 0 {
+		t.Fatalf("expected no query sets for p2 profile, got %d", len(payload.QuerySets))
+	}
+}

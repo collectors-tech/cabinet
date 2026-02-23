@@ -297,6 +297,22 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries profile index: %w", err)
 	}
+	if err := ensureColumn(ctx, conn, "scanner_query_sets", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_query_sets.profile_id: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_query_sets profile index: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "scanner_candidates", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.profile_id: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
+	}
 
 	return conn, nil
 }

@@ -72,6 +72,10 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) CreateQuerySet(ctx context.Context, in QuerySet) (QuerySet, error) {
+	return s.CreateQuerySetForProfile(ctx, "", in)
+}
+
+func (s *Service) CreateQuerySetForProfile(ctx context.Context, profileID string, in QuerySet) (QuerySet, error) {
 	if strings.TrimSpace(in.Name) == "" || len(in.Keywords) == 0 {
 		return QuerySet{}, fmt.Errorf("name and keywords are required")
 	}
@@ -89,23 +93,27 @@ func (s *Service) CreateQuerySet(ctx context.Context, in QuerySet) (QuerySet, er
 		enabled = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, in.Name, string(k), string(e), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Name, string(k), string(e), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
 	if err != nil {
 		return QuerySet{}, fmt.Errorf("insert query set: %w", err)
 	}
-	return s.GetQuerySet(ctx, in.ID)
+	return s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), in.ID)
 }
 
 func (s *Service) GetQuerySet(ctx context.Context, id string) (QuerySet, error) {
+	return s.GetQuerySetForProfile(ctx, "", id)
+}
+
+func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id string) (QuerySet, error) {
 	var q QuerySet
 	var keywordsJSON, exclusionsJSON string
 	var enabled int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at
-		FROM scanner_query_sets WHERE id = ?
-	`, id).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
+		FROM scanner_query_sets WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return QuerySet{}, fmt.Errorf("query set not found")
@@ -119,7 +127,11 @@ func (s *Service) GetQuerySet(ctx context.Context, id string) (QuerySet, error) 
 }
 
 func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM scanner_query_sets ORDER BY created_at ASC`)
+	return s.ListQuerySetsByProfile(ctx, "")
+}
+
+func (s *Service) ListQuerySetsByProfile(ctx context.Context, profileID string) ([]QuerySet, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM scanner_query_sets WHERE (? = '' OR profile_id = ?) ORDER BY created_at ASC`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return nil, fmt.Errorf("list query sets: %w", err)
 	}
@@ -130,7 +142,7 @@ func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan query set id: %w", err)
 		}
-		q, err := s.GetQuerySet(ctx, id)
+		q, err := s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), id)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +155,11 @@ func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
 }
 
 func (s *Service) RunNow(ctx context.Context, querySetID string, provider Provider) (RunResult, error) {
-	qs, err := s.GetQuerySet(ctx, querySetID)
+	return s.RunNowForProfile(ctx, "", querySetID, provider)
+}
+
+func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID string, provider Provider) (RunResult, error) {
+	qs, err := s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), querySetID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -161,7 +177,7 @@ func (s *Service) RunNow(ctx context.Context, querySetID string, provider Provid
 		items, lastErr = provider.Search(ctx, qs)
 		if lastErr == nil {
 			s.recordProviderHealth(ctx, "ebay", "ok", "")
-			return s.persistCandidates(ctx, qs.ID, items, attempt)
+			return s.persistCandidatesForProfile(ctx, strings.TrimSpace(profileID), qs.ID, items, attempt)
 		}
 		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
 		s.logFailure(ctx, "ebay", lastErr.Error())
@@ -177,7 +193,11 @@ func (s *Service) RunNow(ctx context.Context, querySetID string, provider Provid
 }
 
 func (s *Service) RunScheduled(ctx context.Context, provider Provider) (int, error) {
-	sets, err := s.ListQuerySets(ctx)
+	return s.RunScheduledForProfile(ctx, "", provider)
+}
+
+func (s *Service) RunScheduledForProfile(ctx context.Context, profileID string, provider Provider) (int, error) {
+	sets, err := s.ListQuerySetsByProfile(ctx, strings.TrimSpace(profileID))
 	if err != nil {
 		return 0, err
 	}
@@ -186,7 +206,7 @@ func (s *Service) RunScheduled(ctx context.Context, provider Provider) (int, err
 		if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
 			continue
 		}
-		if _, err := s.RunNow(ctx, qs.ID, provider); err != nil {
+		if _, err := s.RunNowForProfile(ctx, strings.TrimSpace(profileID), qs.ID, provider); err != nil {
 			return ran, err
 		}
 		ran++
@@ -195,6 +215,10 @@ func (s *Service) RunScheduled(ctx context.Context, provider Provider) (int, err
 }
 
 func (s *Service) persistCandidates(ctx context.Context, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
+	return s.persistCandidatesForProfile(ctx, "", querySetID, items, attempts)
+}
+
+func (s *Service) persistCandidatesForProfile(ctx context.Context, profileID, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
 	saved := 0
 	for _, it := range items {
 		if strings.TrimSpace(it.ListingID) == "" {
@@ -207,17 +231,17 @@ func (s *Service) persistCandidates(ctx context.Context, querySetID string, item
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
 			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?
-			WHERE listing_id = ?
-		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, it.ListingID)
+			WHERE listing_id = ? AND (? = '' OR profile_id = ?)
+		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
 		affected, _ := res.RowsAffected()
 		if affected == 0 {
 			_, err := s.db.ExecContext(ctx, `
-				INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?)
-			`, uuid.NewString(), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source)
+				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?)
+			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
 			}
@@ -228,12 +252,16 @@ func (s *Service) persistCandidates(ctx context.Context, querySetID string, item
 }
 
 func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Candidate, error) {
+	return s.ListCandidatesByProfile(ctx, "", querySetID)
+}
+
+func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, querySetID string) ([]Candidate, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source
 		FROM scanner_candidates
-		WHERE query_set_id = ?
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
 		ORDER BY last_seen DESC
-	`, querySetID)
+	`, querySetID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return nil, fmt.Errorf("list candidates: %w", err)
 	}
