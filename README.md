@@ -13,13 +13,14 @@ Desktop-first collector intelligence app.
 
 ## Run Locally
 1. Install Go 1.24+.
-2. Run:
+2. Optional: copy `.env.example` to `.env` and adjust runtime URL/port.
+3. Run:
 
 ```powershell
 go run ./cmd/cabinet
 ```
 
-3. Open:
+4. Open:
 - `http://127.0.0.1:17880/`
 - `http://127.0.0.1:17880/healthz`
 - `http://127.0.0.1:17880/api/runtime`
@@ -112,6 +113,8 @@ go run ./cmd/cabinet
 - `POST /api/onboarding/sample-data`
 
 ## Environment Variables
+- `.env` in repo root is loaded automatically when present.
+- Process env vars override `.env` values.
 - `CABINET_ADDR` default: `127.0.0.1:17880`
 - `CABINET_DATA_DIR` default:
   - Windows: `%LOCALAPPDATA%\\Cabinet`

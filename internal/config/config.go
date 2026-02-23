@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/update"
 )
@@ -22,6 +24,8 @@ type Config struct {
 }
 
 func Load() Config {
+	loadDotEnv(".env")
+
 	addr := valueOrDefault("CABINET_ADDR", "127.0.0.1:17880")
 	dataDir := valueOrDefault("CABINET_DATA_DIR", defaultDataDir())
 	dbPath := valueOrDefault("CABINET_DB_PATH", filepath.Join(dataDir, "cabinet.db"))
@@ -44,6 +48,43 @@ func Load() Config {
 		WebAuthnOrigin:  waOrigin,
 		WebAuthnName:    waName,
 		BackupInterval:  backupInterval,
+	}
+}
+
+func loadDotEnv(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if key == "" {
+			continue
+		}
+		if existing, exists := os.LookupEnv(key); exists && strings.TrimSpace(existing) != "" {
+			continue
+		}
+		value := strings.TrimSpace(parts[1])
+		if len(value) >= 2 {
+			if (strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"")) || (strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
+				value = value[1 : len(value)-1]
+			}
+		}
+		_ = os.Setenv(key, value)
 	}
 }
 
