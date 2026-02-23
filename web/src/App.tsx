@@ -131,6 +131,7 @@ export function App() {
   const [onboardingStatus, setOnboardingStatus] = useState("");
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingSetupPath, setOnboardingSetupPath] = useState<"quick" | "import" | "sample" | "">("");
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -384,8 +385,10 @@ export function App() {
       setAdvancedWorkspace(false);
       setOnboardingStep(1);
       setOnboardingCompleted(false);
+      setOnboardingSetupPath("");
       localStorage.setItem(onboardingStepPreferenceKey(active.id), "1");
       localStorage.setItem(onboardingCompletedPreferenceKey(active.id), "0");
+      localStorage.removeItem(onboardingPathPreferenceKey(active.id));
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
@@ -416,6 +419,7 @@ export function App() {
   async function loadOnboardingState(profileID: string) {
     const onboardingCompletedValue = localStorage.getItem(onboardingCompletedPreferenceKey(profileID));
     const onboardingStepValue = localStorage.getItem(onboardingStepPreferenceKey(profileID));
+    const onboardingPathValue = localStorage.getItem(onboardingPathPreferenceKey(profileID));
     const workspaceValue = localStorage.getItem(workspacePreferenceKey(profileID));
     const completed = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true" || workspaceValue === "1";
     setOnboardingCompleted(Boolean(completed));
@@ -425,6 +429,11 @@ export function App() {
       setOnboardingStep(savedStep as OnboardingStep);
     } else {
       setOnboardingStep(1);
+    }
+    if (onboardingPathValue === "quick" || onboardingPathValue === "import" || onboardingPathValue === "sample") {
+      setOnboardingSetupPath(onboardingPathValue);
+    } else {
+      setOnboardingSetupPath("");
     }
 
     const value = localStorage.getItem(workspacePreferenceKey(profileID));
@@ -463,6 +472,27 @@ export function App() {
 
   function onboardingCompletedPreferenceKey(profileID: string) {
     return `cabinet.onboarding.completed.${profileID}`;
+  }
+
+  function onboardingPathPreferenceKey(profileID: string) {
+    return `cabinet.onboarding.path.${profileID}`;
+  }
+
+  async function chooseOnboardingPath(path: "quick" | "import" | "sample") {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setOnboardingSetupPath(path);
+    localStorage.setItem(onboardingPathPreferenceKey(activeProfile.id), path);
+    if (path === "sample") {
+      await seedOnboardingSampleData();
+    }
+    if (path === "import") {
+      setOnboardingStatus("Import path selected. Continue to setup identity, then use import tools in advanced workspace.");
+    }
+    const next: OnboardingStep = 2;
+    setOnboardingStep(next);
+    localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), String(next));
   }
 
   function nextOnboardingStep() {
@@ -1878,6 +1908,23 @@ export function App() {
                 Step {onboardingStep} of {ONBOARDING_STEPS.length}
               </p>
               <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
+              {onboardingSetupPath ? <p>Setup path: {onboardingSetupPath}</p> : null}
+              {onboardingStep === 1 ? (
+                <div>
+                  <p>Choose how you want to begin. Quick setup gets you collecting immediately and you can refine details later.</p>
+                  <div>
+                    <button type="button" onClick={() => void chooseOnboardingPath("quick")}>
+                      Start Setup
+                    </button>{" "}
+                    <button type="button" onClick={() => void chooseOnboardingPath("import")}>
+                      Import Existing Collection
+                    </button>{" "}
+                    <button type="button" onClick={() => void chooseOnboardingPath("sample")}>
+                      Use Sample Data
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div>
                 <button type="button" onClick={previousOnboardingStep} disabled={onboardingStep <= 1}>
                   Back Step

@@ -292,6 +292,67 @@ describe("App shell", () => {
     expect(await screen.findByText(/step 2 of 5/i)).toBeInTheDocument();
   });
 
+  it("supports step-1 welcome setup choices and persists selected path", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/onboarding/sample-data" && init?.method === "POST") {
+        return new Response(JSON.stringify({ created_items: 1 }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+
+    render(<App />);
+    let activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    expect(await screen.findByRole("button", { name: /start setup/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /import existing collection/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /use sample data/i })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /start setup/i }));
+    expect(await screen.findByText(/step 2 of 5/i)).toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.onboarding.path.p1")).toBe("quick");
+
+    cleanup();
+    localStorage.setItem("cabinet.onboarding.step.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    render(<App />);
+    activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    fireEvent.click(await screen.findByRole("button", { name: /import existing collection/i }));
+    expect(await screen.findByText(/step 2 of 5/i)).toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.onboarding.path.p1")).toBe("import");
+
+    cleanup();
+    localStorage.setItem("cabinet.onboarding.step.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    render(<App />);
+    activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+    fireEvent.click(await screen.findByRole("button", { name: /use sample data/i }));
+    expect(localStorage.getItem("cabinet.onboarding.path.p1")).toBe("sample");
+    expect(await screen.findByText(/onboarding sample data loaded/i)).toBeInTheDocument();
+  });
+
   it("lists and creates collection items", async () => {
     const fetchMock = vi
       .fn()
