@@ -250,6 +250,48 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: /open advanced workspace/i })).toBeInTheDocument();
   });
 
+  it("persists onboarding wizard step and resumes from last incomplete step", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    expect(await screen.findByText(/step 1 of 5/i)).toBeInTheDocument();
+    const next = await screen.findByRole("button", { name: /next step/i });
+    next.click();
+    expect(await screen.findByText(/step 2 of 5/i)).toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.onboarding.step.p1")).toBe("2");
+
+    cleanup();
+    render(<App />);
+    const activateAgain = await screen.findByRole("button", { name: /use alpha/i });
+    activateAgain.click();
+    expect(await screen.findByText(/step 2 of 5/i)).toBeInTheDocument();
+  });
+
   it("lists and creates collection items", async () => {
     const fetchMock = vi
       .fn()

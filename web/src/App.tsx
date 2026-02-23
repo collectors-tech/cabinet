@@ -9,6 +9,7 @@ import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type Secr
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
+type OnboardingStep = 1 | 2 | 3 | 4 | 5;
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -32,6 +33,7 @@ function detectInitialTheme(): Theme {
 }
 
 export function App() {
+  const ONBOARDING_STEPS = ["Welcome", "Identity", "Starter Data", "First Item", "Preferences"] as const;
   const [theme, setTheme] = useState<Theme>(detectInitialTheme);
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [activeProfile, setActiveProfile] = useState<{ id: string; name: string } | null>(null);
@@ -127,6 +129,8 @@ export function App() {
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState("");
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -378,6 +382,10 @@ export function App() {
       await loadProfileStorage(active.id);
       localStorage.setItem(workspacePreferenceKey(active.id), "0");
       setAdvancedWorkspace(false);
+      setOnboardingStep(1);
+      setOnboardingCompleted(false);
+      localStorage.setItem(onboardingStepPreferenceKey(active.id), "1");
+      localStorage.setItem(onboardingCompletedPreferenceKey(active.id), "0");
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
@@ -398,17 +406,34 @@ export function App() {
       const active = (await activateResp.json()) as { id: string; name: string };
       setActiveProfile(active);
       await loadProfileStorage(active.id);
-      await loadWorkspacePreference(active.id);
+      await loadOnboardingState(active.id);
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_activate_profile");
     }
   }
 
-  async function loadWorkspacePreference(profileID: string) {
+  async function loadOnboardingState(profileID: string) {
+    const onboardingCompletedValue = localStorage.getItem(onboardingCompletedPreferenceKey(profileID));
+    const onboardingStepValue = localStorage.getItem(onboardingStepPreferenceKey(profileID));
+    const workspaceValue = localStorage.getItem(workspacePreferenceKey(profileID));
+    const completed = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true" || workspaceValue === "1";
+    setOnboardingCompleted(Boolean(completed));
+
+    const savedStep = Number(onboardingStepValue || "1");
+    if (Number.isFinite(savedStep) && savedStep >= 1 && savedStep <= ONBOARDING_STEPS.length) {
+      setOnboardingStep(savedStep as OnboardingStep);
+    } else {
+      setOnboardingStep(1);
+    }
+
     const value = localStorage.getItem(workspacePreferenceKey(profileID));
     if (value === null) {
-      setAdvancedWorkspace(true);
+      if (onboardingCompletedValue === null && onboardingStepValue === null) {
+        setAdvancedWorkspace(true);
+        return;
+      }
+      setAdvancedWorkspace(Boolean(completed));
       return;
     }
     setAdvancedWorkspace(value === "1" || value.toLowerCase() === "true");
@@ -420,10 +445,44 @@ export function App() {
     }
     setAdvancedWorkspace(nextAdvanced);
     localStorage.setItem(workspacePreferenceKey(activeProfile.id), nextAdvanced ? "1" : "0");
+    if (nextAdvanced) {
+      setOnboardingCompleted(true);
+      setOnboardingStep(5);
+      localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), "5");
+      localStorage.setItem(onboardingCompletedPreferenceKey(activeProfile.id), "1");
+    }
   }
 
   function workspacePreferenceKey(profileID: string) {
     return `cabinet.workspace.${profileID}`;
+  }
+
+  function onboardingStepPreferenceKey(profileID: string) {
+    return `cabinet.onboarding.step.${profileID}`;
+  }
+
+  function onboardingCompletedPreferenceKey(profileID: string) {
+    return `cabinet.onboarding.completed.${profileID}`;
+  }
+
+  function nextOnboardingStep() {
+    setOnboardingStep((current) => {
+      const next = current < 5 ? ((current + 1) as OnboardingStep) : current;
+      if (activeProfile?.id) {
+        localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), String(next));
+      }
+      return next;
+    });
+  }
+
+  function previousOnboardingStep() {
+    setOnboardingStep((current) => {
+      const next = current > 1 ? ((current - 1) as OnboardingStep) : current;
+      if (activeProfile?.id) {
+        localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), String(next));
+      }
+      return next;
+    });
   }
 
   async function addItemWithPayload(payload: {
@@ -1814,7 +1873,19 @@ export function App() {
           ) : null}
           {activeProfile && !showAdvancedWorkspace ? (
             <div>
-              <h3>Starter Onboarding</h3>
+              <h3>Starter Onboarding Wizard</h3>
+              <p>
+                Step {onboardingStep} of {ONBOARDING_STEPS.length}
+              </p>
+              <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
+              <div>
+                <button type="button" onClick={previousOnboardingStep} disabled={onboardingStep <= 1}>
+                  Back Step
+                </button>{" "}
+                <button type="button" onClick={nextOnboardingStep} disabled={onboardingStep >= ONBOARDING_STEPS.length}>
+                  Next Step
+                </button>
+              </div>
               <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
               <div>
                 <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
