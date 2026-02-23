@@ -50,9 +50,17 @@ export function CollectionItemForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(async (values) => {
-          await onSubmit(values);
-        })}
+        onSubmit={form.handleSubmit(
+          async (values) => {
+            await onSubmit(values);
+          },
+          (errors) => {
+            const first = Object.keys(errors)[0] as keyof CollectionItemValues | undefined;
+            if (first) {
+              form.setFocus(first);
+            }
+          },
+        )}
       >
         <BoundTextInput<CollectionItemValues, "part_number">
           name="part_number"

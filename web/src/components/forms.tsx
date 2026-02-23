@@ -68,7 +68,7 @@ const FormControl = React.forwardRef<
 ));
 FormControl.displayName = "FormControl";
 
-function FormMessage({ className }: { className?: string }) {
+function FormMessage({ className, id }: { className?: string; id?: string }) {
   const { getFieldState, formState } = useFormContext();
   const field = React.useContext(FormFieldContext);
   if (!field) {
@@ -80,6 +80,7 @@ function FormMessage({ className }: { className?: string }) {
   }
   return (
     <p
+      id={id}
       role="alert"
       className={["cabinet-form-message", className].filter(Boolean).join(" ")}
     >
@@ -103,14 +104,18 @@ function BoundTextInput<
   TName extends FieldPath<TFieldValues>,
 >({ name, label, placeholder, type = "text" }: BoundFieldProps<TFieldValues, TName>) {
   const { control } = useFormContext<TFieldValues>();
-  const { field } = useController({ control, name });
+  const { field, fieldState } = useController({ control, name });
+  const inputID = String(name);
+  const errorID = `${inputID}-error`;
+  const hasError = Boolean(fieldState.error?.message);
   return (
     <div className="cabinet-form-item">
-      <label className="cabinet-form-label" htmlFor={String(name)}>
+      <label className="cabinet-form-label" htmlFor={inputID}>
         {label}
       </label>
       <input
-        id={String(name)}
+        id={inputID}
+        ref={field.ref}
         className="cabinet-input"
         placeholder={placeholder}
         type={type}
@@ -118,9 +123,11 @@ function BoundTextInput<
         onChange={field.onChange}
         onBlur={field.onBlur}
         name={field.name}
+        aria-invalid={hasError ? "true" : undefined}
+        aria-describedby={hasError ? errorID : undefined}
       />
       <FormFieldContext.Provider value={{ name: String(name) }}>
-        <FormMessage />
+        <FormMessage id={errorID} />
       </FormFieldContext.Provider>
     </div>
   );
