@@ -788,6 +788,601 @@ paths:
                     type: boolean
         "400":
           $ref: "#/components/responses/Error"
+  /api/scanner/run/scheduled:
+    post:
+      tags: [Scanner]
+      summary: Run scheduled scanner cycle
+      responses:
+        "200":
+          description: Scheduled scanner run result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/scanner/failures:
+    get:
+      tags: [Scanner]
+      summary: List scanner failures
+      responses:
+        "200":
+          description: Failure entries
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/provider/health:
+    get:
+      tags: [Scanner]
+      summary: Provider health status
+      parameters:
+        - in: query
+          name: provider
+          schema: { type: string }
+      responses:
+        "200":
+          description: Provider health payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/settings/reset-ignore-rules:
+    post:
+      tags: [Discovery]
+      summary: Reset discovery ignore rules
+      responses:
+        "200":
+          description: Ignore rules reset result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/wishlist/hits:
+    get:
+      tags: [Wishlist]
+      summary: List wishlist hits
+      responses:
+        "200":
+          description: Wishlist hits
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/snapshot/run:
+    post:
+      tags: [Pricing]
+      summary: Trigger pricing snapshot run
+      responses:
+        "200":
+          description: Snapshot run result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/graph:
+    get:
+      tags: [Pricing]
+      summary: Pricing graph series
+      responses:
+        "200":
+          description: Graph points
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/by-source:
+    get:
+      tags: [Pricing]
+      summary: Pricing grouped by source
+      responses:
+        "200":
+          description: Source grouped pricing
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/stats:
+    get:
+      tags: [Pricing]
+      summary: Pricing statistics
+      responses:
+        "200":
+          description: Pricing stats
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/trend:
+    get:
+      tags: [Pricing]
+      summary: Pricing trend analysis
+      responses:
+        "200":
+          description: Pricing trend payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pricing/history/export:
+    get:
+      tags: [Pricing]
+      summary: Export pricing history
+      responses:
+        "200":
+          description: Export payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/logs/debug:
+    post:
+      tags: [Logs]
+      summary: Toggle debug logging
+      responses:
+        "200":
+          description: Debug mode status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/ai/toggle:
+    post:
+      tags: [AI]
+      summary: Enable or disable AI assist
+      responses:
+        "200":
+          description: AI toggle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/ai/suggest/photo:
+    post:
+      tags: [AI]
+      summary: AI suggestion from photo
+      responses:
+        "200":
+          description: AI photo suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AISuggestion"
+  /api/data/export/json:
+    get:
+      tags: [Data]
+      summary: Export full data JSON snapshot
+      responses:
+        "200":
+          description: JSON snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/data/export/csv/items:
+    get:
+      tags: [Data]
+      summary: Export items CSV
+      responses:
+        "200":
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
+  /api/data/import/json/dry-run:
+    post:
+      tags: [Data]
+      summary: Validate JSON import without applying
+      responses:
+        "200":
+          description: Dry run result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/data/import/json/apply:
+    post:
+      tags: [Data]
+      summary: Apply JSON import
+      responses:
+        "200":
+          description: Import apply result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/data/import/csv/dry-run:
+    post:
+      tags: [Data]
+      summary: Validate CSV import without applying
+      responses:
+        "200":
+          description: CSV dry run result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/data/import/csv/apply:
+    post:
+      tags: [Data]
+      summary: Apply CSV import
+      responses:
+        "200":
+          description: CSV import apply result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/data/reindex:
+    post:
+      tags: [Data]
+      summary: Reindex data/search indexes
+      responses:
+        "200":
+          description: Reindex result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/data/repair:
+    post:
+      tags: [Data]
+      summary: Run data repair routine
+      responses:
+        "200":
+          description: Repair result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/backup/run:
+    post:
+      tags: [Backup]
+      summary: Trigger backup run
+      responses:
+        "200":
+          description: Backup run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/backup/list:
+    get:
+      tags: [Backup]
+      summary: List backups
+      responses:
+        "200":
+          description: Backup list
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/backup/restore:
+    post:
+      tags: [Backup]
+      summary: Restore from backup
+      responses:
+        "200":
+          description: Restore result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/auth/webauthn/register/begin:
+    post:
+      tags: [Auth]
+      summary: Begin WebAuthn registration
+      responses:
+        "200":
+          description: Registration challenge/options
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/webauthn/register/finish:
+    post:
+      tags: [Auth]
+      summary: Finish WebAuthn registration
+      responses:
+        "200":
+          description: Registration finished
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/auth/requirements:
+    get:
+      tags: [Auth]
+      summary: Authentication requirements for profile
+      responses:
+        "200":
+          description: Auth requirements
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/recovery/passphrase:
+    post:
+      tags: [Auth]
+      summary: Set recovery passphrase
+      responses:
+        "200":
+          description: Recovery passphrase result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/auth/recovery/reset/begin:
+    post:
+      tags: [Auth]
+      summary: Begin recovery reset
+      responses:
+        "200":
+          description: Recovery reset session
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/webauthn/login/begin:
+    post:
+      tags: [Auth]
+      summary: Begin WebAuthn login
+      responses:
+        "200":
+          description: Login challenge/options
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/webauthn/login/finish:
+    post:
+      tags: [Auth]
+      summary: Finish WebAuthn login
+      responses:
+        "200":
+          description: Login session token
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/session/validate:
+    post:
+      tags: [Auth]
+      summary: Validate auth session
+      responses:
+        "200":
+          description: Session validation result
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/session/lock:
+    post:
+      tags: [Auth]
+      summary: Lock auth session
+      responses:
+        "200":
+          description: Session lock result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/profiles/{profileID}/saved-filters:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    get:
+      tags: [Profiles]
+      summary: List saved search filters
+      responses:
+        "200":
+          description: Saved filter list
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags: [Profiles]
+      summary: Create saved filter
+      responses:
+        "201":
+          description: Created saved filter
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      tags: [Profiles]
+      summary: Update saved filter
+      responses:
+        "200":
+          description: Updated saved filter
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      tags: [Profiles]
+      summary: Delete saved filter
+      responses:
+        "204":
+          description: Deleted
+  /api/profiles/{profileID}/storage:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    get:
+      tags: [Profiles]
+      summary: Profile storage paths
+      responses:
+        "200":
+          description: Storage paths
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/profiles/{profileID}/license:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    get:
+      tags: [Profiles]
+      summary: Get profile license JSON
+      responses:
+        "200":
+          description: Profile license JSON
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      tags: [Profiles]
+      summary: Upsert profile license JSON
+      responses:
+        "200":
+          description: License update result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/items/{itemID}/barcodes:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    get:
+      tags: [Collection]
+      summary: List item barcodes
+      responses:
+        "200":
+          description: Barcode list
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags: [Collection]
+      summary: Add item barcode
+      responses:
+        "201":
+          description: Created barcode
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/items/{itemID}/photos:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    get:
+      tags: [Collection]
+      summary: List item photos
+      responses:
+        "200":
+          description: Photo list
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags: [Collection]
+      summary: Upload item photo
+      responses:
+        "201":
+          description: Uploaded photo
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/items/{itemID}/photos/{photoID}:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Collection]
+      summary: Delete photo
+      responses:
+        "204":
+          description: Photo deleted
+  /api/items/{itemID}/photos/{photoID}/primary:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Collection]
+      summary: Set primary photo
+      responses:
+        "204":
+          description: Primary set
+  /api/items/{itemID}/photos/{photoID}/file:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Collection]
+      summary: Retrieve photo file variant
+      responses:
+        "200":
+          description: Photo file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /api/items/{itemID}/photos-rebuild:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    post:
+      tags: [Collection]
+      summary: Rebuild item photo thumbnails
+      responses:
+        "200":
+          description: Rebuild result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /api/barcodes/{barcode}:
+    parameters:
+      - in: path
+        name: barcode
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Collection]
+      summary: Lookup barcode in local catalog
+      responses:
+        "200":
+          description: Barcode matches
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/barcodes/{barcode}/external-search:
+    parameters:
+      - in: path
+        name: barcode
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Collection]
+      summary: Build external barcode search URL
+      parameters:
+        - in: query
+          name: source
+          schema: { type: string }
+        - in: query
+          name: region
+          schema: { type: string }
+      responses:
+        "200":
+          description: External search URL
+          content:
+            application/json:
+              schema:
+                type: object
 components:
   parameters:
     ProfileID:
