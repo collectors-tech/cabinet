@@ -212,6 +212,56 @@ body {
   font: inherit;
 }
 
+.cabinet-textarea,
+.cabinet-select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.cabinet-textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.cabinet-checkbox {
+  width: 18px;
+  height: 18px;
+}
+
+.cabinet-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.cabinet-switch-on {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+}
+
+.cabinet-switch-off {
+  background: var(--surface-2);
+}
+
+.cabinet-input[data-invalid="true"],
+.cabinet-textarea[data-invalid="true"],
+.cabinet-select[data-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.cabinet-input:disabled,
+.cabinet-textarea:disabled,
+.cabinet-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .cabinet-card table {
   width: 100%;
   border-collapse: separate;

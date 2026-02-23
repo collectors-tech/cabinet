@@ -13,6 +13,17 @@ Shared form primitives live in `web/src/components/forms.tsx`:
 - `FormMessage`
 - `SubmitButton`
 
+Reusable inputs in the same file:
+
+- `TextInput`
+- `TextAreaInput`
+- `SelectInput`
+- `MultiSelectInput`
+- `CheckboxInput`
+- `SwitchInput`
+- `DateInput`
+- `CurrencyInput`
+
 ## Validation Pattern
 
 - Each form declares a `zod` schema.

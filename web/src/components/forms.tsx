@@ -138,6 +138,127 @@ const TextInput = React.forwardRef<
 ));
 TextInput.displayName = "TextInput";
 
+const TextAreaInput = React.forwardRef<
+  HTMLTextAreaElement,
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>
+>(({ className, ...props }, ref) => (
+  <textarea
+    ref={ref}
+    className={["cabinet-textarea", className].filter(Boolean).join(" ")}
+    {...props}
+  />
+));
+TextAreaInput.displayName = "TextAreaInput";
+
+const SelectInput = React.forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(({ className, ...props }, ref) => (
+  <select
+    ref={ref}
+    className={["cabinet-select", className].filter(Boolean).join(" ")}
+    {...props}
+  />
+));
+SelectInput.displayName = "SelectInput";
+
+function MultiSelectInput({
+  options,
+  value,
+  onChange,
+  ...props
+}: {
+  options: Array<{ label: string; value: string }>;
+  value: string[];
+  onChange: (next: string[]) => void;
+} & Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "value" | "onChange" | "multiple">) {
+  return (
+    <select
+      {...props}
+      multiple
+      className={["cabinet-select", props.className].filter(Boolean).join(" ")}
+      value={value}
+      onChange={(event) => {
+        const next = Array.from(event.currentTarget.selectedOptions).map((opt) => opt.value);
+        onChange(next);
+      }}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+const CheckboxInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, ...props }, ref) => (
+  <input
+    ref={ref}
+    type="checkbox"
+    className={["cabinet-checkbox", className].filter(Boolean).join(" ")}
+    {...props}
+  />
+));
+CheckboxInput.displayName = "CheckboxInput";
+
+function SwitchInput({
+  checked,
+  onChange,
+  className,
+  ...props
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onChange">) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={[
+        "cabinet-switch",
+        checked ? "cabinet-switch-on" : "cabinet-switch-off",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    />
+  );
+}
+
+const DateInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, ...props }, ref) => (
+  <input
+    ref={ref}
+    type="date"
+    className={["cabinet-input", className].filter(Boolean).join(" ")}
+    {...props}
+  />
+));
+DateInput.displayName = "DateInput";
+
+const CurrencyInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, inputMode, ...props }, ref) => (
+  <input
+    ref={ref}
+    type="text"
+    inputMode={inputMode || "decimal"}
+    className={["cabinet-input", className].filter(Boolean).join(" ")}
+    {...props}
+  />
+));
+CurrencyInput.displayName = "CurrencyInput";
+
 function SubmitButton({
   children,
   isSubmitting,
@@ -156,6 +277,9 @@ function SubmitButton({
 
 export {
   BoundTextInput,
+  CheckboxInput,
+  CurrencyInput,
+  DateInput,
   Form,
   FormControl,
   FormField,
@@ -163,7 +287,10 @@ export {
   FormItem,
   FormLabel,
   FormMessage,
+  MultiSelectInput,
+  SelectInput,
   SubmitButton,
+  SwitchInput,
+  TextAreaInput,
   TextInput,
 };
-
