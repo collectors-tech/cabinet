@@ -20,9 +20,9 @@ go run ./cmd/cabinet
 ```
 
 3. Open:
-- `http://127.0.0.1:8080/`
-- `http://127.0.0.1:8080/healthz`
-- `http://127.0.0.1:8080/api/runtime`
+- `http://127.0.0.1:17880/`
+- `http://127.0.0.1:17880/healthz`
+- `http://127.0.0.1:17880/api/runtime`
 
 ## Frontend Development
 - Frontend source: `web/`
@@ -112,7 +112,7 @@ go run ./cmd/cabinet
 - `POST /api/onboarding/sample-data`
 
 ## Environment Variables
-- `CABINET_ADDR` default: `127.0.0.1:8080`
+- `CABINET_ADDR` default: `127.0.0.1:17880`
 - `CABINET_DATA_DIR` default:
   - Windows: `%LOCALAPPDATA%\\Cabinet`
   - macOS/Linux: `$HOME/.cabinet`
@@ -120,7 +120,7 @@ go run ./cmd/cabinet
 - `CABINET_UPDATE_CHANNEL` values: `stable`, `beta` (default `stable`)
 - `CABINET_UPDATE_PUBLIC_KEY` base64 ed25519 public key for update signature validation
 - `CABINET_WEBAUTHN_RP_ID` default: `127.0.0.1`
-- `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:8080`
+- `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:17880`
 - `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
 

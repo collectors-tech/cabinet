@@ -6,7 +6,7 @@ info:
     Local-first API for Cabinet.
     This specification is the source of truth for API documentation.
 servers:
-  - url: http://127.0.0.1:8080
+  - url: http://127.0.0.1:17880
 security: []
 tags:
   - name: Runtime

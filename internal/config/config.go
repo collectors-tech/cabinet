@@ -22,13 +22,13 @@ type Config struct {
 }
 
 func Load() Config {
-	addr := valueOrDefault("CABINET_ADDR", "127.0.0.1:8080")
+	addr := valueOrDefault("CABINET_ADDR", "127.0.0.1:17880")
 	dataDir := valueOrDefault("CABINET_DATA_DIR", defaultDataDir())
 	dbPath := valueOrDefault("CABINET_DB_PATH", filepath.Join(dataDir, "cabinet.db"))
 	updateChannel := update.ParseChannel(valueOrDefault("CABINET_UPDATE_CHANNEL", "stable"))
 	updatePublicKey := os.Getenv("CABINET_UPDATE_PUBLIC_KEY")
 	waRPID := valueOrDefault("CABINET_WEBAUTHN_RP_ID", "127.0.0.1")
-	waOrigin := valueOrDefault("CABINET_WEBAUTHN_ORIGIN", "http://127.0.0.1:8080")
+	waOrigin := valueOrDefault("CABINET_WEBAUTHN_ORIGIN", "http://127.0.0.1:17880")
 	waName := valueOrDefault("CABINET_WEBAUTHN_RP_NAME", "Cabinet")
 	backupInterval, _ := strconv.Atoi(valueOrDefault("CABINET_BACKUP_INTERVAL_MINUTES", "60"))
 	if backupInterval <= 0 {

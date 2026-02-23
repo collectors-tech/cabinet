@@ -12,13 +12,13 @@ import (
 func StartupURLFromAddr(addr string) string {
 	host, port, err := net.SplitHostPort(strings.TrimSpace(addr))
 	if err != nil {
-		return "http://127.0.0.1:8080/"
+		return "http://127.0.0.1:17880/"
 	}
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"
 	}
 	if port == "" {
-		port = "8080"
+		port = "17880"
 	}
 	return (&url.URL{
 		Scheme: "http",

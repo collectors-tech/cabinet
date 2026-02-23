@@ -7,14 +7,14 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    baseURL: "http://127.0.0.1:8080",
+    baseURL: "http://127.0.0.1:17880",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
   webServer: {
     command: "npm run build && npm run serve:go",
-    url: "http://127.0.0.1:8080/healthz",
+    url: "http://127.0.0.1:17880/healthz",
     reuseExistingServer: true,
     timeout: 120_000,
   },

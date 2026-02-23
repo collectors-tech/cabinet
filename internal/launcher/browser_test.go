@@ -5,7 +5,7 @@ import "testing"
 func TestBrowserCommandForOS(t *testing.T) {
 	t.Parallel()
 
-	name, args, err := browserCommandForOS("windows", "http://127.0.0.1:8080/")
+	name, args, err := browserCommandForOS("windows", "http://127.0.0.1:17880/")
 	if err != nil {
 		t.Fatalf("windows command error = %v", err)
 	}
@@ -13,7 +13,7 @@ func TestBrowserCommandForOS(t *testing.T) {
 		t.Fatalf("invalid windows command: %q %v", name, args)
 	}
 
-	name, args, err = browserCommandForOS("darwin", "http://127.0.0.1:8080/")
+	name, args, err = browserCommandForOS("darwin", "http://127.0.0.1:17880/")
 	if err != nil {
 		t.Fatalf("darwin command error = %v", err)
 	}
@@ -21,7 +21,7 @@ func TestBrowserCommandForOS(t *testing.T) {
 		t.Fatalf("invalid darwin command: %q %v", name, args)
 	}
 
-	name, args, err = browserCommandForOS("linux", "http://127.0.0.1:8080/")
+	name, args, err = browserCommandForOS("linux", "http://127.0.0.1:17880/")
 	if err != nil {
 		t.Fatalf("linux command error = %v", err)
 	}
@@ -33,13 +33,13 @@ func TestBrowserCommandForOS(t *testing.T) {
 func TestStartupURLFromAddr(t *testing.T) {
 	t.Parallel()
 
-	if got := StartupURLFromAddr("127.0.0.1:8080"); got != "http://127.0.0.1:8080/" {
+	if got := StartupURLFromAddr("127.0.0.1:17880"); got != "http://127.0.0.1:17880/" {
 		t.Fatalf("unexpected url: %q", got)
 	}
-	if got := StartupURLFromAddr("0.0.0.0:8080"); got != "http://127.0.0.1:8080/" {
+	if got := StartupURLFromAddr("0.0.0.0:17880"); got != "http://127.0.0.1:17880/" {
 		t.Fatalf("unexpected wildcard url: %q", got)
 	}
-	if got := StartupURLFromAddr(":8080"); got != "http://127.0.0.1:8080/" {
+	if got := StartupURLFromAddr(":17880"); got != "http://127.0.0.1:17880/" {
 		t.Fatalf("unexpected empty-host url: %q", got)
 	}
 }
