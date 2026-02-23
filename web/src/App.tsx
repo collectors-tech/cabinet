@@ -133,6 +133,7 @@ export function App() {
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [onboardingIdentityComplete, setOnboardingIdentityComplete] = useState(false);
   const [onboardingSetupPath, setOnboardingSetupPath] = useState<"quick" | "import" | "sample" | "">("");
+  const [onboardingStarterDataChoice, setOnboardingStarterDataChoice] = useState<"sample" | "empty" | "">("");
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -388,10 +389,12 @@ export function App() {
       setOnboardingCompleted(false);
       setOnboardingIdentityComplete(false);
       setOnboardingSetupPath("");
+      setOnboardingStarterDataChoice("");
       localStorage.setItem(onboardingStepPreferenceKey(active.id), "1");
       localStorage.setItem(onboardingCompletedPreferenceKey(active.id), "0");
       localStorage.setItem(onboardingIdentityPreferenceKey(active.id), "0");
       localStorage.removeItem(onboardingPathPreferenceKey(active.id));
+      localStorage.removeItem(onboardingStarterDataPreferenceKey(active.id));
       await loadItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_setup_profile");
@@ -424,6 +427,7 @@ export function App() {
     const onboardingStepValue = localStorage.getItem(onboardingStepPreferenceKey(profileID));
     const onboardingPathValue = localStorage.getItem(onboardingPathPreferenceKey(profileID));
     const onboardingIdentityValue = localStorage.getItem(onboardingIdentityPreferenceKey(profileID));
+    const onboardingStarterDataValue = localStorage.getItem(onboardingStarterDataPreferenceKey(profileID));
     const workspaceValue = localStorage.getItem(workspacePreferenceKey(profileID));
     const completed = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true" || workspaceValue === "1";
     setOnboardingCompleted(Boolean(completed));
@@ -440,6 +444,11 @@ export function App() {
       setOnboardingSetupPath("");
     }
     setOnboardingIdentityComplete(onboardingIdentityValue === "1" || onboardingIdentityValue?.toLowerCase() === "true");
+    if (onboardingStarterDataValue === "sample" || onboardingStarterDataValue === "empty") {
+      setOnboardingStarterDataChoice(onboardingStarterDataValue);
+    } else {
+      setOnboardingStarterDataChoice("");
+    }
 
     const value = localStorage.getItem(workspacePreferenceKey(profileID));
     if (value === null) {
@@ -487,6 +496,10 @@ export function App() {
     return `cabinet.onboarding.identity_completed.${profileID}`;
   }
 
+  function onboardingStarterDataPreferenceKey(profileID: string) {
+    return `cabinet.onboarding.starter_data.${profileID}`;
+  }
+
   async function chooseOnboardingPath(path: "quick" | "import" | "sample") {
     if (!activeProfile?.id) {
       return;
@@ -502,6 +515,19 @@ export function App() {
     const next: OnboardingStep = 2;
     setOnboardingStep(next);
     localStorage.setItem(onboardingStepPreferenceKey(activeProfile.id), String(next));
+  }
+
+  async function chooseOnboardingStarterData(choice: "sample" | "empty") {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setOnboardingStarterDataChoice(choice);
+    localStorage.setItem(onboardingStarterDataPreferenceKey(activeProfile.id), choice);
+    if (choice === "sample") {
+      await seedOnboardingSampleData();
+      return;
+    }
+    setOnboardingStatus("Starting with an empty collection.");
   }
 
   function nextOnboardingStep() {
@@ -1959,19 +1985,32 @@ export function App() {
                 <button
                   type="button"
                   onClick={nextOnboardingStep}
-                  disabled={onboardingStep >= ONBOARDING_STEPS.length || (onboardingStep === 2 && !onboardingIdentityComplete)}
+                  disabled={
+                    onboardingStep >= ONBOARDING_STEPS.length ||
+                    (onboardingStep === 2 && !onboardingIdentityComplete) ||
+                    (onboardingStep === 3 && !onboardingStarterDataChoice)
+                  }
                 >
                   Next Step
                 </button>
               </div>
               <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
               <div>
-                <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
-                  {starterIdentityBusy ? "Completing Identity..." : "Complete Identity"}
-                </button>{" "}
-                <button type="button" onClick={seedOnboardingSampleData}>
-                  Load Sample Data
-                </button>{" "}
+                {onboardingStep === 2 ? (
+                  <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
+                    {starterIdentityBusy ? "Completing Identity..." : "Complete Identity"}
+                  </button>
+                ) : null}
+                {onboardingStep === 3 ? (
+                  <>
+                    <button type="button" onClick={() => void chooseOnboardingStarterData("sample")}>
+                      Load Sample Data (Recommended)
+                    </button>{" "}
+                    <button type="button" onClick={() => void chooseOnboardingStarterData("empty")}>
+                      Start Empty
+                    </button>
+                  </>
+                ) : null}
                 <button type="button" onClick={() => setWorkspaceMode(true)}>
                   Open Advanced Workspace
                 </button>

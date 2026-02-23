@@ -218,7 +218,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
   });
 
-  it("shows starter identity and sample data actions", async () => {
+  it("shows step-scoped starter onboarding actions", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -240,13 +240,16 @@ describe("App shell", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "2");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
 
     render(<App />);
     const activate = await screen.findByRole("button", { name: /use alpha/i });
     activate.click();
 
     expect(await screen.findByRole("button", { name: /complete identity/i })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /load sample data/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /load sample data/i })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /open advanced workspace/i })).toBeInTheDocument();
   });
 
@@ -351,6 +354,96 @@ describe("App shell", () => {
     fireEvent.click(await screen.findByRole("button", { name: /use sample data/i }));
     expect(localStorage.getItem("cabinet.onboarding.path.p1")).toBe("sample");
     expect(await screen.findByText(/onboarding sample data loaded/i)).toBeInTheDocument();
+  });
+
+  it("shows step-3 starter data choices and persists start-empty selection", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "3");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+    localStorage.setItem("cabinet.onboarding.identity_completed.p1", "1");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const sampleButton = await screen.findByRole("button", { name: /load sample data \(recommended\)/i });
+    expect(sampleButton).toBeInTheDocument();
+    const startEmpty = await screen.findByRole("button", { name: /start empty/i });
+    fireEvent.click(startEmpty);
+
+    expect(localStorage.getItem("cabinet.onboarding.starter_data.p1")).toBe("empty");
+    expect(await screen.findByText(/starting with an empty collection/i)).toBeInTheDocument();
+    expect(screen.queryByText(/onboarding sample data loaded/i)).not.toBeInTheDocument();
+  });
+
+  it("runs sample-data seeding from step 3 and handles idempotent reruns", async () => {
+    let sampleCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/onboarding/sample-data" && init?.method === "POST") {
+        sampleCalls += 1;
+        if (sampleCalls === 1) {
+          return new Response(JSON.stringify({ created_items: 3 }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ created_items: 0 }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "3");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+    localStorage.setItem("cabinet.onboarding.identity_completed.p1", "1");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const sampleButton = await screen.findByRole("button", { name: /load sample data \(recommended\)/i });
+    fireEvent.click(sampleButton);
+    expect(await screen.findByText(/onboarding sample data loaded \(3 starter items\)/i)).toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.onboarding.starter_data.p1")).toBe("sample");
+
+    fireEvent.click(sampleButton);
+    expect(await screen.findByText(/onboarding sample data already available/i)).toBeInTheDocument();
+    expect(sampleCalls).toBe(2);
   });
 
   it("requires successful identity completion before progressing past step 2", async () => {
