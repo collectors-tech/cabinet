@@ -1123,6 +1123,65 @@ describe("App shell", () => {
     expect(await screen.findByText(/export bytes: 24/i)).toBeInTheDocument();
   });
 
+  it("supports backup list and guarded restore workflows", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/backup/list") {
+        return new Response(JSON.stringify({ backups: ["/tmp/backups/cabinet-backup-20260223-120000.db", "/tmp/backups/fail-backup.db"] }), { status: 200 });
+      }
+      if (url === "/api/backup/restore" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body || "{}")) as { backup_path?: string };
+        if (body.backup_path?.includes("fail")) {
+          return new Response(JSON.stringify({ error: "failed_to_restore_backup" }), { status: 400 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /load backups/i }));
+    expect(await screen.findByText(/backup count: 2/i)).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /cabinet-backup-20260223-120000.db/i })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /restore selected backup/i }));
+    expect(await screen.findByText(/admin error: restore_confirmation_required/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/backup selection/i), { target: { value: "/tmp/backups/fail-backup.db" } });
+    fireEvent.click(await screen.findByLabelText(/confirm restore/i));
+    fireEvent.click(await screen.findByRole("button", { name: /restore selected backup/i }));
+    expect(await screen.findByText(/admin error: failed_to_restore_backup/i)).toBeInTheDocument();
+    expect(await screen.findByText(/restore failed: verify the selected backup file is valid and readable/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/backup selection/i), { target: { value: "/tmp/backups/cabinet-backup-20260223-120000.db" } });
+    const confirmRestore = (await screen.findByLabelText(/confirm restore/i)) as HTMLInputElement;
+    if (!confirmRestore.checked) {
+      fireEvent.click(confirmRestore);
+    }
+    fireEvent.click(await screen.findByRole("button", { name: /restore selected backup/i }));
+    expect(await screen.findByText(/settings status: backup_restored/i)).toBeInTheDocument();
+  });
+
   it("loads and saves profile settings and secrets", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

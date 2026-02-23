@@ -110,6 +110,9 @@ export function App() {
   const [insightError, setInsightError] = useState("");
   const [licenseStatus, setLicenseStatus] = useState<{ state?: string; tier?: string } | null>(null);
   const [logCount, setLogCount] = useState(0);
+  const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
+  const [selectedBackupPath, setSelectedBackupPath] = useState("");
+  const [confirmRestore, setConfirmRestore] = useState(false);
   const [adminError, setAdminError] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
   const [profileSettingsInitial, setProfileSettingsInitial] = useState<ProfileSettingsValues>({
@@ -1552,6 +1555,58 @@ export function App() {
     }
   }
 
+  function parseBackupEntry(path: string) {
+    const normalized = path.replaceAll("\\", "/");
+    const name = normalized.split("/").pop() || path;
+    const m = name.match(/cabinet-backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+    const timestampLabel = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]} UTC` : "unknown time";
+    return { path, name, timestampLabel };
+  }
+
+  async function loadBackups() {
+    setAdminError("");
+    try {
+      const resp = await fetch("/api/backup/list");
+      if (!resp.ok) {
+        throw new Error("failed_to_list_backups");
+      }
+      const data = (await resp.json()) as { backups?: string[] };
+      const next = (data.backups || []).map(parseBackupEntry);
+      setBackupEntries(next);
+      setSelectedBackupPath(next[0]?.path || "");
+      setConfirmRestore(false);
+      setSettingsStatus("backup_list_loaded");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_list_backups");
+    }
+  }
+
+  async function restoreSelectedBackup() {
+    if (!selectedBackupPath) {
+      setAdminError("backup_selection_required");
+      return;
+    }
+    if (!confirmRestore) {
+      setAdminError("restore_confirmation_required");
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch("/api/backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backup_path: selectedBackupPath }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_restore_backup");
+      }
+      setSettingsStatus("backup_restored");
+      setConfirmRestore(false);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_restore_backup");
+    }
+  }
+
   async function exportText(path: string, label: string) {
     try {
       const resp = await fetch(path);
@@ -2910,12 +2965,46 @@ export function App() {
                 <button type="button" onClick={() => runDataMaintenance("/api/backup/run", "backup")}>
                   Run Backup
                 </button>{" "}
+                <button type="button" onClick={loadBackups}>
+                  Load Backups
+                </button>{" "}
                 <button type="button" onClick={() => exportText("/api/logs/export", "logs")}>
                   Export Logs
                 </button>{" "}
                 <button type="button" onClick={() => exportText("/api/data/export/json", "json")}>
                   Export JSON
                 </button>
+              </div>
+              <div>
+                <label htmlFor="backup-selection">Available backups</label>{" "}
+                <select
+                  id="backup-selection"
+                  aria-label="Backup selection"
+                  value={selectedBackupPath}
+                  onChange={(e) => setSelectedBackupPath(e.target.value)}
+                >
+                  <option value="">Select backup</option>
+                  {backupEntries.map((entry) => (
+                    <option key={entry.path} value={entry.path}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>{" "}
+                <label>
+                  <input type="checkbox" checked={confirmRestore} onChange={(e) => setConfirmRestore(e.target.checked)} aria-label="Confirm restore" /> Confirm
+                  restore
+                </label>{" "}
+                <button type="button" onClick={restoreSelectedBackup}>
+                  Restore Selected Backup
+                </button>
+                <p>Backup count: {backupEntries.length}</p>
+                <ul>
+                  {backupEntries.map((entry) => (
+                    <li key={entry.path}>
+                      {entry.name} ({entry.timestampLabel})
+                    </li>
+                  ))}
+                </ul>
               </div>
               <div>
                 <ProfileSettingsForm initialValues={profileSettingsInitial} onSubmit={saveProfileSettings} />
@@ -2926,6 +3015,7 @@ export function App() {
               <p>Log entries: {logCount}</p>
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}
+              {adminError === "failed_to_restore_backup" ? <p>Restore failed: verify the selected backup file is valid and readable.</p> : null}
             </div>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (

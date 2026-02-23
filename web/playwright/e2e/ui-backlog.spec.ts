@@ -86,6 +86,12 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     if (path === "/api/wishlist/hits" && method === "GET") {
       return respondJSON({ hits: [{ item_id: "i1", listing_id: "l1", title: "Hit Item", price: 18 }] });
     }
+    if (path === "/api/backup/list" && method === "GET") {
+      return respondJSON({ backups: ["/tmp/backups/cabinet-backup-20260223-120000.db"] });
+    }
+    if (path === "/api/backup/restore" && method === "POST") {
+      return respondJSON({ ok: true });
+    }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
       if (state.registerBeginFailsOnce && state.registerBeginCalls === 1) {
@@ -181,6 +187,15 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByText(/snapshot status: pricing_snapshot_completed/i)).toBeVisible();
   await page.getByRole("button", { name: /load wishlist hits/i }).click();
   await expect(page.getByText(/wishlist hit: i1 \/ hit item \/ 18/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /^settings$/i }).first().click();
+  await page.getByRole("button", { name: /load backups/i }).click();
+  await expect(page.getByText(/backup count: 1/i)).toBeVisible();
+  await page.getByRole("button", { name: /restore selected backup/i }).click();
+  await expect(page.getByText(/admin error: restore_confirmation_required/i)).toBeVisible();
+  await page.getByLabel(/confirm restore/i).check();
+  await page.getByRole("button", { name: /restore selected backup/i }).click();
+  await expect(page.getByText(/settings status: backup_restored/i)).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
