@@ -10,6 +10,7 @@ import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/st
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "pricing" | "settings";
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -139,6 +140,7 @@ export function App() {
   const [onboardingTheme, setOnboardingTheme] = useState<Theme>(detectInitialTheme);
   const [onboardingFinishing, setOnboardingFinishing] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
+  const [activeScreen, setActiveScreen] = useState<TopLevelScreen>("all");
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
@@ -497,6 +499,9 @@ export function App() {
       return;
     }
     setAdvancedWorkspace(nextAdvanced);
+    if (nextAdvanced) {
+      setActiveScreen("all");
+    }
     localStorage.setItem(workspacePreferenceKey(activeProfile.id), nextAdvanced ? "1" : "0");
     if (nextAdvanced) {
       setOnboardingCompleted(true);
@@ -1877,13 +1882,60 @@ export function App() {
       }
     : undefined;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
+  const navEnabled = showAdvancedWorkspace;
+  function selectScreen(screen: TopLevelScreen) {
+    if (!navEnabled) {
+      return;
+    }
+    setActiveScreen(screen);
+  }
   const navLinks = (
     <>
-      <a href="#dashboard">Dashboard</a>
-      <a href="#collection">Collection</a>
-      <a href="#scanner">Scanner</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#settings">Settings</a>
+      <button
+        type="button"
+        className={`cabinet-nav-link${activeScreen === "dashboard" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "dashboard" ? "page" : undefined}
+        onClick={() => selectScreen("dashboard")}
+        disabled={!navEnabled}
+      >
+        Dashboard
+      </button>
+      <button
+        type="button"
+        className={`cabinet-nav-link${activeScreen === "collection" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "collection" ? "page" : undefined}
+        onClick={() => selectScreen("collection")}
+        disabled={!navEnabled}
+      >
+        Collection
+      </button>
+      <button
+        type="button"
+        className={`cabinet-nav-link${activeScreen === "scanner" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "scanner" ? "page" : undefined}
+        onClick={() => selectScreen("scanner")}
+        disabled={!navEnabled}
+      >
+        Scanner
+      </button>
+      <button
+        type="button"
+        className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "pricing" ? "page" : undefined}
+        onClick={() => selectScreen("pricing")}
+        disabled={!navEnabled}
+      >
+        Pricing
+      </button>
+      <button
+        type="button"
+        className={`cabinet-nav-link${activeScreen === "settings" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "settings" ? "page" : undefined}
+        onClick={() => selectScreen("settings")}
+        disabled={!navEnabled}
+      >
+        Settings
+      </button>
     </>
   );
 
@@ -2154,8 +2206,8 @@ export function App() {
               {itemsError ? <p>Item error: {itemsError}</p> : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
-            <div>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
+            <div id="collection">
               <h3>Collection</h3>
               <div>
                 <button type="button" onClick={() => setWorkspaceMode(false)}>
@@ -2322,7 +2374,7 @@ export function App() {
               </div>
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <div>
               <h3>Photos</h3>
               <div>
@@ -2394,7 +2446,7 @@ export function App() {
               ) : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "scanner") ? (
             <div>
               <h3>Discovery Scanner</h3>
               <ScannerQuerySetForm
@@ -2507,9 +2559,9 @@ export function App() {
               </ul>
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
-            <div>
-              <h3>Dashboard and Pricing</h3>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard" || activeScreen === "pricing") ? (
+            <div id={activeScreen === "pricing" ? "pricing" : "dashboard"}>
+              <h3>{activeScreen === "pricing" ? "Pricing" : "Dashboard"}</h3>
               <div>
                 <button type="button" onClick={loadDashboard}>
                   Load Dashboard
@@ -2581,8 +2633,8 @@ export function App() {
               {insightError ? <p>Insight error: {insightError}</p> : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
-            <div>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "settings") ? (
+            <div id="settings">
               <h3>Settings and Diagnostics</h3>
               <div>
                 <button type="button" onClick={loadProfileSettings}>
@@ -2624,7 +2676,7 @@ export function App() {
               {adminError ? <p>Admin error: {adminError}</p> : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <div>
               <h3>Barcodes</h3>
               <div>
@@ -2658,7 +2710,7 @@ export function App() {
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
             </div>
           ) : null}
-          {showAdvancedWorkspace ? (
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <div>
               <h3>AI Assist</h3>
               <AIAssistForms

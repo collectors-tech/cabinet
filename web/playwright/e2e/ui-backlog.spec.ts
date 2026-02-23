@@ -97,6 +97,31 @@ test("api health smoke (real backend)", async ({ request }) => {
   expect(health.ok()).toBeTruthy();
 });
 
+test("left navigation switches visible advanced-workspace screens (desktop + mobile)", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await expect(page.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
+  await page.getByRole("button", { name: /^dashboard$/i }).first().click();
+  await expect(page.getByRole("button", { name: /^dashboard$/i }).first()).toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("button", { name: /^collection$/i }).first().click();
+  await expect(page.getByRole("heading", { name: /^collection$/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^collection$/i }).first()).toHaveAttribute("aria-current", "page");
+
+  await page.setViewportSize({ width: 800, height: 900 });
+  await page.getByRole("button", { name: /open navigation menu/i }).click();
+  const drawer = page.getByRole("dialog", { name: /navigation menu/i });
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: /^scanner$/i }).click();
+  await expect(page.getByRole("dialog", { name: /navigation menu/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /discovery scanner/i })).toBeVisible();
+});
+
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: true });
   await openStarterWizard(page);

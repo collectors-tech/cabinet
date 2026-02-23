@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -42,6 +42,85 @@ describe("App shell", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: /navigation menu/i })).not.toBeInTheDocument();
+  });
+
+  it("switches visible advanced workspace section from sidebar navigation", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    const dashboardNav = await screen.findByRole("button", { name: /^dashboard$/i });
+    fireEvent.click(dashboardNav);
+    expect(dashboardNav).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: /^dashboard$/i })).toBeInTheDocument();
+
+    const collectionNav = await screen.findByRole("button", { name: /^collection$/i });
+    fireEvent.click(collectionNav);
+    expect(collectionNav).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: /^collection$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^dashboard$/i })).not.toBeInTheDocument();
+
+    const settingsNav = await screen.findByRole("button", { name: /^settings$/i });
+    fireEvent.click(settingsNav);
+    expect(settingsNav).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: /settings and diagnostics/i })).toBeInTheDocument();
+  });
+
+  it("uses mobile drawer navigation to switch active screen", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /open navigation menu/i }));
+    const drawer = await screen.findByRole("dialog", { name: /navigation menu/i });
+    const scannerNavInDrawer = within(drawer).getByRole("button", { name: /^scanner$/i });
+    fireEvent.click(scannerNavInDrawer);
+
+    expect(screen.queryByRole("dialog", { name: /navigation menu/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^scanner$/i })).toHaveAttribute("aria-current", "page");
   });
 
   it("shows onboarding create flow when no profiles exist", async () => {
