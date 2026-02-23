@@ -353,6 +353,102 @@ describe("App shell", () => {
     expect(await screen.findByText(/onboarding sample data loaded/i)).toBeInTheDocument();
   });
 
+  it("requires successful identity completion before progressing past step 2", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/begin" && init?.method === "POST") {
+        return new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/finish" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/onboarding/sample-data" && init?.method === "POST") {
+        return new Response(JSON.stringify({ created_items: 0 }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "2");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const next = await screen.findByRole("button", { name: /next step/i });
+    expect(next).toBeDisabled();
+
+    const completeIdentity = await screen.findByRole("button", { name: /complete identity/i });
+    completeIdentity.click();
+    expect(await screen.findByText(/auth status: registration_finished/i)).toBeInTheDocument();
+    expect(next).toBeEnabled();
+
+    fireEvent.click(next);
+    expect(await screen.findByText(/step 3 of 5/i)).toBeInTheDocument();
+  });
+
+  it("keeps step 2 blocked when identity action fails and allows retry", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/begin" && init?.method === "POST") {
+        return new Response(JSON.stringify({ error: "failed" }), { status: 500 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "2");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    const next = await screen.findByRole("button", { name: /next step/i });
+    expect(next).toBeDisabled();
+
+    const completeIdentity = await screen.findByRole("button", { name: /complete identity/i });
+    completeIdentity.click();
+    expect(await screen.findByText(/request_failed:\/api\/auth\/webauthn\/register\/begin/i)).toBeInTheDocument();
+    expect(next).toBeDisabled();
+    expect(completeIdentity).toBeInTheDocument();
+  });
+
   it("lists and creates collection items", async () => {
     const fetchMock = vi
       .fn()

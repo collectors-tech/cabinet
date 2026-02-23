@@ -131,6 +131,7 @@ export function App() {
   const [onboardingStatus, setOnboardingStatus] = useState("");
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingIdentityComplete, setOnboardingIdentityComplete] = useState(false);
   const [onboardingSetupPath, setOnboardingSetupPath] = useState<"quick" | "import" | "sample" | "">("");
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
@@ -385,9 +386,11 @@ export function App() {
       setAdvancedWorkspace(false);
       setOnboardingStep(1);
       setOnboardingCompleted(false);
+      setOnboardingIdentityComplete(false);
       setOnboardingSetupPath("");
       localStorage.setItem(onboardingStepPreferenceKey(active.id), "1");
       localStorage.setItem(onboardingCompletedPreferenceKey(active.id), "0");
+      localStorage.setItem(onboardingIdentityPreferenceKey(active.id), "0");
       localStorage.removeItem(onboardingPathPreferenceKey(active.id));
       await loadItems();
     } catch (e) {
@@ -420,6 +423,7 @@ export function App() {
     const onboardingCompletedValue = localStorage.getItem(onboardingCompletedPreferenceKey(profileID));
     const onboardingStepValue = localStorage.getItem(onboardingStepPreferenceKey(profileID));
     const onboardingPathValue = localStorage.getItem(onboardingPathPreferenceKey(profileID));
+    const onboardingIdentityValue = localStorage.getItem(onboardingIdentityPreferenceKey(profileID));
     const workspaceValue = localStorage.getItem(workspacePreferenceKey(profileID));
     const completed = onboardingCompletedValue === "1" || onboardingCompletedValue?.toLowerCase() === "true" || workspaceValue === "1";
     setOnboardingCompleted(Boolean(completed));
@@ -435,6 +439,7 @@ export function App() {
     } else {
       setOnboardingSetupPath("");
     }
+    setOnboardingIdentityComplete(onboardingIdentityValue === "1" || onboardingIdentityValue?.toLowerCase() === "true");
 
     const value = localStorage.getItem(workspacePreferenceKey(profileID));
     if (value === null) {
@@ -476,6 +481,10 @@ export function App() {
 
   function onboardingPathPreferenceKey(profileID: string) {
     return `cabinet.onboarding.path.${profileID}`;
+  }
+
+  function onboardingIdentityPreferenceKey(profileID: string) {
+    return `cabinet.onboarding.identity_completed.${profileID}`;
   }
 
   async function chooseOnboardingPath(path: "quick" | "import" | "sample") {
@@ -1549,6 +1558,10 @@ export function App() {
       const parsed = JSON.parse(credentialJSON || "{}");
       await postJSON("/api/auth/webauthn/register/finish", { session_id: authSessionID, credential: parsed });
       setAuthStatus("registration_finished");
+      if (activeProfile?.id) {
+        setOnboardingIdentityComplete(true);
+        localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "1");
+      }
       await seedOnboardingSampleData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_finish_registration");
@@ -1583,6 +1596,10 @@ export function App() {
         setSessionToken(token);
       }
       setAuthStatus("login_finished");
+      if (activeProfile?.id) {
+        setOnboardingIdentityComplete(true);
+        localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "1");
+      }
       await seedOnboardingSampleData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_finish_login");
@@ -1619,6 +1636,8 @@ export function App() {
         setAuthSessionID(sid);
         await postJSON("/api/auth/webauthn/register/finish", { session_id: sid, credential: {} });
         setAuthStatus("registration_finished");
+        setOnboardingIdentityComplete(true);
+        localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "1");
         await seedOnboardingSampleData();
       } else {
         const start = await postJSON("/api/auth/webauthn/login/begin", { profile_id: activeProfile.id });
@@ -1630,9 +1649,13 @@ export function App() {
           setSessionToken(token);
         }
         setAuthStatus("login_finished");
+        setOnboardingIdentityComplete(true);
+        localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "1");
         await seedOnboardingSampleData();
       }
     } catch (e) {
+      setOnboardingIdentityComplete(false);
+      localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "0");
       setError(e instanceof Error ? e.message : "failed_to_complete_identity");
     } finally {
       setStarterIdentityBusy(false);
@@ -1683,6 +1706,10 @@ export function App() {
     try {
       await postJSON("/api/auth/session/validate", { session_token: value });
       setAuthStatus("session_valid");
+      if (activeProfile?.id) {
+        setOnboardingIdentityComplete(true);
+        localStorage.setItem(onboardingIdentityPreferenceKey(activeProfile.id), "1");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "session_invalid_or_locked");
     }
@@ -1929,7 +1956,11 @@ export function App() {
                 <button type="button" onClick={previousOnboardingStep} disabled={onboardingStep <= 1}>
                   Back Step
                 </button>{" "}
-                <button type="button" onClick={nextOnboardingStep} disabled={onboardingStep >= ONBOARDING_STEPS.length}>
+                <button
+                  type="button"
+                  onClick={nextOnboardingStep}
+                  disabled={onboardingStep >= ONBOARDING_STEPS.length || (onboardingStep === 2 && !onboardingIdentityComplete)}
+                >
                   Next Step
                 </button>
               </div>
