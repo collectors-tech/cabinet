@@ -42,6 +42,10 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) SearchItems(ctx context.Context, q Query) ([]collection.Item, error) {
+	return r.SearchItemsByProfile(ctx, "", q)
+}
+
+func (r *Repository) SearchItemsByProfile(ctx context.Context, profileID string, q Query) ([]collection.Item, error) {
 	limit := q.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -58,6 +62,10 @@ func (r *Repository) SearchItems(ctx context.Context, q Query) ([]collection.Ite
 
 	args := []any{}
 	var where []string
+	if profile := strings.TrimSpace(profileID); profile != "" {
+		where = append(where, "c.profile_id = ?")
+		args = append(args, profile)
+	}
 	if b := strings.TrimSpace(q.Brand); b != "" {
 		where = append(where, "c.brand = ?")
 		args = append(args, b)

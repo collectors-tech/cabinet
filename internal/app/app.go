@@ -436,7 +436,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		items, err := searchRepo.SearchItems(r.Context(), search.Query{
+		query := search.Query{
 			Text:      r.URL.Query().Get("q"),
 			Brand:     r.URL.Query().Get("brand"),
 			Category:  r.URL.Query().Get("category"),
@@ -446,7 +446,11 @@ func New(cfg config.Config) (*App, error) {
 			Scale:     r.URL.Query().Get("scale"),
 			SortBy:    r.URL.Query().Get("sort"),
 			Limit:     limit,
-		})
+		}
+		items, err := searchRepo.SearchItems(r.Context(), query)
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+			items, err = searchRepo.SearchItemsByProfile(r.Context(), active.ID, query)
+		}
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_search_items"}`, http.StatusBadRequest)
 			return
