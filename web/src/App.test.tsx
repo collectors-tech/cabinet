@@ -1318,6 +1318,54 @@ describe("App shell", () => {
     expect(await screen.findByText(/settings status: license_profile_saved/i)).toBeInTheDocument();
   });
 
+  it("supports diagnostics debug mode toggle and current state visibility", async () => {
+    let debugEnabled = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/settings") && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ settings: { debug_mode: debugEnabled ? "true" : "false" } }), { status: 200 });
+      }
+      if (url === "/api/logs/debug" && init?.method === "POST") {
+        const req = JSON.parse(String(init.body || "{}")) as { enabled?: boolean };
+        debugEnabled = Boolean(req.enabled);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /load profile settings/i }));
+    expect(await screen.findByText(/debug mode: disabled/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /enable debug mode/i }));
+    expect(await screen.findByText(/debug mode: enabled/i)).toBeInTheDocument();
+    expect(await screen.findByText(/settings status: debug_mode_enabled/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /disable debug mode/i }));
+    expect(await screen.findByText(/debug mode: disabled/i)).toBeInTheDocument();
+    expect(await screen.findByText(/settings status: debug_mode_disabled/i)).toBeInTheDocument();
+  });
+
   it("supports barcode lookup and external search link", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

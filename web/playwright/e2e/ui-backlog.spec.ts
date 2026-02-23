@@ -108,6 +108,9 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     if (path === "/api/license/status" && method === "GET") {
       return respondJSON({ state: "valid", tier: "pro", features: ["ai_assist", "price_tracking"], expires_at: "2030-01-01T00:00:00Z" });
     }
+    if (path === "/api/logs/debug" && method === "POST") {
+      return respondJSON({ ok: true });
+    }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
       if (state.registerBeginFailsOnce && state.registerBeginCalls === 1) {
@@ -220,6 +223,10 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await page.getByRole("button", { name: /import license file/i }).click();
   await expect(page.getByText(/license import status: license_imported/i)).toBeVisible();
   await expect(page.getByText(/license validation: valid \/ pro/i)).toBeVisible();
+  await page.getByRole("button", { name: /enable debug mode/i }).click();
+  await expect(page.getByText(/debug mode: enabled/i)).toBeVisible();
+  await page.getByRole("button", { name: /disable debug mode/i }).click();
+  await expect(page.getByText(/debug mode: disabled/i)).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {

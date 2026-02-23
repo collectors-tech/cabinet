@@ -112,6 +112,7 @@ export function App() {
   const [profileLicenseJSON, setProfileLicenseJSON] = useState("");
   const [licenseImportDraft, setLicenseImportDraft] = useState({ payload_base64: "", signature_base64: "" });
   const [licenseImportStatus, setLicenseImportStatus] = useState("");
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [logCount, setLogCount] = useState(0);
   const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
@@ -1532,8 +1533,30 @@ export function App() {
         db_path: settings["storage.db_path"] || "",
         update_channel: (settings.update_channel as ProfileSettingsValues["update_channel"]) || "stable",
       });
+      setDebugModeEnabled(String(settings.debug_mode || "").toLowerCase() === "true");
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_get_settings");
+    }
+  }
+
+  async function toggleDebugMode(nextEnabled: boolean) {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setAdminError("");
+    try {
+      const resp = await fetch("/api/logs/debug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: activeProfile.id, enabled: nextEnabled }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_toggle_debug_mode");
+      }
+      setDebugModeEnabled(nextEnabled);
+      setSettingsStatus(nextEnabled ? "debug_mode_enabled" : "debug_mode_disabled");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_toggle_debug_mode");
     }
   }
 
@@ -3025,6 +3048,23 @@ export function App() {
             <div id="settings">
               <h3>Settings and Diagnostics</h3>
               <div>
+                <h4>Diagnostics</h4>
+                <button type="button" onClick={() => toggleDebugMode(true)}>
+                  Enable Debug Mode
+                </button>{" "}
+                <button type="button" onClick={() => toggleDebugMode(false)}>
+                  Disable Debug Mode
+                </button>{" "}
+                <button type="button" onClick={() => exportText("/api/logs/export", "logs")}>
+                  Export Logs
+                </button>{" "}
+                <button type="button" onClick={loadAdminStatus}>
+                  Refresh Diagnostics
+                </button>
+                <p>Debug mode: {debugModeEnabled ? "enabled" : "disabled"}</p>
+              </div>
+              <div>
+                <h4>Maintenance</h4>
                 <button type="button" onClick={loadProfileSettings}>
                   Load Profile Settings
                 </button>{" "}
@@ -3060,9 +3100,6 @@ export function App() {
                 </button>{" "}
                 <button type="button" onClick={loadBackups}>
                   Load Backups
-                </button>{" "}
-                <button type="button" onClick={() => exportText("/api/logs/export", "logs")}>
-                  Export Logs
                 </button>{" "}
                 <button type="button" onClick={() => exportText("/api/data/export/json", "json")}>
                   Export JSON
