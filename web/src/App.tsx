@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
 
@@ -21,6 +22,7 @@ export function App() {
     [],
   );
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [starterSubmitting, setStarterSubmitting] = useState(false);
   const [itemsError, setItemsError] = useState("");
   const [newItem, setNewItem] = useState({
     part_number: "",
@@ -379,9 +381,9 @@ export function App() {
     return `cabinet.workspace.${profileID}`;
   }
 
-  async function addItem() {
+  async function addItemWithPayload(payload: { part_number: string; title: string; brand: string; category: string }) {
     setItemsError("");
-    if (!newItem.part_number.trim() || !newItem.title.trim()) {
+    if (!payload.part_number.trim() || !payload.title.trim()) {
       setItemsError("part_number_and_title_required");
       return;
     }
@@ -389,7 +391,7 @@ export function App() {
       const resp = await fetch("/api/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newItem),
+        body: JSON.stringify(payload),
       });
       if (!resp.ok) {
         throw new Error("failed_to_create_item");
@@ -399,9 +401,27 @@ export function App() {
       if (!selectedItemID) {
         setSelectedItemID(created.id);
       }
-      setNewItem({ part_number: "", title: "", brand: "", category: "General" });
     } catch (e) {
       setItemsError(e instanceof Error ? e.message : "failed_to_create_item");
+    }
+  }
+
+  async function addItem() {
+    await addItemWithPayload(newItem);
+    setNewItem({ part_number: "", title: "", brand: "", category: "General" });
+  }
+
+  async function addStarterItem(values: StarterQuickAddValues) {
+    setStarterSubmitting(true);
+    try {
+      await addItemWithPayload({
+        part_number: values.part_number,
+        title: values.title,
+        brand: values.brand || "",
+        category: "General",
+      });
+    } finally {
+      setStarterSubmitting(false);
     }
   }
 
@@ -1479,29 +1499,7 @@ export function App() {
                   Open Advanced Workspace
                 </button>
               </div>
-              <div>
-                <input
-                  value={newItem.part_number}
-                  onChange={(e) => setNewItem((current) => ({ ...current, part_number: e.target.value }))}
-                  placeholder="Part Number"
-                  aria-label="Starter part number"
-                />{" "}
-                <input
-                  value={newItem.title}
-                  onChange={(e) => setNewItem((current) => ({ ...current, title: e.target.value }))}
-                  placeholder="Item Title"
-                  aria-label="Starter item title"
-                />{" "}
-                <input
-                  value={newItem.brand}
-                  onChange={(e) => setNewItem((current) => ({ ...current, brand: e.target.value }))}
-                  placeholder="Brand"
-                  aria-label="Starter brand"
-                />{" "}
-                <button type="button" onClick={addItem}>
-                  Add First Item
-                </button>
-              </div>
+              <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} />
               <p>Current items: {items.length}</p>
               {itemsError ? <p>Item error: {itemsError}</p> : null}
             </div>
