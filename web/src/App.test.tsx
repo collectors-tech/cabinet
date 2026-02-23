@@ -500,6 +500,69 @@ describe("App shell", () => {
     expect(await screen.findByText(/current items: 1/i)).toBeInTheDocument();
   });
 
+  it("persists step-5 preferences, completes onboarding, and reopens in advanced workspace", async () => {
+    let settingsPayload: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/profiles/p1/settings" && init?.method === "PUT") {
+        settingsPayload = JSON.parse(String(init.body || "{}")) as Record<string, unknown>;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "5");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+    localStorage.setItem("cabinet.onboarding.path.p1", "quick");
+    localStorage.setItem("cabinet.onboarding.identity_completed.p1", "1");
+    localStorage.setItem("cabinet.onboarding.starter_data.p1", "empty");
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    fireEvent.change(await screen.findByLabelText(/onboarding theme/i), { target: { value: "dark" } });
+    fireEvent.change(await screen.findByLabelText(/onboarding backup frequency/i), { target: { value: "weekly" } });
+    fireEvent.change(await screen.findByLabelText(/onboarding scanner schedule/i), { target: { value: "weekly" } });
+    fireEvent.click(await screen.findByRole("button", { name: /finish onboarding/i }));
+
+    expect(await screen.findByText(/onboarding complete\. advanced workspace unlocked\./i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.onboarding.completed.p1")).toBe("1");
+    expect(localStorage.getItem("cabinet.workspace.p1")).toBe("1");
+    expect(settingsPayload).toEqual(
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          backup_frequency: "weekly",
+          scanner_schedule: "0 8 * * 1",
+        }),
+      }),
+    );
+
+    cleanup();
+    render(<App />);
+    const activateAgain = await screen.findByRole("button", { name: /use alpha/i });
+    activateAgain.click();
+    expect(await screen.findByRole("heading", { name: /discovery scanner/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open advanced workspace/i })).not.toBeInTheDocument();
+  });
+
   it("requires successful identity completion before progressing past step 2", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

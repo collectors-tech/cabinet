@@ -134,6 +134,10 @@ export function App() {
   const [onboardingIdentityComplete, setOnboardingIdentityComplete] = useState(false);
   const [onboardingSetupPath, setOnboardingSetupPath] = useState<"quick" | "import" | "sample" | "">("");
   const [onboardingStarterDataChoice, setOnboardingStarterDataChoice] = useState<"sample" | "empty" | "">("");
+  const [onboardingBackupFrequency, setOnboardingBackupFrequency] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [onboardingScannerPreset, setOnboardingScannerPreset] = useState<"manual" | "daily" | "weekly">("manual");
+  const [onboardingTheme, setOnboardingTheme] = useState<Theme>(detectInitialTheme);
+  const [onboardingFinishing, setOnboardingFinishing] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -390,6 +394,9 @@ export function App() {
       setOnboardingIdentityComplete(false);
       setOnboardingSetupPath("");
       setOnboardingStarterDataChoice("");
+      setOnboardingBackupFrequency("daily");
+      setOnboardingScannerPreset("manual");
+      setOnboardingTheme(theme);
       localStorage.setItem(onboardingStepPreferenceKey(active.id), "1");
       localStorage.setItem(onboardingCompletedPreferenceKey(active.id), "0");
       localStorage.setItem(onboardingIdentityPreferenceKey(active.id), "0");
@@ -449,6 +456,9 @@ export function App() {
     } else {
       setOnboardingStarterDataChoice("");
     }
+    setOnboardingBackupFrequency("daily");
+    setOnboardingScannerPreset("manual");
+    setOnboardingTheme(theme);
 
     const value = localStorage.getItem(workspacePreferenceKey(profileID));
     if (value === null) {
@@ -528,6 +538,50 @@ export function App() {
       return;
     }
     setOnboardingStatus("Starting with an empty collection.");
+  }
+
+  function scannerScheduleFromPreset(preset: "manual" | "daily" | "weekly") {
+    if (preset === "daily") {
+      return "0 8 * * *";
+    }
+    if (preset === "weekly") {
+      return "0 8 * * 1";
+    }
+    return "";
+  }
+
+  async function finishOnboarding() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setOnboardingFinishing(true);
+    setAdminError("");
+    try {
+      const payload = {
+        settings: {
+          scanner_schedule: scannerScheduleFromPreset(onboardingScannerPreset),
+          backup_frequency: onboardingBackupFrequency,
+          "storage.db_path": profileSettingsInitial.db_path || "",
+          update_channel: profileSettingsInitial.update_channel || "stable",
+        },
+      };
+      const resp = await fetch(`/api/profiles/${encodeURIComponent(activeProfile.id)}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_update_settings");
+      }
+      setTheme(onboardingTheme);
+      setSettingsStatus("settings_saved");
+      setOnboardingStatus("Onboarding complete. Advanced workspace unlocked.");
+      await setWorkspaceMode(true);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_update_settings");
+    } finally {
+      setOnboardingFinishing(false);
+    }
   }
 
   function nextOnboardingStep() {
@@ -2027,6 +2081,52 @@ export function App() {
                 <>
                   <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} />
                 </>
+              ) : null}
+              {onboardingStep === 5 ? (
+                <div>
+                  <h4>Preferences</h4>
+                  <div>
+                    <label htmlFor="onboarding-theme">Theme</label>{" "}
+                    <select
+                      id="onboarding-theme"
+                      aria-label="Onboarding theme"
+                      value={onboardingTheme}
+                      onChange={(e) => setOnboardingTheme((e.target.value as Theme) || "light")}
+                    >
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="onboarding-backup">Backup frequency</label>{" "}
+                    <select
+                      id="onboarding-backup"
+                      aria-label="Onboarding backup frequency"
+                      value={onboardingBackupFrequency}
+                      onChange={(e) => setOnboardingBackupFrequency((e.target.value as "daily" | "weekly" | "monthly") || "daily")}
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="onboarding-scanner">Scanner schedule</label>{" "}
+                    <select
+                      id="onboarding-scanner"
+                      aria-label="Onboarding scanner schedule"
+                      value={onboardingScannerPreset}
+                      onChange={(e) => setOnboardingScannerPreset((e.target.value as "manual" | "daily" | "weekly") || "manual")}
+                    >
+                      <option value="manual">Manual only</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </div>
+                  <button type="button" onClick={finishOnboarding} disabled={onboardingFinishing}>
+                    {onboardingFinishing ? "Finishing..." : "Finish Onboarding"}
+                  </button>
+                </div>
               ) : null}
               <p>Current items: {items.length}</p>
               {itemsError ? <p>Item error: {itemsError}</p> : null}
