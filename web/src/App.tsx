@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Theme = "light" | "dark";
 
@@ -95,11 +95,60 @@ export function App() {
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem("cabinet.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileNavOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const root = drawerRef.current;
+      if (!root) {
+        return;
+      }
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      drawerTriggerRef.current?.focus();
+    };
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     let disposed = false;
@@ -1262,22 +1311,65 @@ export function App() {
   const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
   const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
+  const navLinks = (
+    <>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#collection">Collection</a>
+      <a href="#scanner">Scanner</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#settings">Settings</a>
+    </>
+  );
 
   return (
     <main data-testid="app-shell" className="cabinet-shell">
       <aside className="cabinet-sidebar">
         <h1>Cabinet</h1>
-        <nav>
-          <a href="#dashboard">Dashboard</a>
-          <a href="#collection">Collection</a>
-          <a href="#scanner">Scanner</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#settings">Settings</a>
-        </nav>
+        <nav>{navLinks}</nav>
       </aside>
+      {mobileNavOpen ? (
+        <>
+          <button
+            type="button"
+            className="cabinet-drawer-backdrop"
+            aria-label="Close navigation menu backdrop"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div
+            id="cabinet-mobile-nav"
+            ref={drawerRef}
+            className="cabinet-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation Menu"
+            tabIndex={-1}
+          >
+            <div className="cabinet-drawer-head">
+              <h2>Navigation</h2>
+              <button type="button" onClick={() => setMobileNavOpen(false)}>
+                Close
+              </button>
+            </div>
+            <nav onClick={() => setMobileNavOpen(false)}>{navLinks}</nav>
+          </div>
+        </>
+      ) : null}
       <section className="cabinet-content">
         <header className="cabinet-topbar">
-          <strong>Runtime connected. UI foundation active.</strong>
+          <div className="cabinet-topbar-left">
+            <button
+              ref={drawerTriggerRef}
+              type="button"
+              className="cabinet-nav-toggle"
+              aria-controls="cabinet-mobile-nav"
+              aria-expanded={mobileNavOpen}
+              aria-label="Open navigation menu"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              Menu
+            </button>
+            <strong>Runtime connected. UI foundation active.</strong>
+          </div>
           <button
             id="theme-toggle"
             type="button"

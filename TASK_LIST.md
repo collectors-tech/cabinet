@@ -7,6 +7,10 @@ Last synced from GitHub issues: 2026-02-22 10:39:32 +11:00
 - `OPEN`: issue is open without `in-progress` label
 - `DONE`: issue is closed
 
+## Active UI Backlog (2026-02-23)
+- [ ] #64 [OPEN] [UI] Mobile drawer navigation for small screens
+  URL: https://github.com/collectors-tech/cabinet/issues/64
+
 ## M1 - Foundation and Core Experience
 - [ ] #1 [IN_PROGRESS] [Backlog] Application Core and Runtime
   URL: https://github.com/collectors-tech/cabinet/issues/1

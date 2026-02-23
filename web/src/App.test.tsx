@@ -30,6 +30,20 @@ describe("App shell", () => {
     expect(link).toHaveAttribute("href", "/redoc.html");
   });
 
+  it("opens and closes mobile navigation drawer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+    const openButton = await screen.findByRole("button", { name: /open navigation menu/i });
+    fireEvent.click(openButton);
+    expect(await screen.findByRole("dialog", { name: /navigation menu/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: /navigation menu/i })).not.toBeInTheDocument();
+  });
+
   it("shows onboarding create flow when no profiles exist", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
