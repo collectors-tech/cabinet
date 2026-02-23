@@ -7,6 +7,7 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
+import { CollectionScreen, DashboardScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
@@ -2550,7 +2551,7 @@ export function App() {
             </div>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
-            <div id="collection">
+            <CollectionScreen id="collection">
               <h3>Collection</h3>
               <div>
                 <button type="button" onClick={() => setWorkspaceMode(false)}>
@@ -2715,7 +2716,7 @@ export function App() {
                   </ul>
                 </div>
               </div>
-            </div>
+            </CollectionScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <div>
@@ -2790,7 +2791,7 @@ export function App() {
             </div>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "scanner") ? (
-            <div>
+            <ScannerScreen>
               <h3>Discovery Scanner</h3>
               <ScannerQuerySetForm
                 initialValues={querySetInitialValues}
@@ -2924,10 +2925,10 @@ export function App() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </ScannerScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard") ? (
-            <div id="dashboard">
+            <DashboardScreen id="dashboard">
               <h3>Dashboard</h3>
               <div>
                 <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
@@ -2949,10 +2950,10 @@ export function App() {
                 <p>No dashboard data yet.</p>
               )}
               {insightError ? <p>Insight error: {insightError}</p> : null}
-            </div>
+            </DashboardScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "pricing") ? (
-            <div id="pricing">
+            <PricingScreen id="pricing">
               <h3>Pricing</h3>
               <div>
                 <button type="button" onClick={loadWishlist}>
@@ -3042,10 +3043,10 @@ export function App() {
               </ul>
               <p>Export bytes: {exportBytes}</p>
               {insightError ? <p>Insight error: {insightError}</p> : null}
-            </div>
+            </PricingScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "settings") ? (
-            <div id="settings">
+            <SettingsScreen id="settings">
               <h3>Settings and Diagnostics</h3>
               <div>
                 <h4>Diagnostics</h4>
@@ -3177,7 +3178,7 @@ export function App() {
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}
               {adminError === "failed_to_restore_backup" ? <p>Restore failed: verify the selected backup file is valid and readable.</p> : null}
-            </div>
+            </SettingsScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <div>
