@@ -7,11 +7,11 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { CollectionScreen, DashboardScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import { CollectionScreen, DashboardScreen, DiscoveriesScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "pricing" | "settings";
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "pricing" | "settings";
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -2350,6 +2350,15 @@ export function App() {
       </button>
       <button
         type="button"
+        className={`cabinet-nav-link${activeScreen === "discoveries" ? " cabinet-nav-link-active" : ""}`}
+        aria-current={activeScreen === "discoveries" ? "page" : undefined}
+        onClick={() => selectScreen("discoveries")}
+        disabled={!navEnabled}
+      >
+        Discoveries
+      </button>
+      <button
+        type="button"
         className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
         aria-current={activeScreen === "pricing" ? "page" : undefined}
         onClick={() => selectScreen("pricing")}
@@ -2997,6 +3006,11 @@ export function App() {
                 <p>Suggested: {suggestedCount}</p>
                 <p>Not In Collection: {notInCollectionCount}</p>
               </div>
+            </ScannerScreen>
+          ) : null}
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "discoveries") ? (
+            <DiscoveriesScreen id="discoveries">
+              <h3>Not In My Collection</h3>
               <div>
                 <input
                   value={notInCollectionFilter.query}
@@ -3039,7 +3053,7 @@ export function App() {
                   </li>
                 ))}
               </ul>
-            </ScannerScreen>
+            </DiscoveriesScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard") ? (
             <DashboardScreen id="dashboard">
@@ -3053,6 +3067,9 @@ export function App() {
                 </button>{" "}
                 <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
                   Open Scanner Workspace
+                </button>{" "}
+                <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
+                  Open Discoveries Workspace
                 </button>{" "}
                 <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
                   Open Pricing Workspace
