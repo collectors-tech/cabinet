@@ -186,18 +186,28 @@ describe("App shell", () => {
   });
 
   it("starts WebAuthn registration for active profile", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ profiles: [{ id: "p2", name: "Beta" }] }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: true }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p2", name: "Beta" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p2/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p2")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/register/begin" && init?.method === "POST") {
+        return new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -808,22 +818,31 @@ describe("App shell", () => {
   });
 
   it("lists and creates collection items", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: "i2", part_number: "PN-002", title: "New Item", brand: "Hot Wheels" }), {
-          status: 201,
-        }),
-      );
+    let items = [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ items }), { status: 200 });
+      }
+      if (url === "/api/items" && init?.method === "POST") {
+        const created = { id: "i2", part_number: "PN-002", title: "New Item", brand: "Hot Wheels" };
+        items = [...items, created];
+        return new Response(JSON.stringify(created), { status: 201 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -845,22 +864,28 @@ describe("App shell", () => {
   });
 
   it("loads photos for selected item", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), {
-          status: 200,
-        }),
-      );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/photos")) {
+        return new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -872,22 +897,28 @@ describe("App shell", () => {
   });
 
   it("opens fullscreen photo preview and handles camera permission errors", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), {
-          status: 200,
-        }),
-      );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/photos")) {
+        return new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("navigator", {
       mediaDevices: {
@@ -910,16 +941,28 @@ describe("App shell", () => {
   });
 
   it("loads scanner query sets", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ requires_registration: false }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ query_sets: [{ id: "q1", name: "AFX Search" }] }), { status: 200 }),
-      );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/scanner/query-sets") {
+        return new Response(JSON.stringify({ query_sets: [{ id: "q1", name: "AFX Search" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -1459,6 +1502,71 @@ describe("App shell", () => {
     expect(await screen.findByText(/runtime channel: stable/i)).toBeInTheDocument();
     expect(await screen.findByText(/runtime signing key configured: yes/i)).toBeInTheDocument();
     expect(await screen.findByText(/recovery required: no/i)).toBeInTheDocument();
+  });
+
+  it("shows recovery-required banner when runtime recovery state is required", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/runtime/recovery") {
+        return new Response(JSON.stringify({ recovery_required: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    expect(await screen.findByRole("alert", { name: /recovery required/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /open settings diagnostics/i })).toBeInTheDocument();
+  });
+
+  it("hides recovery-required banner when runtime recovery state is clear", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/runtime/recovery") {
+        return new Response(JSON.stringify({ recovery_required: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    expect(screen.queryByRole("alert", { name: /recovery required/i })).not.toBeInTheDocument();
   });
 
   it("shows runtime diagnostics error when runtime endpoints fail", async () => {

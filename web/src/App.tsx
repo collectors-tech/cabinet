@@ -231,6 +231,36 @@ export function App() {
 
   useEffect(() => {
     let disposed = false;
+    async function loadRecoveryState() {
+      if (!activeProfile?.id) {
+        if (!disposed) {
+          setRecoveryDiagnostics(null);
+        }
+        return;
+      }
+      try {
+        const resp = await fetch("/api/runtime/recovery");
+        if (!resp.ok) {
+          throw new Error("failed_to_load_recovery_state");
+        }
+        const data = (await resp.json()) as { recovery_required?: boolean };
+        if (!disposed) {
+          setRecoveryDiagnostics({ recovery_required: Boolean(data.recovery_required) });
+        }
+      } catch {
+        if (!disposed) {
+          setRecoveryDiagnostics(null);
+        }
+      }
+    }
+    void loadRecoveryState();
+    return () => {
+      disposed = true;
+    };
+  }, [activeProfile?.id]);
+
+  useEffect(() => {
+    let disposed = false;
     async function loadProfiles() {
       setLoading(true);
       setError("");
@@ -2396,6 +2426,25 @@ export function App() {
             Toggle Theme
           </button>
         </header>
+        {recoveryDiagnostics?.recovery_required ? (
+          <section className="cabinet-card" role="alert" aria-label="Recovery required">
+            <strong>Recovery required.</strong> Cabinet detected an incomplete previous session and recommends diagnostics review.
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navEnabled) {
+                    return;
+                  }
+                  setActiveScreen("settings");
+                }}
+                disabled={!navEnabled}
+              >
+                Open Settings Diagnostics
+              </button>
+            </div>
+          </section>
+        ) : null}
         <section className="cabinet-card">
           <h2>Cabinet Frontend Foundation</h2>
           <p>Local-first onboarding, WebAuthn auth, collection workflows, and automated E2E coverage are active.</p>
