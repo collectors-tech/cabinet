@@ -4,6 +4,7 @@ import { CollectionItemForm, type CollectionItemValues } from "./components/coll
 import { DataImportExportWizard } from "./components/data-import-export-wizard";
 import { InstanceForm, type InstanceFormValues } from "./components/instance-form";
 import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/scanner-query-set-form";
+import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
@@ -119,6 +120,7 @@ export function App() {
   const [aiPhotoURL, setAiPhotoURL] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState<{ title?: string; confidence?: number; [key: string]: unknown } | null>(null);
   const [aiError, setAiError] = useState("");
+  const [aiLastAction, setAiLastAction] = useState<"title" | "photo" | "">("");
   const [authStatus, setAuthStatus] = useState("");
   const [starterIdentityBusy, setStarterIdentityBusy] = useState(false);
   const [recoverySubmitting, setRecoverySubmitting] = useState(false);
@@ -1366,17 +1368,20 @@ export function App() {
     }
   }
 
-  async function suggestFromTitle() {
-    if (!activeProfile?.id || !aiTitleInput.trim()) {
+  async function suggestFromTitle(input?: string) {
+    const title = (input ?? aiTitleInput).trim();
+    if (!activeProfile?.id || !title) {
       setAiError("profile_and_title_required");
       return;
     }
     setAiError("");
+    setAiLastAction("title");
+    setAiTitleInput(title);
     try {
       const resp = await fetch("/api/ai/suggest/title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_id: activeProfile.id, title: aiTitleInput.trim() }),
+        body: JSON.stringify({ profile_id: activeProfile.id, title }),
       });
       if (!resp.ok) {
         throw new Error("failed_ai_suggest_title");
@@ -1388,17 +1393,20 @@ export function App() {
     }
   }
 
-  async function suggestFromPhoto() {
-    if (!activeProfile?.id || !aiPhotoURL.trim()) {
+  async function suggestFromPhoto(input?: string) {
+    const photo = (input ?? aiPhotoURL).trim();
+    if (!activeProfile?.id || !photo) {
       setAiError("profile_and_photo_required");
       return;
     }
     setAiError("");
+    setAiLastAction("photo");
+    setAiPhotoURL(photo);
     try {
       const resp = await fetch("/api/ai/suggest/photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_id: activeProfile.id, image_url: aiPhotoURL.trim() }),
+        body: JSON.stringify({ profile_id: activeProfile.id, image_url: photo }),
       });
       if (!resp.ok) {
         throw new Error("failed_ai_suggest_photo");
@@ -1414,11 +1422,18 @@ export function App() {
     if (!aiSuggestion?.title) {
       return;
     }
-    if (!window.confirm("Apply AI suggestion to item title draft?")) {
-      return;
-    }
     setCollectionFormSeed((current) => ({ ...current, title: String(aiSuggestion.title || "") }));
     setCollectionFormKey((current) => current + 1);
+  }
+
+  async function retryLastAIAction() {
+    if (aiLastAction === "title") {
+      await suggestFromTitle(aiTitleInput);
+      return;
+    }
+    if (aiLastAction === "photo") {
+      await suggestFromPhoto(aiPhotoURL);
+    }
   }
 
   async function beginWebAuthnRegistration() {
@@ -2324,50 +2339,18 @@ export function App() {
           {showAdvancedWorkspace ? (
             <div>
               <h3>AI Assist</h3>
-              <div>
-                <button type="button" onClick={() => toggleAI(true)}>
-                  Enable AI
-                </button>{" "}
-                <button type="button" onClick={() => toggleAI(false)}>
-                  Disable AI
-                </button>{" "}
-                <button type="button" onClick={testAI}>
-                  Test AI
-                </button>
-              </div>
-              <p>AI enabled: {String(aiEnabled)}</p>
-              <div>
-                <input
-                  value={aiTitleInput}
-                  onChange={(e) => setAiTitleInput(e.target.value)}
-                  placeholder="Listing title"
-                  aria-label="AI title input"
-                />{" "}
-                <button type="button" onClick={suggestFromTitle}>
-                  Suggest From Title
-                </button>
-              </div>
-              <div>
-                <input
-                  value={aiPhotoURL}
-                  onChange={(e) => setAiPhotoURL(e.target.value)}
-                  placeholder="Image URL"
-                  aria-label="AI photo url"
-                />{" "}
-                <button type="button" onClick={suggestFromPhoto}>
-                  Suggest From Photo
-                </button>
-              </div>
-              {aiSuggestion ? (
-                <div>
-                  <p>AI confidence: {String(aiSuggestion.confidence ?? "")}</p>
-                  <p>AI title: {String(aiSuggestion.title ?? "")}</p>
-                  <button type="button" onClick={applySuggestion}>
-                    Apply Suggestion
-                  </button>
-                </div>
-              ) : null}
-              {aiError ? <p>AI error: {aiError}</p> : null}
+              <AIAssistForms
+                aiEnabled={aiEnabled}
+                aiError={aiError}
+                suggestion={aiSuggestion}
+                lastAction={aiLastAction}
+                onToggle={toggleAI}
+                onTest={testAI}
+                onSuggestTitle={suggestFromTitle}
+                onSuggestPhoto={suggestFromPhoto}
+                onApplySuggestion={applySuggestion}
+                onRetry={retryLastAIAction}
+              />
             </div>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}

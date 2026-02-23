@@ -586,8 +586,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/ebay.com\/sch\/i.html/i)).toBeInTheDocument();
   });
 
-  it("toggles AI and applies suggestion with confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("toggles AI and applies suggestion with explicit confirmation gate", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -616,19 +615,25 @@ describe("App shell", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
+    localStorage.setItem("cabinet.workspace.p1", "1");
     const activate = await screen.findByRole("button", { name: /use alpha/i });
     activate.click();
+    const openAdvanced = await screen.findByRole("button", { name: /open advanced workspace/i });
+    openAdvanced.click();
     const toggleAi = await screen.findByRole("button", { name: /enable ai/i });
     toggleAi.click();
-    const titleInput = await screen.findByLabelText(/ai title input/i);
+    const titleInput = await screen.findByLabelText(/title normalization input/i);
     fireEvent.change(titleInput, { target: { value: "AFX P-1 listing" } });
-    const suggest = await screen.findByRole("button", { name: /suggest from title/i });
+    const suggest = await screen.findByRole("button", { name: /normalize title/i });
     suggest.click();
     expect(await screen.findByText(/ai confidence: 0.92/i)).toBeInTheDocument();
     const apply = await screen.findByRole("button", { name: /apply suggestion/i });
+    expect(apply).toBeDisabled();
+    const confirmApply = await screen.findByLabelText(/confirm apply suggestion/i);
+    fireEvent.click(confirmApply);
+    expect(apply).toBeEnabled();
     apply.click();
     expect(await screen.findByDisplayValue(/suggested title/i)).toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   it("supports debounced collection search and saved filters", async () => {
