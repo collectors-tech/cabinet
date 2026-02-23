@@ -680,9 +680,11 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/wishlist", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
 		switch r.Method {
 		case http.MethodGet:
-			items, err := wishlistSvc.List(r.Context())
+			items, err := wishlistSvc.ListByProfile(r.Context(), profileID)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_list_wishlist"}`, http.StatusInternalServerError)
 				return
@@ -694,7 +696,7 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			created, err := wishlistSvc.Create(r.Context(), req)
+			created, err := wishlistSvc.CreateForProfile(r.Context(), profileID, req)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_wishlist"}`, http.StatusBadRequest)
 				return
@@ -707,7 +709,7 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			if err := wishlistSvc.Update(r.Context(), req); err != nil {
+			if err := wishlistSvc.UpdateForProfile(r.Context(), profileID, req); err != nil {
 				http.Error(w, `{"error":"failed_to_update_wishlist"}`, http.StatusBadRequest)
 				return
 			}
@@ -718,7 +720,7 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
 				return
 			}
-			if err := wishlistSvc.Delete(r.Context(), id); err != nil {
+			if err := wishlistSvc.DeleteForProfile(r.Context(), profileID, id); err != nil {
 				http.Error(w, `{"error":"failed_to_delete_wishlist"}`, http.StatusBadRequest)
 				return
 			}
@@ -733,8 +735,10 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
-		hits, err := wishlistSvc.Hits(r.Context(), itemID)
+		hits, err := wishlistSvc.HitsByProfile(r.Context(), profileID, itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_wishlist_hits"}`, http.StatusInternalServerError)
 			return

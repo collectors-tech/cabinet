@@ -39,6 +39,10 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, in Entry) (Entry, error) {
+	return s.CreateForProfile(ctx, "", in)
+}
+
+func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Entry) (Entry, error) {
 	if strings.TrimSpace(in.ItemID) == "" {
 		return Entry{}, fmt.Errorf("item_id is required")
 	}
@@ -51,16 +55,20 @@ func (s *Service) Create(ctx context.Context, in Entry) (Entry, error) {
 		highlight = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO wishlist_entries(id, item_id, target_price, priority, notes, highlight_hit)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, in.ID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
 	if err != nil {
 		return Entry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
-	return s.GetByID(ctx, in.ID)
+	return s.GetByIDForProfile(ctx, strings.TrimSpace(profileID), in.ID)
 }
 
 func (s *Service) Update(ctx context.Context, in Entry) error {
+	return s.UpdateForProfile(ctx, "", in)
+}
+
+func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Entry) error {
 	if strings.TrimSpace(in.ID) == "" {
 		return fmt.Errorf("id is required")
 	}
@@ -71,23 +79,31 @@ func (s *Service) Update(ctx context.Context, in Entry) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE wishlist_entries
 		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID)
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	return err
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ?`, id)
+	return s.DeleteForProfile(ctx, "", id)
+}
+
+func (s *Service) DeleteForProfile(ctx context.Context, profileID, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	return err
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
+	return s.GetByIDForProfile(ctx, "", id)
+}
+
+func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (Entry, error) {
 	var e Entry
 	var highlight int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, item_id, target_price, priority, notes, highlight_hit, created_at, updated_at
-		FROM wishlist_entries WHERE id = ?
-	`, id).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &e.CreatedAt, &e.UpdatedAt)
+		FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Entry{}, fmt.Errorf("wishlist entry not found")
@@ -100,7 +116,11 @@ func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
 }
 
 func (s *Service) List(ctx context.Context) ([]Entry, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM wishlist_entries ORDER BY created_at ASC`)
+	return s.ListByProfile(ctx, "")
+}
+
+func (s *Service) ListByProfile(ctx context.Context, profileID string) ([]Entry, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM wishlist_entries WHERE (? = '' OR profile_id = ?) ORDER BY created_at ASC`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +131,7 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		e, err := s.GetByID(ctx, id)
+		e, err := s.GetByIDForProfile(ctx, strings.TrimSpace(profileID), id)
 		if err != nil {
 			return nil, err
 		}
@@ -121,14 +141,18 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 }
 
 func (s *Service) Hits(ctx context.Context, itemID string) ([]Hit, error) {
+	return s.HitsByProfile(ctx, "", itemID)
+}
+
+func (s *Service) HitsByProfile(ctx context.Context, profileID, itemID string) ([]Hit, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT c.id, w.item_id, c.title, c.price, c.url, c.last_seen
 		FROM wishlist_entries w
 		JOIN canonical_items i ON i.id = w.item_id
 		JOIN scanner_candidates c ON LOWER(c.title) LIKE '%' || LOWER(i.part_number) || '%'
-		WHERE w.highlight_hit = 1 AND (? = '' OR w.item_id = ?)
+		WHERE w.highlight_hit = 1 AND (? = '' OR w.profile_id = ?) AND (? = '' OR w.item_id = ?)
 		ORDER BY c.last_seen DESC
-	`, itemID, itemID)
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID), itemID, itemID)
 	if err != nil {
 		return nil, err
 	}

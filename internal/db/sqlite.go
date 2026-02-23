@@ -289,6 +289,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
 	}
+	if err := ensureColumn(ctx, conn, "wishlist_entries", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.profile_id: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries profile index: %w", err)
+	}
 
 	return conn, nil
 }
