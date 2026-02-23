@@ -34,6 +34,7 @@ Serious niche collector (starting with AFX slot cars):
 The complete v1 + planned feature inventory is maintained in:
 - `docs/FULL_FEATURE_LIST.md`
 - `docs/USE_CASES_AND_SCENARIOS.md`
+- `docs/UI_ENDPOINT_PARITY.md`
 
 This file (`SPEC.md`) defines product intent and scope boundaries.
 `FULL_FEATURE_LIST.md` is the implementation-level feature checklist.

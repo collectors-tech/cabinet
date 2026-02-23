@@ -169,11 +169,13 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
   await page.getByRole("button", { name: /^dashboard$/i }).first().click();
   await expect(page.getByRole("button", { name: /^dashboard$/i }).first()).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("screen-dashboard")).toBeVisible();
   await expect(page.getByText(/new discoveries: 2/i)).toBeVisible();
 
   await page.getByRole("button", { name: /^collection$/i }).first().click();
   await expect(page.getByRole("heading", { name: /^collection$/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /^collection$/i }).first()).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("screen-collection")).toBeVisible();
 
   await page.setViewportSize({ width: 800, height: 900 });
   await page.getByRole("button", { name: /open navigation menu/i }).click();
@@ -182,6 +184,7 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await drawer.getByRole("button", { name: /^scanner$/i }).click();
   await expect(page.getByRole("dialog", { name: /navigation menu/i })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /discovery scanner/i })).toBeVisible();
+  await expect(page.getByTestId("screen-scanner")).toBeVisible();
   await page.getByRole("button", { name: /run scheduled/i }).click();
   await expect(page.getByText(/scheduled run: scheduled_scans_triggered/i)).toBeVisible();
   await page.getByRole("button", { name: /load scanner failures/i }).click();
@@ -194,6 +197,7 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
 
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.getByRole("button", { name: /^pricing$/i }).first().click();
+  await expect(page.getByTestId("screen-pricing")).toBeVisible();
   await page.getByRole("button", { name: /track pricing/i }).click();
   await expect(page.getByText(/pricing track status: pricing_track_enabled/i)).toBeVisible();
   await page.getByRole("button", { name: /load pricing history/i }).click();
@@ -208,6 +212,7 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByText(/wishlist hit: i1 \/ hit item \/ 18/i)).toBeVisible();
 
   await page.getByRole("button", { name: /^settings$/i }).first().click();
+  await expect(page.getByTestId("screen-settings")).toBeVisible();
   await page.getByRole("button", { name: /load backups/i }).click();
   await expect(page.getByText(/backup count: 1/i)).toBeVisible();
   await page.getByRole("button", { name: /restore selected backup/i }).click();
