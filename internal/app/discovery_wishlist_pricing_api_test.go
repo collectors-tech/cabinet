@@ -52,7 +52,7 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	if setActive.Code != http.StatusOK {
 		t.Fatalf("set active profile status=%d body=%s", setActive.Code, setActive.Body.String())
 	}
-	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('i1','AFX','Slot','P-1','AFX P-1')`); err != nil {
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('i1', ?, 'AFX','Slot','P-1','AFX P-1')`, profile.ID); err != nil {
 		t.Fatalf("seed item: %v", err)
 	}
 	if _, err := a.db.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Q','["afx"]','[]')`); err != nil {

@@ -313,6 +313,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
 	}
+	if err := ensureColumn(ctx, conn, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure tracked_items.profile_id: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure tracked_items profile index: %w", err)
+	}
 
 	return conn, nil
 }

@@ -203,3 +203,47 @@ func TestScannerQuerySetsAreIsolatedByActiveProfile(t *testing.T) {
 		t.Fatalf("expected no query sets for p2 profile, got %d", len(payload.QuerySets))
 	}
 }
+
+func TestPricingEndpointsRejectItemsFromOtherProfiles(t *testing.T) {
+	a := newTestApp(t)
+
+	createP1 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	createP2 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P2"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1.Code != http.StatusCreated || createP2.Code != http.StatusCreated {
+		t.Fatalf("create profiles failed p1=%d p2=%d", createP1.Code, createP2.Code)
+	}
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createP1.Body).Decode(&p1); err != nil {
+		t.Fatalf("decode p1: %v", err)
+	}
+	if err := json.NewDecoder(createP2.Body).Decode(&p2); err != nil {
+		t.Fatalf("decode p2: %v", err)
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p1.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	createItem := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"PRICE-P1-001","title":"Price Item P1","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if createItem.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", createItem.Code, createItem.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createItem.Body).Decode(&item); err != nil {
+		t.Fatalf("decode created item: %v", err)
+	}
+
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p2.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	track := doRequest(t, a, http.MethodPost, "/api/pricing/track", strings.NewReader(`{"item_id":"`+item.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if track.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request for cross-profile track, got %d body=%s", track.Code, track.Body.String())
+	}
+	history := doRequest(t, a, http.MethodGet, "/api/pricing/history?item_id="+item.ID, nil, nil)
+	if history.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request for cross-profile history, got %d body=%s", history.Code, history.Body.String())
+	}
+}

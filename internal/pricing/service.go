@@ -34,12 +34,24 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) TrackItem(ctx context.Context, itemID string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO tracked_items(item_id, created_at) VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(item_id) DO NOTHING`, itemID)
+	return s.TrackItemForProfile(ctx, "", itemID)
+}
+
+func (s *Service) TrackItemForProfile(ctx context.Context, profileID, itemID string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO tracked_items(item_id, profile_id, created_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(item_id) DO UPDATE SET profile_id = excluded.profile_id
+	`, itemID, strings.TrimSpace(profileID))
 	return err
 }
 
 func (s *Service) RunDailySnapshot(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT item_id FROM tracked_items`)
+	return s.RunDailySnapshotForProfile(ctx, "")
+}
+
+func (s *Service) RunDailySnapshotForProfile(ctx context.Context, profileID string) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT item_id FROM tracked_items WHERE (? = '' OR profile_id = ?)`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return err
 	}
@@ -56,7 +68,7 @@ func (s *Service) RunDailySnapshot(ctx context.Context) error {
 		return err
 	}
 	for _, itemID := range ids {
-		if err := s.snapshotItem(ctx, itemID); err != nil {
+		if err := s.snapshotItemForProfile(ctx, strings.TrimSpace(profileID), itemID); err != nil {
 			return err
 		}
 	}
@@ -64,15 +76,19 @@ func (s *Service) RunDailySnapshot(ctx context.Context) error {
 }
 
 func (s *Service) snapshotItem(ctx context.Context, itemID string) error {
+	return s.snapshotItemForProfile(ctx, "", itemID)
+}
+
+func (s *Service) snapshotItemForProfile(ctx context.Context, profileID, itemID string) error {
 	var part string
-	if err := s.db.QueryRowContext(ctx, `SELECT part_number FROM canonical_items WHERE id = ?`, itemID).Scan(&part); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT part_number FROM canonical_items WHERE id = ? AND (? = '' OR profile_id = ?)`, itemID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&part); err != nil {
 		return err
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT source, price
 		FROM scanner_candidates
-		WHERE LOWER(title) LIKE '%' || LOWER(?) || '%'
-	`, part)
+		WHERE LOWER(title) LIKE '%' || LOWER(?) || '%' AND (? = '' OR profile_id = ?)
+	`, part, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return err
 	}

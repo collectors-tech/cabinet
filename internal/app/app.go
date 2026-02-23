@@ -748,6 +748,18 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
 	})
+	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
+		profileID = strings.TrimSpace(profileID)
+		itemID = strings.TrimSpace(itemID)
+		if profileID == "" || itemID == "" {
+			return false
+		}
+		var count int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items WHERE id = ? AND profile_id = ?`, itemID, profileID).Scan(&count); err != nil {
+			return false
+		}
+		return count > 0
+	}
 	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -773,7 +785,11 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 		}
-		if err := pricingSvc.TrackItem(r.Context(), req.ItemID); err != nil {
+		if !itemOwnedByProfile(r.Context(), active.ID, req.ItemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
+		if err := pricingSvc.TrackItemForProfile(r.Context(), active.ID, req.ItemID); err != nil {
 			http.Error(w, `{"error":"failed_to_track_item"}`, http.StatusBadRequest)
 			return
 		}
@@ -797,7 +813,7 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 		}
-		if err := pricingSvc.RunDailySnapshot(r.Context()); err != nil {
+		if err := pricingSvc.RunDailySnapshotForProfile(r.Context(), active.ID); err != nil {
 			http.Error(w, `{"error":"failed_to_run_price_snapshot"}`, http.StatusInternalServerError)
 			return
 		}
@@ -822,6 +838,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		history, err := pricingSvc.History(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_price_history"}`, http.StatusBadRequest)
@@ -848,6 +868,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		history, err := pricingSvc.History(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_price_graph"}`, http.StatusBadRequest)
@@ -874,6 +898,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		bySource, err := pricingSvc.BySource(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_price_by_source"}`, http.StatusBadRequest)
@@ -900,6 +928,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		history, err := pricingSvc.History(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_price_stats"}`, http.StatusBadRequest)
@@ -935,6 +967,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		points, err := pricingSvc.Trend(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_price_trend"}`, http.StatusBadRequest)
@@ -960,6 +996,10 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
+			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
+			return
+		}
 		csvText, err := pricingSvc.ExportCSV(r.Context(), itemID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_export_price_history"}`, http.StatusBadRequest)
