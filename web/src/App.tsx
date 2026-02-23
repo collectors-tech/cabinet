@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
@@ -91,6 +92,7 @@ export function App() {
   const [aiError, setAiError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
   const [starterIdentityBusy, setStarterIdentityBusy] = useState(false);
+  const [recoverySubmitting, setRecoverySubmitting] = useState(false);
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState("");
@@ -1281,13 +1283,18 @@ export function App() {
     }
   }
 
-  async function saveRecoveryPassphrase() {
-    if (!activeProfile?.id || !recoveryPassphrase) {
+  async function saveRecoveryPassphrase(passphrase?: string) {
+    if (!activeProfile?.id) {
+      return;
+    }
+    const value = (passphrase ?? recoveryPassphrase).trim();
+    if (!value) {
+      setError("recovery_passphrase_required");
       return;
     }
     setError("");
     try {
-      await postJSON("/api/auth/recovery/passphrase", { profile_id: activeProfile.id, passphrase: recoveryPassphrase });
+      await postJSON("/api/auth/recovery/passphrase", { profile_id: activeProfile.id, passphrase: value });
       setAuthStatus("recovery_passphrase_set");
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_set_recovery_passphrase");
@@ -1311,26 +1318,28 @@ export function App() {
     }
   }
 
-  async function validateSession() {
-    if (!sessionToken) {
+  async function validateSession(token?: string) {
+    const value = (token ?? sessionToken).trim();
+    if (!value) {
       return;
     }
     setError("");
     try {
-      await postJSON("/api/auth/session/validate", { session_token: sessionToken });
+      await postJSON("/api/auth/session/validate", { session_token: value });
       setAuthStatus("session_valid");
     } catch (e) {
       setError(e instanceof Error ? e.message : "session_invalid_or_locked");
     }
   }
 
-  async function lockSession() {
-    if (!sessionToken) {
+  async function lockSession(token?: string) {
+    const value = (token ?? sessionToken).trim();
+    if (!value) {
       return;
     }
     setError("");
     try {
-      await postJSON("/api/auth/session/lock", { session_token: sessionToken });
+      await postJSON("/api/auth/session/lock", { session_token: value });
       setAuthStatus("session_locked");
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed_to_lock_session");
@@ -1491,34 +1500,31 @@ export function App() {
                   cols={60}
                   aria-label="Credential JSON"
                 />
-                <div>
-                  <input
-                    value={recoveryPassphrase}
-                    onChange={(e) => setRecoveryPassphrase(e.target.value)}
-                    placeholder="Recovery passphrase"
-                    aria-label="Recovery passphrase"
-                  />{" "}
-                  <button type="button" onClick={saveRecoveryPassphrase}>
-                    Save Recovery Passphrase
-                  </button>{" "}
-                  <button type="button" onClick={beginRecoveryReset}>
-                    Begin Recovery Reset
-                  </button>
-                </div>
-                <div>
-                  <input
-                    value={sessionToken}
-                    onChange={(e) => setSessionToken(e.target.value)}
-                    placeholder="Session token"
-                    aria-label="Session token"
-                  />{" "}
-                  <button type="button" onClick={validateSession}>
-                    Validate Session
-                  </button>{" "}
-                  <button type="button" onClick={lockSession}>
-                    Lock Session
-                  </button>
-                </div>
+                <RecoveryPassphraseForm
+                  isSubmitting={recoverySubmitting}
+                  onSubmit={async ({ passphrase }) => {
+                    setRecoverySubmitting(true);
+                    setRecoveryPassphrase(passphrase);
+                    try {
+                      await saveRecoveryPassphrase(passphrase);
+                    } finally {
+                      setRecoverySubmitting(false);
+                    }
+                  }}
+                />
+                <button type="button" onClick={beginRecoveryReset}>
+                  Begin Recovery Reset
+                </button>
+                <SessionTokenForm
+                  onValidate={async ({ token }) => {
+                    setSessionToken(token);
+                    await validateSession(token);
+                  }}
+                  onLock={async ({ token }) => {
+                    setSessionToken(token);
+                    await lockSession(token);
+                  }}
+                />
               </details>
               <p>Auth status: {authStatus || "idle"}</p>
               {onboardingStatus ? <p>{onboardingStatus}</p> : null}
