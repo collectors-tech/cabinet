@@ -2,9 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-forms";
 import { CollectionItemForm, type CollectionItemValues } from "./components/collection-item-form";
 import { InstanceForm, type InstanceFormValues } from "./components/instance-form";
+import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/scanner-query-set-form";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
+type ScannerQuerySetRecord = {
+  id: string;
+  name: string;
+  keywords?: string[];
+  exclusions?: string[];
+  max_price?: number;
+  region?: string;
+  condition?: string;
+  schedule_cron?: string;
+  enabled?: boolean;
+  rate_limit_rps?: number;
+  max_retry_count?: number;
+};
 
 function detectInitialTheme(): Theme {
   const saved = localStorage.getItem("cabinet.theme");
@@ -56,8 +70,10 @@ export function App() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStatus, setCameraStatus] = useState("idle");
   const [photosError, setPhotosError] = useState("");
-  const [querySets, setQuerySets] = useState<Array<{ id: string; name: string }>>([]);
+  const [querySets, setQuerySets] = useState<ScannerQuerySetRecord[]>([]);
   const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
+  const [editingQuerySetID, setEditingQuerySetID] = useState("");
+  const [querySetSubmitting, setQuerySetSubmitting] = useState(false);
   const [candidates, setCandidates] = useState<Array<{ id: string; title?: string; listing_id?: string; status?: string }>>([]);
   const [matchingResults, setMatchingResults] = useState<Array<{ candidate_id?: string; state?: string; part_number?: string; item_id?: string }>>(
     [],
@@ -67,7 +83,6 @@ export function App() {
   );
   const [notInCollectionFilter, setNotInCollectionFilter] = useState({ query: "", maxPrice: "", dateFrom: "" });
   const [scannerError, setScannerError] = useState("");
-  const [newQuerySet, setNewQuerySet] = useState({ name: "", keywords: "afx" });
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
@@ -711,7 +726,7 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_list_query_sets");
       }
-      const data = (await resp.json()) as { query_sets?: Array<{ id: string; name: string }> };
+      const data = (await resp.json()) as { query_sets?: ScannerQuerySetRecord[] };
       const listed = data.query_sets || [];
       setQuerySets(listed);
       if (listed.length > 0 && !selectedQuerySetID) {
@@ -722,15 +737,27 @@ export function App() {
     }
   }
 
-  async function createQuerySet() {
+  async function createQuerySet(values: ScannerQuerySetValues) {
     setScannerError("");
+    setQuerySetSubmitting(true);
     try {
       const payload = {
-        name: newQuerySet.name || "Query Set",
-        keywords: newQuerySet.keywords
+        name: values.name.trim() || "Query Set",
+        keywords: values.keywords
           .split(",")
           .map((k) => k.trim())
           .filter(Boolean),
+        exclusions: values.exclusions
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean),
+        max_price: values.max_price || 0,
+        region: values.region || "",
+        condition: values.condition || "",
+        schedule_cron: values.schedule_cron || "",
+        enabled: values.enabled,
+        rate_limit_rps: values.rate_limit_rps,
+        max_retry_count: values.max_retry_count,
       };
       const resp = await fetch("/api/scanner/query-sets", {
         method: "POST",
@@ -740,14 +767,16 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_create_query_set");
       }
-      const created = (await resp.json()) as { id: string; name: string };
+      const created = (await resp.json()) as ScannerQuerySetRecord;
       setQuerySets((current) => [...current, created]);
       if (!selectedQuerySetID) {
         setSelectedQuerySetID(created.id);
       }
-      setNewQuerySet({ name: "", keywords: "afx" });
+      setEditingQuerySetID("");
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_create_query_set");
+    } finally {
+      setQuerySetSubmitting(false);
     }
   }
 
@@ -1499,6 +1528,21 @@ export function App() {
   const matchedCount = matchingResults.filter((result) => result.state === "matched").length;
   const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
   const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
+  const editingQuerySet = querySets.find((querySet) => querySet.id === editingQuerySetID);
+  const querySetInitialValues: Partial<ScannerQuerySetValues> | undefined = editingQuerySet
+    ? {
+        name: editingQuerySet.name || "",
+        keywords: (editingQuerySet.keywords || []).join(", "),
+        exclusions: (editingQuerySet.exclusions || []).join(", "),
+        max_price: editingQuerySet.max_price,
+        region: editingQuerySet.region || "US",
+        condition: editingQuerySet.condition || "",
+        schedule_cron: editingQuerySet.schedule_cron || "",
+        enabled: editingQuerySet.enabled ?? true,
+        rate_limit_rps: editingQuerySet.rate_limit_rps ?? 2,
+        max_retry_count: editingQuerySet.max_retry_count ?? 1,
+      }
+    : undefined;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
   const navLinks = (
     <>
@@ -1922,22 +1966,13 @@ export function App() {
           {showAdvancedWorkspace ? (
             <div>
               <h3>Discovery Scanner</h3>
+              <ScannerQuerySetForm
+                initialValues={querySetInitialValues}
+                onSubmit={createQuerySet}
+                isSubmitting={querySetSubmitting}
+                onCancel={() => setEditingQuerySetID("")}
+              />
               <div>
-                <input
-                  value={newQuerySet.name}
-                  onChange={(e) => setNewQuerySet((current) => ({ ...current, name: e.target.value }))}
-                  placeholder="Query set name"
-                  aria-label="Query set name"
-                />{" "}
-                <input
-                  value={newQuerySet.keywords}
-                  onChange={(e) => setNewQuerySet((current) => ({ ...current, keywords: e.target.value }))}
-                  placeholder="Keywords comma separated"
-                  aria-label="Query set keywords"
-                />{" "}
-                <button type="button" onClick={createQuerySet}>
-                  Create Query Set
-                </button>{" "}
                 <button type="button" onClick={loadQuerySets}>
                   Load Query Sets
                 </button>
@@ -1960,7 +1995,16 @@ export function App() {
               <ul>
                 {querySets.map((q) => (
                   <li key={q.id}>
-                    {q.name} ({q.id})
+                    {q.name} ({q.id}){" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedQuerySetID(q.id);
+                        setEditingQuerySetID(q.id);
+                      }}
+                    >
+                      Edit
+                    </button>
                   </li>
                 ))}
               </ul>
