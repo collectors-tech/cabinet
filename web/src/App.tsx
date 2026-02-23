@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-forms";
+import { CollectionItemForm, type CollectionItemValues } from "./components/collection-item-form";
+import { InstanceForm, type InstanceFormValues } from "./components/instance-form";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
 
 type Theme = "light" | "dark";
@@ -25,12 +27,17 @@ export function App() {
   const [itemsLoading, setItemsLoading] = useState(false);
   const [starterSubmitting, setStarterSubmitting] = useState(false);
   const [itemsError, setItemsError] = useState("");
-  const [newItem, setNewItem] = useState({
+  const [collectionFormSeed, setCollectionFormSeed] = useState<Partial<CollectionItemValues>>({
     part_number: "",
     title: "",
     brand: "",
     category: "General",
   });
+  const [collectionFormKey, setCollectionFormKey] = useState(0);
+  const [instances, setInstances] = useState<
+    Array<{ id: string; item_id: string; condition?: string; status?: string; quantity?: number; storage_location?: string; acquisition_price?: number; acquisition_date?: string }>
+  >([]);
+  const [instanceSubmitting, setInstanceSubmitting] = useState(false);
   const [collectionQuery, setCollectionQuery] = useState({
     text: "",
     brand: "",
@@ -395,7 +402,19 @@ export function App() {
     return `cabinet.workspace.${profileID}`;
   }
 
-  async function addItemWithPayload(payload: { part_number: string; title: string; brand: string; category: string }) {
+  async function addItemWithPayload(payload: {
+    part_number: string;
+    title: string;
+    brand: string;
+    category: string;
+    make?: string;
+    model?: string;
+    year?: string;
+    scale?: string;
+    series?: string;
+    description?: string;
+    tags?: string[];
+  }) {
     setItemsError("");
     if (!payload.part_number.trim() || !payload.title.trim()) {
       setItemsError("part_number_and_title_required");
@@ -420,11 +439,6 @@ export function App() {
     }
   }
 
-  async function addItem() {
-    await addItemWithPayload(newItem);
-    setNewItem({ part_number: "", title: "", brand: "", category: "General" });
-  }
-
   async function addStarterItem(values: StarterQuickAddValues) {
     setStarterSubmitting(true);
     try {
@@ -436,6 +450,106 @@ export function App() {
       });
     } finally {
       setStarterSubmitting(false);
+    }
+  }
+
+  async function addCollectionItem(values: CollectionItemValues) {
+    const tags = values.tags
+      ? values.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [];
+    await addItemWithPayload({
+      part_number: values.part_number,
+      title: values.title,
+      brand: values.brand,
+      category: values.category,
+      make: values.make || "",
+      model: values.model || "",
+      year: values.year || "",
+      scale: values.scale || "",
+      series: values.series || "",
+      description: values.description || "",
+      tags,
+    });
+    setCollectionFormSeed({
+      part_number: "",
+      title: "",
+      brand: "",
+      category: "General",
+    });
+    setCollectionFormKey((current) => current + 1);
+  }
+
+  async function loadInstances() {
+    if (!selectedItemID) {
+      setItemsError("item_id_required");
+      return;
+    }
+    setItemsError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/instances`);
+      if (!resp.ok) {
+        throw new Error("failed_to_list_instances");
+      }
+      const data = (await resp.json()) as {
+        instances?: Array<{
+          id: string;
+          item_id: string;
+          condition?: string;
+          status?: string;
+          quantity?: number;
+          storage_location?: string;
+          acquisition_price?: number;
+          acquisition_date?: string;
+        }>;
+      };
+      setInstances(data.instances || []);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_list_instances");
+    }
+  }
+
+  async function addInstance(values: InstanceFormValues) {
+    if (!values.item_id.trim()) {
+      setItemsError("item_id_required");
+      return;
+    }
+    setInstanceSubmitting(true);
+    setItemsError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(values.item_id)}/instances`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          condition: values.condition,
+          status: values.status,
+          quantity: values.quantity,
+          storage_location: values.storage_location || "",
+          acquisition_price: values.acquisition_price || 0,
+          acquisition_date: values.acquisition_date || "",
+          notes: values.notes || "",
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_create_instance");
+      }
+      const created = (await resp.json()) as {
+        id: string;
+        item_id: string;
+        condition?: string;
+        status?: string;
+        quantity?: number;
+        storage_location?: string;
+        acquisition_price?: number;
+        acquisition_date?: string;
+      };
+      setInstances((current) => [...current, created]);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_create_instance");
+    } finally {
+      setInstanceSubmitting(false);
     }
   }
 
@@ -1180,7 +1294,8 @@ export function App() {
     if (!window.confirm("Apply AI suggestion to item title draft?")) {
       return;
     }
-    setNewItem((current) => ({ ...current, title: String(aiSuggestion.title) }));
+    setCollectionFormSeed((current) => ({ ...current, title: String(aiSuggestion.title || "") }));
+    setCollectionFormKey((current) => current + 1);
   }
 
   async function beginWebAuthnRegistration() {
@@ -1272,12 +1387,26 @@ export function App() {
     setError("");
     try {
       if (requiresRegistration) {
-        await beginWebAuthnRegistration();
-        await finishWebAuthnRegistration();
+        const start = await postJSON("/api/auth/webauthn/register/begin", { profile_id: activeProfile.id });
+        const sid = String(start.session_id || "");
+        setAuthSessionID(sid);
+        await postJSON("/api/auth/webauthn/register/finish", { session_id: sid, credential: {} });
+        setAuthStatus("registration_finished");
+        await seedOnboardingSampleData();
       } else {
-        await beginWebAuthnLogin();
-        await finishWebAuthnLogin();
+        const start = await postJSON("/api/auth/webauthn/login/begin", { profile_id: activeProfile.id });
+        const sid = String(start.session_id || "");
+        setAuthSessionID(sid);
+        const done = await postJSON("/api/auth/webauthn/login/finish", { session_id: sid, credential: {} });
+        const token = String(done.session_token || "");
+        if (token) {
+          setSessionToken(token);
+        }
+        setAuthStatus("login_finished");
+        await seedOnboardingSampleData();
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed_to_complete_identity");
     } finally {
       setStarterIdentityBusy(false);
     }
@@ -1610,35 +1739,11 @@ export function App() {
                   </li>
                 ))}
               </ul>
-              <div>
-                <input
-                  value={newItem.part_number}
-                  onChange={(e) => setNewItem((current) => ({ ...current, part_number: e.target.value }))}
-                  placeholder="Part Number"
-                  aria-label="Part number"
-                />{" "}
-                <input
-                  value={newItem.title}
-                  onChange={(e) => setNewItem((current) => ({ ...current, title: e.target.value }))}
-                  placeholder="Item Title"
-                  aria-label="Item title"
-                />{" "}
-                <input
-                  value={newItem.brand}
-                  onChange={(e) => setNewItem((current) => ({ ...current, brand: e.target.value }))}
-                  placeholder="Brand"
-                  aria-label="Brand"
-                />{" "}
-                <input
-                  value={newItem.category}
-                  onChange={(e) => setNewItem((current) => ({ ...current, category: e.target.value }))}
-                  placeholder="Category"
-                  aria-label="Category"
-                />{" "}
-                <button type="button" onClick={addItem}>
-                  Add Item
-                </button>
-              </div>
+              <CollectionItemForm
+                key={collectionFormKey}
+                onSubmit={addCollectionItem}
+                initialValues={collectionFormSeed}
+              />
               {itemsLoading ? <p>Loading items...</p> : null}
               {itemsError ? <p>Item error: {itemsError}</p> : null}
               {!itemsLoading && items.length === 0 ? <p>No items found for current filters.</p> : null}
@@ -1653,13 +1758,31 @@ export function App() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <td>{item.part_number}</td>
+                      <td>
+                        <button type="button" onClick={() => setSelectedItemID(item.id)}>
+                          {item.part_number}
+                        </button>
+                      </td>
                       <td>{item.title}</td>
                       <td>{item.brand || "-"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <h4>Instances</h4>
+              <div>
+                <button type="button" onClick={loadInstances}>
+                  Load Instances
+                </button>
+              </div>
+              <InstanceForm itemID={selectedItemID} onSubmit={addInstance} isSubmitting={instanceSubmitting} />
+              <ul>
+                {instances.map((instance) => (
+                  <li key={instance.id}>
+                    {instance.status || "unknown"} / {instance.condition || "unknown"} / qty {String(instance.quantity || 0)}
+                  </li>
+                ))}
+              </ul>
               <h4>Column View</h4>
               <div>
                 <div>
