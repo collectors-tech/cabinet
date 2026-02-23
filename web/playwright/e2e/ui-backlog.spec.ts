@@ -50,6 +50,9 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
       state.items.push(next);
       return respondJSON(next, 201);
     }
+    if (path === "/api/dashboard" && method === "GET") {
+      return respondJSON({ new_discoveries: 2, wishlist_hits: 1, price_drops: 1, recently_added: 3, total_items: 10, total_instances: 14 });
+    }
     if (path === "/api/auth/webauthn/register/begin" && method === "POST") {
       state.registerBeginCalls += 1;
       if (state.registerBeginFailsOnce && state.registerBeginCalls === 1) {
@@ -108,6 +111,7 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
   await page.getByRole("button", { name: /^dashboard$/i }).first().click();
   await expect(page.getByRole("button", { name: /^dashboard$/i }).first()).toHaveAttribute("aria-current", "page");
+  await expect(page.getByText(/new discoveries: 2/i)).toBeVisible();
 
   await page.getByRole("button", { name: /^collection$/i }).first().click();
   await expect(page.getByRole("heading", { name: /^collection$/i })).toBeVisible();

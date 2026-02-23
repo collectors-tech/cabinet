@@ -90,6 +90,7 @@ export function App() {
   const [notInCollectionFilter, setNotInCollectionFilter] = useState({ query: "", maxPrice: "", dateFrom: "" });
   const [scannerError, setScannerError] = useState("");
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
   const [pricingBySource, setPricingBySource] = useState<Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>>(
@@ -198,6 +199,13 @@ export function App() {
       drawerTriggerRef.current?.focus();
     };
   }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!activeProfile?.id || !advancedWorkspace || activeScreen !== "dashboard") {
+      return;
+    }
+    void loadDashboard();
+  }, [activeProfile?.id, advancedWorkspace, activeScreen]);
 
   useEffect(() => {
     let disposed = false;
@@ -1117,6 +1125,7 @@ export function App() {
 
   async function loadDashboard() {
     setInsightError("");
+    setDashboardLoading(true);
     try {
       const resp = await fetch("/api/dashboard");
       if (!resp.ok) {
@@ -1126,6 +1135,8 @@ export function App() {
       setDashboard(data);
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_dashboard");
+    } finally {
+      setDashboardLoading(false);
     }
   }
 
@@ -2559,13 +2570,35 @@ export function App() {
               </ul>
             </div>
           ) : null}
-          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard" || activeScreen === "pricing") ? (
-            <div id={activeScreen === "pricing" ? "pricing" : "dashboard"}>
-              <h3>{activeScreen === "pricing" ? "Pricing" : "Dashboard"}</h3>
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard") ? (
+            <div id="dashboard">
+              <h3>Dashboard</h3>
               <div>
-                <button type="button" onClick={loadDashboard}>
-                  Load Dashboard
+                <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
+                  {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
                 </button>{" "}
+              </div>
+              {dashboardLoading ? <p>Loading dashboard...</p> : null}
+              {dashboard ? (
+                <div>
+                  <p>New Discoveries: {String(dashboard.new_discoveries ?? 0)}</p>
+                  <p>Wishlist Hits: {String(dashboard.wishlist_hits ?? 0)}</p>
+                  <p>Price Drops: {String(dashboard.price_drops ?? 0)}</p>
+                  <p>Recently Added: {String(dashboard.recently_added ?? dashboard.recent_items ?? 0)}</p>
+                  <p>Total Items: {String(dashboard.total_items ?? 0)}</p>
+                  <p>Total Instances: {String(dashboard.total_instances ?? 0)}</p>
+                  <p>Estimated Value: {String(dashboard.estimated_value ?? "n/a")}</p>
+                </div>
+              ) : (
+                <p>No dashboard data yet.</p>
+              )}
+              {insightError ? <p>Insight error: {insightError}</p> : null}
+            </div>
+          ) : null}
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "pricing") ? (
+            <div id="pricing">
+              <h3>Pricing</h3>
+              <div>
                 <button type="button" onClick={loadWishlist}>
                   Load Wishlist
                 </button>{" "}
@@ -2602,14 +2635,6 @@ export function App() {
                   aria-label="Wishlist priority"
                 />
               </div>
-              {dashboard ? (
-                <div>
-                  <p>New Discoveries: {String(dashboard.new_discoveries ?? 0)}</p>
-                  <p>Wishlist Hits: {String(dashboard.wishlist_hits ?? 0)}</p>
-                  <p>Price Drops: {String(dashboard.price_drops ?? 0)}</p>
-                  <p>Total Items: {String(dashboard.total_items ?? 0)}</p>
-                </div>
-              ) : null}
               <ul>
                 {wishlist.map((w) => (
                   <li key={w.id}>
