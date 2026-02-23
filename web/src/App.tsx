@@ -115,6 +115,7 @@ export function App() {
   const [licenseImportStatus, setLicenseImportStatus] = useState("");
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [logCount, setLogCount] = useState(0);
+  const [activityLogs, setActivityLogs] = useState<Array<Record<string, unknown>>>([]);
   const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -1426,8 +1427,10 @@ export function App() {
       if (!logsResp.ok) {
         throw new Error("failed_to_load_activity_logs");
       }
-      const logs = (await logsResp.json()) as { activity?: Array<unknown> };
-      setLogCount((logs.activity || []).length);
+      const logs = (await logsResp.json()) as { activity?: Array<Record<string, unknown>>; logs?: Array<Record<string, unknown>> };
+      const entries = logs.logs || logs.activity || [];
+      setActivityLogs(entries);
+      setLogCount(entries.length);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "failed_to_load_admin_status");
     }
@@ -3175,6 +3178,13 @@ export function App() {
               {licenseStatus?.expires_at ? <p>License expires: {licenseStatus.expires_at}</p> : null}
               {licenseImportStatus ? <p>License import status: {licenseImportStatus}</p> : null}
               <p>Log entries: {logCount}</p>
+              <ul>
+                {activityLogs.map((entry, idx) => (
+                  <li key={`${String(entry.event || "event")}-${idx}`}>
+                    Activity: {String(entry.event || "unknown")} {entry.created_at ? `(${String(entry.created_at)})` : ""}
+                  </li>
+                ))}
+              </ul>
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}
               {adminError === "failed_to_restore_backup" ? <p>Restore failed: verify the selected backup file is valid and readable.</p> : null}

@@ -1102,7 +1102,7 @@ describe("App shell", () => {
         return new Response(JSON.stringify({ state: "valid", tier: "pro" }), { status: 200 });
       }
       if (url === "/api/logs/activity?limit=10") {
-        return new Response(JSON.stringify({ activity: [{ event: "scanner_run_completed" }] }), { status: 200 });
+        return new Response(JSON.stringify({ logs: [{ event: "scanner_run_completed", created_at: "2026-02-23T00:00:00Z" }] }), { status: 200 });
       }
       if (url.includes("/api/pricing/history/export?item_id=")) {
         return new Response("date,price\n2026-02-21,18", { status: 200 });
@@ -1118,6 +1118,7 @@ describe("App shell", () => {
     loadAdmin.click();
     expect(await screen.findByText(/license: valid \/ pro/i)).toBeInTheDocument();
     expect(await screen.findByText(/log entries: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/activity: scanner_run_completed/i)).toBeInTheDocument();
     const exportPricing = await screen.findByRole("button", { name: /export pricing history/i });
     exportPricing.click();
     expect(await screen.findByText(/export bytes: 24/i)).toBeInTheDocument();
