@@ -159,29 +159,28 @@ func (s *Service) BeginLogin(ctx context.Context, profileID string) (WebAuthnSta
 	}, nil
 }
 
-func (s *Service) FinishLogin(ctx context.Context, sessionID string, credentialPayload any) error {
+func (s *Service) FinishLogin(ctx context.Context, sessionID string, credentialPayload any) (string, error) {
 	sess, err := s.popSession(sessionID, "login")
 	if err != nil {
-		return err
+		return "", err
 	}
 	user, err := s.loadUser(ctx, sess.ProfileID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	req, err := payloadToRequest(credentialPayload)
 	if err != nil {
-		return err
+		return "", err
 	}
 	cred, err := s.wa.FinishLogin(user, sess.Session, req)
 	if err != nil {
-		return fmt.Errorf("finish login: %w", err)
+		return "", fmt.Errorf("finish login: %w", err)
 	}
 	if err := s.upsertCredential(ctx, sess.ProfileID, *cred); err != nil {
-		return err
+		return "", err
 	}
-	_, err = s.CreateUnlockedSession(sess.ProfileID)
-	return err
+	return s.CreateUnlockedSession(sess.ProfileID)
 }
 
 func (s *Service) storeSession(sessionID string, p pendingSession) {
@@ -259,6 +258,27 @@ func (s *Service) LockUnlockedSession(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.unlockedSessions, token)
+}
+
+func (s *Service) HasUnlockedSession(profileID string) bool {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return false
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	found := false
+	for token, st := range s.unlockedSessions {
+		if now.After(st.ExpiresAt) || now.Sub(st.LastActive) > s.autoLockTimeout {
+			delete(s.unlockedSessions, token)
+			continue
+		}
+		if st.ProfileID == profileID {
+			found = true
+		}
+	}
+	return found
 }
 
 func (s *Service) SetRecoveryPassphrase(ctx context.Context, profileID, passphrase string) error {

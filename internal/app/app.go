@@ -38,10 +38,11 @@ import (
 )
 
 type App struct {
-	cfg       config.Config
-	db        *sql.DB
-	srv       *http.Server
-	backupSvc *backup.Service
+	cfg         config.Config
+	db          *sql.DB
+	srv         *http.Server
+	backupSvc   *backup.Service
+	authService *auth.Service
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -1763,11 +1764,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := authService.FinishLogin(r.Context(), req.SessionID, req.Credential); err != nil {
+		sessionToken, err := authService.FinishLogin(r.Context(), req.SessionID, req.Credential)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_finish_login"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session_token": sessionToken})
 	})
 	mux.HandleFunc("/api/auth/session/validate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1805,20 +1807,89 @@ func New(cfg config.Config) (*App, error) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 
+	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !requiresUnlockedSession(r) {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		registrationRequired, err := authService.RequiresRegistration(r.Context(), active.ID)
+		if err != nil {
+			http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
+			return
+		}
+		if registrationRequired {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		token := sessionTokenFromRequest(r)
+		if token != "" {
+			if err := authService.ValidateUnlockedSession(token); err != nil {
+				http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
+				return
+			}
+			mux.ServeHTTP(w, r)
+			return
+		}
+		if authService.HasUnlockedSession(active.ID) {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
+	})
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           mux,
+		Handler:           protectedMux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	a := &App{
-		cfg:       cfg,
-		db:        conn,
-		srv:       srv,
-		backupSvc: backupSvc,
+		cfg:         cfg,
+		db:          conn,
+		srv:         srv,
+		backupSvc:   backupSvc,
+		authService: authService,
 	}
 
 	return a, nil
+}
+
+func requiresUnlockedSession(r *http.Request) bool {
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		return false
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodDelete:
+	default:
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/auth/") {
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/onboarding/") {
+		return false
+	}
+	if r.URL.Path == "/api/profiles" || r.URL.Path == "/api/profiles/active" {
+		return false
+	}
+	return true
+}
+
+func sessionTokenFromRequest(r *http.Request) string {
+	token := strings.TrimSpace(r.Header.Get("X-Cabinet-Session"))
+	if token != "" {
+		return token
+	}
+	authz := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		return strings.TrimSpace(authz[7:])
+	}
+	return strings.TrimSpace(r.URL.Query().Get("session_token"))
 }
 
 func (a *App) Run(ctx context.Context) error {
