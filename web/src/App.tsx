@@ -82,6 +82,7 @@ export function App() {
   const [editingQuerySetID, setEditingQuerySetID] = useState("");
   const [querySetSubmitting, setQuerySetSubmitting] = useState(false);
   const [scheduledRunStatus, setScheduledRunStatus] = useState("");
+  const [scannerRetryStatus, setScannerRetryStatus] = useState("");
   const [scannerFailures, setScannerFailures] = useState<Array<{ id?: string; query_set_id?: string; reason?: string; attempts?: number; last_error_at?: string }>>([]);
   const [providerHealth, setProviderHealth] = useState<{ provider?: string; state?: string; healthy?: boolean } | null>(null);
   const [matchingRunStatus, setMatchingRunStatus] = useState("");
@@ -1075,6 +1076,31 @@ export function App() {
       setScannerFailures(data.failures || []);
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_load_scanner_failures");
+    }
+  }
+
+  async function retryScannerFailure(querySetID: string) {
+    const trimmed = querySetID.trim();
+    if (!trimmed) {
+      setScannerError("missing_query_set_id");
+      return;
+    }
+    setScannerError("");
+    setScannerRetryStatus("");
+    try {
+      const resp = await fetch("/api/scanner/failures/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query_set_id: trimmed }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_retry_scanner_failure");
+      }
+      setSelectedQuerySetID(trimmed);
+      setScannerRetryStatus(`retry_started_for_${trimmed}`);
+      await loadScannerFailures();
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_retry_scanner_failure");
     }
   }
 
@@ -2864,12 +2890,21 @@ export function App() {
               </div>
               {scannerError ? <p>Scanner error: {scannerError}</p> : null}
               {scheduledRunStatus ? <p>Scheduled run: {scheduledRunStatus}</p> : null}
+              {scannerRetryStatus ? <p>Scanner retry status: {scannerRetryStatus}</p> : null}
               {matchingRunStatus ? <p>Matching run status: {matchingRunStatus}</p> : null}
               {providerHealth ? <p>Provider health: {providerHealth.provider || "unknown"} / {providerHealth.state || String(providerHealth.healthy)}</p> : null}
               <ul>
                 {scannerFailures.map((failure, idx) => (
                   <li key={failure.id || `${failure.query_set_id || "qs"}-${idx}`}>
                     Failure: {failure.query_set_id || "unknown"} / {failure.reason || "n/a"} / attempts {String(failure.attempts || 0)}
+                    {failure.query_set_id ? (
+                      <>
+                        {" "}
+                        <button type="button" onClick={() => retryScannerFailure(failure.query_set_id || "")}>
+                          Retry Failure {failure.query_set_id}
+                        </button>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>

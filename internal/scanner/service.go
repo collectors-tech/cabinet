@@ -180,7 +180,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			return s.persistCandidatesForProfile(ctx, strings.TrimSpace(profileID), qs.ID, items, attempt)
 		}
 		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
-		s.logFailure(ctx, "ebay", lastErr.Error())
+		s.logFailure(ctx, qs.ID, "ebay", lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
 			if sleep < 100*time.Millisecond {
@@ -281,18 +281,25 @@ func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, queryS
 }
 
 func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT provider, message, created_at FROM scanner_failures ORDER BY created_at DESC LIMIT 100`)
+	rows, err := s.db.QueryContext(ctx, `SELECT query_set_id, provider, message, created_at FROM scanner_failures ORDER BY created_at DESC LIMIT 100`)
 	if err != nil {
 		return nil, fmt.Errorf("list failures: %w", err)
 	}
 	defer rows.Close()
 	var out []map[string]string
 	for rows.Next() {
-		var p, m, c string
-		if err := rows.Scan(&p, &m, &c); err != nil {
+		var q, p, m, c string
+		if err := rows.Scan(&q, &p, &m, &c); err != nil {
 			return nil, fmt.Errorf("scan failure: %w", err)
 		}
-		out = append(out, map[string]string{"provider": p, "message": m, "created_at": c})
+		out = append(out, map[string]string{
+			"query_set_id": q,
+			"provider":     p,
+			"message":      m,
+			"created_at":   c,
+			"reason":       m,
+			"last_error_at": c,
+		})
 	}
 	return out, rows.Err()
 }
@@ -323,9 +330,9 @@ func (s *Service) recordProviderHealth(ctx context.Context, provider, status, me
 	`, provider, status, message)
 }
 
-func (s *Service) logFailure(ctx context.Context, provider, message string) {
+func (s *Service) logFailure(ctx context.Context, querySetID, provider, message string) {
 	_, _ = s.db.ExecContext(ctx, `
-		INSERT INTO scanner_failures(id, provider, message, created_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-	`, uuid.NewString(), provider, message)
+		INSERT INTO scanner_failures(id, query_set_id, provider, message, created_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, uuid.NewString(), strings.TrimSpace(querySetID), provider, message)
 }

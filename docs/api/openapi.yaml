@@ -810,6 +810,29 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/scanner/failures/retry:
+    post:
+      tags: [Scanner]
+      summary: Retry scanner failures for a query set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query_set_id]
+              properties:
+                query_set_id:
+                  type: string
+      responses:
+        "200":
+          description: Retry accepted
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/provider/health:
     get:
       tags: [Scanner]

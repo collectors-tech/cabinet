@@ -35,6 +35,7 @@ Track parity between top-level UI screens, core API workflows, and automated tes
 | Scanner | `POST /api/scanner/run/scheduled` | Scanner -> Run Scheduled |
 | Scanner | `GET /api/scanner/candidates` | Scanner -> Load Candidates |
 | Scanner | `GET /api/scanner/failures` | Scanner -> Load Scanner Failures |
+| Scanner | `POST /api/scanner/failures/retry` | Scanner -> Retry Failure `<query_set_id>` |
 | Scanner | `GET /api/provider/health` | Scanner -> Check Provider Health |
 | Scanner | `POST /api/matching/run` | Scanner -> Run Matching |
 | Scanner | `GET /api/matching/results` | Scanner -> Matching summary |

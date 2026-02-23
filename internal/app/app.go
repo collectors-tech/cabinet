@@ -623,6 +623,39 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"failures": items})
 	})
+	mux.HandleFunc("/api/scanner/failures/retry", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := ""
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+		_, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		logSvc.Log(r.Context(), "info", "scanner_retry_requested", map[string]any{"query_set_id": req.QuerySetID})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"retry_started": true,
+			"query_set_id":  req.QuerySetID,
+		})
+	})
 	mux.HandleFunc("/api/provider/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {

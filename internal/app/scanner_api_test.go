@@ -33,3 +33,26 @@ func TestScannerQuerySetsAndProviderHealthEndpoints(t *testing.T) {
 		t.Fatalf("provider health status=%d body=%s", health.Code, health.Body.String())
 	}
 }
+
+func TestScannerRetryFailuresEndpoint(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"Q1","keywords":["afx"],"enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", create.Code, create.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create payload: %v", err)
+	}
+	querySetID, _ := created["id"].(string)
+	if querySetID == "" {
+		t.Fatal("expected query set id")
+	}
+
+	retry := doRequest(t, a, http.MethodPost, "/api/scanner/failures/retry", strings.NewReader(`{"query_set_id":"`+querySetID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if retry.Code != http.StatusOK {
+		t.Fatalf("retry failures status=%d body=%s", retry.Code, retry.Body.String())
+	}
+}

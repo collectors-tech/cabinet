@@ -213,6 +213,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS scanner_failures (
 			id TEXT PRIMARY KEY,
+			query_set_id TEXT NOT NULL DEFAULT '',
 			provider TEXT NOT NULL,
 			message TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -312,6 +313,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "scanner_failures", "query_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_failures.query_set_id: %w", err)
 	}
 	if err := ensureColumn(ctx, conn, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()

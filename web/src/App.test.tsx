@@ -954,6 +954,9 @@ describe("App shell", () => {
       if (url === "/api/scanner/failures") {
         return new Response(JSON.stringify({ failures: [{ id: "f1", query_set_id: "q1", reason: "rate_limited", attempts: 2 }] }), { status: 200 });
       }
+      if (url === "/api/scanner/failures/retry" && init?.method === "POST") {
+        return new Response(JSON.stringify({ retry_started: true, query_set_id: "q1" }), { status: 200 });
+      }
       if (url.startsWith("/api/provider/health?provider=ebay")) {
         return new Response(JSON.stringify({ provider: "ebay", state: "healthy", healthy: true }), { status: 200 });
       }
@@ -977,6 +980,8 @@ describe("App shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /load scanner failures/i }));
     expect(await screen.findByText(/failure: q1 \/ rate_limited \/ attempts 2/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /retry failure q1/i }));
+    expect(await screen.findByText(/scanner retry status: retry_started_for_q1/i)).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /check provider health/i }));
     expect(await screen.findByText(/provider health: ebay \/ healthy/i)).toBeInTheDocument();
