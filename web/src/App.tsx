@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-forms";
 import { CollectionItemForm, type CollectionItemValues } from "./components/collection-item-form";
+import { DataImportExportWizard } from "./components/data-import-export-wizard";
 import { InstanceForm, type InstanceFormValues } from "./components/instance-form";
 import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/scanner-query-set-form";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
@@ -1168,6 +1169,83 @@ export function App() {
     }
   }
 
+  async function dataImportDryRun(args: { format: "json" | "csv"; payload: string; mapping: Record<string, string> }) {
+    setAdminError("");
+    setSettingsStatus("");
+    try {
+      if (args.format === "json") {
+        const resp = await fetch("/api/data/import/json/dry-run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ snapshot: JSON.parse(args.payload) }),
+        });
+        if (!resp.ok) {
+          throw new Error("failed_to_dry_run_import");
+        }
+        const data = (await resp.json()) as Record<string, unknown>;
+        setSettingsStatus("import_dry_run_ok");
+        return data;
+      }
+      const resp = await fetch("/api/data/import/csv/dry-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv_import: { csv: args.payload, mapping: args.mapping } }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_dry_run_import");
+      }
+      const data = (await resp.json()) as Record<string, unknown>;
+      setSettingsStatus("import_dry_run_ok");
+      return data;
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_dry_run_import");
+      throw e;
+    }
+  }
+
+  async function dataImportApply(args: {
+    format: "json" | "csv";
+    payload: string;
+    mapping: Record<string, string>;
+    options: { default_action: string; overrides: Record<string, string> };
+  }) {
+    setAdminError("");
+    setSettingsStatus("");
+    try {
+      if (args.format === "json") {
+        const resp = await fetch("/api/data/import/json/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ snapshot: JSON.parse(args.payload), options: args.options }),
+        });
+        if (!resp.ok) {
+          throw new Error("failed_to_apply_import");
+        }
+      } else {
+        const resp = await fetch("/api/data/import/csv/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csv_import: { csv: args.payload, mapping: args.mapping }, options: args.options }),
+        });
+        if (!resp.ok) {
+          throw new Error("failed_to_apply_import");
+        }
+      }
+      setSettingsStatus("import_apply_ok");
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "failed_to_apply_import");
+      throw e;
+    }
+  }
+
+  async function dataExportRun(args: { format: "json" | "csv"; scope: "full" | "items" }) {
+    if (args.format === "json") {
+      await exportText("/api/data/export/json", "json");
+      return;
+    }
+    await exportText("/api/data/export/csv/items", "csv_items");
+  }
+
   async function loadItemBarcodes() {
     if (!selectedItemID) {
       setBarcodeError("item_id_required");
@@ -2201,6 +2279,7 @@ export function App() {
               <div>
                 <ProfileSettingsForm initialValues={profileSettingsInitial} onSubmit={saveProfileSettings} />
                 <SecretsForm initialValues={secretsInitial} onSubmit={saveSecrets} />
+                <DataImportExportWizard onDryRun={dataImportDryRun} onApply={dataImportApply} onExport={dataExportRun} />
               </div>
               {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
               <p>Log entries: {logCount}</p>
