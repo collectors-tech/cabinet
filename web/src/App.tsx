@@ -90,6 +90,7 @@ export function App() {
   const [aiSuggestion, setAiSuggestion] = useState<{ title?: string; confidence?: number; [key: string]: unknown } | null>(null);
   const [aiError, setAiError] = useState("");
   const [authStatus, setAuthStatus] = useState("");
+  const [starterIdentityBusy, setStarterIdentityBusy] = useState(false);
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState("");
@@ -293,6 +294,17 @@ export function App() {
       disposed = true;
     };
   }, [activeProfile?.id]);
+
+  useEffect(() => {
+    if (!activeProfile?.id || requiresRegistration !== true) {
+      return;
+    }
+    const key = workspacePreferenceKey(activeProfile.id);
+    if (localStorage.getItem(key) !== null) {
+      return;
+    }
+    setAdvancedWorkspace(false);
+  }, [activeProfile?.id, requiresRegistration]);
 
   async function postJSON(path: string, payload: unknown) {
     const resp = await fetch(path, {
@@ -1250,6 +1262,25 @@ export function App() {
     }
   }
 
+  async function completeIdentity() {
+    if (!activeProfile?.id) {
+      return;
+    }
+    setStarterIdentityBusy(true);
+    setError("");
+    try {
+      if (requiresRegistration) {
+        await beginWebAuthnRegistration();
+        await finishWebAuthnRegistration();
+      } else {
+        await beginWebAuthnLogin();
+        await finishWebAuthnLogin();
+      }
+    } finally {
+      setStarterIdentityBusy(false);
+    }
+  }
+
   async function saveRecoveryPassphrase() {
     if (!activeProfile?.id || !recoveryPassphrase) {
       return;
@@ -1436,56 +1467,59 @@ export function App() {
             <div>
               <h3>Authentication</h3>
               <p>Requires registration: {requiresRegistration === null ? "unknown" : String(requiresRegistration)}</p>
-              <div>
-                <button type="button" onClick={beginWebAuthnRegistration}>
-                  Begin WebAuthn Registration
-                </button>{" "}
-                <button type="button" onClick={finishWebAuthnRegistration}>
-                  Finish Registration
-                </button>{" "}
-                <button type="button" onClick={beginWebAuthnLogin}>
-                  Begin WebAuthn Login
-                </button>{" "}
-                <button type="button" onClick={finishWebAuthnLogin}>
-                  Finish Login
-                </button>
-              </div>
-              <p>Auth session: {authSessionID || "none"}</p>
-              <textarea
-                value={credentialJSON}
-                onChange={(e) => setCredentialJSON(e.target.value)}
-                rows={4}
-                cols={60}
-                aria-label="Credential JSON"
-              />
-              <div>
-                <input
-                  value={recoveryPassphrase}
-                  onChange={(e) => setRecoveryPassphrase(e.target.value)}
-                  placeholder="Recovery passphrase"
-                  aria-label="Recovery passphrase"
-                />{" "}
-                <button type="button" onClick={saveRecoveryPassphrase}>
-                  Save Recovery Passphrase
-                </button>{" "}
-                <button type="button" onClick={beginRecoveryReset}>
-                  Begin Recovery Reset
-                </button>
-              </div>
-              <div>
-                <input
-                  value={sessionToken}
-                  onChange={(e) => setSessionToken(e.target.value)}
-                  placeholder="Session token"
-                  aria-label="Session token"
-                />{" "}
-                <button type="button" onClick={validateSession}>
-                  Validate Session
-                </button>{" "}
-                <button type="button" onClick={lockSession}>
-                  Lock Session
-                </button>
-              </div>
+              <details>
+                <summary>Advanced Identity Tools</summary>
+                <div>
+                  <button type="button" onClick={beginWebAuthnRegistration}>
+                    Begin WebAuthn Registration
+                  </button>{" "}
+                  <button type="button" onClick={finishWebAuthnRegistration}>
+                    Finish Registration
+                  </button>{" "}
+                  <button type="button" onClick={beginWebAuthnLogin}>
+                    Begin WebAuthn Login
+                  </button>{" "}
+                  <button type="button" onClick={finishWebAuthnLogin}>
+                    Finish Login
+                  </button>
+                </div>
+                <p>Auth session: {authSessionID || "none"}</p>
+                <textarea
+                  value={credentialJSON}
+                  onChange={(e) => setCredentialJSON(e.target.value)}
+                  rows={4}
+                  cols={60}
+                  aria-label="Credential JSON"
+                />
+                <div>
+                  <input
+                    value={recoveryPassphrase}
+                    onChange={(e) => setRecoveryPassphrase(e.target.value)}
+                    placeholder="Recovery passphrase"
+                    aria-label="Recovery passphrase"
+                  />{" "}
+                  <button type="button" onClick={saveRecoveryPassphrase}>
+                    Save Recovery Passphrase
+                  </button>{" "}
+                  <button type="button" onClick={beginRecoveryReset}>
+                    Begin Recovery Reset
+                  </button>
+                </div>
+                <div>
+                  <input
+                    value={sessionToken}
+                    onChange={(e) => setSessionToken(e.target.value)}
+                    placeholder="Session token"
+                    aria-label="Session token"
+                  />{" "}
+                  <button type="button" onClick={validateSession}>
+                    Validate Session
+                  </button>{" "}
+                  <button type="button" onClick={lockSession}>
+                    Lock Session
+                  </button>
+                </div>
+              </details>
               <p>Auth status: {authStatus || "idle"}</p>
               {onboardingStatus ? <p>{onboardingStatus}</p> : null}
             </div>
@@ -1495,6 +1529,12 @@ export function App() {
               <h3>Starter Onboarding</h3>
               <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
               <div>
+                <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
+                  {starterIdentityBusy ? "Completing Identity..." : "Complete Identity"}
+                </button>{" "}
+                <button type="button" onClick={seedOnboardingSampleData}>
+                  Load Sample Data
+                </button>{" "}
                 <button type="button" onClick={() => setWorkspaceMode(true)}>
                   Open Advanced Workspace
                 </button>
