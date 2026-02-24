@@ -23,6 +23,9 @@ type Summary struct {
 	WishlistHits   int             `json:"wishlist_hits"`
 	PriceDrops     int             `json:"price_drops"`
 	RecentlyAdded  []string        `json:"recently_added"`
+	TotalItems     int             `json:"total_items"`
+	TotalInstances int             `json:"total_instances"`
+	EstimatedValue float64         `json:"estimated_value"`
 	Collection     CollectionStats `json:"collection"`
 	Cards          []Card          `json:"cards"`
 }
@@ -81,6 +84,9 @@ func (s *Service) Summary(ctx context.Context) (Summary, error) {
 	if err := rows.Err(); err != nil {
 		return Summary{}, fmt.Errorf("iterate recently added: %w", err)
 	}
+	out.TotalItems = out.Collection.TotalItems
+	out.TotalInstances = out.Collection.TotalInstances
+	out.EstimatedValue = out.Collection.EstimatedValue
 	out.Cards = []Card{
 		{Title: "New Discoveries", Value: out.NewDiscoveries, Link: "/discoveries"},
 		{Title: "Wishlist Hits", Value: out.WishlistHits, Link: "/wishlist"},

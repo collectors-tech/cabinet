@@ -84,6 +84,14 @@ function contextPaneCollapsedStorageKey(profileID?: string) {
   return profileID ? `cabinet.context.collapsed.${profileID}` : "cabinet.context.collapsed.global";
 }
 
+function attentionDismissedStorageKey(profileID?: string) {
+  return profileID ? `cabinet.attention.dismissed.${profileID}` : "cabinet.attention.dismissed.global";
+}
+
+function attentionSnoozedStorageKey(profileID?: string) {
+  return profileID ? `cabinet.attention.snoozed.${profileID}` : "cabinet.attention.snoozed.global";
+}
+
 function detectInitialChatOpen(): boolean {
   const saved = localStorage.getItem("cabinet.chat.open");
   return saved === "1" || saved?.toLowerCase() === "true";
@@ -171,6 +179,8 @@ export function App() {
   const [scannerError, setScannerError] = useState("");
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dismissedAttentionKeys, setDismissedAttentionKeys] = useState<string[]>([]);
+  const [snoozedAttentionUntil, setSnoozedAttentionUntil] = useState<Record<string, number>>({});
   const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
   const [pricingBySource, setPricingBySource] = useState<
@@ -327,6 +337,39 @@ export function App() {
     }
     void loadDashboard();
   }, [activeProfile?.id, advancedWorkspace, activeScreen]);
+
+  useEffect(() => {
+    const profileID = activeProfile?.id;
+    const dismissedRaw = localStorage.getItem(attentionDismissedStorageKey(profileID));
+    const snoozedRaw = localStorage.getItem(attentionSnoozedStorageKey(profileID));
+    try {
+      const dismissed = dismissedRaw ? (JSON.parse(dismissedRaw) as string[]) : [];
+      setDismissedAttentionKeys(Array.isArray(dismissed) ? dismissed.filter((value) => typeof value === "string") : []);
+    } catch {
+      setDismissedAttentionKeys([]);
+    }
+    try {
+      const snoozed = snoozedRaw ? (JSON.parse(snoozedRaw) as Record<string, number>) : {};
+      if (!snoozed || typeof snoozed !== "object") {
+        setSnoozedAttentionUntil({});
+        return;
+      }
+      const next = Object.fromEntries(
+        Object.entries(snoozed).filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number"),
+      );
+      setSnoozedAttentionUntil(next);
+    } catch {
+      setSnoozedAttentionUntil({});
+    }
+  }, [activeProfile?.id]);
+
+  useEffect(() => {
+    localStorage.setItem(attentionDismissedStorageKey(activeProfile?.id), JSON.stringify(dismissedAttentionKeys));
+  }, [activeProfile?.id, dismissedAttentionKeys]);
+
+  useEffect(() => {
+    localStorage.setItem(attentionSnoozedStorageKey(activeProfile?.id), JSON.stringify(snoozedAttentionUntil));
+  }, [activeProfile?.id, snoozedAttentionUntil]);
 
   useEffect(() => {
     const profileID = activeProfile?.id;
@@ -2772,10 +2815,25 @@ export function App() {
       actionLabel: "Review Price Drops",
       open: () => openWorkspaceFromDashboard("pricing"),
     },
-  ];
+  ].filter((row) => {
+    if (dismissedAttentionKeys.includes(row.key)) {
+      return false;
+    }
+    const snoozedUntil = snoozedAttentionUntil[row.key];
+    if (typeof snoozedUntil === "number" && snoozedUntil > Date.now()) {
+      return false;
+    }
+    return true;
+  });
   const rankedAttentionRows = [...dashboardAttentionRows].sort((a, b) => b.count - a.count);
   const topAttention = rankedAttentionRows[0];
   const hasPendingAttention = rankedAttentionRows.some((row) => row.count > 0);
+  function dismissAttentionCard(key: string) {
+    setDismissedAttentionKeys((current) => (current.includes(key) ? current : [...current, key]));
+  }
+  function snoozeAttentionCard(key: string, durationHours: number) {
+    setSnoozedAttentionUntil((current) => ({ ...current, [key]: Date.now() + durationHours * 60 * 60 * 1000 }));
+  }
   const editingQuerySet = querySets.find((querySet) => querySet.id === editingQuerySetID);
   const querySetInitialValues: Partial<ScannerQuerySetValues> | undefined = editingQuerySet
     ? {
@@ -4066,9 +4124,17 @@ export function App() {
                       <p className="cabinet-attention-label">{row.label.replace("Review ", "")}</p>
                       <p className="cabinet-attention-value">{String(row.count)}</p>
                       <p className="cabinet-attention-meta">{row.details}</p>
-                      <button type="button" onClick={row.open}>
-                        {row.actionLabel}
-                      </button>
+                      <div className="cabinet-attention-actions">
+                        <button type="button" onClick={row.open}>
+                          {row.actionLabel}
+                        </button>
+                        <button type="button" aria-label={`Snooze ${row.label.toLowerCase()}`} onClick={() => snoozeAttentionCard(row.key, 24)}>
+                          Snooze
+                        </button>
+                        <button type="button" aria-label={`Dismiss ${row.label.toLowerCase()}`} onClick={() => dismissAttentionCard(row.key)}>
+                          Dismiss
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>

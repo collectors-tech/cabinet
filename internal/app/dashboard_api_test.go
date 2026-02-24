@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 )
@@ -17,5 +18,25 @@ func TestDashboardEndpoint(t *testing.T) {
 	resp := doRequest(t, a, http.MethodGet, "/api/dashboard", nil, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("dashboard status=%d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestDashboardEndpointContractForUI(t *testing.T) {
+	t.Parallel()
+	a := newTestApp(t)
+
+	resp := doRequest(t, a, http.MethodGet, "/api/dashboard", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("dashboard status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	required := []string{"new_discoveries", "wishlist_hits", "price_drops", "recently_added", "total_items", "total_instances"}
+	for _, key := range required {
+		if _, ok := body[key]; !ok {
+			t.Fatalf("missing required key %q in dashboard payload: %#v", key, body)
+		}
 	}
 }

@@ -376,6 +376,30 @@ test("home screen adapts for first-run and returning users", async ({ page }) =>
   await expect(page.locator(".cabinet-home-diagnostics")).not.toHaveAttribute("open", "");
 });
 
+test("home attention cards support dismiss and snooze persistence", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.removeItem("cabinet.attention.dismissed.p1");
+    localStorage.removeItem("cabinet.attention.snoozed.p1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+  await page.getByRole("button", { name: /^dashboard$/i }).first().click();
+
+  await expect(page.getByRole("button", { name: /review discoveries/i })).toBeVisible();
+  await page.getByRole("button", { name: /dismiss review new discoveries/i }).click();
+  await expect(page.getByRole("button", { name: /review discoveries/i })).toHaveCount(0);
+
+  const dismissedStorage = await page.evaluate(() => localStorage.getItem("cabinet.attention.dismissed.p1") || "");
+  expect(dismissedStorage).toContain("discoveries");
+
+  await page.getByRole("button", { name: /snooze review wishlist hits/i }).click();
+  const snoozedStorage = await page.evaluate(() => localStorage.getItem("cabinet.attention.snoozed.p1") || "");
+  expect(snoozedStorage).toContain("wishlist");
+});
+
 test("wizard supports skip path for optional starter-data choices", async ({ page }) => {
   const state = await installWizardMocks(page, { requiresRegistration: true });
   await openStarterWizard(page);

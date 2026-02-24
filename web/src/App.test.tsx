@@ -1878,6 +1878,77 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: /open pricing workspace/i })).toBeInTheDocument();
   });
 
+  it("HOME-CARD-001 attention card action routes to discoveries workspace", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/dashboard") {
+        return new Response(JSON.stringify({ new_discoveries: 4, wishlist_hits: 0, price_drops: 0, total_items: 9, total_instances: 9 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^dashboard$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /review discoveries/i }));
+    expect(await screen.findByRole("heading", { name: /not in my collection/i })).toBeInTheDocument();
+  });
+
+  it("HOME-CARD-002 dismiss and snooze persist dashboard attention state", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/dashboard") {
+        return new Response(JSON.stringify({ new_discoveries: 5, wishlist_hits: 3, price_drops: 2, total_items: 10, total_instances: 12 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^dashboard$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /dismiss review new discoveries/i }));
+    expect(screen.queryByRole("button", { name: /review discoveries/i })).not.toBeInTheDocument();
+    expect(localStorage.getItem("cabinet.attention.dismissed.p1")).toContain("discoveries");
+
+    fireEvent.click(await screen.findByRole("button", { name: /snooze review wishlist hits/i }));
+    expect(localStorage.getItem("cabinet.attention.snoozed.p1")).toContain("wishlist");
+  });
+
   it("prioritizes action queue and shows next-best action guidance on dashboard", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
