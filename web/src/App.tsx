@@ -2485,7 +2485,7 @@ export function App() {
 
   return (
     <main data-testid="app-shell" className="cabinet-shell">
-      <aside className="cabinet-sidebar">
+      <aside className="cabinet-sidebar primary-nav">
         <h1>Cabinet</h1>
         <nav>{navLinks}</nav>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
@@ -2525,7 +2525,7 @@ export function App() {
         </>
       ) : null}
       <section className="cabinet-content">
-        <header className="cabinet-topbar">
+        <header className="cabinet-topbar page-header">
           <div className="cabinet-topbar-left">
             <button
               ref={drawerTriggerRef}
@@ -2799,6 +2799,7 @@ export function App() {
               </aside>
             </section>
           ) : null}
+          {activeProfile && showAdvancedWorkspace && onboardingStatus ? <p>{onboardingStatus}</p> : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <CollectionScreen id="collection">
               <h3>Collection</h3>

@@ -33,6 +33,17 @@ describe("App shell", () => {
     expect(document.querySelector(".cabinet-sidebar")).toBeTruthy();
   });
 
+  it("exposes semantic shell classes for page-header and primary-nav", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    expect(document.querySelector("header.page-header")).toBeTruthy();
+    expect(document.querySelector("aside.primary-nav")).toBeTruthy();
+  });
+
   it("shows API Kitchen Sync quick link in utility links", async () => {
     vi.stubGlobal(
       "fetch",

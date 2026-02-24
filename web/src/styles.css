@@ -40,6 +40,7 @@ body {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -50,6 +51,7 @@ body {
   border-right: 1px solid var(--line);
   background: var(--surface);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -103,11 +105,13 @@ body {
 
 .cabinet-content {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 
 .cabinet-topbar {
@@ -127,6 +131,8 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .cabinet-topbar-left {
