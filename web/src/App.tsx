@@ -275,6 +275,7 @@ export function App() {
   const [contextPaneCollapsed, setContextPaneCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
   const [activeContextID, setActiveContextID] = useState<string>("all-items");
+  const [contextFilter, setContextFilter] = useState("");
   const [navConfig, setNavConfig] = useState<NavItemConfig[]>(() => NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -3001,6 +3002,9 @@ export function App() {
     ));
 
   const activeContext = COLLECTION_CONTEXT_NODES.find((node) => node.id === activeContextID) ?? COLLECTION_CONTEXT_NODES[0];
+  const filteredContextNodes = COLLECTION_CONTEXT_NODES.filter((node) =>
+    node.label.toLowerCase().includes(contextFilter.trim().toLowerCase()),
+  );
 
   const contextPane = (forDrawer = false) => (
     <aside className={`collection-context-pane${contextPaneCollapsed && !forDrawer ? " collection-context-pane-collapsed" : ""}`} aria-label="Collection context pane">
@@ -3022,8 +3026,19 @@ export function App() {
           </button>
         ) : null}
       </div>
+      {contextPaneCollapsed && !forDrawer ? null : (
+        <div className="collection-context-search">
+          <input
+            type="search"
+            value={contextFilter}
+            onChange={(e) => setContextFilter(e.target.value)}
+            aria-label="Search collections"
+            placeholder="Search folders"
+          />
+        </div>
+      )}
       <nav aria-label="Collection folders and saved views">
-        {COLLECTION_CONTEXT_NODES.map((node) => (
+        {filteredContextNodes.map((node) => (
           <button
             key={node.id}
             type="button"

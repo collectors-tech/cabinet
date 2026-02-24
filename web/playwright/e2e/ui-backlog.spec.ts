@@ -408,6 +408,30 @@ test("collection command bar supports summarize toggle and view controls", async
   await expect(page.getByText(/view mode: cards/i)).toBeVisible();
 });
 
+test("collection context pane search filters items in desktop and mobile drawer", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  const desktopSearch = page.getByLabel(/search collections/i).first();
+  await desktopSearch.fill("wish");
+  await expect(page.getByRole("button", { name: /wishlist focus/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /store 1/i })).toHaveCount(0);
+  await page.getByRole("button", { name: /wishlist focus/i }).first().click();
+  await expect(page.getByText(/context: wishlist focus/i)).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: /open navigation menu/i }).click();
+  const drawer = page.getByRole("dialog", { name: /navigation menu/i });
+  const drawerSearch = drawer.getByLabel(/search collections/i);
+  await drawerSearch.fill("store");
+  await expect(drawer.getByRole("button", { name: /store 1/i })).toBeVisible();
+  await expect(drawer.getByRole("button", { name: /wishlist focus/i })).toHaveCount(0);
+});
+
 test("three-pane shell renders context pane and keeps context in mobile drawer", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: false });
   await page.addInitScript(() => {

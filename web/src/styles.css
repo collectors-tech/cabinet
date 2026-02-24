@@ -121,6 +121,19 @@ body {
   cursor: pointer;
 }
 
+.collection-context-search {
+  margin-bottom: 10px;
+}
+
+.collection-context-search input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 .collection-context-pane nav {
   display: grid;
   gap: 8px;

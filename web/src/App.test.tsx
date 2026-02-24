@@ -58,6 +58,23 @@ describe("App shell", () => {
     expect(screen.getByText(/context: wishlist focus/i)).toBeInTheDocument();
   });
 
+  it("filters collection context pane items via search input", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const search = screen.getByLabelText(/search collections/i);
+    fireEvent.change(search, { target: { value: "wish" } });
+    expect(screen.getByRole("button", { name: /wishlist focus/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /watch list/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /store 1/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /wishlist focus/i }));
+    expect(screen.getByText(/context: wishlist focus/i)).toBeInTheDocument();
+  });
+
   it("collapses and expands the collection context pane", () => {
     vi.stubGlobal(
       "fetch",
