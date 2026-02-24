@@ -414,6 +414,45 @@ body {
   gap: 8px;
 }
 
+.cabinet-chat-context-chips,
+.cabinet-chat-actions {
+  padding: 10px 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cabinet-chat-context-chips button,
+.cabinet-chat-actions button {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.cabinet-chat-action-preview {
+  margin: 10px 12px 0;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.cabinet-chat-action-preview p {
+  margin: 0 0 6px;
+}
+
+.cabinet-chat-action-preview p:last-of-type {
+  margin-bottom: 10px;
+}
+
+.cabinet-chat-action-preview div {
+  display: flex;
+  gap: 8px;
+}
+
 .cabinet-chat-msg {
   margin: 0;
   border: 1px solid var(--line);

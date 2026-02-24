@@ -105,6 +105,66 @@ describe("App shell", () => {
     expect(screen.queryByRole("complementary", { name: /chat copilot/i })).not.toBeInTheDocument();
   });
 
+  it("persists chat rail open state in local storage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    localStorage.setItem("cabinet.chat.open", "1");
+    render(<App />);
+    expect(await screen.findByRole("complementary", { name: /chat copilot/i })).toBeInTheDocument();
+  });
+
+  it("supports context chips that prefill the chat composer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /toggle chat copilot/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /wishlist hits context chip/i }));
+
+    expect((screen.getByLabelText(/chat message/i) as HTMLTextAreaElement).value).toMatch(/wishlist hits/i);
+  });
+
+  it("uses preview and confirm flow before applying chat suggested actions", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Default" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Default" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url.includes("/api/dashboard")) {
+        return new Response(JSON.stringify({ new_discoveries: 2, wishlist_hits: 1, price_drops: 1, recently_added: 3, total_items: 10, total_instances: 14 }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use default/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /toggle chat copilot/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /preview open collection workspace action/i }));
+    expect(await screen.findByText(/ready to apply: open collection workspace/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /confirm apply action/i }));
+    expect(await screen.findByRole("heading", { name: /^collection$/i })).toBeInTheDocument();
+  });
+
   it("shows app version and build date in left nav footer", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

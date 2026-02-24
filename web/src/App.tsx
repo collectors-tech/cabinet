@@ -16,6 +16,8 @@ type NavScreen = Exclude<TopLevelScreen, "all">;
 type NavItemDefinition = { screen: NavScreen; label: string; icon: string };
 type NavItemConfig = { screen: NavScreen; visible: boolean };
 type CollectionContextNode = { id: string; label: string; kind: "all" | "folder" | "saved" };
+type ChatContextChip = { id: string; label: string; prompt: string };
+type ChatSuggestedAction = { id: string; label: string; description: string; targetScreen: NavScreen };
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -51,6 +53,21 @@ const COLLECTION_CONTEXT_NODES: CollectionContextNode[] = [
   { id: "warehouse-1", label: "Warehouse 1", kind: "folder" },
 ];
 
+const CHAT_CONTEXT_CHIPS: ChatContextChip[] = [
+  { id: "wishlist-hits", label: "Wishlist hits", prompt: "wishlist hits" },
+  { id: "price-drops", label: "Price drops", prompt: "Summarize recent price drops and best buy timing." },
+  { id: "new-discoveries", label: "New discoveries", prompt: "List new discoveries and suggest priorities." },
+];
+
+const CHAT_SUGGESTED_ACTIONS: ChatSuggestedAction[] = [
+  {
+    id: "open-collection-workspace",
+    label: "Open Collection Workspace",
+    description: "Jump to collection and review item details.",
+    targetScreen: "collection",
+  },
+];
+
 function navConfigStorageKey(profileID?: string) {
   return profileID ? `cabinet.nav.main.${profileID}` : "cabinet.nav.main.global";
 }
@@ -61,6 +78,11 @@ function navCollapsedStorageKey(profileID?: string) {
 
 function contextPaneCollapsedStorageKey(profileID?: string) {
   return profileID ? `cabinet.context.collapsed.${profileID}` : "cabinet.context.collapsed.global";
+}
+
+function detectInitialChatOpen(): boolean {
+  const saved = localStorage.getItem("cabinet.chat.open");
+  return saved === "1" || saved?.toLowerCase() === "true";
 }
 
 function detectInitialTheme(): Theme {
@@ -205,11 +227,12 @@ export function App() {
   const [onboardingFinishing, setOnboardingFinishing] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [activeScreen, setActiveScreen] = useState<TopLevelScreen>("all");
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(detectInitialChatOpen);
   const [chatDraft, setChatDraft] = useState("");
   const [chatThread, setChatThread] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
     { role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." },
   ]);
+  const [chatPendingAction, setChatPendingAction] = useState<ChatSuggestedAction | null>(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [contextPaneCollapsed, setContextPaneCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
@@ -327,6 +350,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(contextPaneCollapsedStorageKey(activeProfile?.id), contextPaneCollapsed ? "1" : "0");
   }, [activeProfile?.id, contextPaneCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem("cabinet.chat.open", chatOpen ? "1" : "0");
+  }, [chatOpen]);
 
   useEffect(() => {
     let disposed = false;
@@ -2628,6 +2655,29 @@ export function App() {
     setChatDraft("");
   }
 
+  function applyChatContextChip(chip: ChatContextChip) {
+    setChatDraft(chip.prompt);
+  }
+
+  function previewChatAction(action: ChatSuggestedAction) {
+    setChatPendingAction(action);
+    setChatThread((current) => [...current, { role: "assistant", text: `Preview ready: ${action.label}. Confirm to apply this action.` }]);
+  }
+
+  function confirmChatAction() {
+    if (!chatPendingAction) {
+      return;
+    }
+    if (!navEnabled) {
+      setChatThread((current) => [...current, { role: "assistant", text: "Finish onboarding to unlock workspace actions." }]);
+      setChatPendingAction(null);
+      return;
+    }
+    setActiveScreen(chatPendingAction.targetScreen);
+    setChatThread((current) => [...current, { role: "assistant", text: `Applied action: ${chatPendingAction.label}.` }]);
+    setChatPendingAction(null);
+  }
+
   const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${contextPaneCollapsed ? " cabinet-shell-context-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
 
   return (
@@ -3910,6 +3960,44 @@ export function App() {
               Close
             </button>
           </div>
+          <div className="cabinet-chat-context-chips" aria-label="Chat context chips">
+            {CHAT_CONTEXT_CHIPS.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                aria-label={`${chip.label} context chip`}
+                onClick={() => applyChatContextChip(chip)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          <div className="cabinet-chat-actions" aria-label="Chat suggested actions">
+            {CHAT_SUGGESTED_ACTIONS.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                aria-label={`Preview ${action.label} action`}
+                onClick={() => previewChatAction(action)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+          {chatPendingAction ? (
+            <div className="cabinet-chat-action-preview" role="status">
+              <p>Ready to apply: {chatPendingAction.label}</p>
+              <p>{chatPendingAction.description}</p>
+              <div>
+                <button type="button" aria-label="Confirm apply action" onClick={confirmChatAction}>
+                  Confirm
+                </button>
+                <button type="button" aria-label="Cancel apply action" onClick={() => setChatPendingAction(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="cabinet-chat-thread">
             {chatThread.map((entry, index) => (
               <p key={`${entry.role}-${index}`} className={`cabinet-chat-msg cabinet-chat-msg-${entry.role}`}>

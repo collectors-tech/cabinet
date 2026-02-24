@@ -258,6 +258,27 @@ test("three-pane shell renders context pane and keeps context in mobile drawer",
   await expect(drawer.getByLabel("Collection context pane")).toBeVisible();
 });
 
+test("chat rail supports context chips and preview-confirm workspace actions", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await page.getByRole("button", { name: /toggle chat copilot/i }).click();
+  const chatRail = page.getByRole("complementary", { name: /chat copilot/i });
+  await expect(chatRail).toBeVisible();
+
+  await chatRail.getByRole("button", { name: /wishlist hits context chip/i }).click();
+  await expect(chatRail.getByLabel(/chat message/i)).toHaveValue(/wishlist hits/i);
+
+  await chatRail.getByRole("button", { name: /preview open collection workspace action/i }).click();
+  await expect(chatRail.getByText(/ready to apply: open collection workspace/i)).toBeVisible();
+  await chatRail.getByRole("button", { name: /confirm apply action/i }).click();
+  await expect(page.getByRole("heading", { name: /^collection$/i })).toBeVisible();
+});
+
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: true });
   await openStarterWizard(page);
