@@ -2406,10 +2406,80 @@ describe("App shell", () => {
     const lookupBtn = await screen.findByRole("button", { name: /lookup barcode/i });
     lookupBtn.click();
     expect(await screen.findByText(/local matches: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/status: matched/i)).toBeInTheDocument();
 
     const externalBtn = await screen.findByRole("button", { name: /external search/i });
     externalBtn.click();
     expect(await screen.findByText(/ebay.com\/sch\/i.html/i)).toBeInTheDocument();
+  });
+
+  it("shows no-match status and supports external search for unmatched barcode", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.includes("/api/barcodes/99999/external-search")) {
+        return new Response(JSON.stringify({ source: "ebay", url: "https://www.ebay.com/sch/i.html?_nkw=99999" }), { status: 200 });
+      }
+      if (url === "/api/barcodes/99999") {
+        return new Response(JSON.stringify({ matches: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^barcodes$/i }));
+    fireEvent.change(await screen.findByLabelText(/^barcode$/i), { target: { value: "99999" } });
+    fireEvent.click(await screen.findByRole("button", { name: /lookup barcode/i }));
+    expect(await screen.findByText(/local matches: 0/i)).toBeInTheDocument();
+    expect(await screen.findByText(/status: no match/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /external search/i }));
+    expect(await screen.findByText(/_nkw=99999/i)).toBeInTheDocument();
+  });
+
+  it("requires non-empty barcode value before add", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^barcodes$/i }));
+    fireEvent.change(await screen.findByLabelText(/^barcode$/i), { target: { value: "   " } });
+    fireEvent.click(await screen.findByRole("button", { name: /add barcode/i }));
+    expect(await screen.findByText(/barcode error: item_and_barcode_required/i)).toBeInTheDocument();
   });
 
   it("toggles AI and applies suggestion with explicit confirmation gate", async () => {

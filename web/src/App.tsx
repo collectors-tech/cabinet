@@ -2670,6 +2670,7 @@ export function App() {
       }
     : undefined;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
+  const barcodeMatchStatus = barcodeLookupMatches.length > 0 ? "matched" : "no_match";
   const navEnabled = showAdvancedWorkspace;
   function selectScreen(screen: TopLevelScreen) {
     if (!navEnabled) {
@@ -4209,6 +4210,7 @@ export function App() {
                 ))}
               </ul>
               <p>Local matches: {barcodeLookupMatches.length}</p>
+              <p>Status: {barcodeMatchStatus === "matched" ? "Matched" : "No Match"}</p>
               {barcodeExternalURL ? <p>{barcodeExternalURL}</p> : null}
             </BarcodesScreen>
           ) : null}
