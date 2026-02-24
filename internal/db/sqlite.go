@@ -273,6 +273,53 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			details TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS chat_threads (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_threads_profile_id ON chat_threads(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS chat_messages (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT NOT NULL,
+			attachments_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id ON chat_messages(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS chat_attachments (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL,
+			filename TEXT NOT NULL,
+			mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+			size_bytes INTEGER NOT NULL DEFAULT 0,
+			stored_path TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS chat_action_previews (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL,
+			action TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			status TEXT NOT NULL DEFAULT 'previewed',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			applied_at TEXT,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_action_previews_profile_id ON chat_action_previews(profile_id);`,
 	}
 
 	for _, q := range queries {

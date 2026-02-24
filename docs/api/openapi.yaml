@@ -22,6 +22,7 @@ tags:
   - name: Auth
   - name: Licensing
   - name: AI
+  - name: Chat
   - name: Logs
   - name: Data
   - name: Backup
@@ -969,6 +970,183 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AISuggestion"
+  /api/chat/threads:
+    get:
+      tags: [Chat]
+      summary: List chat threads for profile
+      parameters:
+        - in: query
+          name: profile_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thread list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  threads:
+                    type: array
+                    items:
+                      type: object
+    post:
+      tags: [Chat]
+      summary: Create chat thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, title]
+              properties:
+                profile_id:
+                  type: string
+                title:
+                  type: string
+      responses:
+        "201":
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/chat/messages:
+    get:
+      tags: [Chat]
+      summary: List messages for a thread
+      parameters:
+        - in: query
+          name: profile_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: thread_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Message list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+    post:
+      tags: [Chat]
+      summary: Create chat message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, thread_id, role, content]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                role:
+                  type: string
+                content:
+                  type: string
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/chat/attachments:
+    post:
+      tags: [Chat]
+      summary: Attach user-selected file to chat thread
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [profile_id, thread_id, file]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Attachment metadata
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/chat/actions/preview:
+    post:
+      tags: [Chat]
+      summary: Preview chat action without mutation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, thread_id, action, payload]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                action:
+                  type: string
+                payload:
+                  type: object
+      responses:
+        "200":
+          description: Preview created
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/chat/actions/apply:
+    post:
+      tags: [Chat]
+      summary: Apply previously previewed chat action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, thread_id, preview_id, confirm]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                preview_id:
+                  type: string
+                confirm:
+                  type: boolean
+      responses:
+        "200":
+          description: Action apply result
+          content:
+            application/json:
+              schema:
+                type: object
   /api/data/export/json:
     get:
       tags: [Data]

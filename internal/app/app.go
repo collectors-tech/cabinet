@@ -20,6 +20,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/auth"
 	"github.com/collectors-tech/cabinet/internal/backup"
 	"github.com/collectors-tech/cabinet/internal/barcode"
+	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
@@ -80,6 +81,7 @@ func New(cfg config.Config) (*App, error) {
 	wishlistSvc := wishlist.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
+	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
 	aiSvc := ai.NewService(ai.Config{})
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
@@ -1332,6 +1334,149 @@ func New(cfg config.Config) (*App, error) {
 		}
 		logSvc.Log(r.Context(), "info", "ai_suggest_photo_ok", map[string]any{"profile_id": req.ProfileID, "confidence": suggestion.Confidence})
 		_ = json.NewEncoder(w).Encode(suggestion)
+	})
+	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			threads, err := chatSvc.ListThreads(r.Context(), profileID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_chat_threads"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"threads": threads})
+		case http.MethodPost:
+			var req struct {
+				ProfileID string `json:"profile_id"`
+				Title     string `json:"title"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			thread, err := chatSvc.CreateThread(r.Context(), req.ProfileID, req.Title)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_chat_thread"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(thread)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/messages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+			if profileID == "" || threadID == "" {
+				http.Error(w, `{"error":"profile_id_and_thread_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			messages, err := chatSvc.ListMessages(r.Context(), profileID, threadID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_chat_messages"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"messages": messages})
+		case http.MethodPost:
+			var req struct {
+				ProfileID string `json:"profile_id"`
+				ThreadID  string `json:"thread_id"`
+				Role      string `json:"role"`
+				Content   string `json:"content"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			message, err := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(message)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/attachments", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "multipart/form-data") {
+			http.Error(w, `{"error":"multipart_form_data_required"}`, http.StatusBadRequest)
+			return
+		}
+		if err := r.ParseMultipartForm(16 << 20); err != nil {
+			http.Error(w, `{"error":"invalid_multipart"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(r.FormValue("profile_id"))
+		threadID := strings.TrimSpace(r.FormValue("thread_id"))
+		if profileID == "" || threadID == "" {
+			http.Error(w, `{"error":"profile_id_and_thread_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		file, hdr, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, `{"error":"file_required"}`, http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		attachment, err := chatSvc.SaveAttachment(r.Context(), profileID, threadID, hdr.Filename, hdr.Header.Get("Content-Type"), file)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_save_attachment"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(attachment)
+	})
+	mux.HandleFunc("/api/chat/actions/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req chat.PreviewActionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.PreviewAction(r.Context(), req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_preview_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(preview)
+	})
+	mux.HandleFunc("/api/chat/actions/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req chat.ApplyActionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := chatSvc.ApplyAction(r.Context(), req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_apply_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

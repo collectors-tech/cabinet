@@ -1,0 +1,426 @@
+package chat
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type Service struct {
+	db      *sql.DB
+	dataDir string
+}
+
+type Thread struct {
+	ID        string `json:"id"`
+	ProfileID string `json:"profile_id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type Message struct {
+	ID          string `json:"id"`
+	ProfileID   string `json:"profile_id"`
+	ThreadID    string `json:"thread_id"`
+	Role        string `json:"role"`
+	Content     string `json:"content"`
+	Attachments string `json:"attachments_json"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type Attachment struct {
+	ID        string `json:"id"`
+	ProfileID string `json:"profile_id"`
+	ThreadID  string `json:"thread_id"`
+	Filename  string `json:"filename"`
+	MimeType  string `json:"mime_type"`
+	SizeBytes int64  `json:"size_bytes"`
+	Path      string `json:"path"`
+	CreatedAt string `json:"created_at"`
+}
+
+type PreviewActionInput struct {
+	ProfileID string         `json:"profile_id"`
+	ThreadID  string         `json:"thread_id"`
+	Action    string         `json:"action"`
+	Payload   map[string]any `json:"payload"`
+}
+
+type ActionPreview struct {
+	ID        string `json:"id"`
+	ProfileID string `json:"profile_id"`
+	ThreadID  string `json:"thread_id"`
+	Action    string `json:"action"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"created_at"`
+	AppliedAt string `json:"applied_at,omitempty"`
+}
+
+type ApplyActionInput struct {
+	ProfileID string `json:"profile_id"`
+	ThreadID  string `json:"thread_id"`
+	PreviewID string `json:"preview_id"`
+	Confirm   bool   `json:"confirm"`
+}
+
+type ApplyActionResult struct {
+	Applied   bool   `json:"applied"`
+	Action    string `json:"action"`
+	ItemID    string `json:"item_id,omitempty"`
+	PreviewID string `json:"preview_id"`
+}
+
+func NewService(db *sql.DB, dataDir string) *Service {
+	return &Service{db: db, dataDir: dataDir}
+}
+
+func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Thread, error) {
+	profileID = strings.TrimSpace(profileID)
+	title = strings.TrimSpace(title)
+	if profileID == "" {
+		return Thread{}, fmt.Errorf("profile_id is required")
+	}
+	if title == "" {
+		return Thread{}, fmt.Errorf("title is required")
+	}
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_threads(id, profile_id, title)
+		VALUES (?, ?, ?)
+	`, id, profileID, title); err != nil {
+		return Thread{}, fmt.Errorf("create thread: %w", err)
+	}
+	return s.GetThread(ctx, profileID, id)
+}
+
+func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, error) {
+	profileID = strings.TrimSpace(profileID)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, title, created_at, updated_at
+		FROM chat_threads
+		WHERE profile_id = ?
+		ORDER BY updated_at DESC, created_at DESC
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Thread
+	for rows.Next() {
+		var t Thread
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Thread, error) {
+	var t Thread
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, title, created_at, updated_at
+		FROM chat_threads
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(threadID), strings.TrimSpace(profileID)).Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return Thread{}, fmt.Errorf("thread not found")
+		}
+		return Thread{}, err
+	}
+	return t, nil
+}
+
+func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string) (Message, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	role = strings.TrimSpace(strings.ToLower(role))
+	content = strings.TrimSpace(content)
+	if profileID == "" || threadID == "" {
+		return Message{}, fmt.Errorf("profile_id and thread_id are required")
+	}
+	if role != "user" && role != "assistant" && role != "system" {
+		return Message{}, fmt.Errorf("invalid role")
+	}
+	if content == "" {
+		return Message{}, fmt.Errorf("content is required")
+	}
+	if _, err := s.GetThread(ctx, profileID, threadID); err != nil {
+		return Message{}, err
+	}
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json)
+		VALUES (?, ?, ?, ?, ?, '[]')
+	`, id, profileID, threadID, role, content); err != nil {
+		return Message{}, fmt.Errorf("create message: %w", err)
+	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, threadID)
+	return s.getMessage(ctx, profileID, id)
+}
+
+func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) ([]Message, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		FROM chat_messages
+		WHERE profile_id = ? AND thread_id = ?
+		ORDER BY created_at ASC
+	`, profileID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) getMessage(ctx context.Context, profileID, messageID string) (Message, error) {
+	var m Message
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		FROM chat_messages
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return Message{}, fmt.Errorf("message not found")
+		}
+		return Message{}, err
+	}
+	return m, nil
+}
+
+func (s *Service) SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (Attachment, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	filename = strings.TrimSpace(filename)
+	if profileID == "" || threadID == "" {
+		return Attachment{}, fmt.Errorf("profile_id and thread_id are required")
+	}
+	if filename == "" {
+		return Attachment{}, fmt.Errorf("filename is required")
+	}
+	if _, err := s.GetThread(ctx, profileID, threadID); err != nil {
+		return Attachment{}, err
+	}
+	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
+		return Attachment{}, fmt.Errorf("create attachment dir: %w", err)
+	}
+	id := uuid.NewString()
+	safeName := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			return '_'
+		}
+		return r
+	}, filename)
+	targetPath := filepath.Join(s.dataDir, id+"-"+safeName)
+	out, err := os.Create(targetPath)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("create attachment file: %w", err)
+	}
+	size, copyErr := io.Copy(out, src)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return Attachment{}, fmt.Errorf("write attachment: %w", copyErr)
+	}
+	if closeErr != nil {
+		return Attachment{}, fmt.Errorf("close attachment: %w", closeErr)
+	}
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_attachments(id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, id, profileID, threadID, filename, mimeType, size, targetPath); err != nil {
+		return Attachment{}, fmt.Errorf("save attachment: %w", err)
+	}
+	return s.getAttachment(ctx, profileID, id)
+}
+
+func (s *Service) getAttachment(ctx context.Context, profileID, attachmentID string) (Attachment, error) {
+	var a Attachment
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path, created_at
+		FROM chat_attachments
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(attachmentID), strings.TrimSpace(profileID)).Scan(
+		&a.ID, &a.ProfileID, &a.ThreadID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.Path, &a.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return Attachment{}, fmt.Errorf("attachment not found")
+		}
+		return Attachment{}, err
+	}
+	return a, nil
+}
+
+func (s *Service) PreviewAction(ctx context.Context, in PreviewActionInput) (ActionPreview, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.Action = strings.TrimSpace(in.Action)
+	if in.ProfileID == "" || in.ThreadID == "" || in.Action == "" {
+		return ActionPreview{}, fmt.Errorf("profile_id, thread_id and action are required")
+	}
+	if _, err := s.GetThread(ctx, in.ProfileID, in.ThreadID); err != nil {
+		return ActionPreview{}, err
+	}
+	if err := validateActionPayload(in.Action, in.Payload); err != nil {
+		return ActionPreview{}, err
+	}
+	rawPayload, err := json.Marshal(in.Payload)
+	if err != nil {
+		return ActionPreview{}, fmt.Errorf("marshal payload: %w", err)
+	}
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_action_previews(id, profile_id, thread_id, action, payload_json, status)
+		VALUES (?, ?, ?, ?, ?, 'previewed')
+	`, id, in.ProfileID, in.ThreadID, in.Action, string(rawPayload)); err != nil {
+		return ActionPreview{}, fmt.Errorf("create preview: %w", err)
+	}
+	return s.getPreview(ctx, in.ProfileID, id)
+}
+
+func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.PreviewID = strings.TrimSpace(in.PreviewID)
+	if in.ProfileID == "" || in.ThreadID == "" || in.PreviewID == "" {
+		return ApplyActionResult{}, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	if !in.Confirm {
+		return ApplyActionResult{}, fmt.Errorf("confirm_required")
+	}
+	preview, payload, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	result := ApplyActionResult{Applied: true, Action: preview.Action, PreviewID: preview.ID}
+	switch preview.Action {
+	case "create_item_stub":
+		itemID, err := s.applyCreateItemStub(ctx, in.ProfileID, payload)
+		if err != nil {
+			return ApplyActionResult{}, err
+		}
+		result.ItemID = itemID
+	default:
+		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", preview.Action)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chat_action_previews
+		SET status = 'applied', applied_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND profile_id = ? AND thread_id = ?
+	`, in.PreviewID, in.ProfileID, in.ThreadID)
+	if err != nil {
+		return ApplyActionResult{}, fmt.Errorf("mark action applied: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
+	var preview ActionPreview
+	var payloadRaw string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, action, payload_json, status, created_at, COALESCE(applied_at, '')
+		FROM chat_action_previews
+		WHERE id = ? AND profile_id = ? AND thread_id = ?
+	`, previewID, profileID, threadID).Scan(
+		&preview.ID, &preview.ProfileID, &preview.ThreadID, &preview.Action, &payloadRaw, &preview.Status, &preview.CreatedAt, &preview.AppliedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ActionPreview{}, nil, fmt.Errorf("preview not found")
+		}
+		return ActionPreview{}, nil, err
+	}
+	if preview.Status != "previewed" {
+		return ActionPreview{}, nil, fmt.Errorf("preview already applied")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadRaw), &payload); err != nil {
+		return ActionPreview{}, nil, fmt.Errorf("decode payload: %w", err)
+	}
+	return preview, payload, nil
+}
+
+func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
+	var preview ActionPreview
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, action, status, created_at, COALESCE(applied_at, '')
+		FROM chat_action_previews
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(previewID), strings.TrimSpace(profileID)).Scan(
+		&preview.ID, &preview.ProfileID, &preview.ThreadID, &preview.Action, &preview.Status, &preview.CreatedAt, &preview.AppliedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ActionPreview{}, fmt.Errorf("preview not found")
+		}
+		return ActionPreview{}, err
+	}
+	return preview, nil
+}
+
+func validateActionPayload(action string, payload map[string]any) error {
+	switch strings.TrimSpace(action) {
+	case "create_item_stub":
+		partNumber, _ := payload["part_number"].(string)
+		title, _ := payload["title"].(string)
+		if strings.TrimSpace(partNumber) == "" || strings.TrimSpace(title) == "" {
+			return fmt.Errorf("part_number and title are required")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported action: %s", action)
+	}
+}
+
+func (s *Service) applyCreateItemStub(ctx context.Context, profileID string, payload map[string]any) (string, error) {
+	partNumber, _ := payload["part_number"].(string)
+	title, _ := payload["title"].(string)
+	brand, _ := payload["brand"].(string)
+	category, _ := payload["category"].(string)
+	if strings.TrimSpace(brand) == "" {
+		brand = "Unknown"
+	}
+	if strings.TrimSpace(category) == "" {
+		category = "General"
+	}
+	itemID := uuid.NewString()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO canonical_items(
+			id, profile_id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, '', '', '', '', '', '', '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, itemID, profileID, strings.TrimSpace(brand), strings.TrimSpace(category), strings.TrimSpace(partNumber), strings.TrimSpace(title))
+	if err != nil {
+		return "", fmt.Errorf("create stub item: %w", err)
+	}
+	return itemID, nil
+}
+
+func (s *Service) CleanupOldPreviews(ctx context.Context, olderThan time.Duration) error {
+	cutoff := time.Now().Add(-olderThan).UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_action_previews WHERE status = 'previewed' AND created_at < ?`, cutoff)
+	return err
+}
