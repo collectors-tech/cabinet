@@ -213,7 +213,8 @@ body {
   border-radius: 10px;
   padding: 10px;
   margin-bottom: 10px;
-  max-height: 220px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -245,6 +246,16 @@ body {
   padding: 4px 8px;
   font: inherit;
   cursor: pointer;
+}
+
+.cabinet-nav-editor-eye {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
 }
 
 .cabinet-content {

@@ -2603,8 +2603,23 @@ export function App() {
                     >
                       Down
                     </button>
-                    <button type="button" aria-label={`${item.visible ? "Hide" : "Show"} ${item.label}`} onClick={() => toggleNavVisibility(item.screen)}>
-                      {item.visible ? "Hide" : "Show"}
+                    <button
+                      type="button"
+                      className="cabinet-nav-editor-eye"
+                      aria-label={`${item.visible ? "Hide" : "Show"} ${item.label}`}
+                      onClick={() => toggleNavVisibility(item.screen)}
+                    >
+                      {item.visible ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" stroke="currentColor" strokeWidth="2" />
+                          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M2 12s3.5-6 10-6c2.1 0 3.9.6 5.4 1.5M22 12s-3.5 6-10 6c-2.1 0-3.9-.6-5.4-1.5" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </li>
@@ -2612,7 +2627,7 @@ export function App() {
             </ul>
           </section>
         ) : null}
-        <nav className="nav-main">{navLinks()}</nav>
+        {!navEditMode ? <nav className="nav-main">{navLinks()}</nav> : null}
         <div className="cabinet-nav-edit-row">
           <button type="button" aria-label={navEditMode ? "Finish nav main editing" : "Edit nav main"} onClick={toggleNavEdit}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

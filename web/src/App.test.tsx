@@ -159,11 +159,19 @@ describe("App shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
     expect(screen.getByLabelText(/nav main editor/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^dashboard$/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /move dashboard down/i }));
-    expect(within(navMain).getAllByRole("button")[0]).toHaveAccessibleName("Collection");
+    fireEvent.click(screen.getByRole("button", { name: /finish nav main editing/i }));
 
+    const navMainAfterMove = screen.getAllByRole("navigation")[0];
+    expect(within(navMainAfterMove).getAllByRole("button")[0]).toHaveAccessibleName("Collection");
+
+    fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
     fireEvent.click(screen.getByRole("button", { name: /hide collection/i }));
-    expect(within(navMain).queryByRole("button", { name: /^collection$/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /finish nav main editing/i }));
+
+    const navMainAfterHide = screen.getAllByRole("navigation")[0];
+    expect(within(navMainAfterHide).queryByRole("button", { name: /^collection$/i })).not.toBeInTheDocument();
   });
 
   it("renders semantic collection browser base layout in advanced workspace", async () => {
@@ -197,6 +205,37 @@ describe("App shell", () => {
     expect(screen.getByTestId("collection-tree")).toBeInTheDocument();
     expect(screen.getByTestId("collection-results")).toBeInTheDocument();
     expect(screen.getByTestId("collection-summary-strip")).toBeInTheDocument();
+  });
+
+  it("renders eye icon toggle control for nav item visibility in edit mode", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
+
+    const hideCollection = screen.getByRole("button", { name: /hide collection/i });
+    expect(hideCollection.querySelector("svg")).toBeTruthy();
   });
 
   it("switches visible advanced workspace section from sidebar navigation", async () => {
