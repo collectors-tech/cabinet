@@ -1412,6 +1412,10 @@ describe("App shell", () => {
     fireEvent.change(await screen.findByLabelText(/bulk edit brand/i), { target: { value: "Auto World" } });
     fireEvent.click(await screen.findByRole("button", { name: /preview bulk edit/i }));
     expect(await screen.findByText(/brand -> Auto World/i)).toBeInTheDocument();
+    const applyButton = await screen.findByRole("button", { name: /apply bulk edit/i });
+    expect(applyButton).toBeDisabled();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /confirm bulk edit changes/i }));
+    expect(applyButton).toBeEnabled();
     fireEvent.click(await screen.findByRole("button", { name: /apply bulk edit/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(

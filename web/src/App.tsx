@@ -145,6 +145,7 @@ export function App() {
   const [selectedCollectionItemIDs, setSelectedCollectionItemIDs] = useState<string[]>([]);
   const [bulkEditDraft, setBulkEditDraft] = useState({ brand: "", category: "" });
   const [bulkEditPreview, setBulkEditPreview] = useState("");
+  const [bulkEditConfirmed, setBulkEditConfirmed] = useState(false);
   const [inlineEditDraft, setInlineEditDraft] = useState<Record<string, { title: string; brand: string }>>({});
   const [collectionStatus, setCollectionStatus] = useState("");
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
@@ -1037,6 +1038,7 @@ export function App() {
       }
       return current.filter((id) => id !== itemID);
     });
+    setBulkEditConfirmed(false);
   }
 
   function previewBulkEdit() {
@@ -1071,6 +1073,10 @@ export function App() {
       setItemsError("bulk_changes_required");
       return;
     }
+    if (!bulkEditConfirmed) {
+      setItemsError("bulk_confirmation_required");
+      return;
+    }
     setItemsError("");
     try {
       const resp = await fetch("/api/items/bulk-edit", {
@@ -1087,6 +1093,7 @@ export function App() {
       setCollectionStatus(`bulk_edit_applied:${selectedCollectionItemIDs.length}`);
       setBulkEditPreview("");
       setSelectedCollectionItemIDs([]);
+      setBulkEditConfirmed(false);
     } catch (e) {
       setItemsError(e instanceof Error ? e.message : "failed_to_bulk_edit_items");
     }
@@ -3624,20 +3631,35 @@ export function App() {
                 <p>{selectedCollectionItemIDs.length} selected</p>
                 <input
                   value={bulkEditDraft.brand}
-                  onChange={(e) => setBulkEditDraft((current) => ({ ...current, brand: e.target.value }))}
+                  onChange={(e) => {
+                    setBulkEditDraft((current) => ({ ...current, brand: e.target.value }));
+                    setBulkEditConfirmed(false);
+                  }}
                   placeholder="Brand"
                   aria-label="Bulk edit brand"
                 />
                 <input
                   value={bulkEditDraft.category}
-                  onChange={(e) => setBulkEditDraft((current) => ({ ...current, category: e.target.value }))}
+                  onChange={(e) => {
+                    setBulkEditDraft((current) => ({ ...current, category: e.target.value }));
+                    setBulkEditConfirmed(false);
+                  }}
                   placeholder="Category"
                   aria-label="Bulk edit category"
                 />
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={bulkEditConfirmed}
+                    onChange={(e) => setBulkEditConfirmed(e.target.checked)}
+                    aria-label="Confirm bulk edit changes"
+                  />{" "}
+                  Confirm bulk edit changes
+                </label>
                 <button type="button" onClick={previewBulkEdit}>
                   Preview Bulk Edit
                 </button>
-                <button type="button" onClick={applyBulkEdit}>
+                <button type="button" onClick={applyBulkEdit} disabled={!bulkEditConfirmed}>
                   Apply Bulk Edit
                 </button>
                 {bulkEditPreview ? <p>{bulkEditPreview}</p> : null}

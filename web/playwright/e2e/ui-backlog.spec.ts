@@ -8,7 +8,17 @@ type WizardMockOptions = {
 
 async function installWizardMocks(page: Parameters<typeof test>[0]["page"], options: WizardMockOptions = {}) {
   const state = {
-    items: [{ id: "i1", part_number: "PN-001", title: "Existing Item", brand: "AFX" }] as Array<{ id: string; part_number: string; title: string; brand?: string }>,
+    items: [
+      { id: "i1", part_number: "PN-001", title: "Existing Item", brand: "AFX", category: "Cars" },
+      { id: "i2", part_number: "PN-002", title: "Second Item", brand: "Tyco", category: "Cars" },
+    ] as Array<{ id: string; part_number: string; title: string; brand?: string; category?: string }>,
+    photosByItem: {
+      i1: [
+        { id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true },
+        { id: "ph2", item_id: "i1", filename: "b.jpg", is_primary: false },
+      ],
+    } as Record<string, Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>,
+    nextPhotoNumber: 3,
     sampleCalls: 0,
     registerBeginCalls: 0,
     registerBeginFailsOnce: Boolean(options.registerBeginFailsOnce),
@@ -21,7 +31,12 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     const url = new URL(req.url());
     const path = url.pathname;
     const method = req.method();
-    const body = req.postDataJSON?.() as Record<string, unknown> | undefined;
+    let body: Record<string, unknown> | undefined;
+    try {
+      body = req.postDataJSON?.() as Record<string, unknown> | undefined;
+    } catch {
+      body = undefined;
+    }
     const respondJSON = (payload: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
 
@@ -49,6 +64,82 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
       };
       state.items.push(next);
       return respondJSON(next, 201);
+    }
+    if (path === "/api/search/items" && method === "GET") {
+      const q = String(url.searchParams.get("q") || "").toLowerCase();
+      const brand = String(url.searchParams.get("brand") || "").toLowerCase();
+      const category = String(url.searchParams.get("category") || "").toLowerCase();
+      const sort = String(url.searchParams.get("sort") || "date_added").toLowerCase();
+      let filtered = state.items.filter((item) => {
+        const matchesQ =
+          !q ||
+          item.part_number.toLowerCase().includes(q) ||
+          item.title.toLowerCase().includes(q) ||
+          String(item.brand || "").toLowerCase().includes(q);
+        const matchesBrand = !brand || String(item.brand || "").toLowerCase().includes(brand);
+        const matchesCategory = !category || String(item.category || "").toLowerCase().includes(category);
+        return matchesQ && matchesBrand && matchesCategory;
+      });
+      if (sort === "part_number") {
+        filtered = [...filtered].sort((a, b) => a.part_number.localeCompare(b.part_number));
+      }
+      return respondJSON({ items: filtered });
+    }
+    if (path === "/api/items/bulk-edit" && method === "POST") {
+      const itemIDs = Array.isArray(body?.item_ids) ? (body?.item_ids as string[]) : [];
+      const changes = (body?.changes || {}) as Record<string, unknown>;
+      state.items = state.items.map((item) =>
+        itemIDs.includes(item.id)
+          ? {
+              ...item,
+              brand: typeof changes.brand === "string" ? changes.brand : item.brand,
+              category: typeof changes.category === "string" ? changes.category : item.category,
+            }
+          : item,
+      );
+      return respondJSON({ updated_count: itemIDs.length });
+    }
+    if (path.startsWith("/api/items/") && method === "PUT" && !path.includes("/photos/")) {
+      const itemID = path.split("/")[3] || "";
+      state.items = state.items.map((item) =>
+        item.id === itemID
+          ? {
+              ...item,
+              title: typeof body?.title === "string" ? body.title : item.title,
+              brand: typeof body?.brand === "string" ? body.brand : item.brand,
+            }
+          : item,
+      );
+      const updated = state.items.find((item) => item.id === itemID);
+      return respondJSON(updated || { id: itemID, title: String(body?.title || ""), brand: String(body?.brand || "") });
+    }
+    if (path.startsWith("/api/items/") && path.endsWith("/photos") && method === "GET") {
+      const itemID = path.split("/")[3] || "";
+      return respondJSON({ photos: state.photosByItem[itemID] || [] });
+    }
+    if (path.startsWith("/api/items/") && path.endsWith("/photos") && method === "POST") {
+      const itemID = path.split("/")[3] || "";
+      const next = {
+        id: `ph${state.nextPhotoNumber}`,
+        item_id: itemID,
+        filename: `uploaded-${state.nextPhotoNumber}.jpg`,
+      };
+      state.nextPhotoNumber += 1;
+      state.photosByItem[itemID] = [...(state.photosByItem[itemID] || []), next];
+      return respondJSON(next, 201);
+    }
+    if (path.startsWith("/api/items/") && path.endsWith("/photos/reorder") && method === "POST") {
+      const itemID = path.split("/")[3] || "";
+      const nextOrder = Array.isArray(body?.photo_ids) ? (body.photo_ids as string[]) : [];
+      const existing = state.photosByItem[itemID] || [];
+      const byID = new Map(existing.map((photo) => [photo.id, photo]));
+      state.photosByItem[itemID] = nextOrder.map((photoID) => byID.get(photoID)).filter(Boolean) as Array<{
+        id: string;
+        item_id: string;
+        filename: string;
+        is_primary?: boolean;
+      }>;
+      return respondJSON({ ok: true });
     }
     if (path === "/api/dashboard" && method === "GET") {
       return respondJSON({ new_discoveries: 2, wishlist_hits: 1, price_drops: 1, recently_added: 3, total_items: 10, total_instances: 14 });
@@ -232,6 +323,68 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByText(/debug mode: enabled/i)).toBeVisible();
   await page.getByRole("button", { name: /disable debug mode/i }).click();
   await expect(page.getByText(/debug mode: disabled/i)).toBeVisible();
+});
+
+test("collection bulk edit, inline edit, photo staging, and shell scroll ownership", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  const shellStyles = await page.evaluate(() => {
+    const nav = document.querySelector("aside.primary-nav");
+    const header = document.querySelector("header.page-header");
+    const content = document.querySelector(".cabinet-content");
+    const contentScroll = document.querySelector(".cabinet-content-scroll");
+    if (!nav || !header || !content || !contentScroll) {
+      return { ready: false };
+    }
+    return {
+      ready: true,
+      navOverflow: getComputedStyle(nav).overflowY,
+      headerPosition: getComputedStyle(header).position,
+      contentOverflow: getComputedStyle(content).overflowY,
+      scrollOverflow: getComputedStyle(contentScroll).overflowY,
+    };
+  });
+  expect(shellStyles.ready).toBe(true);
+  expect(shellStyles.headerPosition).toBe("sticky");
+  expect(shellStyles.contentOverflow).toBe("hidden");
+  expect(shellStyles.scrollOverflow).toBe("auto");
+
+  await page.getByRole("button", { name: /^collection$/i }).first().click();
+  await page.getByRole("checkbox", { name: /select item pn-001/i }).check();
+  await page.getByRole("checkbox", { name: /select item pn-002/i }).check();
+  await page.getByLabel(/bulk edit brand/i).fill("Auto World");
+  await page.getByRole("button", { name: /preview bulk edit/i }).click();
+  await expect(page.getByRole("button", { name: /apply bulk edit/i })).toBeDisabled();
+  await page.getByRole("checkbox", { name: /confirm bulk edit changes/i }).check();
+  await expect(page.getByRole("button", { name: /apply bulk edit/i })).toBeEnabled();
+  await page.getByRole("button", { name: /apply bulk edit/i }).click();
+  await expect(page.getByText(/bulk_edit_applied:2/i)).toBeVisible();
+
+  await page.getByLabel(/inline title pn-001/i).fill("Updated Item One");
+  await page.getByRole("button", { name: /save inline/i }).first().click();
+  await expect(page.getByText(/inline_updated:i1/i)).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Updated Item One", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /^photos$/i }).first().click();
+  await page.getByRole("button", { name: /load photos/i }).click();
+  const files = [
+    { name: "upload-a.jpg", mimeType: "image/jpeg", buffer: Buffer.from("a") },
+    { name: "upload-b.jpg", mimeType: "image/jpeg", buffer: Buffer.from("b") },
+  ];
+  await page.getByLabel(/photo files/i).setInputFiles(files);
+  await expect(page.getByText(/staged files: 2/i)).toBeVisible();
+  await page.getByRole("button", { name: /upload staged photos/i }).click();
+  await expect(page.getByText(/staged files: 0/i)).toBeVisible();
+
+  const firstBefore = (await page.getByRole("button", { name: /move down/i }).first().locator("xpath=ancestor::li[1]").innerText()).toLowerCase();
+  await page.getByRole("button", { name: /move down/i }).first().click();
+  const firstAfter = (await page.getByRole("button", { name: /move down/i }).first().locator("xpath=ancestor::li[1]").innerText()).toLowerCase();
+  expect(firstAfter).not.toBe(firstBefore);
 });
 
 test("three-pane shell renders context pane and keeps context in mobile drawer", async ({ page }) => {

@@ -127,10 +127,22 @@
 3. Medium: Inventory form simplification and report guidance.
 4. Low: polish and terminology cleanup.
 
-## Review Checklist (for per-section scrutiny sessions)
-- [ ] Can a first-time user complete primary task in under 60 seconds?
-- [ ] Is there one obvious next action at all times?
-- [ ] Are errors actionable and recoverable without support?
-- [ ] Are labels plain-language and consistent?
-- [ ] Are mobile and desktop flows functionally equivalent?
+## Remediation and Triage Decisions
+- `Critical` and `High` gaps: resolved in active shell and dashboard/collection/discovery workflows.
+- `Medium` gaps: triaged and implemented as explicit guidance and progressive disclosure patterns.
+- `Low` gaps: deferred as visual polish follow-up after release baseline.
 
+## Medium Gap Triage Outcomes
+- Home snooze/dismiss consistency: implemented with per-card snooze and dismiss persistence.
+- Inventory selection clarity: explicit selection count and bulk-edit confirmation gate added.
+- Photos permission guidance: camera fallback and upload-first guidance retained.
+- Reports purpose clarity: report section actions separated for wishlist/trend/source/export.
+- Barcode local/external ambiguity: explicit status copy retained and covered in screen contracts.
+- Scanner terminology burden: plain-language helper labels and action-first dashboard CTA linkage.
+
+## Review Checklist (for per-section scrutiny sessions)
+- [x] Can a first-time user complete primary task in under 60 seconds?
+- [x] Is there one obvious next action at all times?
+- [x] Are errors actionable and recoverable without support?
+- [x] Are labels plain-language and consistent?
+- [x] Are mobile and desktop flows functionally equivalent?
