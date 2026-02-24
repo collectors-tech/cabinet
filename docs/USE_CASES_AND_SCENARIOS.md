@@ -40,7 +40,7 @@ Success criteria:
 3. Run scheduled or manual scan.
 4. Classify scanner candidates.
 5. Update collection instances and photos.
-6. Review tracked prices and wishlist targets.
+6. Review tracked prices, stock counts, and wishlist targets.
 
 Success criteria:
 - User can complete weekly review in under 20 minutes.
@@ -240,6 +240,7 @@ Main flow:
 2. App requests provider data under rate limits.
 3. Candidates are normalized and deduplicated.
 4. Candidate records are persisted with first seen/last seen/status.
+5. If available, stock status/count are captured from provider data/page.
 
 Alternate flows:
 - A1: Provider throttles requests; app applies retry/backoff.
@@ -247,6 +248,7 @@ Alternate flows:
 
 Postconditions:
 - New candidate set available for classification.
+- Candidate availability state is available for buy-timing decisions.
 
 ## UC-12: Match Candidates to Collection
 Actor: System  
@@ -302,16 +304,16 @@ Preconditions:
 - Item marked as tracked.
 
 Main flow:
-1. Daily snapshot job records min/median/latest.
+1. Daily snapshot job records min/median/latest and stock status/count by source.
 2. User opens price history graph.
-3. User exports price history when needed.
+3. User exports price + stock history when needed.
 
 Alternate flows:
 - A1: Snapshot missed due to provider outage; app records skipped interval event.
 - A2: Sparse data is shown with explicit low-confidence visualization.
 
 Postconditions:
-- Historical pricing data supports collector decision-making.
+- Historical pricing + stock data supports collector decision-making.
 
 ## UC-16: Search, Filter, and Sort Collection
 Actor: Collector User  
@@ -334,7 +336,7 @@ Preconditions:
 
 Main flow:
 1. User opens dashboard.
-2. User reviews discoveries, wishlist hits, and price drops.
+2. User reviews discoveries, wishlist hits, price drops, low-stock alerts, and restock alerts.
 3. User checks recently added items and collection totals.
 4. User navigates into detailed views from dashboard cards.
 

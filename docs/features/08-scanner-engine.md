@@ -7,6 +7,7 @@
 
 ## Goal
 - Run query sets against providers to collect candidate listings.
+- Capture stock availability/count signals when provider pages expose them.
 
 ## Scope
 - In scope: Query-set management, run now/scheduled run, candidate persistence, failures.
@@ -26,7 +27,15 @@
 
 ## Data Model Touchpoints
 - Tables/entities: scanner_query_sets, scanner_candidates, scanner_failures, provider_health.
+- Candidate stock fields: `stock_status`, `stock_count`, `stock_observed_at`, `stock_source_note`.
 - Settings/secrets: Profile settings and secret storage where applicable.
+
+## Stock Signal Requirements
+- SR-1: Scanner candidate ingest attempts to read stock status from provider payload/page.
+- SR-2: If quantity exists, persist normalized integer `stock_count`.
+- SR-3: If stock signal is unavailable, persist `stock_status=unknown` (never guess).
+- SR-4: Preserve last observed stock timestamp for buy-timing analysis.
+- SR-5: Candidate list surfaces stock state inline for triage decisions.
 
 ## UX Flow
 - Entry point: Main application workspace and related navigation section.

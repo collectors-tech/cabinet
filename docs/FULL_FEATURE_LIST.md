@@ -123,6 +123,9 @@ Stored fields:
 - URL
 - Image
 - Seller
+- Stock status (`in_stock`, `low_stock`, `out_of_stock`, `unknown`)
+- Stock count (if provider page exposes quantity)
+- Stock count confidence/source note
 - First seen
 - Last seen
 - Status
@@ -165,6 +168,8 @@ Actions:
 - Mark item as tracked
 - Daily price snapshot
 - Store min, median, latest
+- Store per-source stock count observation with timestamp
+- Store in-stock/out-of-stock transitions by source
 - Graph view
 - Per-source breakdown
 - Export price history
@@ -174,6 +179,8 @@ Displays:
 - New discoveries
 - Wishlist hits
 - Price drops
+- Low stock alerts for watchlisted/tracked items
+- Restock alerts for previously out-of-stock items
 - Recently added items
 
 Collection stats:

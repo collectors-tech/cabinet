@@ -53,6 +53,7 @@ Sections:
 1. Filter bar (query, max price, date)
 2. Not-in-collection list
 3. Candidate actions
+4. Stock status/count badge in each candidate row/card
 
 Required actions:
 - Ignore
@@ -74,6 +75,7 @@ Sections:
 2. Pricing trend/points
 3. Source breakdown
 4. Export controls
+5. Stock history/availability trend by source
 
 ## Settings
 Sections:
@@ -93,4 +95,3 @@ Sections:
 - [ ] Each screen implements all four state types.
 - [ ] Required actions are present and testable.
 - [ ] Empty and error states are explicit and actionable.
-

@@ -7,9 +7,11 @@
 
 ## Goal
 - Summarize discoveries, pricing signals, and collection metrics.
+- Surface buy-timing signals using stock scarcity and restock events.
 
 ## Scope
 - In scope: Dashboard cards, counters, recently added and stats.
+- In scope: stock-aware attention cards for low stock and restock on tracked/watchlisted items.
 - Out of scope: Non-v1 enhancements unless explicitly listed in feature backlog.
 
 ## User Stories
@@ -26,6 +28,7 @@
 
 ## Data Model Touchpoints
 - Tables/entities: Derived aggregations across candidates, wishlist, items, pricing.
+- Derived stock signals: low-stock counters, restock counters, stock trend state.
 - Settings/secrets: Profile settings and secret storage where applicable.
 
 ## UX Flow

@@ -22,6 +22,7 @@ Map UI widgets to endpoints, required fields, and fallback behavior.
 4. Discoveries
 - Endpoint: `GET /api/discovery/not-in-collection`
 - Required fields: `candidate_id`, `title`, `price`, `last_seen`
+- Optional stock fields: `stock_status`, `stock_count`, `stock_observed_at`
 - Fallback: empty list
 
 5. Scanner Failures
@@ -56,9 +57,9 @@ Map UI widgets to endpoints, required fields, and fallback behavior.
 2. UI validates required fields before rendering interactive rows.
 3. Unknown/missing fields produce deterministic placeholders.
 4. All endpoint failures return user-visible error + retry action.
+5. Stock fields are optional but when present must render as explicit state (`in stock`, `low stock`, `out of stock`, `unknown`).
 
 ## Acceptance Criteria
 - [ ] Every critical widget has endpoint and required field contract.
 - [ ] Fallback behavior defined for missing/failed data.
 - [ ] Contracts align with OpenAPI and runtime handlers.
-

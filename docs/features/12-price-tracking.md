@@ -7,9 +7,11 @@
 
 ## Goal
 - Persist daily price snapshots and provide graph/export views.
+- Persist stock snapshots by source so pricing can be combined with availability trends.
 
 ## Scope
 - In scope: Track item, history, source breakdown, export.
+- In scope: Source stock count/state observation history and change detection.
 - Out of scope: Non-v1 enhancements unless explicitly listed in feature backlog.
 
 ## User Stories
@@ -26,7 +28,14 @@
 
 ## Data Model Touchpoints
 - Tables/entities: tracked_items, price_snapshots.
+- Additional entities/fields: stock_snapshots (or stock columns on price snapshots), source_stock_events.
 - Settings/secrets: Profile settings and secret storage where applicable.
+
+## Stock-Aware Requirements
+- SR-1: Snapshot includes `stock_status` and optional `stock_count` per source.
+- SR-2: Compute `in_stock_change` event when state transitions between in/out of stock.
+- SR-3: Source breakdown UI exposes latest stock state next to latest price.
+- SR-4: Export includes stock fields for downstream buy-timing analysis.
 
 ## UX Flow
 - Entry point: Main application workspace and related navigation section.
