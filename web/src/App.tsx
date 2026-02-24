@@ -15,6 +15,7 @@ type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discover
 type NavScreen = Exclude<TopLevelScreen, "all">;
 type NavItemDefinition = { screen: NavScreen; label: string; icon: string };
 type NavItemConfig = { screen: NavScreen; visible: boolean };
+type CollectionContextNode = { id: string; label: string; kind: "all" | "folder" | "saved" };
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -41,12 +42,25 @@ const NAV_ITEMS: NavItemDefinition[] = [
   { screen: "settings", label: "Settings", icon: "ST" },
 ];
 
+const COLLECTION_CONTEXT_NODES: CollectionContextNode[] = [
+  { id: "all-items", label: "All Items", kind: "all" },
+  { id: "watchlist", label: "Watch List", kind: "saved" },
+  { id: "wishlist-focus", label: "Wishlist Focus", kind: "saved" },
+  { id: "store-1", label: "Store 1", kind: "folder" },
+  { id: "store-2", label: "Store 2", kind: "folder" },
+  { id: "warehouse-1", label: "Warehouse 1", kind: "folder" },
+];
+
 function navConfigStorageKey(profileID?: string) {
   return profileID ? `cabinet.nav.main.${profileID}` : "cabinet.nav.main.global";
 }
 
 function navCollapsedStorageKey(profileID?: string) {
   return profileID ? `cabinet.nav.collapsed.${profileID}` : "cabinet.nav.collapsed.global";
+}
+
+function contextPaneCollapsedStorageKey(profileID?: string) {
+  return profileID ? `cabinet.context.collapsed.${profileID}` : "cabinet.context.collapsed.global";
 }
 
 function detectInitialTheme(): Theme {
@@ -197,7 +211,9 @@ export function App() {
     { role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." },
   ]);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [contextPaneCollapsed, setContextPaneCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
+  const [activeContextID, setActiveContextID] = useState<string>("all-items");
   const [navConfig, setNavConfig] = useState<NavItemConfig[]>(() => NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
@@ -295,6 +311,8 @@ export function App() {
 
     const savedCollapsed = localStorage.getItem(navCollapsedStorageKey(profileID));
     setNavCollapsed(savedCollapsed === "1" || savedCollapsed?.toLowerCase() === "true");
+    const savedContextCollapsed = localStorage.getItem(contextPaneCollapsedStorageKey(profileID));
+    setContextPaneCollapsed(savedContextCollapsed === "1" || savedContextCollapsed?.toLowerCase() === "true");
     setNavEditMode(false);
   }, [activeProfile?.id]);
 
@@ -305,6 +323,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(navCollapsedStorageKey(activeProfile?.id), navCollapsed ? "1" : "0");
   }, [activeProfile?.id, navCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(contextPaneCollapsedStorageKey(activeProfile?.id), contextPaneCollapsed ? "1" : "0");
+  }, [activeProfile?.id, contextPaneCollapsed]);
 
   useEffect(() => {
     let disposed = false;
@@ -2553,6 +2575,46 @@ export function App() {
       </button>
     ));
 
+  const activeContext = COLLECTION_CONTEXT_NODES.find((node) => node.id === activeContextID) ?? COLLECTION_CONTEXT_NODES[0];
+
+  const contextPane = (forDrawer = false) => (
+    <aside className={`collection-context-pane${contextPaneCollapsed && !forDrawer ? " collection-context-pane-collapsed" : ""}`} aria-label="Collection context pane">
+      <div className="collection-context-head">
+        {contextPaneCollapsed && !forDrawer ? null : <h2>Collections</h2>}
+        {!forDrawer ? (
+          <button
+            type="button"
+            aria-label={contextPaneCollapsed ? "Expand collection pane" : "Collapse collection pane"}
+            onClick={() => setContextPaneCollapsed((current) => !current)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              {contextPaneCollapsed ? (
+                <path d="M10 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <path d="M14 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              )}
+            </svg>
+          </button>
+        ) : null}
+      </div>
+      <nav aria-label="Collection folders and saved views">
+        {COLLECTION_CONTEXT_NODES.map((node) => (
+          <button
+            key={node.id}
+            type="button"
+            className={`collection-context-item${activeContext.id === node.id ? " collection-context-item-active" : ""}`}
+            aria-current={activeContext.id === node.id ? "page" : undefined}
+            onClick={() => setActiveContextID(node.id)}
+            title={contextPaneCollapsed && !forDrawer ? node.label : undefined}
+          >
+            <span aria-hidden="true">{node.kind === "saved" ? "SV" : node.kind === "folder" ? "FD" : "AL"}</span>
+            {contextPaneCollapsed && !forDrawer ? null : <span>{node.label}</span>}
+          </button>
+        ))}
+      </nav>
+    </aside>
+  );
+
   function sendChatDraft() {
     const trimmed = chatDraft.trim();
     if (!trimmed) {
@@ -2566,7 +2628,7 @@ export function App() {
     setChatDraft("");
   }
 
-  const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
+  const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${contextPaneCollapsed ? " cabinet-shell-context-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
 
   return (
     <main data-testid="app-shell" className={shellClassName}>
@@ -2651,6 +2713,7 @@ export function App() {
           </p>
         </div>
       </aside>
+      {contextPane()}
       {mobileNavOpen ? (
         <>
           <button
@@ -2675,10 +2738,13 @@ export function App() {
               </button>
             </div>
             <nav className="nav-main" onClick={() => setMobileNavOpen(false)}>{navLinks(true)}</nav>
+            <div className="cabinet-drawer-context" onClick={() => setMobileNavOpen(false)}>
+              {contextPane(true)}
+            </div>
           </div>
         </>
       ) : null}
-      <section className="cabinet-content">
+      <section className="cabinet-content" aria-label="Primary content">
         <header className="cabinet-topbar page-header">
           <div className="cabinet-topbar-left">
             <button
@@ -2693,6 +2759,7 @@ export function App() {
               Menu
             </button>
             <strong>Runtime connected. UI foundation active.</strong>
+            <span className="cabinet-active-context-pill">Context: {activeContext.label}</span>
           </div>
           <button
             type="button"

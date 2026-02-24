@@ -234,6 +234,30 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByText(/debug mode: disabled/i)).toBeVisible();
 });
 
+test("three-pane shell renders context pane and keeps context in mobile drawer", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await expect(page.locator("aside.primary-nav")).toBeVisible();
+  await expect(page.getByLabel("Collection context pane").first()).toBeVisible();
+  await expect(page.getByLabel("Primary content")).toBeVisible();
+  await page.getByRole("button", { name: /wishlist focus/i }).click();
+  await expect(page.getByText(/context: wishlist focus/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /collapse collection pane/i }).click();
+  await expect(page.getByRole("button", { name: /expand collection pane/i })).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: /open navigation menu/i }).click();
+  const drawer = page.getByRole("dialog", { name: /navigation menu/i });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByLabel("Collection context pane")).toBeVisible();
+});
+
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: true });
   await openStarterWizard(page);

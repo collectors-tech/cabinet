@@ -31,6 +31,8 @@ describe("App shell", () => {
     expect(document.querySelector(".cabinet-content-scroll")).toBeTruthy();
     expect(document.querySelector(".cabinet-topbar")).toBeTruthy();
     expect(document.querySelector(".cabinet-sidebar")).toBeTruthy();
+    expect(screen.getByLabelText(/collection context pane/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/primary content/i)).toBeInTheDocument();
   });
 
   it("exposes semantic shell classes for page-header and primary-nav", () => {
@@ -42,6 +44,34 @@ describe("App shell", () => {
 
     expect(document.querySelector("header.page-header")).toBeTruthy();
     expect(document.querySelector("aside.primary-nav")).toBeTruthy();
+    expect(document.querySelector("aside.collection-context-pane")).toBeTruthy();
+  });
+
+  it("updates active context label from the context pane", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /wishlist focus/i }));
+    expect(screen.getByText(/context: wishlist focus/i)).toBeInTheDocument();
+  });
+
+  it("collapses and expands the collection context pane", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const collapse = screen.getByRole("button", { name: /collapse collection pane/i });
+    fireEvent.click(collapse);
+    expect(screen.getByTestId("app-shell")).toHaveClass("cabinet-shell-context-collapsed");
+
+    const expand = screen.getByRole("button", { name: /expand collection pane/i });
+    fireEvent.click(expand);
+    expect(screen.getByTestId("app-shell")).not.toHaveClass("cabinet-shell-context-collapsed");
   });
 
   it("shows API Kitchen Sync quick link in utility links", async () => {
@@ -105,7 +135,9 @@ describe("App shell", () => {
     render(<App />);
     const openButton = await screen.findByRole("button", { name: /open navigation menu/i });
     fireEvent.click(openButton);
-    expect(await screen.findByRole("dialog", { name: /navigation menu/i })).toBeInTheDocument();
+    const drawer = await screen.findByRole("dialog", { name: /navigation menu/i });
+    expect(drawer).toBeInTheDocument();
+    expect(within(drawer).getByLabelText(/collection context pane/i)).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: /navigation menu/i })).not.toBeInTheDocument();
