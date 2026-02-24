@@ -165,6 +165,38 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: /^collection$/i })).toBeInTheDocument();
   });
 
+  it("sends a chat message and appends an assistant response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /toggle chat copilot/i }));
+    fireEvent.change(screen.getByLabelText(/chat message/i), { target: { value: "Show collection gaps" } });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(await screen.findByText(/show collection gaps/i)).toBeInTheDocument();
+    expect(await screen.findByText(/base chat scaffold is active/i)).toBeInTheDocument();
+  });
+
+  it("supports adding and removing local attachments before sending", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /toggle chat copilot/i }));
+    const input = await screen.findByLabelText(/chat attachment/i);
+    const file = new File(["sample"], "notes.txt", { type: "text/plain" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText(/notes\.txt/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /remove attachment notes\.txt/i }));
+    expect(screen.queryByText(/notes\.txt/i)).not.toBeInTheDocument();
+  });
+
   it("shows app version and build date in left nav footer", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

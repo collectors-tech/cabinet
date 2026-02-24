@@ -119,3 +119,54 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 		t.Fatalf("expected item created after apply, body=%s", itemsAfter.Body.String())
 	}
 }
+
+func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createP1 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P1"}`), map[string]string{"Content-Type": "application/json"})
+	if createP1.Code != http.StatusCreated {
+		t.Fatalf("create p1 status=%d body=%s", createP1.Code, createP1.Body.String())
+	}
+	createP2 := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"P2"}`), map[string]string{"Content-Type": "application/json"})
+	if createP2.Code != http.StatusCreated {
+		t.Fatalf("create p2 status=%d body=%s", createP2.Code, createP2.Body.String())
+	}
+	var p1 struct {
+		ID string `json:"id"`
+	}
+	var p2 struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createP1.Body).Decode(&p1)
+	_ = json.NewDecoder(createP2.Body).Decode(&p2)
+
+	createThread := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p1.ID+`","title":"T1"}`), map[string]string{"Content-Type": "application/json"})
+	if createThread.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", createThread.Code, createThread.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createThread.Body).Decode(&thread)
+
+	badRole := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p1.ID+`","thread_id":"`+thread.ID+`","role":"invalid","content":"hello"}`), map[string]string{"Content-Type": "application/json"})
+	if badRole.Code != http.StatusBadRequest {
+		t.Fatalf("bad role status=%d body=%s", badRole.Code, badRole.Body.String())
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p1.ID+`","thread_id":"`+thread.ID+`","action":"create_item_stub","payload":{"part_number":"ISO-1","title":"Isolated"}}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	var previewObj struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(preview.Body).Decode(&previewObj)
+
+	// Different profile cannot apply another profile's preview.
+	crossProfileApply := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+p2.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewObj.ID+`","confirm":true}`), map[string]string{"Content-Type": "application/json"})
+	if crossProfileApply.Code != http.StatusBadRequest {
+		t.Fatalf("cross profile apply status=%d body=%s", crossProfileApply.Code, crossProfileApply.Body.String())
+	}
+}

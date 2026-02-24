@@ -18,6 +18,7 @@ type NavItemConfig = { screen: NavScreen; visible: boolean };
 type CollectionContextNode = { id: string; label: string; kind: "all" | "folder" | "saved" };
 type ChatContextChip = { id: string; label: string; prompt: string };
 type ChatSuggestedAction = { id: string; label: string; description: string; targetScreen: NavScreen };
+type ChatAttachment = { id: string; name: string; size: number; file: File };
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -67,6 +68,8 @@ const CHAT_SUGGESTED_ACTIONS: ChatSuggestedAction[] = [
     targetScreen: "collection",
   },
 ];
+const CHAT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const CHAT_ATTACHMENT_ALLOWED_EXTENSIONS = [".txt", ".csv", ".json", ".jpg", ".jpeg", ".png", ".pdf"];
 
 function navConfigStorageKey(profileID?: string) {
   return profileID ? `cabinet.nav.main.${profileID}` : "cabinet.nav.main.global";
@@ -233,6 +236,8 @@ export function App() {
     { role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." },
   ]);
   const [chatPendingAction, setChatPendingAction] = useState<ChatSuggestedAction | null>(null);
+  const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
+  const [chatAttachmentError, setChatAttachmentError] = useState("");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [contextPaneCollapsed, setContextPaneCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
@@ -2647,12 +2652,16 @@ export function App() {
     if (!trimmed) {
       return;
     }
+    const attachmentSummary =
+      chatAttachments.length > 0 ? ` Attached: ${chatAttachments.map((attachment) => attachment.name).join(", ")}` : "";
     setChatThread((current) => [
       ...current,
-      { role: "user", text: trimmed },
+      { role: "user", text: `${trimmed}${attachmentSummary}` },
       { role: "assistant", text: "Base chat scaffold is active. Action previews will be connected in the next implementation pass." },
     ]);
     setChatDraft("");
+    setChatAttachments([]);
+    setChatAttachmentError("");
   }
 
   function applyChatContextChip(chip: ChatContextChip) {
@@ -2676,6 +2685,34 @@ export function App() {
     setActiveScreen(chatPendingAction.targetScreen);
     setChatThread((current) => [...current, { role: "assistant", text: `Applied action: ${chatPendingAction.label}.` }]);
     setChatPendingAction(null);
+  }
+
+  function onChatAttachmentChange(files: FileList | null) {
+    if (!files || files.length === 0) {
+      return;
+    }
+    const next: ChatAttachment[] = [];
+    for (const file of Array.from(files)) {
+      const normalizedName = file.name.toLowerCase();
+      const allowed = CHAT_ATTACHMENT_ALLOWED_EXTENSIONS.some((extension) => normalizedName.endsWith(extension));
+      if (!allowed) {
+        setChatAttachmentError(`Unsupported file type for ${file.name}. Allowed: ${CHAT_ATTACHMENT_ALLOWED_EXTENSIONS.join(", ")}`);
+        continue;
+      }
+      if (file.size > CHAT_ATTACHMENT_MAX_BYTES) {
+        setChatAttachmentError(`File ${file.name} exceeds ${Math.floor(CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024))}MB limit.`);
+        continue;
+      }
+      next.push({ id: `${Date.now()}-${file.name}-${file.size}`, name: file.name, size: file.size, file });
+    }
+    if (next.length > 0) {
+      setChatAttachmentError("");
+      setChatAttachments((current) => [...current, ...next]);
+    }
+  }
+
+  function removeChatAttachment(attachmentID: string) {
+    setChatAttachments((current) => current.filter((attachment) => attachment.id !== attachmentID));
   }
 
   const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${contextPaneCollapsed ? " cabinet-shell-context-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
@@ -4006,6 +4043,31 @@ export function App() {
             ))}
           </div>
           <div className="cabinet-chat-composer">
+            <label className="cabinet-chat-attachment-field">
+              <span>Add attachment</span>
+              <input
+                aria-label="Chat attachment"
+                type="file"
+                multiple
+                onChange={(event) => {
+                  onChatAttachmentChange(event.target.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            {chatAttachments.length > 0 ? (
+              <ul className="cabinet-chat-attachment-tray" aria-label="Chat attachment tray">
+                {chatAttachments.map((attachment) => (
+                  <li key={attachment.id}>
+                    <span>{attachment.name}</span>
+                    <button type="button" aria-label={`Remove attachment ${attachment.name}`} onClick={() => removeChatAttachment(attachment.id)}>
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {chatAttachmentError ? <p className="cabinet-chat-attachment-error">{chatAttachmentError}</p> : null}
             <textarea
               aria-label="Chat message"
               value={chatDraft}

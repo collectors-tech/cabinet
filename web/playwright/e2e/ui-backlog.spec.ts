@@ -269,14 +269,50 @@ test("chat rail supports context chips and preview-confirm workspace actions", a
   await page.getByRole("button", { name: /toggle chat copilot/i }).click();
   const chatRail = page.getByRole("complementary", { name: /chat copilot/i });
   await expect(chatRail).toBeVisible();
+  const collectionNav = page.getByRole("button", { name: /^collection$/i }).first();
+  await expect(collectionNav).not.toHaveAttribute("aria-current", "page");
 
   await chatRail.getByRole("button", { name: /wishlist hits context chip/i }).click();
   await expect(chatRail.getByLabel(/chat message/i)).toHaveValue(/wishlist hits/i);
 
   await chatRail.getByRole("button", { name: /preview open collection workspace action/i }).click();
   await expect(chatRail.getByText(/ready to apply: open collection workspace/i)).toBeVisible();
+  await expect(collectionNav).not.toHaveAttribute("aria-current", "page");
   await chatRail.getByRole("button", { name: /confirm apply action/i }).click();
+  await expect(collectionNav).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: /^collection$/i })).toBeVisible();
+});
+
+test("chat open-close preserves active workspace and supports local attachment staging", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+  await page.getByRole("button", { name: /^scanner$/i }).first().click();
+  await expect(page.getByRole("heading", { name: /discovery scanner/i })).toBeVisible();
+
+  await page.getByRole("button", { name: /toggle chat copilot/i }).click();
+  const chatRail = page.getByRole("complementary", { name: /chat copilot/i });
+  await expect(chatRail).toBeVisible();
+
+  await chatRail.getByLabel(/chat attachment/i).setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("collector notes"),
+  });
+  await expect(chatRail.getByText(/notes\.txt/i)).toBeVisible();
+  await chatRail.getByRole("button", { name: /remove attachment notes\.txt/i }).click();
+  await expect(chatRail.getByText(/notes\.txt/i)).toHaveCount(0);
+
+  await chatRail.getByLabel(/chat message/i).fill("show collection gaps");
+  await chatRail.getByRole("button", { name: /^send$/i }).click();
+  await expect(chatRail.getByText(/you:\s*show collection gaps/i)).toBeVisible();
+
+  await chatRail.getByRole("button", { name: /close chat copilot/i }).click();
+  await expect(page.getByRole("complementary", { name: /chat copilot/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /discovery scanner/i })).toBeVisible();
 });
 
 test("wizard happy path completes all 5 steps and unlocks advanced workspace", async ({ page }) => {
