@@ -1823,6 +1823,25 @@ func New(cfg config.Config) (*App, error) {
 			}
 
 			if len(parts) == 3 {
+				if parts[2] == "reorder" {
+					if r.Method != http.MethodPost {
+						http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+						return
+					}
+					var req struct {
+						PhotoIDs []string `json:"photo_ids"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+						return
+					}
+					if err := mediaService.Reorder(r.Context(), itemID, req.PhotoIDs); err != nil {
+						http.Error(w, `{"error":"failed_to_reorder_photos"}`, http.StatusBadRequest)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+					return
+				}
 				photoID := strings.TrimSpace(parts[2])
 				if photoID == "" {
 					http.Error(w, `{"error":"invalid_photo_id"}`, http.StatusBadRequest)

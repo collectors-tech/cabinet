@@ -139,7 +139,8 @@ export function App() {
   const [inlineEditDraft, setInlineEditDraft] = useState<Record<string, { title: string; brand: string }>>({});
   const [collectionStatus, setCollectionStatus] = useState("");
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [stagedPhotoFiles, setStagedPhotoFiles] = useState<File[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<{ id: string; filename: string } | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStatus, setCameraStatus] = useState("idle");
@@ -546,6 +547,19 @@ export function App() {
       return next;
     });
   }, [items]);
+
+  useEffect(() => {
+    if (!fullscreenPhoto) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFullscreenPhoto(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreenPhoto]);
 
   useEffect(() => {
     let disposed = false;
@@ -1179,6 +1193,7 @@ export function App() {
       setPhotosError("item_id_required");
       return;
     }
+    setPhotosLoading(true);
     setPhotosError("");
     try {
       const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos`);
@@ -1189,28 +1204,64 @@ export function App() {
       setPhotos(data.photos || []);
     } catch (e) {
       setPhotosError(e instanceof Error ? e.message : "failed_to_list_photos");
+    } finally {
+      setPhotosLoading(false);
     }
   }
 
-  async function uploadPhoto() {
-    if (!selectedItemID || !photoFile) {
+  function stagePhotoFiles(nextFiles: FileList | File[] | null | undefined) {
+    if (!nextFiles) {
+      return;
+    }
+    const asList = Array.from(nextFiles).filter((file) => Boolean(file));
+    if (asList.length === 0) {
+      return;
+    }
+    setStagedPhotoFiles((current) => [...current, ...asList].slice(0, 10));
+  }
+
+  async function uploadStagedPhotos() {
+    if (!selectedItemID || stagedPhotoFiles.length === 0) {
       setPhotosError("item_and_file_required");
       return;
     }
     setPhotosError("");
     try {
-      const form = new FormData();
-      form.append("file", photoFile);
-      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos`, {
-        method: "POST",
-        body: form,
-      });
-      if (!resp.ok) {
-        throw new Error("failed_to_upload_photo");
+      for (const file of stagedPhotoFiles) {
+        const form = new FormData();
+        form.append("file", file);
+        const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos`, {
+          method: "POST",
+          body: form,
+        });
+        if (!resp.ok) {
+          throw new Error("failed_to_upload_photo");
+        }
       }
+      setStagedPhotoFiles([]);
       await loadPhotos();
     } catch (e) {
       setPhotosError(e instanceof Error ? e.message : "failed_to_upload_photo");
+    }
+  }
+
+  async function reorderPhotos(orderedPhotoIDs: string[]) {
+    if (!selectedItemID || orderedPhotoIDs.length === 0) {
+      return;
+    }
+    setPhotosError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(selectedItemID)}/photos/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_ids: orderedPhotoIDs }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_reorder_photos");
+      }
+      await loadPhotos();
+    } catch (e) {
+      setPhotosError(e instanceof Error ? e.message : "failed_to_reorder_photos");
     }
   }
 
@@ -3540,24 +3591,33 @@ export function App() {
               <div>
                 <input
                   type="file"
-                  onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                  aria-label="Photo file"
+                  multiple
+                  onChange={(e) => stagePhotoFiles(e.target.files)}
+                  aria-label="Photo files"
                 />{" "}
-                <button type="button" onClick={uploadPhoto}>
-                  Upload Photo
+                <button type="button" onClick={() => setStagedPhotoFiles([])}>
+                  Clear Staged
+                </button>{" "}
+                <button type="button" onClick={uploadStagedPhotos}>
+                  Upload Staged Photos
                 </button>
               </div>
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
-                  const dropped = e.dataTransfer.files?.[0];
-                  if (dropped) {
-                    setPhotoFile(dropped);
-                  }
+                  stagePhotoFiles(e.dataTransfer.files);
                 }}
               >
                 Drop photo here to stage upload.
+              </div>
+              <div>
+                <p>Staged files: {stagedPhotoFiles.length}</p>
+                <ul>
+                  {stagedPhotoFiles.map((file, idx) => (
+                    <li key={`${file.name}-${idx}`}>{file.name}</li>
+                  ))}
+                </ul>
               </div>
               <div>
                 <button type="button" onClick={openCamera}>
@@ -3568,7 +3628,9 @@ export function App() {
                 </button>
                 {cameraOpen ? <p>{cameraStatus}</p> : null}
               </div>
+              {photosLoading ? <p>Loading photos...</p> : null}
               {photosError ? <p>Photo error: {photosError}</p> : null}
+              {!photosLoading && photos.length === 0 ? <p>No photos yet. Upload your first image.</p> : null}
               <ul>
                 {photos.map((p) => (
                   <li key={p.id}>
@@ -3578,6 +3640,40 @@ export function App() {
                     </button>{" "}
                     <button type="button" onClick={() => deletePhoto(p.id)}>
                       Delete
+                    </button>{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentIndex = photos.findIndex((photo) => photo.id === p.id);
+                        if (currentIndex <= 0) {
+                          return;
+                        }
+                        const next = [...photos];
+                        const swap = next[currentIndex - 1];
+                        next[currentIndex - 1] = next[currentIndex];
+                        next[currentIndex] = swap;
+                        setPhotos(next);
+                        void reorderPhotos(next.map((photo) => photo.id));
+                      }}
+                    >
+                      Move Up
+                    </button>{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentIndex = photos.findIndex((photo) => photo.id === p.id);
+                        if (currentIndex < 0 || currentIndex >= photos.length - 1) {
+                          return;
+                        }
+                        const next = [...photos];
+                        const swap = next[currentIndex + 1];
+                        next[currentIndex + 1] = next[currentIndex];
+                        next[currentIndex] = swap;
+                        setPhotos(next);
+                        void reorderPhotos(next.map((photo) => photo.id));
+                      }}
+                    >
+                      Move Down
                     </button>{" "}
                     <button type="button" onClick={() => setFullscreenPhoto({ id: p.id, filename: p.filename })}>
                       Open Fullscreen Preview

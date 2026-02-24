@@ -24,6 +24,7 @@ type Photo struct {
 	PreviewPath   string `json:"preview_path"`
 	ThumbnailPath string `json:"thumbnail_path"`
 	IsPrimary     bool   `json:"is_primary"`
+	DisplayOrder  int    `json:"display_order"`
 	CreatedAt     string `json:"created_at"`
 }
 
@@ -86,11 +87,15 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	if existingCount == 0 {
 		isPrimary = 1
 	}
+	var nextOrder int
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(display_order), 0) + 1 FROM item_photos WHERE item_id = ?`, itemID).Scan(&nextOrder); err != nil {
+		return Photo{}, fmt.Errorf("next photo order: %w", err)
+	}
 
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, photoID, itemID, filename, origPath, previewPath, thumbPath, isPrimary); err != nil {
+		INSERT INTO item_photos (id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, photoID, itemID, filename, origPath, previewPath, thumbPath, isPrimary, nextOrder); err != nil {
 		return Photo{}, fmt.Errorf("insert photo record: %w", err)
 	}
 
@@ -99,8 +104,10 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 
 func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, created_at
-		FROM item_photos WHERE item_id = ? ORDER BY created_at ASC
+		SELECT id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order, created_at
+		FROM item_photos
+		WHERE item_id = ?
+		ORDER BY CASE WHEN display_order > 0 THEN 0 ELSE 1 END ASC, display_order ASC, created_at ASC
 	`, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("list photos: %w", err)
@@ -111,7 +118,7 @@ func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error
 	for rows.Next() {
 		var p Photo
 		var isPrimary int
-		if err := rows.Scan(&p.ID, &p.ItemID, &p.Filename, &p.OriginalPath, &p.PreviewPath, &p.ThumbnailPath, &isPrimary, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.ItemID, &p.Filename, &p.OriginalPath, &p.PreviewPath, &p.ThumbnailPath, &isPrimary, &p.DisplayOrder, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan photo: %w", err)
 		}
 		p.IsPrimary = isPrimary == 1
@@ -127,9 +134,9 @@ func (s *Service) GetByID(ctx context.Context, photoID string) (Photo, error) {
 	var p Photo
 	var isPrimary int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, created_at
+		SELECT id, item_id, filename, original_path, preview_path, thumbnail_path, is_primary, display_order, created_at
 		FROM item_photos WHERE id = ?
-	`, photoID).Scan(&p.ID, &p.ItemID, &p.Filename, &p.OriginalPath, &p.PreviewPath, &p.ThumbnailPath, &isPrimary, &p.CreatedAt)
+	`, photoID).Scan(&p.ID, &p.ItemID, &p.Filename, &p.OriginalPath, &p.PreviewPath, &p.ThumbnailPath, &isPrimary, &p.DisplayOrder, &p.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Photo{}, fmt.Errorf("photo not found")
@@ -230,6 +237,39 @@ func (s *Service) ResolveVariantPath(ctx context.Context, itemID, photoID, varia
 	default:
 		return "", fmt.Errorf("invalid photo variant")
 	}
+}
+
+func (s *Service) Reorder(ctx context.Context, itemID string, orderedIDs []string) error {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return fmt.Errorf("item_id is required")
+	}
+	if len(orderedIDs) == 0 {
+		return fmt.Errorf("photo_ids are required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for idx, id := range orderedIDs {
+		photoID := strings.TrimSpace(id)
+		if photoID == "" {
+			return fmt.Errorf("photo_id is required")
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE item_photos SET display_order = ? WHERE id = ? AND item_id = ?`, idx+1, photoID, itemID)
+		if err != nil {
+			return fmt.Errorf("update display order: %w", err)
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			return fmt.Errorf("photo not found")
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit reorder: %w", err)
+	}
+	return nil
 }
 
 func generateScaledJPEG(inputPath, outputPath string, maxSize int) error {

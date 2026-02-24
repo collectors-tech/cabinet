@@ -76,6 +76,52 @@ func TestUploadSetPrimaryDeleteAndRebuild(t *testing.T) {
 	}
 }
 
+func TestReorderPersistsListOrder(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('item-1','AFX','Slot Car','P-1','Car')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	img := sampleJPEG(t)
+
+	p1, err := svc.Upload(context.Background(), "item-1", "a.jpg", bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("Upload() p1 error = %v", err)
+	}
+	p2, err := svc.Upload(context.Background(), "item-1", "b.jpg", bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("Upload() p2 error = %v", err)
+	}
+	p3, err := svc.Upload(context.Background(), "item-1", "c.jpg", bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("Upload() p3 error = %v", err)
+	}
+
+	if err := svc.Reorder(context.Background(), "item-1", []string{p3.ID, p1.ID, p2.ID}); err != nil {
+		t.Fatalf("Reorder() error = %v", err)
+	}
+	ordered, err := svc.ListByItem(context.Background(), "item-1")
+	if err != nil {
+		t.Fatalf("ListByItem() error = %v", err)
+	}
+	if len(ordered) != 3 {
+		t.Fatalf("expected 3 photos, got %d", len(ordered))
+	}
+	if ordered[0].ID != p3.ID || ordered[1].ID != p1.ID || ordered[2].ID != p2.ID {
+		t.Fatalf("unexpected order: %s %s %s", ordered[0].ID, ordered[1].ID, ordered[2].ID)
+	}
+}
+
 func sampleJPEG(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))

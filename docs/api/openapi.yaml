@@ -1560,6 +1560,32 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/items/{itemID}/photos/reorder:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    post:
+      tags: [Collection]
+      summary: Reorder photos for item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_ids]
+              properties:
+                photo_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/{photoID}:
     parameters:
       - $ref: "#/components/parameters/ItemID"

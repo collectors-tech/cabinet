@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -1454,6 +1454,84 @@ describe("App shell", () => {
     const openCamera = await screen.findByRole("button", { name: /open camera/i });
     openCamera.click();
     expect(await screen.findByText(/camera_unavailable/i)).toBeInTheDocument();
+  });
+
+  it("stages multiple photos before upload commit", async () => {
+    let uploadCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/photos") && init?.method === "POST") {
+        uploadCalls += 1;
+        return new Response(JSON.stringify({ id: `ph${uploadCalls}`, item_id: "i1", filename: `f${uploadCalls}.jpg` }), { status: 201 });
+      }
+      if (url.includes("/api/items/i1/photos") && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ photos: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^photos$/i }));
+
+    const files = [1, 2, 3, 4, 5].map((n) => new File([`img-${n}`], `img-${n}.jpg`, { type: "image/jpeg" }));
+    fireEvent.change(await screen.findByLabelText(/photo files/i), { target: { files } });
+    expect(await screen.findByText(/staged files: 5/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /upload staged photos/i }));
+    await waitFor(() => expect(uploadCalls).toBe(5));
+  });
+
+  it("closes fullscreen photo preview with escape key", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX" }] }), { status: 200 });
+      }
+      if (url.includes("/api/items/i1/photos")) {
+        return new Response(JSON.stringify({ photos: [{ id: "ph1", item_id: "i1", filename: "a.jpg", is_primary: true }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^photos$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load photos/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /open fullscreen preview/i }));
+    expect(await screen.findByRole("dialog", { name: /fullscreen photo preview/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /fullscreen photo preview/i })).not.toBeInTheDocument());
   });
 
   it("loads scanner query sets", async () => {

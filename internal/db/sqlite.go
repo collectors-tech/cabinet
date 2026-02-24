@@ -159,6 +159,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			preview_path TEXT NOT NULL,
 			thumbnail_path TEXT NOT NULL,
 			is_primary INTEGER NOT NULL DEFAULT 0,
+			display_order INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
@@ -356,6 +357,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "scanner_candidates", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure item_photos.display_order: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
 		conn.Close()
