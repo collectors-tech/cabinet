@@ -632,6 +632,63 @@ body {
   margin-bottom: 14px;
 }
 
+.cabinet-collection-command-bar {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.cabinet-collection-command-primary,
+.cabinet-collection-command-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.cabinet-collection-command-primary input,
+.cabinet-collection-command-primary select {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-height: 36px;
+}
+
+.cabinet-collection-command-primary input {
+  min-width: 260px;
+}
+
+.cabinet-collection-command-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-soft);
+}
+
+.cabinet-collection-command-secondary button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.cabinet-collection-command-secondary button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.cabinet-collection-command-secondary span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
 .cabinet-collection-tree {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -674,6 +731,25 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.cabinet-collection-card-grid-muted {
+  opacity: 0.55;
+}
+
+.cabinet-collection-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cabinet-collection-filter-row-muted {
+  opacity: 0.7;
+}
+
+.cabinet-collection-table-muted {
+  opacity: 0.72;
 }
 
 .cabinet-collection-card {

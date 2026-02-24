@@ -136,6 +136,8 @@ export function App() {
     category: "",
     sort_by: "date_added",
   });
+  const [collectionSummarized, setCollectionSummarized] = useState(false);
+  const [collectionViewMode, setCollectionViewMode] = useState<"cards" | "table">("cards");
   const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; query?: Record<string, unknown> }>>([]);
   const [savedFilterName, setSavedFilterName] = useState("");
   const [columnBrand, setColumnBrand] = useState("");
@@ -3572,7 +3574,7 @@ export function App() {
                 </aside>
                 <section className="cabinet-collection-results" data-testid="collection-results">
                   <h4>Collection Browser</h4>
-                  <div className="cabinet-collection-card-grid">
+                  <div className={`cabinet-collection-card-grid${collectionViewMode === "table" ? " cabinet-collection-card-grid-muted" : ""}`}>
                     {items.slice(0, 12).map((item) => (
                       <article key={item.id} className="cabinet-collection-card">
                         <div className="cabinet-collection-card-image" />
@@ -3588,13 +3590,53 @@ export function App() {
                   </div>
                 </section>
               </div>
-              <div>
-                <input
-                  value={collectionQuery.text}
-                  onChange={(e) => setCollectionQuery((current) => ({ ...current, text: e.target.value }))}
-                  placeholder="Search items"
-                  aria-label="Collection search"
-                />{" "}
+              <section className="cabinet-collection-command-bar" role="region" aria-label="Collection command bar">
+                <div className="cabinet-collection-command-primary">
+                  <input
+                    value={collectionQuery.text}
+                    onChange={(e) => setCollectionQuery((current) => ({ ...current, text: e.target.value }))}
+                    placeholder="Search items"
+                    aria-label="Collection search"
+                  />
+                  <select
+                    value={collectionQuery.sort_by}
+                    onChange={(e) => setCollectionQuery((current) => ({ ...current, sort_by: e.target.value }))}
+                    aria-label="Collection sort"
+                  >
+                    <option value="date_added">Date Added</option>
+                    <option value="part_number">Part Number</option>
+                    <option value="price">Price</option>
+                  </select>
+                  <label className="cabinet-collection-command-toggle">
+                    <input
+                      type="checkbox"
+                      checked={collectionSummarized}
+                      onChange={(e) => setCollectionSummarized(e.target.checked)}
+                      aria-label="Summarize items"
+                    />{" "}
+                    Summarize items
+                  </label>
+                </div>
+                <div className="cabinet-collection-command-secondary">
+                  <button
+                    type="button"
+                    aria-pressed={collectionViewMode === "cards"}
+                    onClick={() => setCollectionViewMode("cards")}
+                  >
+                    Card View
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={collectionViewMode === "table"}
+                    onClick={() => setCollectionViewMode("table")}
+                  >
+                    Table View
+                  </button>
+                  <span>Summary mode: {collectionSummarized ? "summarized" : "detailed"}</span>
+                  <span>View mode: {collectionViewMode === "cards" ? "cards" : "table"}</span>
+                </div>
+              </section>
+              <div className={collectionSummarized ? "cabinet-collection-filter-row cabinet-collection-filter-row-muted" : "cabinet-collection-filter-row"}>
                 <input
                   value={collectionQuery.brand}
                   onChange={(e) => setCollectionQuery((current) => ({ ...current, brand: e.target.value }))}
@@ -3606,16 +3648,7 @@ export function App() {
                   onChange={(e) => setCollectionQuery((current) => ({ ...current, category: e.target.value }))}
                   placeholder="Category filter"
                   aria-label="Collection category filter"
-                />{" "}
-                <select
-                  value={collectionQuery.sort_by}
-                  onChange={(e) => setCollectionQuery((current) => ({ ...current, sort_by: e.target.value }))}
-                  aria-label="Collection sort"
-                >
-                  <option value="date_added">Date Added</option>
-                  <option value="part_number">Part Number</option>
-                  <option value="price">Price</option>
-                </select>
+                />
               </div>
               <div>
                 <input
@@ -3686,7 +3719,7 @@ export function App() {
               {itemsLoading ? <p>Loading items...</p> : null}
               {itemsError ? <p>Item error: {itemsError}</p> : null}
               {!itemsLoading && items.length === 0 ? <p>No items found for current filters.</p> : null}
-              <table>
+              <table className={collectionViewMode === "cards" ? "cabinet-collection-table-muted" : ""}>
                 <thead>
                   <tr>
                     <th>Select</th>

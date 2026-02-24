@@ -387,6 +387,27 @@ test("collection bulk edit, inline edit, photo staging, and shell scroll ownersh
   expect(firstAfter).not.toBe(firstBefore);
 });
 
+test("collection command bar supports summarize toggle and view controls", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await page.getByRole("button", { name: /^collection$/i }).first().click();
+  await expect(page.getByRole("region", { name: /collection command bar/i })).toBeVisible();
+  await expect(page.getByText(/summary mode: detailed/i)).toBeVisible();
+
+  await page.getByLabel(/summarize items/i).check();
+  await expect(page.getByText(/summary mode: summarized/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /table view/i }).click();
+  await expect(page.getByText(/view mode: table/i)).toBeVisible();
+  await page.getByRole("button", { name: /card view/i }).click();
+  await expect(page.getByText(/view mode: cards/i)).toBeVisible();
+});
+
 test("three-pane shell renders context pane and keeps context in mobile drawer", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: false });
   await page.addInitScript(() => {
