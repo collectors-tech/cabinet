@@ -12,6 +12,9 @@ import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, Discoverie
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
 type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "photos" | "pricing" | "settings";
+type NavScreen = Exclude<TopLevelScreen, "all">;
+type NavItemDefinition = { screen: NavScreen; label: string; icon: string };
+type NavItemConfig = { screen: NavScreen; visible: boolean };
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -25,6 +28,26 @@ type ScannerQuerySetRecord = {
   rate_limit_rps?: number;
   max_retry_count?: number;
 };
+
+const NAV_ITEMS: NavItemDefinition[] = [
+  { screen: "dashboard", label: "Dashboard", icon: "DB" },
+  { screen: "collection", label: "Collection", icon: "CL" },
+  { screen: "scanner", label: "Scanner", icon: "SC" },
+  { screen: "discoveries", label: "Discoveries", icon: "DS" },
+  { screen: "ai", label: "AI Assist", icon: "AI" },
+  { screen: "barcodes", label: "Barcodes", icon: "BC" },
+  { screen: "photos", label: "Photos", icon: "PH" },
+  { screen: "pricing", label: "Pricing", icon: "PR" },
+  { screen: "settings", label: "Settings", icon: "ST" },
+];
+
+function navConfigStorageKey(profileID?: string) {
+  return profileID ? `cabinet.nav.main.${profileID}` : "cabinet.nav.main.global";
+}
+
+function navCollapsedStorageKey(profileID?: string) {
+  return profileID ? `cabinet.nav.collapsed.${profileID}` : "cabinet.nav.collapsed.global";
+}
 
 function detectInitialTheme(): Theme {
   const saved = localStorage.getItem("cabinet.theme");
@@ -168,6 +191,9 @@ export function App() {
   const [onboardingFinishing, setOnboardingFinishing] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [activeScreen, setActiveScreen] = useState<TopLevelScreen>("all");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navEditMode, setNavEditMode] = useState(false);
+  const [navConfig, setNavConfig] = useState<NavItemConfig[]>(() => NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
   const [credentialJSON, setCredentialJSON] = useState("{}");
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
@@ -232,6 +258,48 @@ export function App() {
     }
     void loadDashboard();
   }, [activeProfile?.id, advancedWorkspace, activeScreen]);
+
+  useEffect(() => {
+    const profileID = activeProfile?.id;
+    const savedConfig = localStorage.getItem(navConfigStorageKey(profileID));
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig) as Array<{ screen?: string; visible?: boolean }>;
+        const parsedMap = new Map(parsed.filter((entry) => typeof entry?.screen === "string").map((entry) => [entry.screen as NavScreen, entry.visible !== false]));
+        const hydrated = NAV_ITEMS.map((item) => ({ screen: item.screen, visible: parsedMap.get(item.screen) ?? true }));
+        const prioritized = [
+          ...parsed
+            .filter((entry) => entry && typeof entry.screen === "string")
+            .map((entry) => entry.screen as NavScreen)
+            .filter((screen): screen is NavScreen => NAV_ITEMS.some((item) => item.screen === screen)),
+          ...NAV_ITEMS.map((item) => item.screen),
+        ];
+        const dedupedOrder: NavScreen[] = [];
+        for (const screen of prioritized) {
+          if (!dedupedOrder.includes(screen)) {
+            dedupedOrder.push(screen);
+          }
+        }
+        setNavConfig(dedupedOrder.map((screen) => hydrated.find((item) => item.screen === screen) || { screen, visible: true }));
+      } catch {
+        setNavConfig(NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
+      }
+    } else {
+      setNavConfig(NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
+    }
+
+    const savedCollapsed = localStorage.getItem(navCollapsedStorageKey(profileID));
+    setNavCollapsed(savedCollapsed === "1" || savedCollapsed?.toLowerCase() === "true");
+    setNavEditMode(false);
+  }, [activeProfile?.id]);
+
+  useEffect(() => {
+    localStorage.setItem(navConfigStorageKey(activeProfile?.id), JSON.stringify(navConfig));
+  }, [activeProfile?.id, navConfig]);
+
+  useEffect(() => {
+    localStorage.setItem(navCollapsedStorageKey(activeProfile?.id), navCollapsed ? "1" : "0");
+  }, [activeProfile?.id, navCollapsed]);
 
   useEffect(() => {
     let disposed = false;
@@ -2397,97 +2465,131 @@ export function App() {
       void loadWishlist();
     }
   }
-  const navLinks = (
-    <>
+
+  const orderedNav = navConfig
+    .map((cfg) => {
+      const definition = NAV_ITEMS.find((item) => item.screen === cfg.screen);
+      if (!definition) {
+        return null;
+      }
+      return { ...definition, visible: cfg.visible !== false };
+    })
+    .filter((item): item is NavItemDefinition & { visible: boolean } => Boolean(item));
+  const visibleNav = orderedNav.filter((item) => item.visible);
+
+  useEffect(() => {
+    if (!showAdvancedWorkspace || activeScreen === "all") {
+      return;
+    }
+    if (visibleNav.some((item) => item.screen === activeScreen)) {
+      return;
+    }
+    setActiveScreen(visibleNav[0]?.screen || "dashboard");
+  }, [activeScreen, showAdvancedWorkspace, visibleNav]);
+
+  function moveNavItem(screen: NavScreen, direction: "up" | "down") {
+    setNavConfig((current) => {
+      const index = current.findIndex((entry) => entry.screen === screen);
+      if (index < 0) {
+        return current;
+      }
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function toggleNavVisibility(screen: NavScreen) {
+    setNavConfig((current) => {
+      const visibleCount = current.filter((entry) => entry.visible !== false).length;
+      return current.map((entry) => {
+        if (entry.screen !== screen) {
+          return entry;
+        }
+        if (entry.visible !== false && visibleCount <= 1) {
+          return entry;
+        }
+        return { ...entry, visible: entry.visible === false };
+      });
+    });
+  }
+
+  function toggleNavEdit() {
+    setNavEditMode((current) => {
+      const next = !current;
+      if (next) {
+        setNavCollapsed(false);
+      }
+      return next;
+    });
+  }
+
+  const navLinks = (forDrawer = false) =>
+    visibleNav.map((item) => (
       <button
+        key={item.screen}
         type="button"
-        className={`cabinet-nav-link${activeScreen === "dashboard" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "dashboard" ? "page" : undefined}
-        onClick={() => selectScreen("dashboard")}
+        className={`cabinet-nav-link${activeScreen === item.screen ? " cabinet-nav-link-active" : ""}${navCollapsed && !forDrawer ? " cabinet-nav-link-icon-only" : ""}`}
+        aria-current={activeScreen === item.screen ? "page" : undefined}
+        aria-label={item.label}
+        title={navCollapsed && !forDrawer ? item.label : undefined}
+        onClick={() => selectScreen(item.screen)}
         disabled={!navEnabled}
       >
-        Dashboard
+        <span className="cabinet-nav-icon" aria-hidden="true">
+          {item.icon}
+        </span>
+        <span className="cabinet-nav-label">{item.label}</span>
       </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "collection" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "collection" ? "page" : undefined}
-        onClick={() => selectScreen("collection")}
-        disabled={!navEnabled}
-      >
-        Collection
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "scanner" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "scanner" ? "page" : undefined}
-        onClick={() => selectScreen("scanner")}
-        disabled={!navEnabled}
-      >
-        Scanner
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "discoveries" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "discoveries" ? "page" : undefined}
-        onClick={() => selectScreen("discoveries")}
-        disabled={!navEnabled}
-      >
-        Discoveries
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "ai" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "ai" ? "page" : undefined}
-        onClick={() => selectScreen("ai")}
-        disabled={!navEnabled}
-      >
-        AI Assist
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "barcodes" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "barcodes" ? "page" : undefined}
-        onClick={() => selectScreen("barcodes")}
-        disabled={!navEnabled}
-      >
-        Barcodes
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "photos" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "photos" ? "page" : undefined}
-        onClick={() => selectScreen("photos")}
-        disabled={!navEnabled}
-      >
-        Photos
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "pricing" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "pricing" ? "page" : undefined}
-        onClick={() => selectScreen("pricing")}
-        disabled={!navEnabled}
-      >
-        Pricing
-      </button>
-      <button
-        type="button"
-        className={`cabinet-nav-link${activeScreen === "settings" ? " cabinet-nav-link-active" : ""}`}
-        aria-current={activeScreen === "settings" ? "page" : undefined}
-        onClick={() => selectScreen("settings")}
-        disabled={!navEnabled}
-      >
-        Settings
-      </button>
-    </>
-  );
+    ));
 
   return (
-    <main data-testid="app-shell" className="cabinet-shell">
-      <aside className="cabinet-sidebar primary-nav">
-        <h1>Cabinet</h1>
-        <nav>{navLinks}</nav>
+    <main data-testid="app-shell" className={`cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}`}>
+      <aside className={`cabinet-sidebar primary-nav${navCollapsed ? " cabinet-sidebar-collapsed" : ""}`}>
+        <div className="cabinet-sidebar-head">
+          <h1>{navCollapsed ? "C" : "Cabinet"}</h1>
+          <div className="cabinet-nav-controls">
+            <button type="button" aria-label={navCollapsed ? "Expand primary navigation" : "Collapse primary navigation"} onClick={() => setNavCollapsed((value) => !value)}>
+              {navCollapsed ? ">>" : "<<"}
+            </button>
+            <button type="button" aria-label={navEditMode ? "Finish nav main editing" : "Edit nav main"} onClick={toggleNavEdit}>
+              {navEditMode ? "Done" : "Edit"}
+            </button>
+          </div>
+        </div>
+        {navEditMode ? (
+          <section className="cabinet-nav-editor" aria-label="Nav main editor">
+            <ul>
+              {orderedNav.map((item, index) => (
+                <li key={item.screen}>
+                  <span>{item.label}</span>
+                  <div>
+                    <button type="button" aria-label={`Move ${item.label} up`} onClick={() => moveNavItem(item.screen, "up")} disabled={index === 0}>
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${item.label} down`}
+                      onClick={() => moveNavItem(item.screen, "down")}
+                      disabled={index === orderedNav.length - 1}
+                    >
+                      Down
+                    </button>
+                    <button type="button" aria-label={`${item.visible ? "Hide" : "Show"} ${item.label}`} onClick={() => toggleNavVisibility(item.screen)}>
+                      {item.visible ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        <nav className="nav-main">{navLinks()}</nav>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
           <p>
             <strong>Version:</strong> {appVersionLabel}
@@ -2520,7 +2622,7 @@ export function App() {
                 Close
               </button>
             </div>
-            <nav onClick={() => setMobileNavOpen(false)}>{navLinks}</nav>
+            <nav className="nav-main" onClick={() => setMobileNavOpen(false)}>{navLinks(true)}</nav>
           </div>
         </>
       ) : null}

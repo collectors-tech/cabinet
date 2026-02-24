@@ -95,6 +95,61 @@ describe("App shell", () => {
     expect(screen.queryByRole("dialog", { name: /navigation menu/i })).not.toBeInTheDocument();
   });
 
+  it("collapses primary nav to icon mode and restores expanded mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const collapse = await screen.findByRole("button", { name: /collapse primary navigation/i });
+    fireEvent.click(collapse);
+    expect(document.querySelector(".cabinet-sidebar-collapsed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^dashboard$/i })).toHaveAttribute("title", "Dashboard");
+
+    const expand = await screen.findByRole("button", { name: /expand primary navigation/i });
+    fireEvent.click(expand);
+    expect(document.querySelector(".cabinet-sidebar-collapsed")).toBeFalsy();
+  });
+
+  it("supports nav main reordering and visibility toggles from nav editor", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    const navMain = screen.getAllByRole("navigation")[0];
+    expect(within(navMain).getAllByRole("button")[0]).toHaveAccessibleName("Dashboard");
+
+    fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
+    expect(screen.getByLabelText(/nav main editor/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /move dashboard down/i }));
+    expect(within(navMain).getAllByRole("button")[0]).toHaveAccessibleName("Collection");
+
+    fireEvent.click(screen.getByRole("button", { name: /hide collection/i }));
+    expect(within(navMain).queryByRole("button", { name: /^collection$/i })).not.toBeInTheDocument();
+  });
+
   it("switches visible advanced workspace section from sidebar navigation", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
