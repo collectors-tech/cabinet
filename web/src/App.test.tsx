@@ -2534,6 +2534,55 @@ describe("App shell", () => {
     expect(await screen.findByDisplayValue(/suggested title/i)).toBeInTheDocument();
   });
 
+  it("retries last AI action after an error using the same context", async () => {
+    let titleSuggestCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/ai/toggle" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/ai/suggest/title" && init?.method === "POST") {
+        titleSuggestCalls += 1;
+        if (titleSuggestCalls === 1) {
+          return new Response(JSON.stringify({ error: "failed" }), { status: 500 });
+        }
+        return new Response(JSON.stringify({ title: "Retry Success", confidence: 0.88 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    const openAdvanced = screen.queryByRole("button", { name: /open advanced workspace/i });
+    if (openAdvanced) {
+      openAdvanced.click();
+    }
+    fireEvent.click(await screen.findByRole("button", { name: /enable ai/i }));
+    fireEvent.change(await screen.findByLabelText(/title normalization input/i), { target: { value: "AFX failed listing" } });
+    fireEvent.click(await screen.findByRole("button", { name: /normalize title/i }));
+    expect(await screen.findByText(/ai error: failed_ai_suggest_title/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /retry last ai action/i }));
+    expect(await screen.findByText(/ai title: retry success/i)).toBeInTheDocument();
+    expect(titleSuggestCalls).toBe(2);
+  });
+
   it("supports debounced collection search and saved filters", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
