@@ -30,6 +30,10 @@ export function PricingScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-pricing" title="Pricing" id={props.id}>{props.children}</ScreenContainer>;
 }
 
+export function ReportsScreen(props: PropsWithChildren<{ id?: string }>) {
+  return <ScreenContainer testId="screen-reports" title="Reports" id={props.id}>{props.children}</ScreenContainer>;
+}
+
 export function DiscoveriesScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-discoveries" title="Discoveries" id={props.id}>{props.children}</ScreenContainer>;
 }

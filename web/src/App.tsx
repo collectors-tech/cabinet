@@ -7,11 +7,11 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PhotosScreen, PricingScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PhotosScreen, PricingScreen, ReportsScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "photos" | "pricing" | "settings";
+type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "photos" | "pricing" | "reports" | "settings";
 type NavScreen = Exclude<TopLevelScreen, "all">;
 type NavItemDefinition = { screen: NavScreen; label: string; icon: string };
 type NavItemConfig = { screen: NavScreen; visible: boolean };
@@ -42,6 +42,7 @@ const NAV_ITEMS: NavItemDefinition[] = [
   { screen: "barcodes", label: "Barcodes", icon: "BC" },
   { screen: "photos", label: "Photos", icon: "PH" },
   { screen: "pricing", label: "Pricing", icon: "PR" },
+  { screen: "reports", label: "Reports", icon: "RP" },
   { screen: "settings", label: "Settings", icon: "ST" },
 ];
 
@@ -172,13 +173,21 @@ export function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [wishlist, setWishlist] = useState<Array<{ id: string; item_id: string; target_price?: number; below_target_now?: boolean; priority?: string }>>([]);
   const [pricingPoints, setPricingPoints] = useState<Array<{ day?: string; date?: string; price?: number; min?: number; median?: number; latest?: number }>>([]);
-  const [pricingBySource, setPricingBySource] = useState<Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>>(
-    {},
-  );
+  const [pricingBySource, setPricingBySource] = useState<
+    Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number; stock_count?: number }>>
+  >({});
   const [pricingHistory, setPricingHistory] = useState<Array<{ day?: string; date?: string; min?: number; median?: number; latest?: number }>>([]);
   const [pricingStats, setPricingStats] = useState<Record<string, unknown> | null>(null);
   const [pricingTrend, setPricingTrend] = useState<Record<string, unknown> | null>(null);
   const [wishlistHits, setWishlistHits] = useState<Array<{ item_id?: string; listing_id?: string; title?: string; price?: number }>>([]);
+  const [reportsWishlistLoading, setReportsWishlistLoading] = useState(false);
+  const [reportsTrendLoading, setReportsTrendLoading] = useState(false);
+  const [reportsSourceLoading, setReportsSourceLoading] = useState(false);
+  const [reportsExporting, setReportsExporting] = useState(false);
+  const [reportExportAttempted, setReportExportAttempted] = useState(false);
+  const [reportWishlistLoaded, setReportWishlistLoaded] = useState(false);
+  const [reportTrendLoaded, setReportTrendLoaded] = useState(false);
+  const [reportSourceLoaded, setReportSourceLoaded] = useState(false);
   const [pricingTrackStatus, setPricingTrackStatus] = useState("");
   const [snapshotStatus, setSnapshotStatus] = useState("");
   const [wishlistDraft, setWishlistDraft] = useState({ item_id: "", target_price: "0", priority: "normal", notes: "" });
@@ -1736,7 +1745,7 @@ export function App() {
         throw new Error("failed_to_load_pricing_by_source");
       }
       const data = (await resp.json()) as {
-        by_source?: Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number }>>;
+        by_source?: Record<string, Array<{ snapshot_date?: string; min_price?: number; median_price?: number; latest_price?: number; stock_count?: number }>>;
       };
       setPricingBySource(data.by_source || {});
     } catch (e) {
@@ -1831,6 +1840,50 @@ export function App() {
       setWishlistHits(data.hits || []);
     } catch (e) {
       setInsightError(e instanceof Error ? e.message : "failed_to_load_wishlist_hits");
+    }
+  }
+
+  async function loadReportWishlistSection() {
+    setReportsWishlistLoading(true);
+    setReportWishlistLoaded(false);
+    try {
+      await loadWishlistHits();
+      setReportWishlistLoaded(true);
+    } finally {
+      setReportsWishlistLoading(false);
+    }
+  }
+
+  async function loadReportTrendSection() {
+    setReportsTrendLoading(true);
+    setReportTrendLoaded(false);
+    try {
+      await Promise.all([loadPricingTrend(), loadPricingStats()]);
+      setReportTrendLoaded(true);
+    } finally {
+      setReportsTrendLoading(false);
+    }
+  }
+
+  async function loadReportSourceSection() {
+    setReportsSourceLoading(true);
+    setReportSourceLoaded(false);
+    try {
+      await loadPricingBySource();
+      setReportSourceLoaded(true);
+    } finally {
+      setReportsSourceLoading(false);
+    }
+  }
+
+  async function exportReportHistory() {
+    setReportsExporting(true);
+    setReportExportAttempted(false);
+    try {
+      await exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history_report");
+      setReportExportAttempted(true);
+    } finally {
+      setReportsExporting(false);
     }
   }
 
@@ -2672,6 +2725,18 @@ export function App() {
   const matchedCount = matchingResults.filter((result) => result.state === "matched").length;
   const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
   const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
+  const reportSourceGroups = Object.keys(pricingBySource).length;
+  const reportStockRows = Object.entries(pricingBySource)
+    .map(([source, snapshots]) => {
+      const latestWithStock = [...snapshots].reverse().find((snapshot) => typeof snapshot.stock_count === "number");
+      if (!latestWithStock) {
+        return null;
+      }
+      return { source, stock_count: latestWithStock.stock_count as number };
+    })
+    .filter((row): row is { source: string; stock_count: number } => Boolean(row));
+  const reportTrendHasData = Boolean(pricingTrend && Object.keys(pricingTrend).length > 0);
+  const reportStatsHasData = Boolean(pricingStats && Object.keys(pricingStats).length > 0);
   const newDiscoveriesCount = Number(dashboard?.new_discoveries ?? 0);
   const wishlistHitsCount = Number(dashboard?.wishlist_hits ?? 0);
   const priceDropsCount = Number(dashboard?.price_drops ?? 0);
@@ -4141,6 +4206,51 @@ export function App() {
               <p>Export bytes: {exportBytes}</p>
               {insightError ? <p>Insight error: {insightError}</p> : null}
             </PricingScreen>
+          ) : null}
+          {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "reports") ? (
+            <ReportsScreen id="reports">
+              <h3>Reports</h3>
+              <div>
+                <input
+                  value={selectedItemID}
+                  onChange={(e) => setSelectedItemID(e.target.value)}
+                  placeholder="Report item id"
+                  aria-label="Report item id"
+                />
+              </div>
+              <div>
+                <button type="button" onClick={() => void loadReportWishlistSection()} disabled={reportsWishlistLoading}>
+                  {reportsWishlistLoading ? "Loading Wishlist Report..." : "Load Wishlist Report"}
+                </button>{" "}
+                <button type="button" onClick={() => void loadReportTrendSection()} disabled={reportsTrendLoading}>
+                  {reportsTrendLoading ? "Loading Trend Summary..." : "Load Trend Summary"}
+                </button>{" "}
+                <button type="button" onClick={() => void loadReportSourceSection()} disabled={reportsSourceLoading}>
+                  {reportsSourceLoading ? "Loading Source Summary..." : "Load Source Summary"}
+                </button>{" "}
+                <button type="button" onClick={() => void exportReportHistory()} disabled={reportsExporting}>
+                  {reportsExporting ? "Exporting Report History..." : "Export Report History"}
+                </button>
+              </div>
+              <p>Wishlist hits: {wishlistHits.length}</p>
+              {reportWishlistLoaded && wishlistHits.length === 0 ? <p>No wishlist hits for current context.</p> : null}
+              <p>Report trend loaded: {reportTrendHasData ? "yes" : "no"}</p>
+              <p>Report stats loaded: {reportStatsHasData ? "yes" : "no"}</p>
+              {reportTrendLoaded && !reportTrendHasData && !reportStatsHasData ? <p>No trend data for selected item.</p> : null}
+              <p>Report source groups: {reportSourceGroups}</p>
+              {reportSourceLoaded && reportSourceGroups === 0 ? <p>No source breakdown for selected item.</p> : null}
+              <ul>
+                {reportStockRows.map((row) => (
+                  <li key={`stock-${row.source}`}>
+                    Stock summary: {row.source} latest stock {row.stock_count}
+                  </li>
+                ))}
+              </ul>
+              {reportSourceLoaded && reportSourceGroups > 0 && reportStockRows.length === 0 ? <p>No stock trend data for selected item.</p> : null}
+              <p>Export bytes: {exportBytes}</p>
+              {reportExportAttempted && exportBytes === 0 ? <p>No export payload available yet.</p> : null}
+              {insightError ? <p>Insight error: {insightError}</p> : null}
+            </ReportsScreen>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "settings") ? (
             <SettingsScreen id="settings">

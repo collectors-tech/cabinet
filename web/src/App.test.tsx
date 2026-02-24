@@ -1948,7 +1948,8 @@ describe("App shell", () => {
     expect(await screen.findByText(/activity: scanner_run_completed/i)).toBeInTheDocument();
     const exportPricing = await screen.findByRole("button", { name: /export pricing history/i });
     exportPricing.click();
-    expect(await screen.findByText(/export bytes: 24/i)).toBeInTheDocument();
+    const exportMatches = await screen.findAllByText(/export bytes: 24/i);
+    expect(exportMatches.length).toBeGreaterThan(0);
   });
 
   it("supports backup list and guarded restore workflows", async () => {
@@ -2891,8 +2892,9 @@ describe("App shell", () => {
 
     const loadSources = await screen.findByRole("button", { name: /load pricing sources/i });
     loadSources.click();
-    expect(await screen.findByText(/source groups: 1/i)).toBeInTheDocument();
-    expect(await screen.findByText(/ebay: 1 snapshots/i)).toBeInTheDocument();
+    const pricing = await screen.findByTestId("screen-pricing");
+    expect(await within(pricing).findByText(/^Source groups: 1$/i)).toBeInTheDocument();
+    expect(await within(pricing).findByText(/ebay: 1 snapshots/i)).toBeInTheDocument();
   });
 
   it("supports pricing track/history/stats/trend/snapshot and wishlist hits workflows", async () => {
@@ -2957,5 +2959,121 @@ describe("App shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /load wishlist hits/i }));
     expect(await screen.findByText(/wishlist hit: i1 \/ hit item \/ 18/i)).toBeInTheDocument();
+  });
+
+  it("REP-001..REP-005 loads reports sections with selected item context", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/wishlist/hits") {
+        return new Response(JSON.stringify({ hits: [{ item_id: "i1", listing_id: "l1", title: "Hit Item", price: 18 }] }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/trend?item_id=i1")) {
+        return new Response(JSON.stringify({ trend: "down" }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/stats?item_id=i1")) {
+        return new Response(JSON.stringify({ latest: 12, min: 10, median: 11 }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/by-source?item_id=i1")) {
+        return new Response(
+          JSON.stringify({ by_source: { ebay: [{ snapshot_date: "2026-02-21", latest_price: 12, min_price: 10, median_price: 11, stock_count: 4 }] } }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/api/pricing/history/export?item_id=i1")) {
+        return new Response("day,min,median,latest\n2026-02-21,10,11,12\n", { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reports$/i }));
+    expect(await screen.findByRole("heading", { name: /reports/i })).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/report item id/i), { target: { value: "i1" } });
+    fireEvent.click(await screen.findByRole("button", { name: /load wishlist report/i }));
+    expect(await screen.findByText(/wishlist hits: 1/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load trend summary/i }));
+    expect(await screen.findByText(/report trend loaded: yes/i)).toBeInTheDocument();
+    expect(await screen.findByText(/report stats loaded: yes/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /load source summary/i }));
+    expect(await screen.findByText(/report source groups: 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/stock summary: ebay latest stock 4/i)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /export report history/i }));
+    expect(await screen.findByText(/export bytes: 42/i)).toBeInTheDocument();
+  });
+
+  it("REP no-data states are explicit and recoverable", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url === "/api/wishlist/hits") {
+        return new Response(JSON.stringify({ hits: [] }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/trend?item_id=i1")) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      if (url.includes("/api/pricing/stats?item_id=i1")) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      if (url.includes("/api/pricing/by-source?item_id=i1")) {
+        return new Response(JSON.stringify({ by_source: {} }), { status: 200 });
+      }
+      if (url.includes("/api/pricing/history/export?item_id=i1")) {
+        return new Response("", { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reports$/i }));
+    fireEvent.change(await screen.findByLabelText(/report item id/i), { target: { value: "i1" } });
+
+    fireEvent.click(await screen.findByRole("button", { name: /load wishlist report/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load trend summary/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load source summary/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /export report history/i }));
+
+    expect(await screen.findByText(/no wishlist hits for current context/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no trend data for selected item/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no source breakdown for selected item/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no export payload available yet/i)).toBeInTheDocument();
   });
 });
