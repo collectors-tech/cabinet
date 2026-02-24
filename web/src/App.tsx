@@ -2575,10 +2575,13 @@ export function App() {
           <h1>{navCollapsed ? "C" : "Cabinet"}</h1>
           <div className="cabinet-nav-controls">
             <button type="button" aria-label={navCollapsed ? "Expand primary navigation" : "Collapse primary navigation"} onClick={() => setNavCollapsed((value) => !value)}>
-              {navCollapsed ? ">>" : "<<"}
-            </button>
-            <button type="button" aria-label={navEditMode ? "Finish nav main editing" : "Edit nav main"} onClick={toggleNavEdit}>
-              {navEditMode ? "Done" : "Edit"}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                {navCollapsed ? (
+                  <path d="M10 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                ) : (
+                  <path d="M14 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+              </svg>
             </button>
           </div>
         </div>
@@ -2610,6 +2613,20 @@ export function App() {
           </section>
         ) : null}
         <nav className="nav-main">{navLinks()}</nav>
+        <div className="cabinet-nav-edit-row">
+          <button type="button" aria-label={navEditMode ? "Finish nav main editing" : "Edit nav main"} onClick={toggleNavEdit}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17v3Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
           <p>
             <strong>Version:</strong> {appVersionLabel}

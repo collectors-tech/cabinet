@@ -84,9 +84,32 @@ body {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
+  cursor: pointer;
+}
+
+.cabinet-nav-edit-row {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.cabinet-nav-edit-row button {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
@@ -178,6 +201,10 @@ body {
 
 .cabinet-sidebar-collapsed .cabinet-nav-controls {
   flex-direction: column;
+}
+
+.cabinet-sidebar-collapsed .cabinet-nav-edit-row {
+  justify-content: center;
 }
 
 .cabinet-nav-editor {
