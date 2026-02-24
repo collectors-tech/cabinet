@@ -28,7 +28,8 @@ Serious niche collector (starting with AFX slot cars):
 3. Wishlist & Tracked Items
 4. Price Tracking
 5. AI Metadata Assist (OpenAI)
-6. Licensing System
+6. In-App Chat Copilot (collection assistant)
+7. Licensing System
 
 ## Full Feature Baseline
 The complete v1 + planned feature inventory is maintained in:

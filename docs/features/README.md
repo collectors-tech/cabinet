@@ -25,6 +25,7 @@ This directory contains structured implementation specs per feature area.
 - [20 Future Hooks](./20-future-hooks.md)
 - [21 Non-Functional Requirements](./21-non-functional-requirements.md)
 - [22 Security and Privacy Requirements](./22-security-and-privacy-requirements.md)
+- [23 In-App Chat Copilot](./23-in-app-chat-copilot.md)
 
 ## Structure Standard
 All specs follow `docs/features/SPEC_TEMPLATE.md`.

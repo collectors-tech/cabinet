@@ -434,6 +434,29 @@ Alternate flows:
 Postconditions:
 - Upgrade completes without data loss.
 
+## UC-23: Use In-App Chat Copilot for Guided Collection Actions
+Actor: Collector User  
+Preconditions:
+- User is authenticated.
+- AI assist key is configured and chat feature enabled.
+
+Main flow:
+1. User opens chat panel from current workspace.
+2. User asks a question about collection/discovery/pricing context.
+3. App provides response and one or more suggested actions.
+4. User previews a suggested mutation (for example, create item or add to wishlist).
+5. User explicitly confirms apply.
+6. App executes action and logs outcome.
+7. User closes chat and continues in same workspace screen.
+
+Alternate flows:
+- A1: Provider/API error; user sees retry and manual action fallback.
+- A2: User rejects suggestion; no mutation occurs.
+- A3: Context unavailable; assistant requests required fields explicitly.
+
+Postconditions:
+- User receives guidance and can apply actions safely without context switching.
+
 ## Scenario Matrix (Critical Edge Scenarios)
 1. WebAuthn unavailable on fresh install.
 Expected outcome:
@@ -464,7 +487,7 @@ Expected outcome:
 - Recovery prompt appears; user can restore from latest valid backup.
 
 ## v1 Acceptance Summary
-For v1 completion, all UC-01 through UC-22 must satisfy:
+For v1 completion, all UC-01 through UC-23 must satisfy:
 - Main flow executable end to end.
 - At least one alternate/failure path handled gracefully.
 - User-visible errors are actionable.

@@ -13,6 +13,7 @@ Files:
 - `reports.md`
 - `settings.md`
 - `onboarding-auth.md`
+- `chat-copilot.md`
 
 Each file contains:
 - Use Cases
@@ -20,4 +21,3 @@ Each file contains:
 - State Behavior
 - Acceptance Criteria
 - Test Cases
-

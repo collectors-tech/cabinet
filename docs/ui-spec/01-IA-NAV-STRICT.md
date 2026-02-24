@@ -10,6 +10,7 @@ Defines final v1 web information architecture, navigation behavior, and screen g
 4. Scanner
 5. Reports
 6. Settings
+7. Chat Copilot (global right rail panel)
 
 ## Inventory Sub-Navigation (tabs)
 1. Items
@@ -23,10 +24,11 @@ Defines final v1 web information architecture, navigation behavior, and screen g
 - Inventory tabs become segmented control at top of Inventory screen.
 
 ## Global Navigation Rules
-1. Navigation labels are stable and never hidden behind icon-only controls.
+1. Navigation labels are stable; icon-only collapsed mode is allowed when accessible labels/tooltips remain available.
 2. At most one primary nav item is active (`aria-current="page"`).
 3. If a section is unavailable, show disabled state with explicit reason.
 4. Keyboard support: `Tab` focus order, `Enter` activate, `Esc` close drawer/modal.
+5. Chat panel can be opened/closed from any screen and must not reset current view state.
 
 ## App State Guards
 1. `No profile`:
@@ -57,4 +59,3 @@ Defines final v1 web information architecture, navigation behavior, and screen g
 - [ ] Inventory exposes exactly four sub-tabs.
 - [ ] Disabled navigation includes explicit reason text.
 - [ ] Guard transitions are deterministic across profile/onboarding states.
-

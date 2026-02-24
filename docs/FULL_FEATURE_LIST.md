@@ -265,3 +265,30 @@ Maintenance:
 - No secrets stored in plaintext in SQLite
 - WebAuthn credential operations logged without sensitive material
 - License verification must run offline
+
+## 23. In-App Chat Copilot (Collection Assistant)
+- Persistent chat panel in app workspace (default right side)
+- Toggle open/close from header
+- Works across screens (global assistant, not tied to one tab)
+- Context aware: active profile, active item, selected candidate, current filters
+- User can ask:
+  - Find items in collection
+  - Explain gaps/missing variants
+  - Suggest adding wishlist or tracked entries
+  - Draft add-item payloads and metadata
+- Assistant can propose actions, but never auto-commit destructive changes
+- Confirm-before-apply flow for mutations (`create item`, `update item`, `track price`, `add wishlist`)
+- Session/thread history stored locally per profile
+- Chat settings:
+  - Provider/model
+  - System behavior mode (strict/suggestive)
+  - Context sharing controls (what data can be sent)
+- Keyboard support:
+  - Open chat
+  - Focus composer
+  - Navigate history
+- Docking behavior:
+  - Right rail (default)
+  - Optional pop-out panel
+- Diagnostics:
+  - Chat errors and tool-action logs in activity diagnostics

@@ -30,6 +30,14 @@ main.cabinet-shell [data-testid=app-shell]
       section.cabinet-card[role=alert]? (Recovery alert)
       section.cabinet-card (Main body container)
         starter mode OR advanced mode content
+  aside.cabinet-chat-rail? [aria-label="Chat Copilot"]
+    header.chat-rail-head
+      h2
+      button (Close Chat)
+    section.chat-thread
+    form.chat-composer
+      textarea/input
+      button (Send)
 ```
 
 ## 2. Starter Mode Page Template

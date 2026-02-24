@@ -3,6 +3,17 @@
 ## Scope
 Defines each screen sections, required states, and required actions.
 
+## Global Chat Copilot Panel
+- Persistent right-rail panel available on all primary screens.
+- Required controls:
+  - Open chat
+  - Close chat
+  - Focus composer
+  - Clear/start new thread
+- Required behavior:
+  - Panel open/close does not navigate away from active screen.
+  - Suggested actions require explicit preview/confirm before apply.
+
 ## State Vocabulary (mandatory for all screens)
 - `loading`: primary skeleton or loading message
 - `empty`: no data with guided action
