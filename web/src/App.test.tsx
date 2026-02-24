@@ -1952,7 +1952,7 @@ describe("App shell", () => {
     expect(exportMatches.length).toBeGreaterThan(0);
   });
 
-  it("supports backup list and guarded restore workflows", async () => {
+  it("SET-004 supports backup list and guarded restore workflows", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -2011,7 +2011,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/settings status: backup_restored/i)).toBeInTheDocument();
   });
 
-  it("loads and saves profile settings and secrets", async () => {
+  it("SET-001 loads and saves profile settings and secrets", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -2081,7 +2081,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/ignore_rules_reset_ok/i)).toBeInTheDocument();
   });
 
-  it("supports license import, status validation, and profile license sync", async () => {
+  it("SET-003 supports license import, status validation, and profile license sync", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -2147,7 +2147,78 @@ describe("App shell", () => {
     expect(await screen.findByText(/settings status: license_profile_saved/i)).toBeInTheDocument();
   });
 
-  it("supports diagnostics debug mode toggle and current state visibility", async () => {
+  it("shows explicit empty states for settings license and backups", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/backup/list") {
+        return new Response(JSON.stringify({ backups: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /load backups/i }));
+
+    expect(await screen.findByText(/backup count: 0/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no backups available yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/license status not loaded yet/i)).toBeInTheDocument();
+  });
+
+  it("shows recoverable license import error guidance", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/license/import" && init?.method === "POST") {
+        return new Response(JSON.stringify({ error: "failed_to_import_license" }), { status: 400 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^settings$/i }));
+    fireEvent.change(await screen.findByLabelText(/license payload base64/i), { target: { value: "bad" } });
+    fireEvent.change(await screen.findByLabelText(/license signature base64/i), { target: { value: "bad" } });
+    fireEvent.click(await screen.findByRole("button", { name: /import license file/i }));
+
+    expect(await screen.findByText(/admin error: failed_to_import_license/i)).toBeInTheDocument();
+    expect(await screen.findByText(/license import failed: verify payload and signature/i)).toBeInTheDocument();
+  });
+
+  it("SET-002 supports diagnostics debug mode toggle and current state visibility", async () => {
     let debugEnabled = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

@@ -4369,6 +4369,7 @@ export function App() {
                   Restore Selected Backup
                 </button>
                 <p>Backup count: {backupEntries.length}</p>
+                {backupEntries.length === 0 ? <p>No backups available yet.</p> : null}
                 <ul>
                   {backupEntries.map((entry) => (
                     <li key={entry.path}>
@@ -4382,7 +4383,7 @@ export function App() {
                 <SecretsForm initialValues={secretsInitial} onSubmit={saveSecrets} />
                 <DataImportExportWizard onDryRun={dataImportDryRun} onApply={dataImportApply} onExport={dataExportRun} />
               </div>
-              {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
+              {licenseStatus ? <p>License: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : <p>License status not loaded yet.</p>}
               {licenseStatus ? <p>License validation: {licenseStatus.state || "unknown"} / {licenseStatus.tier || "unknown"}</p> : null}
               {licenseStatus?.features?.length ? <p>License features: {licenseStatus.features.join(", ")}</p> : null}
               {licenseStatus?.expires_at ? <p>License expires: {licenseStatus.expires_at}</p> : null}
@@ -4397,6 +4398,7 @@ export function App() {
               </ul>
               <p>Settings status: {settingsStatus || "idle"}</p>
               {adminError ? <p>Admin error: {adminError}</p> : null}
+              {adminError === "failed_to_import_license" ? <p>License import failed: verify payload and signature.</p> : null}
               {adminError === "failed_to_restore_backup" ? <p>Restore failed: verify the selected backup file is valid and readable.</p> : null}
             </SettingsScreen>
           ) : null}
