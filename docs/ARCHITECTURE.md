@@ -26,6 +26,9 @@ Pipeline:
 5. Match to canonical item
 6. Surface if not in collection
 
+Provider catalog and feasibility notes:
+- `docs/SHOP_PROVIDERS.md`
+
 ## Price Tracking
 Daily snapshot job storing:
 - Min
@@ -36,4 +39,3 @@ Daily snapshot job storing:
 - Signed JSON license file
 - Public key embedded in binary
 - Offline verification supported
-
