@@ -2290,6 +2290,13 @@ export function App() {
   const matchedCount = matchingResults.filter((result) => result.state === "matched").length;
   const suggestedCount = matchingResults.filter((result) => result.state === "suggested").length;
   const notInCollectionCount = matchingResults.filter((result) => result.state === "not_in_collection").length;
+  const newDiscoveriesCount = Number(dashboard?.new_discoveries ?? 0);
+  const wishlistHitsCount = Number(dashboard?.wishlist_hits ?? 0);
+  const priceDropsCount = Number(dashboard?.price_drops ?? 0);
+  const recentAddedCount = Number(dashboard?.recently_added ?? dashboard?.recent_items ?? 0);
+  const totalItemsCount = Number(dashboard?.total_items ?? 0);
+  const totalInstancesCount = Number(dashboard?.total_instances ?? 0);
+  const estimatedValue = dashboard?.estimated_value ?? "n/a";
   const editingQuerySet = querySets.find((querySet) => querySet.id === editingQuerySetID);
   const querySetInitialValues: Partial<ScannerQuerySetValues> | undefined = editingQuerySet
     ? {
@@ -3085,39 +3092,81 @@ export function App() {
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "dashboard") ? (
             <DashboardScreen id="dashboard">
               <h3>Dashboard</h3>
-              <div>
-                <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
-                  {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("collection")}>
-                  Open Collection Workspace
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
-                  Open Scanner Workspace
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
-                  Open Discoveries Workspace
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("ai")}>
-                  Open AI Workspace
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
-                  Open Pricing Workspace
-                </button>{" "}
-                <button type="button" onClick={() => openWorkspaceFromDashboard("settings")}>
-                  Open Settings Workspace
-                </button>
-              </div>
+              <section className="cabinet-home-hero">
+                <div>
+                  <p className="cabinet-home-eyebrow">Home Command Center</p>
+                  <h4>What needs action now in your collection</h4>
+                  <p>Review discovery matches, pricing movement, and maintenance risks from one place.</p>
+                </div>
+                <div className="cabinet-home-hero-actions">
+                  <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
+                    {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("collection")}>
+                    Open Collection Workspace
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
+                    Open Scanner Workspace
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
+                    Open Discoveries Workspace
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("ai")}>
+                    Open AI Workspace
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
+                    Open Pricing Workspace
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("settings")}>
+                    Open Settings Workspace
+                  </button>
+                </div>
+              </section>
+              <section className="cabinet-home-attention">
+                <h4>What Needs Attention Now</h4>
+                <div className="cabinet-attention-grid">
+                  <article className="cabinet-attention-card">
+                    <p className="cabinet-attention-label">New Discoveries</p>
+                    <p className="cabinet-attention-value">{String(newDiscoveriesCount)}</p>
+                    <p className="cabinet-attention-meta">Candidates not yet in your collection.</p>
+                    <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
+                      Review Discoveries
+                    </button>
+                  </article>
+                  <article className="cabinet-attention-card">
+                    <p className="cabinet-attention-label">Wishlist Hits</p>
+                    <p className="cabinet-attention-value">{String(wishlistHitsCount)}</p>
+                    <p className="cabinet-attention-meta">Tracked items that matched your targets.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openWorkspaceFromDashboard("pricing");
+                        void loadWishlistHits();
+                      }}
+                    >
+                      Review Wishlist Hits
+                    </button>
+                  </article>
+                  <article className="cabinet-attention-card">
+                    <p className="cabinet-attention-label">Price Drops</p>
+                    <p className="cabinet-attention-value">{String(priceDropsCount)}</p>
+                    <p className="cabinet-attention-meta">Items with movement in recent snapshots.</p>
+                    <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
+                      Review Price Drops
+                    </button>
+                  </article>
+                </div>
+              </section>
               {dashboardLoading ? <p>Loading dashboard...</p> : null}
               {dashboard ? (
-                <div>
-                  <p>New Discoveries: {String(dashboard.new_discoveries ?? 0)}</p>
-                  <p>Wishlist Hits: {String(dashboard.wishlist_hits ?? 0)}</p>
-                  <p>Price Drops: {String(dashboard.price_drops ?? 0)}</p>
-                  <p>Recently Added: {String(dashboard.recently_added ?? dashboard.recent_items ?? 0)}</p>
-                  <p>Total Items: {String(dashboard.total_items ?? 0)}</p>
-                  <p>Total Instances: {String(dashboard.total_instances ?? 0)}</p>
-                  <p>Estimated Value: {String(dashboard.estimated_value ?? "n/a")}</p>
+                <div className="cabinet-home-kpi-grid">
+                  <p>New Discoveries: {String(newDiscoveriesCount)}</p>
+                  <p>Wishlist Hits: {String(wishlistHitsCount)}</p>
+                  <p>Price Drops: {String(priceDropsCount)}</p>
+                  <p>Recently Added: {String(recentAddedCount)}</p>
+                  <p>Total Items: {String(totalItemsCount)}</p>
+                  <p>Total Instances: {String(totalInstancesCount)}</p>
+                  <p>Estimated Value: {String(estimatedValue)}</p>
                 </div>
               ) : (
                 <p>No dashboard data yet.</p>
