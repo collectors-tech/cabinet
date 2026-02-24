@@ -458,6 +458,39 @@ describe("App shell", () => {
     expect(screen.queryByRole("button", { name: /open advanced workspace/i })).not.toBeInTheDocument();
   });
 
+  it("renders structured onboarding layout with progress rail and status panel", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: true }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "0");
+    localStorage.setItem("cabinet.onboarding.step.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "0");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    expect(await screen.findByRole("heading", { name: /getting started/i })).toBeInTheDocument();
+    expect(await screen.findByRole("list", { name: /onboarding progress/i })).toBeInTheDocument();
+    expect(await screen.findByText(/quick status/i)).toBeInTheDocument();
+  });
+
   it("persists onboarding wizard step and resumes from last incomplete step", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

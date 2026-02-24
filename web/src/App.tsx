@@ -2660,122 +2660,140 @@ export function App() {
             </div>
           ) : null}
           {activeProfile && !showAdvancedWorkspace ? (
-            <div>
-              <h3>Starter Onboarding Wizard</h3>
-              <p>
-                Step {onboardingStep} of {ONBOARDING_STEPS.length}
-              </p>
-              <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
-              {onboardingSetupPath ? <p>Setup path: {onboardingSetupPath}</p> : null}
-              {onboardingStep === 1 ? (
-                <div>
-                  <p>Choose how you want to begin. Quick setup gets you collecting immediately and you can refine details later.</p>
-                  <div>
-                    <button type="button" onClick={() => void chooseOnboardingPath("quick")}>
-                      Start Setup
-                    </button>{" "}
-                    <button type="button" onClick={() => void chooseOnboardingPath("import")}>
-                      Import Existing Collection
-                    </button>{" "}
-                    <button type="button" onClick={() => void chooseOnboardingPath("sample")}>
-                      Use Sample Data
-                    </button>
+            <section className="cabinet-onboarding">
+              <div className="cabinet-onboarding-main">
+                <h3>Starter Onboarding Wizard</h3>
+                <h4>Getting Started</h4>
+                <p className="cabinet-onboarding-subtitle">Set up identity and starter data in a guided flow before unlocking advanced workspaces.</p>
+                <p>
+                  Step {onboardingStep} of {ONBOARDING_STEPS.length}
+                </p>
+                <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
+                <ol className="cabinet-onboarding-progress" aria-label="Onboarding progress">
+                  {ONBOARDING_STEPS.map((stepName, idx) => {
+                    const stepNumber = idx + 1;
+                    const state = stepNumber === onboardingStep ? "current" : stepNumber < onboardingStep ? "done" : "upcoming";
+                    return (
+                      <li key={stepName} className={`cabinet-onboarding-step cabinet-onboarding-step-${state}`}>
+                        <span className="cabinet-onboarding-step-index">{stepNumber}</span>
+                        <span>{stepName}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+                {onboardingSetupPath ? <p>Setup path: {onboardingSetupPath}</p> : null}
+                {onboardingStep === 1 ? (
+                  <div className="cabinet-onboarding-panel">
+                    <p>Choose how you want to begin. Quick setup gets you collecting immediately and you can refine details later.</p>
+                    <div className="cabinet-onboarding-action-row">
+                      <button type="button" onClick={() => void chooseOnboardingPath("quick")}>
+                        Start Setup
+                      </button>
+                      <button type="button" onClick={() => void chooseOnboardingPath("import")}>
+                        Import Existing Collection
+                      </button>
+                      <button type="button" onClick={() => void chooseOnboardingPath("sample")}>
+                        Use Sample Data
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : null}
-              <div>
-                <button type="button" onClick={previousOnboardingStep} disabled={onboardingStep <= 1}>
-                  Back Step
-                </button>{" "}
-                <button
-                  type="button"
-                  onClick={nextOnboardingStep}
-                  disabled={
-                    onboardingStep >= ONBOARDING_STEPS.length ||
-                    (onboardingStep === 2 && !onboardingIdentityComplete) ||
-                    (onboardingStep === 3 && !onboardingStarterDataChoice)
-                  }
-                >
-                  Next Step
-                </button>
-              </div>
-              <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
-              <div>
-                {onboardingStep === 2 ? (
-                  <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
-                    {starterIdentityBusy ? "Completing Identity..." : "Complete Identity"}
+                ) : null}
+                <div className="cabinet-onboarding-nav-row">
+                  <button type="button" onClick={previousOnboardingStep} disabled={onboardingStep <= 1}>
+                    Back Step
                   </button>
-                ) : null}
-                {onboardingStep === 3 ? (
-                  <>
-                    <button type="button" onClick={() => void chooseOnboardingStarterData("sample")}>
-                      Load Sample Data (Recommended)
-                    </button>{" "}
-                    <button type="button" onClick={() => void chooseOnboardingStarterData("empty")}>
-                      Start Empty
-                    </button>
-                  </>
-                ) : null}
-                {onboardingCompleted ? (
-                  <button type="button" onClick={() => setWorkspaceMode(true)}>
-                    Open Advanced Workspace
-                  </button>
-                ) : null}
-              </div>
-              {onboardingStep === 4 ? (
-                <>
-                  <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} />
-                </>
-              ) : null}
-              {onboardingStep === 5 ? (
-                <div>
-                  <h4>Preferences</h4>
-                  <div>
-                    <label htmlFor="onboarding-theme">Theme</label>{" "}
-                    <select
-                      id="onboarding-theme"
-                      aria-label="Onboarding theme"
-                      value={onboardingTheme}
-                      onChange={(e) => setOnboardingTheme((e.target.value as Theme) || "light")}
-                    >
-                      <option value="light">Light</option>
-                      <option value="dark">Dark</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="onboarding-backup">Backup frequency</label>{" "}
-                    <select
-                      id="onboarding-backup"
-                      aria-label="Onboarding backup frequency"
-                      value={onboardingBackupFrequency}
-                      onChange={(e) => setOnboardingBackupFrequency((e.target.value as "daily" | "weekly" | "monthly") || "daily")}
-                    >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="onboarding-scanner">Scanner schedule</label>{" "}
-                    <select
-                      id="onboarding-scanner"
-                      aria-label="Onboarding scanner schedule"
-                      value={onboardingScannerPreset}
-                      onChange={(e) => setOnboardingScannerPreset((e.target.value as "manual" | "daily" | "weekly") || "manual")}
-                    >
-                      <option value="manual">Manual only</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                    </select>
-                  </div>
-                  <button type="button" onClick={finishOnboarding} disabled={onboardingFinishing}>
-                    {onboardingFinishing ? "Finishing..." : "Finish Onboarding"}
+                  <button
+                    type="button"
+                    onClick={nextOnboardingStep}
+                    disabled={
+                      onboardingStep >= ONBOARDING_STEPS.length ||
+                      (onboardingStep === 2 && !onboardingIdentityComplete) ||
+                      (onboardingStep === 3 && !onboardingStarterDataChoice)
+                    }
+                  >
+                    Next Step
                   </button>
                 </div>
-              ) : null}
-              <p>Current items: {items.length}</p>
-              {itemsError ? <p>Item error: {itemsError}</p> : null}
-            </div>
+                <p>Complete identity, add your first item, then open the advanced workspace when you are ready.</p>
+                <div className="cabinet-onboarding-action-row">
+                  {onboardingStep === 2 ? (
+                    <button type="button" onClick={completeIdentity} disabled={starterIdentityBusy}>
+                      {starterIdentityBusy ? "Completing Identity..." : "Complete Identity"}
+                    </button>
+                  ) : null}
+                  {onboardingStep === 3 ? (
+                    <>
+                      <button type="button" onClick={() => void chooseOnboardingStarterData("sample")}>
+                        Load Sample Data (Recommended)
+                      </button>
+                      <button type="button" onClick={() => void chooseOnboardingStarterData("empty")}>
+                        Start Empty
+                      </button>
+                    </>
+                  ) : null}
+                  {onboardingCompleted ? (
+                    <button type="button" onClick={() => setWorkspaceMode(true)}>
+                      Open Advanced Workspace
+                    </button>
+                  ) : null}
+                </div>
+                {onboardingStep === 4 ? <StarterQuickAddForm onSubmit={addStarterItem} isSubmitting={starterSubmitting} /> : null}
+                {onboardingStep === 5 ? (
+                  <div className="cabinet-onboarding-panel">
+                    <h4>Preferences</h4>
+                    <div>
+                      <label htmlFor="onboarding-theme">Theme</label>{" "}
+                      <select
+                        id="onboarding-theme"
+                        aria-label="Onboarding theme"
+                        value={onboardingTheme}
+                        onChange={(e) => setOnboardingTheme((e.target.value as Theme) || "light")}
+                      >
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="onboarding-backup">Backup frequency</label>{" "}
+                      <select
+                        id="onboarding-backup"
+                        aria-label="Onboarding backup frequency"
+                        value={onboardingBackupFrequency}
+                        onChange={(e) => setOnboardingBackupFrequency((e.target.value as "daily" | "weekly" | "monthly") || "daily")}
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="onboarding-scanner">Scanner schedule</label>{" "}
+                      <select
+                        id="onboarding-scanner"
+                        aria-label="Onboarding scanner schedule"
+                        value={onboardingScannerPreset}
+                        onChange={(e) => setOnboardingScannerPreset((e.target.value as "manual" | "daily" | "weekly") || "manual")}
+                      >
+                        <option value="manual">Manual only</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+                    <button type="button" onClick={finishOnboarding} disabled={onboardingFinishing}>
+                      {onboardingFinishing ? "Finishing..." : "Finish Onboarding"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <aside className="cabinet-onboarding-side">
+                <h4>Quick Status</h4>
+                <p>Current items: {items.length}</p>
+                <p>Identity complete: {onboardingIdentityComplete ? "yes" : "no"}</p>
+                <p>Starter data: {onboardingStarterDataChoice || "not selected"}</p>
+                <p>Next unlock: Advanced Workspace</p>
+                {itemsError ? <p>Item error: {itemsError}</p> : null}
+              </aside>
+            </section>
           ) : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <CollectionScreen id="collection">
