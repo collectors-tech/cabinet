@@ -244,12 +244,12 @@ test("wizard happy path completes all 5 steps and unlocks advanced workspace", a
   await page.getByRole("button", { name: /start setup/i }).click();
   await expect(page.getByText(/step 2 of 5/i)).toBeVisible();
   await page.getByRole("button", { name: /complete identity/i }).click();
-  await expect(page.getByText(/auth status: registration_finished/i)).toBeVisible();
+  await expect(page.locator(".cabinet-onboarding").getByText(/identity complete: yes/i)).toBeVisible();
   await page.getByRole("button", { name: /next step/i }).click();
 
   await expect(page.getByText(/step 3 of 5/i)).toBeVisible();
   await page.getByRole("button", { name: /load sample data \(recommended\)/i }).click();
-  await expect(page.getByText(/onboarding sample data (loaded|already available)/i)).toBeVisible();
+  await expect(page.locator(".cabinet-onboarding").getByText(/starter data: sample/i)).toBeVisible();
   await page.getByRole("button", { name: /next step/i }).click();
 
   await expect(page.getByText(/step 4 of 5/i)).toBeVisible();
@@ -283,7 +283,7 @@ test("wizard supports skip path for optional starter-data choices", async ({ pag
 
   await expect(page.getByText(/step 3 of 5/i)).toBeVisible();
   await page.getByRole("button", { name: /start empty/i }).click();
-  await expect(page.getByText(/starting with an empty collection/i)).toBeVisible();
+  await expect(page.locator(".cabinet-onboarding").getByText(/starter data: empty/i)).toBeVisible();
   await page.getByRole("button", { name: /next step/i }).click();
 
   await page.getByLabel(/part number/i).fill("PN-901");
@@ -324,6 +324,6 @@ test("wizard failure path blocks progress then allows retry after identity error
   await expect(nextStep).toBeDisabled();
 
   await page.getByRole("button", { name: /complete identity/i }).click();
-  await expect(page.getByText(/auth status: registration_finished/i)).toBeVisible();
+  await expect(page.locator(".cabinet-onboarding").getByText(/identity complete: yes/i)).toBeVisible();
   await expect(nextStep).toBeEnabled();
 });

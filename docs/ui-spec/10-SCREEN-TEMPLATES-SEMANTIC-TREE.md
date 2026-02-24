@@ -111,15 +111,28 @@ section[aria-label=Dashboard][data-testid=screen-dashboard]
 ```text
 section[aria-label=Collection][data-testid=screen-collection]
   h3
-  workspace mode toggle action
-  search/filter controls
-  saved filter controls
-  saved filter list
-  collection item form
-  loading/error/empty states
-  table (items)
-  instances block (load + form + list)
-  column-view block (brands/categories/series/items lists)
+  section.collection-toolbar
+    workspace mode toggle action
+    search/filter controls
+    add item/folder actions
+    grid/table view toggle
+  section.collection-summary-strip
+    folders/items/quantity/value summaries
+  section.collection-browser
+    aside.collection-tree
+      folder search
+      folder hierarchy list
+      utility links (history/trash)
+    section.collection-results
+      saved filter controls
+      saved filter list
+      selection bar (visible when rows/cards selected)
+      loading/error/empty states
+      table OR card grid (items/folders)
+  section.collection-details
+    collection item form
+    instances block (load + form + list)
+    column-view block (brands/categories/series/items lists)
 ```
 
 ### 4.3 Scanner

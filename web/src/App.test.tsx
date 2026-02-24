@@ -20,6 +20,19 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
   });
 
+  it("uses fixed shell semantics with sticky topbar and scrolling content container", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: /welcome to cabinet/i })).toBeInTheDocument();
+    expect(document.querySelector(".cabinet-content-scroll")).toBeTruthy();
+    expect(document.querySelector(".cabinet-topbar")).toBeTruthy();
+    expect(document.querySelector(".cabinet-sidebar")).toBeTruthy();
+  });
+
   it("shows API Kitchen Sync quick link in utility links", async () => {
     vi.stubGlobal(
       "fetch",

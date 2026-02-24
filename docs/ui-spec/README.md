@@ -13,6 +13,7 @@ Documents:
 - `08-GAP-AND-INTUITIVENESS-REVIEW.md`
 - `09-COMPONENT-SPECS-STRICT.md`
 - `10-SCREEN-TEMPLATES-SEMANTIC-TREE.md`
+- `11-SORTLY-PATTERN-MAPPING.md`
 - `screens/README.md` (per-screen split specs)
 
 Usage:
@@ -26,3 +27,4 @@ Usage:
 8. Close gaps from `08` before release.
 9. Implement component contracts from `09`.
 10. Use semantic page/template tree from `10`.
+11. Apply Sortly-inspired inventory/photo/update patterns from `11`.

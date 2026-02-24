@@ -33,12 +33,14 @@ body {
   font-family: "Aptos", "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);
+  overflow: hidden;
 }
 
 .cabinet-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .cabinet-sidebar {
@@ -47,6 +49,8 @@ body {
   padding: 20px 16px;
   border-right: 1px solid var(--line);
   background: var(--surface);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .cabinet-sidebar nav {
@@ -98,10 +102,18 @@ body {
 }
 
 .cabinet-content {
+  height: 100vh;
+  overflow: hidden;
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .cabinet-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -109,6 +121,12 @@ body {
   border-radius: 12px;
   padding: 10px 14px;
   background: var(--surface);
+}
+
+.cabinet-content-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
 }
 
 .cabinet-topbar-left {
@@ -146,6 +164,66 @@ body {
 
 .cabinet-card p {
   color: var(--text-soft);
+}
+
+.cabinet-empty-state {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.cabinet-empty-state p {
+  margin-top: 0;
+}
+
+.cabinet-profile-list {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.cabinet-profile-list p {
+  margin-top: 0;
+}
+
+.cabinet-profile-pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cabinet-profile-pills li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--surface);
+}
+
+.cabinet-active-profile {
+  margin: 12px 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cabinet-tech-details {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+}
+
+.cabinet-tech-details > summary {
+  cursor: pointer;
+  font-weight: 600;
 }
 
 .cabinet-card ul {
@@ -603,8 +681,13 @@ body {
 }
 
 @media (max-width: 900px) {
+  body {
+    overflow: auto;
+  }
   .cabinet-shell {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
   }
   .cabinet-sidebar {
     display: none;
@@ -623,6 +706,13 @@ body {
   .cabinet-card button {
     width: 100%;
     margin-bottom: 8px;
+  }
+  .cabinet-content {
+    height: auto;
+    overflow: visible;
+  }
+  .cabinet-content-scroll {
+    overflow: visible;
   }
   .cabinet-home-hero {
     grid-template-columns: 1fr;

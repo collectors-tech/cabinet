@@ -10,6 +10,7 @@
 2. Collection Snapshot
 3. Recent Activity
 4. Quick Actions
+5. Sticky in-content header (status + theme/action controls)
 
 ## State Behavior
 - Loading: card placeholders and KPI skeleton.
@@ -22,10 +23,10 @@
 - [ ] Every card has at least one actionable button.
 - [ ] Quick Actions include: Add Item, Run Scanner, Open Discover, Backup Now.
 - [ ] Home refresh updates only relevant panels, not full app hard-block.
+- [ ] Desktop layout keeps sidebar fixed while home content scrolls.
 
 ## Test Cases
 - `HOME-001` card rank order with mixed-priority fixtures.
 - `HOME-002` card action deep-link routing.
 - `HOME-003` empty-state CTA availability.
 - `HOME-004` error + retry recovery.
-

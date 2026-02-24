@@ -2548,6 +2548,7 @@ export function App() {
             Toggle Theme
           </button>
         </header>
+        <div className="cabinet-content-scroll">
         {recoveryDiagnostics?.recovery_required ? (
           <section className="cabinet-card" role="alert" aria-label="Recovery required">
             <strong>Recovery required.</strong> Cabinet detected an incomplete previous session and recommends diagnostics review.
@@ -2568,11 +2569,11 @@ export function App() {
           </section>
         ) : null}
         <section className="cabinet-card">
-          <h2>Cabinet Frontend Foundation</h2>
-          <p>Local-first onboarding, WebAuthn auth, collection workflows, and automated E2E coverage are active.</p>
+          <h2>Welcome to Cabinet</h2>
+          <p>Your local-first collector workspace. Start with a profile, then finish guided setup to unlock advanced tools.</p>
           {loading ? <p>Loading profiles...</p> : null}
           {!loading && profiles.length === 0 ? (
-            <div>
+            <div className="cabinet-empty-state">
               <p>No local profiles found yet. Create your first local profile to initialize Cabinet on this device.</p>
               <button type="button" onClick={createFirstProfile}>
                 Create First Profile
@@ -2580,12 +2581,12 @@ export function App() {
             </div>
           ) : null}
           {!loading && profiles.length > 0 ? (
-            <div>
+            <div className="cabinet-profile-list">
               <p>Select a profile to continue:</p>
-              <ul>
+              <ul className="cabinet-profile-pills">
                 {profiles.map((p) => (
                   <li key={p.id}>
-                    <span>{p.name}</span>{" "}
+                    <span>{p.name}</span>
                     <button type="button" onClick={() => activateProfile(p.id)}>
                       Use {p.name}
                     </button>
@@ -2594,70 +2595,71 @@ export function App() {
               </ul>
             </div>
           ) : null}
-          {activeProfile ? <p>Active profile: {activeProfile.name}</p> : null}
-          {profileStorage ? (
-            <div>
-              <p>Database: {profileStorage.db_path || "not set"}</p>
-              <p>Media: {profileStorage.media_dir || "not set"}</p>
-            </div>
-          ) : null}
+          {activeProfile ? <p className="cabinet-active-profile">Active profile: {activeProfile.name}</p> : null}
           {activeProfile ? (
-            <div>
-              <h3>Authentication</h3>
-              <p>Requires registration: {requiresRegistration === null ? "unknown" : String(requiresRegistration)}</p>
-              <details>
-                <summary>Advanced Identity Tools</summary>
+            <details className="cabinet-tech-details">
+              <summary>Profile and Identity Diagnostics</summary>
+              {profileStorage ? (
                 <div>
-                  <button type="button" onClick={beginWebAuthnRegistration}>
-                    Begin WebAuthn Registration
-                  </button>{" "}
-                  <button type="button" onClick={finishWebAuthnRegistration}>
-                    Finish Registration
-                  </button>{" "}
-                  <button type="button" onClick={beginWebAuthnLogin}>
-                    Begin WebAuthn Login
-                  </button>{" "}
-                  <button type="button" onClick={finishWebAuthnLogin}>
-                    Finish Login
-                  </button>
+                  <p>Database: {profileStorage.db_path || "not set"}</p>
+                  <p>Media: {profileStorage.media_dir || "not set"}</p>
                 </div>
-                <p>Auth session: {authSessionID || "none"}</p>
-                <textarea
-                  value={credentialJSON}
-                  onChange={(e) => setCredentialJSON(e.target.value)}
-                  rows={4}
-                  cols={60}
-                  aria-label="Credential JSON"
-                />
-                <RecoveryPassphraseForm
-                  isSubmitting={recoverySubmitting}
-                  onSubmit={async ({ passphrase }) => {
-                    setRecoverySubmitting(true);
-                    setRecoveryPassphrase(passphrase);
-                    try {
-                      await saveRecoveryPassphrase(passphrase);
-                    } finally {
-                      setRecoverySubmitting(false);
-                    }
-                  }}
-                />
-                <button type="button" onClick={beginRecoveryReset}>
-                  Begin Recovery Reset
-                </button>
-                <SessionTokenForm
-                  onValidate={async ({ token }) => {
-                    setSessionToken(token);
-                    await validateSession(token);
-                  }}
-                  onLock={async ({ token }) => {
-                    setSessionToken(token);
-                    await lockSession(token);
-                  }}
-                />
-              </details>
-              <p>Auth status: {authStatus || "idle"}</p>
-              {onboardingStatus ? <p>{onboardingStatus}</p> : null}
-            </div>
+              ) : null}
+              <div>
+                <h3>Authentication</h3>
+                <p>Requires registration: {requiresRegistration === null ? "unknown" : String(requiresRegistration)}</p>
+                <details>
+                  <summary>Advanced Identity Tools</summary>
+                  <div>
+                    <button type="button" onClick={beginWebAuthnRegistration}>
+                      Begin WebAuthn Registration
+                    </button>{" "}
+                    <button type="button" onClick={finishWebAuthnRegistration}>
+                      Finish Registration
+                    </button>{" "}
+                    <button type="button" onClick={beginWebAuthnLogin}>
+                      Begin WebAuthn Login
+                    </button>{" "}
+                    <button type="button" onClick={finishWebAuthnLogin}>
+                      Finish Login
+                    </button>
+                  </div>
+                  <p>Auth session: {authSessionID || "none"}</p>
+                  <textarea
+                    value={credentialJSON}
+                    onChange={(e) => setCredentialJSON(e.target.value)}
+                    rows={4}
+                    cols={60}
+                    aria-label="Credential JSON"
+                  />
+                  <RecoveryPassphraseForm
+                    isSubmitting={recoverySubmitting}
+                    onSubmit={async ({ passphrase }) => {
+                      setRecoverySubmitting(true);
+                      setRecoveryPassphrase(passphrase);
+                      try {
+                        await saveRecoveryPassphrase(passphrase);
+                      } finally {
+                        setRecoverySubmitting(false);
+                      }
+                    }}
+                  />
+                  <button type="button" onClick={beginRecoveryReset}>
+                    Begin Recovery Reset
+                  </button>
+                  <SessionTokenForm
+                    onValidate={async ({ token }) => {
+                      setSessionToken(token);
+                      await validateSession(token);
+                    }}
+                    onLock={async ({ token }) => {
+                      setSessionToken(token);
+                      await lockSession(token);
+                    }}
+                  />
+                </details>
+              </div>
+            </details>
           ) : null}
           {activeProfile && !showAdvancedWorkspace ? (
             <section className="cabinet-onboarding">
@@ -2669,6 +2671,8 @@ export function App() {
                   Step {onboardingStep} of {ONBOARDING_STEPS.length}
                 </p>
                 <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
+                <p>Auth status: {authStatus || "idle"}</p>
+                {onboardingStatus ? <p>{onboardingStatus}</p> : null}
                 <ol className="cabinet-onboarding-progress" aria-label="Onboarding progress">
                   {ONBOARDING_STEPS.map((stepName, idx) => {
                     const stepNumber = idx + 1;
@@ -3584,11 +3588,12 @@ export function App() {
             <li>
               <a href="/api/runtime/recovery">Recovery State</a>
             </li>
-              <li>
-                <a href="/apidocs">API Kitchen Sync</a>
+            <li>
+              <a href="/apidocs">API Kitchen Sync</a>
               </li>
           </ul>
         </section>
+        </div>
       </section>
     </main>
   );
