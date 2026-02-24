@@ -106,6 +106,66 @@ func (s *Service) GetQuerySet(ctx context.Context, id string) (QuerySet, error) 
 	return s.GetQuerySetForProfile(ctx, "", id)
 }
 
+func (s *Service) UpdateQuerySet(ctx context.Context, id string, in QuerySet) (QuerySet, error) {
+	return s.UpdateQuerySetForProfile(ctx, "", id, in)
+}
+
+func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id string, in QuerySet) (QuerySet, error) {
+	if strings.TrimSpace(id) == "" {
+		return QuerySet{}, fmt.Errorf("query set id is required")
+	}
+	if strings.TrimSpace(in.Name) == "" || len(in.Keywords) == 0 {
+		return QuerySet{}, fmt.Errorf("name and keywords are required")
+	}
+	if in.RateLimitRPS <= 0 {
+		in.RateLimitRPS = 2
+	}
+	if in.MaxRetryCount < 0 {
+		in.MaxRetryCount = 0
+	}
+	k, _ := json.Marshal(in.Keywords)
+	e, _ := json.Marshal(in.Exclusions)
+	enabled := 0
+	if in.Enabled {
+		enabled = 1
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE scanner_query_sets
+		SET name = ?, keywords_json = ?, exclusions_json = ?, max_price = ?, region = ?, condition_filter = ?, schedule_cron = ?, enabled = ?, rate_limit_rps = ?, max_retry_count = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, in.Name, string(k), string(e), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	if err != nil {
+		return QuerySet{}, fmt.Errorf("update query set: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return QuerySet{}, fmt.Errorf("query set not found")
+	}
+	return s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), strings.TrimSpace(id))
+}
+
+func (s *Service) DeleteQuerySet(ctx context.Context, id string) error {
+	return s.DeleteQuerySetForProfile(ctx, "", id)
+}
+
+func (s *Service) DeleteQuerySetForProfile(ctx context.Context, profileID, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("query set id is required")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM scanner_query_sets
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	if err != nil {
+		return fmt.Errorf("delete query set: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("query set not found")
+	}
+	return nil
+}
+
 func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id string) (QuerySet, error) {
 	var q QuerySet
 	var keywordsJSON, exclusionsJSON string
@@ -293,11 +353,11 @@ func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error)
 			return nil, fmt.Errorf("scan failure: %w", err)
 		}
 		out = append(out, map[string]string{
-			"query_set_id": q,
-			"provider":     p,
-			"message":      m,
-			"created_at":   c,
-			"reason":       m,
+			"query_set_id":  q,
+			"provider":      p,
+			"message":       m,
+			"created_at":    c,
+			"reason":        m,
 			"last_error_at": c,
 		})
 	}

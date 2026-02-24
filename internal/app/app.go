@@ -523,6 +523,39 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/scanner/query-sets/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		id := strings.TrimPrefix(r.URL.Path, "/api/scanner/query-sets/")
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, _ := profiles.GetActiveProfile(r.Context())
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodPut:
+			var req scanner.QuerySet
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			updated, err := scannerSvc.UpdateQuerySetForProfile(r.Context(), profileID, id, req)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_query_set"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(updated)
+		case http.MethodDelete:
+			if err := scannerSvc.DeleteQuerySetForProfile(r.Context(), profileID, id); err != nil {
+				http.Error(w, `{"error":"invalid_query_set"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/scanner/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

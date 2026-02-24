@@ -1534,7 +1534,9 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /fullscreen photo preview/i })).not.toBeInTheDocument());
   });
 
-  it("loads scanner query sets", async () => {
+  it("SCAN-001 creates, edits, and deletes scanner query sets", async () => {
+    const updateBodies: string[] = [];
+    const deleteCalls: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -1553,7 +1555,15 @@ describe("App shell", () => {
         return new Response(JSON.stringify({ items: [] }), { status: 200 });
       }
       if (url === "/api/scanner/query-sets") {
-        return new Response(JSON.stringify({ query_sets: [{ id: "q1", name: "AFX Search" }] }), { status: 200 });
+        return new Response(JSON.stringify({ query_sets: [{ id: "q1", name: "AFX Search", keywords: ["afx"], enabled: true }] }), { status: 200 });
+      }
+      if (url === "/api/scanner/query-sets/q1" && init?.method === "PUT") {
+        updateBodies.push(String(init.body || ""));
+        return new Response(JSON.stringify({ id: "q1", name: "AFX Search Updated", keywords: ["afx"], enabled: true }), { status: 200 });
+      }
+      if (url === "/api/scanner/query-sets/q1" && init?.method === "DELETE") {
+        deleteCalls.push(url);
+        return new Response(null, { status: 204 });
       }
       return new Response(JSON.stringify({}), { status: 200 });
     });
@@ -1565,9 +1575,18 @@ describe("App shell", () => {
     const loadQuerySets = await screen.findByRole("button", { name: /load query sets/i });
     loadQuerySets.click();
     expect(await screen.findByText(/afx search/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /edit query set q1/i }));
+    fireEvent.change(await screen.findByLabelText(/query set name/i), { target: { value: "AFX Search Updated" } });
+    fireEvent.click(await screen.findByRole("button", { name: /save query set/i }));
+    await screen.findByText(/afx search updated/i);
+    expect(updateBodies.join(" ")).toContain("AFX Search Updated");
+
+    fireEvent.click(await screen.findByRole("button", { name: /delete query set q1/i }));
+    await waitFor(() => expect(screen.queryByText(/afx search updated/i)).not.toBeInTheDocument());
+    expect(deleteCalls.length).toBe(1);
   });
 
-  it("runs scanner scheduled workflows, provider health, and matching", async () => {
+  it("SCAN-002/003/004 runs scanner controls, failure retry, and provider health", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -1588,8 +1607,14 @@ describe("App shell", () => {
       if (url === "/api/scanner/run/scheduled" && init?.method === "POST") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
+      if (url === "/api/scanner/run" && init?.method === "POST") {
+        return new Response(JSON.stringify({ attempts: 1, saved: 2 }), { status: 200 });
+      }
       if (url === "/api/scanner/failures") {
-        return new Response(JSON.stringify({ failures: [{ id: "f1", query_set_id: "q1", reason: "rate_limited", attempts: 2 }] }), { status: 200 });
+        return new Response(
+          JSON.stringify({ failures: [{ id: "f1", query_set_id: "q1", reason: "rate_limited", attempts: 2 }, { id: "f2", reason: "missing id", attempts: 1 }] }),
+          { status: 200 },
+        );
       }
       if (url === "/api/scanner/failures/retry" && init?.method === "POST") {
         return new Response(JSON.stringify({ retry_started: true, query_set_id: "q1" }), { status: 200 });
@@ -1612,11 +1637,16 @@ describe("App shell", () => {
     fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^scanner$/i }));
 
+    fireEvent.change(await screen.findByLabelText(/selected query set id/i), { target: { value: "q1" } });
+    fireEvent.click(await screen.findByRole("button", { name: /run now/i }));
+    expect(await screen.findByText(/run now status: run_now_ok:attempts=1,saved=2/i)).toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole("button", { name: /run scheduled/i }));
     expect(await screen.findByText(/scheduled run: scheduled_scans_triggered/i)).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /load scanner failures/i }));
     expect(await screen.findByText(/failure: q1 \/ rate_limited \/ attempts 2/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry failure unknown/i })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /retry failure q1/i }));
     expect(await screen.findByText(/scanner retry status: retry_started_for_q1/i)).toBeInTheDocument();
 

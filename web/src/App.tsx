@@ -149,6 +149,9 @@ export function App() {
   const [selectedQuerySetID, setSelectedQuerySetID] = useState("");
   const [editingQuerySetID, setEditingQuerySetID] = useState("");
   const [querySetSubmitting, setQuerySetSubmitting] = useState(false);
+  const [querySetsLoading, setQuerySetsLoading] = useState(false);
+  const [scannerFailuresLoading, setScannerFailuresLoading] = useState(false);
+  const [scannerRunNowStatus, setScannerRunNowStatus] = useState("");
   const [scheduledRunStatus, setScheduledRunStatus] = useState("");
   const [scannerRetryStatus, setScannerRetryStatus] = useState("");
   const [scannerFailures, setScannerFailures] = useState<Array<{ id?: string; query_set_id?: string; reason?: string; attempts?: number; last_error_at?: string }>>([]);
@@ -1321,6 +1324,7 @@ export function App() {
 
   async function loadQuerySets() {
     setScannerError("");
+    setQuerySetsLoading(true);
     try {
       const resp = await fetch("/api/scanner/query-sets");
       if (!resp.ok) {
@@ -1334,11 +1338,14 @@ export function App() {
       }
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_list_query_sets");
+    } finally {
+      setQuerySetsLoading(false);
     }
   }
 
   async function createQuerySet(values: ScannerQuerySetValues) {
     setScannerError("");
+    setScannerRunNowStatus("");
     setQuerySetSubmitting(true);
     try {
       const payload = {
@@ -1359,24 +1366,60 @@ export function App() {
         rate_limit_rps: values.rate_limit_rps,
         max_retry_count: values.max_retry_count,
       };
-      const resp = await fetch("/api/scanner/query-sets", {
-        method: "POST",
+      const editingID = editingQuerySetID.trim();
+      const isEditing = editingID !== "";
+      const endpoint = isEditing ? `/api/scanner/query-sets/${encodeURIComponent(editingID)}` : "/api/scanner/query-sets";
+      const resp = await fetch(endpoint, {
+        method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!resp.ok) {
-        throw new Error("failed_to_create_query_set");
+        throw new Error(isEditing ? "failed_to_update_query_set" : "failed_to_create_query_set");
       }
-      const created = (await resp.json()) as ScannerQuerySetRecord;
-      setQuerySets((current) => [...current, created]);
-      if (!selectedQuerySetID) {
-        setSelectedQuerySetID(created.id);
+      const saved = (await resp.json()) as ScannerQuerySetRecord;
+      if (isEditing) {
+        setQuerySets((current) => current.map((set) => (set.id === editingID ? saved : set)));
+      } else {
+        setQuerySets((current) => [...current, saved]);
+      }
+      if (!selectedQuerySetID || isEditing) {
+        setSelectedQuerySetID(saved.id);
       }
       setEditingQuerySetID("");
     } catch (e) {
-      setScannerError(e instanceof Error ? e.message : "failed_to_create_query_set");
+      setScannerError(e instanceof Error ? e.message : "failed_to_save_query_set");
     } finally {
       setQuerySetSubmitting(false);
+    }
+  }
+
+  async function deleteQuerySet(querySetID: string) {
+    const trimmed = querySetID.trim();
+    if (!trimmed) {
+      return;
+    }
+    setScannerError("");
+    setScannerRunNowStatus("");
+    try {
+      const resp = await fetch(`/api/scanner/query-sets/${encodeURIComponent(trimmed)}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) {
+        throw new Error("failed_to_delete_query_set");
+      }
+      let nextSelected = "";
+      setQuerySets((current) => {
+        const nextSets = current.filter((set) => set.id !== trimmed);
+        nextSelected = nextSets[0]?.id || "";
+        return nextSets;
+      });
+      if (selectedQuerySetID === trimmed) {
+        setSelectedQuerySetID(nextSelected);
+      }
+      if (editingQuerySetID === trimmed) {
+        setEditingQuerySetID("");
+      }
+    } catch (e) {
+      setScannerError(e instanceof Error ? e.message : "failed_to_delete_query_set");
     }
   }
 
@@ -1386,6 +1429,7 @@ export function App() {
       return;
     }
     setScannerError("");
+    setScannerRunNowStatus("");
     try {
       const resp = await fetch("/api/scanner/run", {
         method: "POST",
@@ -1395,6 +1439,8 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_run_scanner");
       }
+      const data = (await resp.json()) as { attempts?: number; saved?: number };
+      setScannerRunNowStatus(`run_now_ok:attempts=${data.attempts || 0},saved=${data.saved || 0}`);
       await loadCandidates();
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_run_scanner");
@@ -1417,6 +1463,7 @@ export function App() {
 
   async function loadScannerFailures() {
     setScannerError("");
+    setScannerFailuresLoading(true);
     try {
       const resp = await fetch("/api/scanner/failures");
       if (!resp.ok) {
@@ -1426,6 +1473,8 @@ export function App() {
       setScannerFailures(data.failures || []);
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_load_scanner_failures");
+    } finally {
+      setScannerFailuresLoading(false);
     }
   }
 
@@ -3740,6 +3789,8 @@ export function App() {
                   Load Query Sets
                 </button>
               </div>
+              {querySetsLoading ? <p>Loading query sets...</p> : null}
+              {!querySetsLoading && querySets.length === 0 ? <p>No query sets created yet.</p> : null}
               <div>
                 <input
                   value={selectedQuerySetID}
@@ -3769,10 +3820,13 @@ export function App() {
                 </button>
               </div>
               {scannerError ? <p>Scanner error: {scannerError}</p> : null}
+              {scannerRunNowStatus ? <p>Run now status: {scannerRunNowStatus}</p> : null}
               {scheduledRunStatus ? <p>Scheduled run: {scheduledRunStatus}</p> : null}
               {scannerRetryStatus ? <p>Scanner retry status: {scannerRetryStatus}</p> : null}
               {matchingRunStatus ? <p>Matching run status: {matchingRunStatus}</p> : null}
               {providerHealth ? <p>Provider health: {providerHealth.provider || "unknown"} / {providerHealth.state || String(providerHealth.healthy)}</p> : null}
+              {scannerFailuresLoading ? <p>Loading scanner failures...</p> : null}
+              {!scannerFailuresLoading && scannerFailures.length === 0 ? <p>No scanner failures recorded.</p> : null}
               <ul>
                 {scannerFailures.map((failure, idx) => (
                   <li key={failure.id || `${failure.query_set_id || "qs"}-${idx}`}>
@@ -3794,12 +3848,16 @@ export function App() {
                     {q.name} ({q.id}){" "}
                     <button
                       type="button"
+                      aria-label={`Edit query set ${q.id}`}
                       onClick={() => {
                         setSelectedQuerySetID(q.id);
                         setEditingQuerySetID(q.id);
                       }}
                     >
                       Edit
+                    </button>{" "}
+                    <button type="button" aria-label={`Delete query set ${q.id}`} onClick={() => void deleteQuerySet(q.id)}>
+                      Delete
                     </button>
                   </li>
                 ))}

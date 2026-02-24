@@ -24,6 +24,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 	requiredPaths := []string{
 		"/api/onboarding/sample-data",
 		"/api/scanner/run/scheduled",
+		"/api/scanner/query-sets/{querySetID}",
 		"/api/scanner/failures",
 		"/api/scanner/failures/retry",
 		"/api/provider/health",

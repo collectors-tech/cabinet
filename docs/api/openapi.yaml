@@ -457,6 +457,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScannerQuerySet"
+  /api/scanner/query-sets/{querySetID}:
+    put:
+      tags: [Scanner]
+      summary: Update scanner query set
+      parameters:
+        - in: path
+          name: querySetID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScannerQuerySetInput"
+      responses:
+        "200":
+          description: Updated query set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerQuerySet"
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Scanner]
+      summary: Delete scanner query set
+      parameters:
+        - in: path
+          name: querySetID
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Query set deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/scanner/run:
     post:
       tags: [Scanner]
