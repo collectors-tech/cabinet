@@ -2297,6 +2297,38 @@ export function App() {
   const totalItemsCount = Number(dashboard?.total_items ?? 0);
   const totalInstancesCount = Number(dashboard?.total_instances ?? 0);
   const estimatedValue = dashboard?.estimated_value ?? "n/a";
+  const dashboardAttentionRows = [
+    {
+      key: "discoveries",
+      label: "Review new discoveries",
+      count: newDiscoveriesCount,
+      details: "Candidates not yet in your collection.",
+      actionLabel: "Review Discoveries",
+      open: () => openWorkspaceFromDashboard("discoveries"),
+    },
+    {
+      key: "wishlist",
+      label: "Review wishlist hits",
+      count: wishlistHitsCount,
+      details: "Tracked items that matched your targets.",
+      actionLabel: "Review Wishlist Hits",
+      open: () => {
+        openWorkspaceFromDashboard("pricing");
+        void loadWishlistHits();
+      },
+    },
+    {
+      key: "pricing",
+      label: "Review price drops",
+      count: priceDropsCount,
+      details: "Items with movement in recent snapshots.",
+      actionLabel: "Review Price Drops",
+      open: () => openWorkspaceFromDashboard("pricing"),
+    },
+  ];
+  const rankedAttentionRows = [...dashboardAttentionRows].sort((a, b) => b.count - a.count);
+  const topAttention = rankedAttentionRows[0];
+  const hasPendingAttention = rankedAttentionRows.some((row) => row.count > 0);
   const editingQuerySet = querySets.find((querySet) => querySet.id === editingQuerySetID);
   const querySetInitialValues: Partial<ScannerQuerySetValues> | undefined = editingQuerySet
     ? {
@@ -3097,10 +3129,16 @@ export function App() {
                   <p className="cabinet-home-eyebrow">Home Command Center</p>
                   <h4>What needs action now in your collection</h4>
                   <p>Review discovery matches, pricing movement, and maintenance risks from one place.</p>
+                  <p className="cabinet-home-next-action">
+                    Next best action: {hasPendingAttention ? topAttention.actionLabel.toLowerCase() : "run scanner now"}
+                  </p>
                 </div>
                 <div className="cabinet-home-hero-actions">
                   <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
                     {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
+                  </button>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
+                    Run Scanner Now
                   </button>
                   <button type="button" onClick={() => openWorkspaceFromDashboard("collection")}>
                     Open Collection Workspace
@@ -3125,37 +3163,41 @@ export function App() {
               <section className="cabinet-home-attention">
                 <h4>What Needs Attention Now</h4>
                 <div className="cabinet-attention-grid">
-                  <article className="cabinet-attention-card">
-                    <p className="cabinet-attention-label">New Discoveries</p>
-                    <p className="cabinet-attention-value">{String(newDiscoveriesCount)}</p>
-                    <p className="cabinet-attention-meta">Candidates not yet in your collection.</p>
-                    <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
-                      Review Discoveries
-                    </button>
-                  </article>
-                  <article className="cabinet-attention-card">
-                    <p className="cabinet-attention-label">Wishlist Hits</p>
-                    <p className="cabinet-attention-value">{String(wishlistHitsCount)}</p>
-                    <p className="cabinet-attention-meta">Tracked items that matched your targets.</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openWorkspaceFromDashboard("pricing");
-                        void loadWishlistHits();
-                      }}
-                    >
-                      Review Wishlist Hits
-                    </button>
-                  </article>
-                  <article className="cabinet-attention-card">
-                    <p className="cabinet-attention-label">Price Drops</p>
-                    <p className="cabinet-attention-value">{String(priceDropsCount)}</p>
-                    <p className="cabinet-attention-meta">Items with movement in recent snapshots.</p>
-                    <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
-                      Review Price Drops
-                    </button>
-                  </article>
+                  {dashboardAttentionRows.map((row) => (
+                    <article key={row.key} className="cabinet-attention-card">
+                      <p className="cabinet-attention-label">{row.label.replace("Review ", "")}</p>
+                      <p className="cabinet-attention-value">{String(row.count)}</p>
+                      <p className="cabinet-attention-meta">{row.details}</p>
+                      <button type="button" onClick={row.open}>
+                        {row.actionLabel}
+                      </button>
+                    </article>
+                  ))}
                 </div>
+              </section>
+              <section className="cabinet-home-queue">
+                <h4>Action Queue</h4>
+                <ul>
+                  {rankedAttentionRows.map((row) => {
+                    const priorityLabel = row.count >= 5 ? "High priority" : row.count > 0 ? "Medium priority" : "Low priority";
+                    return (
+                      <li key={`queue-${row.key}`} className="cabinet-home-queue-item">
+                        <div>
+                          <p className="cabinet-home-queue-title">{row.label}</p>
+                          <p className="cabinet-home-queue-meta">
+                            {priorityLabel} - {row.count} item{row.count === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <button type="button" onClick={row.open}>
+                          Open {row.actionLabel.replace("Review ", "")}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {!hasPendingAttention ? (
+                  <p className="cabinet-home-calm">Everything looks stable today. Run scanner now to check for fresh opportunities.</p>
+                ) : null}
               </section>
               {dashboardLoading ? <p>Loading dashboard...</p> : null}
               {dashboard ? (

@@ -341,6 +341,16 @@ body {
   margin: 0;
 }
 
+.cabinet-home-next-action {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+  font-weight: 600;
+}
+
 .cabinet-home-hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -401,6 +411,54 @@ body {
 
 .cabinet-home-kpi-grid p {
   margin: 0;
+}
+
+.cabinet-home-queue {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.cabinet-home-queue h4 {
+  margin: 0 0 10px;
+}
+
+.cabinet-home-queue ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.cabinet-home-queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.cabinet-home-queue-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cabinet-home-queue-meta {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.cabinet-home-calm {
+  margin: 12px 0 0;
+  color: var(--text);
+  font-weight: 500;
 }
 
 .cabinet-drawer-backdrop {
