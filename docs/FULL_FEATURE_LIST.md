@@ -269,6 +269,7 @@ Maintenance:
 ## 23. In-App Chat Copilot (Collection Assistant)
 - Persistent chat panel in app workspace (default right side)
 - Toggle open/close from header
+- Attach local files from disk into chat context (user selected only)
 - Works across screens (global assistant, not tied to one tab)
 - Context aware: active profile, active item, selected candidate, current filters
 - User can ask:

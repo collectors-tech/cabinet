@@ -12,6 +12,7 @@
 - In scope:
   - Persistent chat UI docked on right rail.
   - Open/close toggle and keyboard open/focus behavior.
+  - Attach/import local files into chat context (manual user action).
   - Context-aware assistant (active profile/screen/item/candidate/filter).
   - Suggested actions with confirm-before-apply for mutations.
   - Per-profile local thread history.
@@ -28,6 +29,9 @@
 - FR-1: Chat panel can be opened and closed from any main screen.
 - FR-2: Chat panel state (open/closed + width) persists per profile.
 - FR-3: Chat composer supports free text and contextual prompts.
+- FR-3a: User can add local files from disk to a chat message (paperclip/drop/select).
+- FR-3b: File attachment requires explicit user selection and pre-send file list preview.
+- FR-3c: Supported file types and max size are validated client-side and server-side.
 - FR-4: Chat suggestions can launch app actions (`create item`, `update`, `wishlist`, `track`) only after explicit confirmation.
 - FR-5: Chat context sharing is user-configurable and least-privilege by default.
 - FR-6: Every assistant-initiated action is logged in diagnostics.
@@ -35,6 +39,7 @@
 ## API and Integration Touchpoints
 - Endpoints/services:
   - `POST /api/chat/message`
+  - `POST /api/chat/attachments`
   - `POST /api/chat/action/preview`
   - `POST /api/chat/action/apply`
   - `GET /api/chat/threads`
@@ -46,6 +51,7 @@
 - Tables/entities:
   - `chat_threads`
   - `chat_messages`
+  - `chat_attachments` (metadata + local path/reference)
   - `chat_action_logs`
   - `chat_panel_preferences`
 - Settings/secrets:
@@ -56,7 +62,7 @@
 - Entry point:
   - Header chat button, keyboard shortcut, optional quick-action button from dashboard.
 - Primary path:
-  - Open panel -> ask question -> receive answer with suggested actions -> preview -> confirm apply.
+  - Open panel -> attach optional files -> ask question -> receive answer with suggested actions -> preview -> confirm apply.
 - Failure/recovery path:
   - Provider/API error shown inline with retry and fall back to manual action links.
 
@@ -77,12 +83,15 @@ References:
 - [ ] AC-3: Action preview/confirm is required for mutations.
 - [ ] AC-4: Thread history persists per profile and can be resumed.
 - [ ] AC-5: Chat failure states are actionable and do not block manual workflows.
+- [ ] AC-6: User can attach local files and remove them before send.
+- [ ] AC-7: File access is explicit and never automatic background disk scanning.
 
 ## Test Strategy
 - Unit: prompt/context building, action preview validation, permission checks.
 - API: chat/thread/action endpoints success + error + guardrails.
 - E2E:
   - Open/close chat from multiple screens.
+  - Attach local file and include it in a chat request.
   - Ask collection question with context.
   - Preview and confirm `add item` action.
   - Verify no mutation occurs without explicit confirm.
@@ -105,6 +114,7 @@ References:
   - provider unavailable
   - invalid key
   - policy/permission denied
+  - unsupported file type / file too large / attachment parse failed
 
 ## Open Questions
 - Q1: Which actions are allowed in v1 apply mode vs preview-only?
