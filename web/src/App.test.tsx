@@ -2677,7 +2677,7 @@ describe("App shell", () => {
       if (url.startsWith("/api/discovery/not-in-collection?")) {
         return new Response(
           JSON.stringify({
-            items: [{ candidate_id: "c3", title: "AFX P-9", price: 12, url: "http://example.local/listing/c3", last_seen: "2026-02-21" }],
+            items: [{ candidate_id: "c3", title: "AFX P-9", price: 12, url: "http://example.local/listing/c3", last_seen: "2026-02-21", stock_state: "low_stock", stock_count: 2 }],
           }),
           { status: 200 },
         );
@@ -2706,9 +2706,111 @@ describe("App shell", () => {
     const loadNotOwned = await screen.findByRole("button", { name: /load not in collection/i });
     loadNotOwned.click();
     expect(await screen.findByText(/afx p-9/i)).toBeInTheDocument();
+    expect(await screen.findByText(/low stock \(2\)/i)).toBeInTheDocument();
+    expect((await screen.findByTestId("stock-chip-c3")).className).toContain("cabinet-stock-chip-low");
+
+    const discoveryCall = fetchMock.mock.calls.find((call) => String(call[0]).startsWith("/api/discovery/not-in-collection?"));
+    expect(String(discoveryCall?.[0])).toContain("q=AFX");
+    expect(String(discoveryCall?.[0])).toContain("price_max=20");
+    expect(String(discoveryCall?.[0])).toContain("date_from=2026-02-01");
 
     const createItem = await screen.findByRole("button", { name: /create item/i });
     createItem.click();
+    expect(await screen.findByLabelText(/action status c3/i)).toHaveTextContent(/created item/i);
+  });
+
+  it("shows inline discovery status for ignore and wishlist actions", async () => {
+    const actionBodies: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.startsWith("/api/discovery/not-in-collection?")) {
+        return new Response(JSON.stringify({ items: [{ candidate_id: "c10", title: "AFX New", price: 10, stock_state: "in_stock", stock_count: 8 }] }), { status: 200 });
+      }
+      if (url === "/api/discovery/action" && init?.method === "POST") {
+        actionBodies.push(String(init.body || ""));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    const discoveries = await screen.findByTestId("screen-discoveries");
+    fireEvent.click(await within(discoveries).findByRole("button", { name: /load not in collection/i }));
+    fireEvent.click(await within(discoveries).findByRole("button", { name: /ignore/i }));
+    expect(await screen.findByLabelText(/action status c10/i)).toHaveTextContent(/ignored/i);
+    fireEvent.click(await within(discoveries).findByRole("button", { name: /wishlist/i }));
+    expect(await screen.findByLabelText(/action status c10/i)).toHaveTextContent(/added to wishlist/i);
+    expect(actionBodies.join(" ")).toContain("\"type\":\"ignore\"");
+    expect(actionBodies.join(" ")).toContain("\"type\":\"add_to_wishlist\"");
+  });
+
+  it("renders stock chip states and discovery empty CTA", async () => {
+    let loadCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "T1" }] }), { status: 200 });
+      }
+      if (url.startsWith("/api/discovery/not-in-collection?")) {
+        loadCount += 1;
+        if (loadCount === 1) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { candidate_id: "s1", title: "In", price: 1, stock_state: "in_stock", stock_count: 12 },
+                { candidate_id: "s2", title: "Out", price: 2, stock_state: "out_of_stock", stock_count: 0 },
+                { candidate_id: "s3", title: "Unknown", price: 3 },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    const discoveries = await screen.findByTestId("screen-discoveries");
+    fireEvent.click(await within(discoveries).findByRole("button", { name: /load not in collection/i }));
+    expect((await screen.findByTestId("stock-chip-s1")).className).toContain("cabinet-stock-chip-in");
+    expect((await screen.findByTestId("stock-chip-s2")).className).toContain("cabinet-stock-chip-out");
+    expect((await screen.findByTestId("stock-chip-s3")).className).toContain("cabinet-stock-chip-unknown");
+
+    fireEvent.click(await within(discoveries).findByRole("button", { name: /load not in collection/i }));
+    expect(await screen.findByText(/no current discoveries/i)).toBeInTheDocument();
+    expect(within(discoveries).getByRole("button", { name: /run scanner now/i })).toBeInTheDocument();
   });
 
   it("loads pricing source breakdown and wishlist below-target indicator", async () => {

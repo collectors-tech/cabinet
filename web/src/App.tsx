@@ -158,10 +158,12 @@ export function App() {
   const [matchingResults, setMatchingResults] = useState<Array<{ candidate_id?: string; state?: string; part_number?: string; item_id?: string }>>(
     [],
   );
-  const [notInCollectionItems, setNotInCollectionItems] = useState<Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string }>>(
-    [],
-  );
+  const [notInCollectionItems, setNotInCollectionItems] = useState<
+    Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string; stock_state?: string; stock_count?: number }>
+  >([]);
   const [notInCollectionFilter, setNotInCollectionFilter] = useState({ query: "", maxPrice: "", dateFrom: "" });
+  const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
+  const [discoveryRowStatus, setDiscoveryRowStatus] = useState<Record<string, string>>({});
   const [scannerError, setScannerError] = useState("");
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -1536,6 +1538,7 @@ export function App() {
 
   async function loadNotInCollection() {
     setScannerError("");
+    setDiscoveriesLoading(true);
     try {
       const params = new URLSearchParams();
       if (notInCollectionFilter.query.trim()) {
@@ -1552,11 +1555,13 @@ export function App() {
         throw new Error("failed_to_list_not_in_collection");
       }
       const data = (await resp.json()) as {
-        items?: Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string }>;
+        items?: Array<{ candidate_id: string; title?: string; price?: number; url?: string; last_seen?: string; stock_state?: string; stock_count?: number }>;
       };
       setNotInCollectionItems(data.items || []);
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_list_not_in_collection");
+    } finally {
+      setDiscoveriesLoading(false);
     }
   }
 
@@ -1571,6 +1576,9 @@ export function App() {
       if (!resp.ok) {
         throw new Error("failed_to_apply_discovery_action");
       }
+      const feedback =
+        actionType === "ignore" ? "Ignored" : actionType === "add_to_wishlist" ? "Added to wishlist" : actionType === "track_price" ? "Tracking price" : "Created item";
+      setDiscoveryRowStatus((current) => ({ ...current, [candidateID]: feedback }));
       await loadNotInCollection();
     } catch (e) {
       setScannerError(e instanceof Error ? e.message : "failed_to_apply_discovery_action");
@@ -2671,6 +2679,32 @@ export function App() {
     : undefined;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
   const barcodeMatchStatus = barcodeLookupMatches.length > 0 ? "matched" : "no_match";
+  function stockStateLabel(state?: string) {
+    const normalized = (state || "").trim().toLowerCase();
+    if (normalized === "in_stock") {
+      return "In Stock";
+    }
+    if (normalized === "low_stock") {
+      return "Low Stock";
+    }
+    if (normalized === "out_of_stock") {
+      return "Out of Stock";
+    }
+    return "Unknown";
+  }
+  function stockStateClassName(state?: string) {
+    const normalized = (state || "").trim().toLowerCase();
+    if (normalized === "in_stock") {
+      return "cabinet-stock-chip cabinet-stock-chip-in";
+    }
+    if (normalized === "low_stock") {
+      return "cabinet-stock-chip cabinet-stock-chip-low";
+    }
+    if (normalized === "out_of_stock") {
+      return "cabinet-stock-chip cabinet-stock-chip-out";
+    }
+    return "cabinet-stock-chip cabinet-stock-chip-unknown";
+  }
   const navEnabled = showAdvancedWorkspace;
   function selectScreen(screen: TopLevelScreen) {
     if (!navEnabled) {
@@ -3822,10 +3856,23 @@ export function App() {
                   Load Not In Collection
                 </button>
               </div>
+              {discoveriesLoading ? <p>Loading discoveries...</p> : null}
+              {!discoveriesLoading && notInCollectionItems.length === 0 ? (
+                <div className="cabinet-discovery-empty" role="status">
+                  <p>No current discoveries. Run scanner to fetch fresh candidates.</p>
+                  <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
+                    Run Scanner Now
+                  </button>
+                </div>
+              ) : null}
               <ul>
                 {notInCollectionItems.map((item) => (
                   <li key={item.candidate_id}>
                     {item.title || item.candidate_id} - {String(item.price || "")}{" "}
+                    <span className={stockStateClassName(item.stock_state)} data-testid={`stock-chip-${item.candidate_id}`}>
+                      {stockStateLabel(item.stock_state)}
+                      {typeof item.stock_count === "number" ? ` (${item.stock_count})` : ""}
+                    </span>{" "}
                     <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "ignore")}>
                       Ignore
                     </button>{" "}
@@ -3838,6 +3885,12 @@ export function App() {
                     <button type="button" onClick={() => notInCollectionAction(item.candidate_id, "create_item")}>
                       Create Item
                     </button>
+                    {discoveryRowStatus[item.candidate_id] ? (
+                      <span role="status" aria-label={`Action status ${item.candidate_id}`}>
+                        {" "}
+                        {discoveryRowStatus[item.candidate_id]}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

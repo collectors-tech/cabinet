@@ -1269,6 +1269,42 @@ body {
   margin: 0;
 }
 
+.cabinet-discovery-empty {
+  padding: 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  margin: 0.5rem 0;
+}
+
+.cabinet-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.cabinet-stock-chip-in {
+  background: color-mix(in srgb, #1f7a47 35%, transparent);
+  color: #b3ffd2;
+}
+
+.cabinet-stock-chip-low {
+  background: color-mix(in srgb, #c07900 32%, transparent);
+  color: #ffe2a8;
+}
+
+.cabinet-stock-chip-out {
+  background: color-mix(in srgb, #a53131 35%, transparent);
+  color: #ffd0d0;
+}
+
+.cabinet-stock-chip-unknown {
+  background: color-mix(in srgb, #4f628a 30%, transparent);
+  color: #d6deef;
+}
+
 @media (max-width: 900px) {
   body {
     overflow: auto;
