@@ -70,3 +70,19 @@ func TestRuntimeRecoveryPromptAfterUncleanShutdown(t *testing.T) {
 		t.Fatalf("expected recovery_required true, got %s", resp.Body.String())
 	}
 }
+
+func TestRuntimeEndpointIncludesBuildMetadata(t *testing.T) {
+	t.Parallel()
+	a := newTestApp(t)
+
+	resp := doRequest(t, a, http.MethodGet, "/api/runtime", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("runtime status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"app_version"`) {
+		t.Fatalf("expected app_version in runtime payload, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"build_date"`) {
+		t.Fatalf("expected build_date in runtime payload, got %s", resp.Body.String())
+	}
+}

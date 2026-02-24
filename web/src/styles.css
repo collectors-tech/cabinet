@@ -42,6 +42,8 @@ body {
 }
 
 .cabinet-sidebar {
+  display: flex;
+  flex-direction: column;
   padding: 20px 16px;
   border-right: 1px solid var(--line);
   background: var(--surface);
@@ -50,6 +52,22 @@ body {
 .cabinet-sidebar nav {
   display: grid;
   gap: 8px;
+}
+
+.cabinet-sidebar-meta {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.cabinet-sidebar-meta p {
+  margin: 0 0 4px;
+}
+
+.cabinet-sidebar-meta p:last-child {
+  margin-bottom: 0;
 }
 
 .cabinet-nav-link {
@@ -502,6 +520,9 @@ body {
     grid-template-columns: 1fr;
   }
   .cabinet-sidebar {
+    display: none;
+  }
+  .cabinet-sidebar-meta {
     display: none;
   }
   .cabinet-nav-toggle {

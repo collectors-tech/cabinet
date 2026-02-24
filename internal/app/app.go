@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -137,10 +138,13 @@ func New(cfg config.Config) (*App, error) {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/api/runtime", func(w http.ResponseWriter, _ *http.Request) {
+		appVersion, buildDate := runtimeBuildMetadata()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"update_channel":               cfg.UpdateChannel,
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
+			"app_version":                  appVersion,
+			"build_date":                   buildDate,
 		})
 	})
 	mux.HandleFunc("/api/runtime/recovery", func(w http.ResponseWriter, r *http.Request) {
@@ -1996,6 +2000,42 @@ func sessionTokenFromRequest(r *http.Request) string {
 		return strings.TrimSpace(authz[7:])
 	}
 	return strings.TrimSpace(r.URL.Query().Get("session_token"))
+}
+
+func runtimeBuildMetadata() (string, string) {
+	version := "dev"
+	buildDate := "unknown"
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version, buildDate
+	}
+
+	if strings.TrimSpace(info.Main.Version) != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+
+	var vcsRevision string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			vcsRevision = strings.TrimSpace(setting.Value)
+		case "vcs.time":
+			if strings.TrimSpace(setting.Value) != "" {
+				buildDate = strings.TrimSpace(setting.Value)
+			}
+		}
+	}
+
+	if vcsRevision != "" {
+		short := vcsRevision
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		version = "rev-" + short
+	}
+
+	return version, buildDate
 }
 
 func (a *App) Run(ctx context.Context) error {

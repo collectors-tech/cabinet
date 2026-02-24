@@ -117,7 +117,11 @@ export function App() {
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [logCount, setLogCount] = useState(0);
   const [activityLogs, setActivityLogs] = useState<Array<Record<string, unknown>>>([]);
-  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<{ update_channel?: string; update_public_key_configured?: boolean } | null>(null);
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<{ update_channel?: string; update_public_key_configured?: boolean; app_version?: string; build_date?: string } | null>(
+    null,
+  );
+  const [appVersionLabel, setAppVersionLabel] = useState("unknown");
+  const [buildDateLabel, setBuildDateLabel] = useState("unknown");
   const [recoveryDiagnostics, setRecoveryDiagnostics] = useState<{ recovery_required?: boolean } | null>(null);
   const [backupEntries, setBackupEntries] = useState<Array<{ path: string; name: string; timestampLabel: string }>>([]);
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
@@ -286,6 +290,34 @@ export function App() {
       }
     }
     loadProfiles();
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    async function loadRuntimeMeta() {
+      try {
+        const resp = await fetch("/api/runtime");
+        if (!resp.ok) {
+          throw new Error("failed_to_load_runtime_meta");
+        }
+        const runtime = (await resp.json()) as { app_version?: string; build_date?: string };
+        if (disposed) {
+          return;
+        }
+        setAppVersionLabel(runtime.app_version || "unknown");
+        setBuildDateLabel(runtime.build_date || "unknown");
+      } catch {
+        if (disposed) {
+          return;
+        }
+        setAppVersionLabel("unknown");
+        setBuildDateLabel("unknown");
+      }
+    }
+    void loadRuntimeMeta();
     return () => {
       disposed = true;
     };
@@ -1501,9 +1533,16 @@ export function App() {
       if (!runtimeResp.ok || !recoveryResp.ok) {
         throw new Error("failed_to_load_runtime_diagnostics");
       }
-      const runtime = (await runtimeResp.json()) as { update_channel?: string; update_public_key_configured?: boolean };
+      const runtime = (await runtimeResp.json()) as {
+        update_channel?: string;
+        update_public_key_configured?: boolean;
+        app_version?: string;
+        build_date?: string;
+      };
       const recovery = (await recoveryResp.json()) as { recovery_required?: boolean };
       setRuntimeDiagnostics(runtime);
+      setAppVersionLabel(runtime.app_version || "unknown");
+      setBuildDateLabel(runtime.build_date || "unknown");
       setRecoveryDiagnostics(recovery);
       setSettingsStatus("runtime_diagnostics_loaded");
     } catch (e) {
@@ -2449,6 +2488,14 @@ export function App() {
       <aside className="cabinet-sidebar">
         <h1>Cabinet</h1>
         <nav>{navLinks}</nav>
+        <div className="cabinet-sidebar-meta" aria-label="App build metadata">
+          <p>
+            <strong>Version:</strong> {appVersionLabel}
+          </p>
+          <p>
+            <strong>Build Date:</strong> {buildDateLabel}
+          </p>
+        </div>
       </aside>
       {mobileNavOpen ? (
         <>

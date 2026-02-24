@@ -30,6 +30,33 @@ describe("App shell", () => {
     expect(link).toHaveAttribute("href", "/apidocs");
   });
 
+  it("shows app version and build date in left nav footer", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/profiles") {
+        return new Response(JSON.stringify({ profiles: [] }), { status: 200 });
+      }
+      if (url === "/api/runtime") {
+        return new Response(
+          JSON.stringify({
+            update_channel: "stable",
+            update_public_key_configured: false,
+            app_version: "rev-abc1234",
+            build_date: "2026-02-24T03:00:00Z",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const meta = await screen.findByLabelText(/app build metadata/i);
+    expect(meta).toHaveTextContent(/version:\s*rev-abc1234/i);
+    expect(meta).toHaveTextContent(/build date:\s*2026-02-24t03:00:00z/i);
+  });
+
   it("opens and closes mobile navigation drawer", async () => {
     vi.stubGlobal(
       "fetch",
