@@ -3027,6 +3027,16 @@ export function App() {
               </aside>
             </section>
           ) : null}
+          {activeProfile && showAdvancedWorkspace ? (
+            <section className="cabinet-home-onboarding-summary" aria-label="Onboarding complete summary">
+              <p>
+                <strong>Onboarding complete.</strong> Your advanced workspace is active.
+              </p>
+              <button type="button" onClick={() => setWorkspaceMode(false)}>
+                Review Starter Setup
+              </button>
+            </section>
+          ) : null}
           {activeProfile && showAdvancedWorkspace && onboardingStatus ? <p>{onboardingStatus}</p> : null}
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "collection") ? (
             <CollectionScreen id="collection">
@@ -3871,20 +3881,24 @@ export function App() {
             </AIScreen>
           ) : null}
           {error ? <p>Profile error: {error}</p> : null}
-          <ul>
-            <li>
-              <a href="/healthz">Health Check</a>
-            </li>
-            <li>
-              <a href="/api/runtime">Runtime</a>
-            </li>
-            <li>
-              <a href="/api/runtime/recovery">Recovery State</a>
-            </li>
-            <li>
-              <a href="/apidocs">API Kitchen Sync</a>
+          <details className="cabinet-home-diagnostics">
+            <summary>Diagnostics</summary>
+            <p>Runtime diagnostics and API checks for troubleshooting.</p>
+            <ul>
+              <li>
+                <a href="/healthz">Health Check</a>
               </li>
-          </ul>
+              <li>
+                <a href="/api/runtime">Runtime</a>
+              </li>
+              <li>
+                <a href="/api/runtime/recovery">Recovery State</a>
+              </li>
+              <li>
+                <a href="/apidocs">API Kitchen Sync</a>
+              </li>
+            </ul>
+          </details>
         </section>
         </div>
       </section>

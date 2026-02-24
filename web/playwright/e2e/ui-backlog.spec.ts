@@ -297,6 +297,28 @@ test("wizard happy path completes all 5 steps and unlocks advanced workspace", a
   expect(completion.workspace).toBe("1");
 });
 
+test("home screen adapts for first-run and returning users", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: true });
+
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "0");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+  await expect(page.getByRole("heading", { name: /starter onboarding wizard/i })).toBeVisible();
+  await expect(page.getByText(/onboarding complete\./i)).toHaveCount(0);
+
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "1");
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /use default/i }).click();
+  await expect(page.getByText(/onboarding complete\./i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /starter onboarding wizard/i })).toHaveCount(0);
+  await expect(page.locator(".cabinet-home-diagnostics")).not.toHaveAttribute("open", "");
+});
+
 test("wizard supports skip path for optional starter-data choices", async ({ page }) => {
   const state = await installWizardMocks(page, { requiresRegistration: true });
   await openStarterWizard(page);
