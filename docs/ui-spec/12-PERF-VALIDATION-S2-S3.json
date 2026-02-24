@@ -1,0 +1,24 @@
+{
+  "S2": {
+    "dataset": "S2",
+    "initialHomeRenderMs": 415,
+    "navMedianMs": 50,
+    "searchMedianMs": 9,
+    "sortMs": 15,
+    "detailOpenMs": 34,
+    "discoverActionMs": 497,
+    "reportsExportMs": 150,
+    "crashed": false
+  },
+  "S3": {
+    "dataset": "S3",
+    "initialHomeRenderMs": 430,
+    "navMedianMs": 73,
+    "searchMedianMs": 12,
+    "sortMs": 13,
+    "detailOpenMs": 48,
+    "discoverActionMs": 1440,
+    "reportsExportMs": 147,
+    "crashed": false
+  }
+}
