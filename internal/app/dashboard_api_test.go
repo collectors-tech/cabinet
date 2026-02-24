@@ -33,7 +33,7 @@ func TestDashboardEndpointContractForUI(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	required := []string{"new_discoveries", "wishlist_hits", "price_drops", "recently_added", "total_items", "total_instances"}
+	required := []string{"new_discoveries", "wishlist_hits", "price_drops", "low_stock_discoveries", "restocks", "recently_added", "total_items", "total_instances"}
 	for _, key := range required {
 		if _, ok := body[key]; !ok {
 			t.Fatalf("missing required key %q in dashboard payload: %#v", key, body)

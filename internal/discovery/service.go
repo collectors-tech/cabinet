@@ -22,6 +22,8 @@ type Item struct {
 	Price       float64 `json:"price"`
 	URL         string  `json:"url"`
 	LastSeen    string  `json:"last_seen"`
+	StockState  string  `json:"stock_state"`
+	StockCount  int     `json:"stock_count"`
 }
 
 type ActionType string
@@ -49,7 +51,7 @@ func NewService(db *sql.DB) *Service {
 
 func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, error) {
 	q := `
-		SELECT c.id, c.title, c.price, c.url, c.last_seen
+		SELECT c.id, c.title, c.price, c.url, c.last_seen, c.stock_state, c.stock_count
 		FROM scanner_candidates c
 		JOIN scanner_matches m ON m.candidate_id = c.id
 		LEFT JOIN ignored_candidates i ON i.candidate_id = c.id
@@ -77,7 +79,7 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 	var out []Item
 	for rows.Next() {
 		var it Item
-		if err := rows.Scan(&it.CandidateID, &it.Title, &it.Price, &it.URL, &it.LastSeen); err != nil {
+		if err := rows.Scan(&it.CandidateID, &it.Title, &it.Price, &it.URL, &it.LastSeen, &it.StockState, &it.StockCount); err != nil {
 			return nil, fmt.Errorf("scan not_in_collection row: %w", err)
 		}
 		out = append(out, it)

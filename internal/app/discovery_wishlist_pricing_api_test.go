@@ -24,6 +24,21 @@ func TestDiscoveryPanelActionsAndReset(t *testing.T) {
 	if list.Code != http.StatusOK {
 		t.Fatalf("list not-in-collection status=%d body=%s", list.Code, list.Body.String())
 	}
+	var listBody struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&listBody); err != nil {
+		t.Fatalf("decode discovery list: %v", err)
+	}
+	if len(listBody.Items) != 1 {
+		t.Fatalf("expected 1 discovery item, got %d", len(listBody.Items))
+	}
+	if _, ok := listBody.Items[0]["stock_state"]; !ok {
+		t.Fatalf("expected stock_state in discovery payload, got %#v", listBody.Items[0])
+	}
+	if _, ok := listBody.Items[0]["stock_count"]; !ok {
+		t.Fatalf("expected stock_count in discovery payload, got %#v", listBody.Items[0])
+	}
 	act := doRequest(t, a, http.MethodPost, "/api/discovery/action", strings.NewReader(`{"candidate_id":"c1","type":"ignore"}`), map[string]string{"Content-Type": "application/json"})
 	if act.Code != http.StatusOK {
 		t.Fatalf("apply action status=%d body=%s", act.Code, act.Body.String())
@@ -100,6 +115,20 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	bySource := doRequest(t, a, http.MethodGet, "/api/pricing/by-source?item_id=i1", nil, nil)
 	if bySource.Code != http.StatusOK {
 		t.Fatalf("by-source status=%d body=%s", bySource.Code, bySource.Body.String())
+	}
+	var sourceBody struct {
+		BySource map[string][]map[string]any `json:"by_source"`
+	}
+	if err := json.NewDecoder(bySource.Body).Decode(&sourceBody); err != nil {
+		t.Fatalf("decode by-source: %v", err)
+	}
+	for source, snapshots := range sourceBody.BySource {
+		if len(snapshots) == 0 {
+			continue
+		}
+		if _, ok := snapshots[0]["stock_count"]; !ok {
+			t.Fatalf("expected stock_count in pricing by-source payload for %s: %#v", source, snapshots[0])
+		}
 	}
 	stats := doRequest(t, a, http.MethodGet, "/api/pricing/stats?item_id=i1", nil, nil)
 	if stats.Code != http.StatusOK {

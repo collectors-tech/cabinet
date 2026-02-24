@@ -193,6 +193,8 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			status TEXT NOT NULL DEFAULT 'new',
 			source TEXT NOT NULL DEFAULT '',
+			stock_state TEXT NOT NULL DEFAULT 'unknown',
+			stock_count INTEGER NOT NULL DEFAULT -1,
 			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_scanner_candidates_query_set_id ON scanner_candidates(query_set_id);`,
@@ -256,6 +258,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			min_price REAL NOT NULL DEFAULT 0,
 			median_price REAL NOT NULL DEFAULT 0,
 			latest_price REAL NOT NULL DEFAULT 0,
+			stock_count INTEGER NOT NULL DEFAULT -1,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
@@ -358,6 +361,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.profile_id: %w", err)
 	}
+	if err := ensureColumn(ctx, conn, "scanner_candidates", "stock_state", "TEXT NOT NULL DEFAULT 'unknown'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.stock_state: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "scanner_candidates", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.stock_count: %w", err)
+	}
 	if err := ensureColumn(ctx, conn, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure item_photos.display_order: %w", err)
@@ -373,6 +384,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure tracked_items.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "price_snapshots", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure price_snapshots.stock_count: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
 		conn.Close()

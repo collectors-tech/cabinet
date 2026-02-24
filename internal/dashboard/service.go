@@ -19,15 +19,17 @@ type CollectionStats struct {
 }
 
 type Summary struct {
-	NewDiscoveries int             `json:"new_discoveries"`
-	WishlistHits   int             `json:"wishlist_hits"`
-	PriceDrops     int             `json:"price_drops"`
-	RecentlyAdded  []string        `json:"recently_added"`
-	TotalItems     int             `json:"total_items"`
-	TotalInstances int             `json:"total_instances"`
-	EstimatedValue float64         `json:"estimated_value"`
-	Collection     CollectionStats `json:"collection"`
-	Cards          []Card          `json:"cards"`
+	NewDiscoveries      int             `json:"new_discoveries"`
+	WishlistHits        int             `json:"wishlist_hits"`
+	PriceDrops          int             `json:"price_drops"`
+	LowStockDiscoveries int             `json:"low_stock_discoveries"`
+	Restocks            int             `json:"restocks"`
+	RecentlyAdded       []string        `json:"recently_added"`
+	TotalItems          int             `json:"total_items"`
+	TotalInstances      int             `json:"total_instances"`
+	EstimatedValue      float64         `json:"estimated_value"`
+	Collection          CollectionStats `json:"collection"`
+	Cards               []Card          `json:"cards"`
 }
 
 type Service struct {
@@ -63,6 +65,28 @@ func (s *Service) Summary(ctx context.Context) (Summary, error) {
 	`).Scan(&out.PriceDrops); err != nil {
 		return Summary{}, fmt.Errorf("price drops count: %w", err)
 	}
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM scanner_candidates c
+		JOIN scanner_matches m ON m.candidate_id = c.id
+		WHERE m.state = 'not_in_collection' AND (
+			LOWER(c.stock_state) = 'low_stock' OR
+			(c.stock_count > 0 AND c.stock_count <= 3)
+		)
+	`).Scan(&out.LowStockDiscoveries); err != nil {
+		return Summary{}, fmt.Errorf("low stock discoveries count: %w", err)
+	}
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM (
+			SELECT item_id, source, snapshot_date, stock_count,
+				LAG(stock_count) OVER (PARTITION BY item_id, source ORDER BY snapshot_date) AS prev_stock
+			FROM price_snapshots
+		) t
+		WHERE prev_stock = 0 AND stock_count > 0
+	`).Scan(&out.Restocks); err != nil {
+		return Summary{}, fmt.Errorf("restock count: %w", err)
+	}
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items`).Scan(&out.Collection.TotalItems); err != nil {
 		return Summary{}, fmt.Errorf("items count: %w", err)
 	}
@@ -89,8 +113,10 @@ func (s *Service) Summary(ctx context.Context) (Summary, error) {
 	out.EstimatedValue = out.Collection.EstimatedValue
 	out.Cards = []Card{
 		{Title: "New Discoveries", Value: out.NewDiscoveries, Link: "/discoveries"},
+		{Title: "Low Stock", Value: out.LowStockDiscoveries, Link: "/discoveries"},
 		{Title: "Wishlist Hits", Value: out.WishlistHits, Link: "/wishlist"},
 		{Title: "Price Drops", Value: out.PriceDrops, Link: "/pricing"},
+		{Title: "Restocks", Value: out.Restocks, Link: "/pricing"},
 		{Title: "Recently Added", Value: len(out.RecentlyAdded), Link: "/collection"},
 	}
 	return out, nil

@@ -55,7 +55,7 @@ func TestQuerySetAndRunNowLifecycle(t *testing.T) {
 	provider := &testProvider{
 		failures: 1,
 		items: []CandidateInput{
-			{ListingID: "L1", Title: "AFX P-1 car", Price: 55, URL: "http://x/1", Seller: "s1"},
+			{ListingID: "L1", Title: "AFX P-1 car", Price: 55, URL: "http://x/1", Seller: "s1", StockState: "low_stock", StockCount: 2},
 		},
 	}
 	run, err := svc.RunNow(context.Background(), qs.ID, provider)
@@ -71,6 +71,9 @@ func TestQuerySetAndRunNowLifecycle(t *testing.T) {
 	}
 	if len(cands) != 1 || cands[0].Status == "" || cands[0].FirstSeen == "" || cands[0].LastSeen == "" {
 		t.Fatalf("unexpected candidates: %+v", cands)
+	}
+	if cands[0].StockState != "low_stock" || cands[0].StockCount != 2 {
+		t.Fatalf("expected stock persistence in candidates, got %+v", cands[0])
 	}
 	health, err := svc.ProviderHealth(context.Background(), "ebay")
 	if err != nil {

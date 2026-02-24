@@ -23,10 +23,10 @@ func TestDailySnapshotAndExport(t *testing.T) {
 	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Q','["afx"]','[]')`); err != nil {
 		t.Fatalf("seed query set: %v", err)
 	}
-	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source) VALUES 
-		('c1','q1','L1','AFX P-1',10,0,'http://x/1','','s',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay'),
-		('c2','q1','L2','AFX P-1',20,0,'http://x/2','','s',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay'),
-		('c3','q1','L3','AFX P-1',30,0,'http://x/3','','s',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay')
+	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count) VALUES 
+		('c1','q1','L1','AFX P-1',10,0,'http://x/1','','s','2026-02-21T00:00:00Z','2026-02-21T00:00:00Z','new','ebay','in_stock',5),
+		('c2','q1','L2','AFX P-1',20,0,'http://x/2','','s','2026-02-22T00:00:00Z','2026-02-22T00:00:00Z','new','ebay','low_stock',2),
+		('c3','q1','L3','AFX P-1',30,0,'http://x/3','','s','2026-02-23T00:00:00Z','2026-02-23T00:00:00Z','new','ebay','out_of_stock',0)
 	`); err != nil {
 		t.Fatalf("seed candidates: %v", err)
 	}
@@ -48,6 +48,9 @@ func TestDailySnapshotAndExport(t *testing.T) {
 	if history[0].MinPrice != 10 || history[0].MedianPrice != 20 || history[0].LatestPrice != 30 {
 		t.Fatalf("unexpected snapshot values: %+v", history[0])
 	}
+	if history[0].StockCount != 0 {
+		t.Fatalf("expected stock_count from latest observation, got %+v", history[0])
+	}
 	bySource, err := svc.BySource(context.Background(), "i1")
 	if err != nil {
 		t.Fatalf("BySource() error = %v", err)
@@ -59,7 +62,7 @@ func TestDailySnapshotAndExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportCSV() error = %v", err)
 	}
-	if !strings.Contains(csv, "snapshot_date,min_price,median_price,latest_price,source") {
+	if !strings.Contains(csv, "snapshot_date,min_price,median_price,latest_price,stock_count,source") {
 		t.Fatalf("unexpected csv export: %s", csv)
 	}
 	trend, err := svc.Trend(context.Background(), "i1")

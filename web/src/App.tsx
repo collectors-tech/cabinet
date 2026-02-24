@@ -2790,6 +2790,8 @@ export function App() {
   const newDiscoveriesCount = Number(dashboard?.new_discoveries ?? 0);
   const wishlistHitsCount = Number(dashboard?.wishlist_hits ?? 0);
   const priceDropsCount = Number(dashboard?.price_drops ?? 0);
+  const lowStockDiscoveriesCount = Number(dashboard?.low_stock_discoveries ?? 0);
+  const restocksCount = Number(dashboard?.restocks ?? 0);
   const recentAddedCount = Number(dashboard?.recently_added ?? dashboard?.recent_items ?? 0);
   const totalItemsCount = Number(dashboard?.total_items ?? 0);
   const totalInstancesCount = Number(dashboard?.total_instances ?? 0);
@@ -2820,6 +2822,22 @@ export function App() {
       count: priceDropsCount,
       details: "Items with movement in recent snapshots.",
       actionLabel: "Review Price Drops",
+      open: () => openWorkspaceFromDashboard("pricing"),
+    },
+    {
+      key: "low-stock",
+      label: "Review low stock discoveries",
+      count: lowStockDiscoveriesCount,
+      details: "Candidates showing limited availability.",
+      actionLabel: "Review Low Stock",
+      open: () => openWorkspaceFromDashboard("discoveries"),
+    },
+    {
+      key: "restocks",
+      label: "Review restocks",
+      count: restocksCount,
+      details: "Tracked items that recently returned in stock.",
+      actionLabel: "Review Restocks",
       open: () => openWorkspaceFromDashboard("pricing"),
     },
   ].filter((row) => {
@@ -4191,6 +4209,8 @@ export function App() {
                   <p>New Discoveries: {String(newDiscoveriesCount)}</p>
                   <p>Wishlist Hits: {String(wishlistHitsCount)}</p>
                   <p>Price Drops: {String(priceDropsCount)}</p>
+                  <p>Low Stock Discoveries: {String(lowStockDiscoveriesCount)}</p>
+                  <p>Restocks: {String(restocksCount)}</p>
                   <p>Recently Added: {String(recentAddedCount)}</p>
                   <p>Total Items: {String(totalItemsCount)}</p>
                   <p>Total Instances: {String(totalInstancesCount)}</p>

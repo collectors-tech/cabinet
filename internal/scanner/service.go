@@ -28,14 +28,16 @@ type QuerySet struct {
 }
 
 type CandidateInput struct {
-	ListingID string  `json:"listing_id"`
-	Title     string  `json:"title"`
-	Price     float64 `json:"price"`
-	Shipping  float64 `json:"shipping"`
-	URL       string  `json:"url"`
-	Image     string  `json:"image"`
-	Seller    string  `json:"seller"`
-	Source    string  `json:"source"`
+	ListingID  string  `json:"listing_id"`
+	Title      string  `json:"title"`
+	Price      float64 `json:"price"`
+	Shipping   float64 `json:"shipping"`
+	URL        string  `json:"url"`
+	Image      string  `json:"image"`
+	Seller     string  `json:"seller"`
+	Source     string  `json:"source"`
+	StockState string  `json:"stock_state"`
+	StockCount int     `json:"stock_count"`
 }
 
 type Candidate struct {
@@ -52,6 +54,8 @@ type Candidate struct {
 	LastSeen   string  `json:"last_seen"`
 	Status     string  `json:"status"`
 	Source     string  `json:"source"`
+	StockState string  `json:"stock_state"`
+	StockCount int     `json:"stock_count"`
 }
 
 type RunResult struct {
@@ -288,20 +292,25 @@ func (s *Service) persistCandidatesForProfile(ctx context.Context, profileID, qu
 		if source == "" {
 			source = "ebay"
 		}
+		stockCount := it.StockCount
+		if stockCount < -1 {
+			stockCount = -1
+		}
+		stockState := normalizeStockState(it.StockState, stockCount)
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
-			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?
+			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?, stock_state = ?, stock_count = ?
 			WHERE listing_id = ? AND (? = '' OR profile_id = ?)
-		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
 		affected, _ := res.RowsAffected()
 		if affected == 0 {
 			_, err := s.db.ExecContext(ctx, `
-				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?)
-			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source)
+				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?)
+			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
 			}
@@ -317,7 +326,7 @@ func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Cand
 
 func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, querySetID string) ([]Candidate, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source
+		SELECT id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
 		FROM scanner_candidates
 		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
 		ORDER BY last_seen DESC
@@ -329,7 +338,7 @@ func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, queryS
 	var out []Candidate
 	for rows.Next() {
 		var c Candidate
-		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source); err != nil {
+		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
 			return nil, fmt.Errorf("scan candidate: %w", err)
 		}
 		out = append(out, c)
@@ -395,4 +404,22 @@ func (s *Service) logFailure(ctx context.Context, querySetID, provider, message 
 		INSERT INTO scanner_failures(id, query_set_id, provider, message, created_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, uuid.NewString(), strings.TrimSpace(querySetID), provider, message)
+}
+
+func normalizeStockState(state string, count int) string {
+	normalized := strings.TrimSpace(strings.ToLower(state))
+	switch normalized {
+	case "in_stock", "low_stock", "out_of_stock", "unknown":
+		return normalized
+	}
+	if count == 0 {
+		return "out_of_stock"
+	}
+	if count > 0 && count <= 3 {
+		return "low_stock"
+	}
+	if count > 3 {
+		return "in_stock"
+	}
+	return "unknown"
 }

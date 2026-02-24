@@ -18,6 +18,7 @@ type Snapshot struct {
 	MinPrice     float64 `json:"min_price"`
 	MedianPrice  float64 `json:"median_price"`
 	LatestPrice  float64 `json:"latest_price"`
+	StockCount   int     `json:"stock_count"`
 }
 
 type TrendPoint struct {
@@ -85,26 +86,30 @@ func (s *Service) snapshotItemForProfile(ctx context.Context, profileID, itemID 
 		return err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT source, price
+		SELECT source, price, stock_count
 		FROM scanner_candidates
 		WHERE LOWER(title) LIKE '%' || LOWER(?) || '%' AND (? = '' OR profile_id = ?)
+		ORDER BY source ASC, last_seen ASC
 	`, part, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	bySource := map[string][]float64{}
+	stockBySource := map[string]int{}
 	var latest float64
 	for rows.Next() {
 		var source string
 		var price float64
-		if err := rows.Scan(&source, &price); err != nil {
+		var stockCount int
+		if err := rows.Scan(&source, &price, &stockCount); err != nil {
 			return err
 		}
 		if strings.TrimSpace(source) == "" {
 			source = "unknown"
 		}
 		bySource[source] = append(bySource[source], price)
+		stockBySource[source] = stockCount
 		latest = price
 	}
 	if err := rows.Err(); err != nil {
@@ -119,9 +124,9 @@ func (s *Service) snapshotItemForProfile(ctx context.Context, profileID, itemID 
 		min := prices[0]
 		median := prices[len(prices)/2]
 		_, err := s.db.ExecContext(ctx, `
-			INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, uuid.NewString(), itemID, date, source, min, median, latest)
+			INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, stock_count, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, uuid.NewString(), itemID, date, source, min, median, latest, stockBySource[source])
 		if err != nil {
 			return err
 		}
@@ -131,7 +136,7 @@ func (s *Service) snapshotItemForProfile(ctx context.Context, profileID, itemID 
 
 func (s *Service) History(ctx context.Context, itemID string) ([]Snapshot, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT snapshot_date, source, min_price, median_price, latest_price
+		SELECT snapshot_date, source, min_price, median_price, latest_price, stock_count
 		FROM price_snapshots
 		WHERE item_id = ?
 		ORDER BY snapshot_date ASC, source ASC
@@ -143,7 +148,7 @@ func (s *Service) History(ctx context.Context, itemID string) ([]Snapshot, error
 	var out []Snapshot
 	for rows.Next() {
 		var snap Snapshot
-		if err := rows.Scan(&snap.SnapshotDate, &snap.Source, &snap.MinPrice, &snap.MedianPrice, &snap.LatestPrice); err != nil {
+		if err := rows.Scan(&snap.SnapshotDate, &snap.Source, &snap.MinPrice, &snap.MedianPrice, &snap.LatestPrice, &snap.StockCount); err != nil {
 			return nil, err
 		}
 		out = append(out, snap)
@@ -170,7 +175,7 @@ func (s *Service) ExportCSV(ctx context.Context, itemID string) (string, error) 
 	}
 	b := &strings.Builder{}
 	w := csv.NewWriter(b)
-	if err := w.Write([]string{"snapshot_date", "min_price", "median_price", "latest_price", "source"}); err != nil {
+	if err := w.Write([]string{"snapshot_date", "min_price", "median_price", "latest_price", "stock_count", "source"}); err != nil {
 		return "", err
 	}
 	for _, snap := range h {
@@ -179,6 +184,7 @@ func (s *Service) ExportCSV(ctx context.Context, itemID string) (string, error) 
 			fmt.Sprintf("%.2f", snap.MinPrice),
 			fmt.Sprintf("%.2f", snap.MedianPrice),
 			fmt.Sprintf("%.2f", snap.LatestPrice),
+			fmt.Sprintf("%d", snap.StockCount),
 			snap.Source,
 		}); err != nil {
 			return "", err
