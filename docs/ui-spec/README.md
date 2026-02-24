@@ -12,6 +12,7 @@ Documents:
 - `07-SCALABILITY-DATA-PLAN.md`
 - `08-GAP-AND-INTUITIVENESS-REVIEW.md`
 - `09-COMPONENT-SPECS-STRICT.md`
+- `screens/README.md` (per-screen split specs)
 
 Usage:
 1. Implement IA/navigation from `01`.
