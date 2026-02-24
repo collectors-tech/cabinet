@@ -12,6 +12,7 @@ Documents:
 - `07-SCALABILITY-DATA-PLAN.md`
 - `08-GAP-AND-INTUITIVENESS-REVIEW.md`
 - `09-COMPONENT-SPECS-STRICT.md`
+- `10-SCREEN-TEMPLATES-SEMANTIC-TREE.md`
 - `screens/README.md` (per-screen split specs)
 
 Usage:
@@ -24,3 +25,4 @@ Usage:
 7. Prepare and generate scale test data from `07`.
 8. Close gaps from `08` before release.
 9. Implement component contracts from `09`.
+10. Use semantic page/template tree from `10`.
