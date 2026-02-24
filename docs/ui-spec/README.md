@@ -11,6 +11,7 @@ Documents:
 - `06-SCREEN-DETAIL-SPECS.md`
 - `07-SCALABILITY-DATA-PLAN.md`
 - `08-GAP-AND-INTUITIVENESS-REVIEW.md`
+- `09-COMPONENT-SPECS-STRICT.md`
 
 Usage:
 1. Implement IA/navigation from `01`.
@@ -21,3 +22,4 @@ Usage:
 6. Build per-screen implementation from `06`.
 7. Prepare and generate scale test data from `07`.
 8. Close gaps from `08` before release.
+9. Implement component contracts from `09`.
