@@ -273,6 +273,53 @@ paths:
           $ref: "#/components/responses/Error"
         "402":
           $ref: "#/components/responses/Error"
+  /api/items/bulk-edit:
+    post:
+      tags: [Collection]
+      summary: Bulk edit canonical items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_ids, changes]
+              properties:
+                item_ids:
+                  type: array
+                  items: { type: string }
+                changes:
+                  $ref: "#/components/schemas/ItemPatch"
+      responses:
+        "200":
+          description: Bulk edit result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkEditResult"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/items/{itemID}:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+    put:
+      tags: [Collection]
+      summary: Update canonical item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemPatch"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/instances:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -303,6 +350,31 @@ paths:
       responses:
         "201":
           description: Created instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instance"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/items/{itemID}/instances/{instanceID}:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: instanceID
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Collection]
+      summary: Update instance for item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstancePatch"
+      responses:
+        "200":
+          description: Updated instance
           content:
             application/json:
               schema:
@@ -1625,7 +1697,23 @@ components:
         created_at: { type: string }
     ItemInput:
       type: object
-      required: [brand, category, part_number, title]
+      required: [part_number, title]
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        part_number: { type: string }
+        title: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: string }
+        scale: { type: string }
+        series: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    ItemPatch:
+      type: object
       properties:
         brand: { type: string }
         category: { type: string }
@@ -1648,9 +1736,25 @@ components:
             id: { type: string }
             created_at: { type: string }
             updated_at: { type: string }
+    BulkEditResult:
+      type: object
+      properties:
+        updated_count: { type: integer }
     InstanceInput:
       type: object
       required: [status]
+      properties:
+        condition: { type: string }
+        status:
+          type: string
+          enum: [sealed, blister, loose, custom, on_track]
+        quantity: { type: integer }
+        storage_location: { type: string }
+        acquisition_price: { type: number }
+        acquisition_date: { type: string }
+        notes: { type: string }
+    InstancePatch:
+      type: object
       properties:
         condition: { type: string }
         status:

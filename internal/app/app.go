@@ -1667,16 +1667,50 @@ func New(cfg config.Config) (*App, error) {
 		w.Header().Set("Content-Type", "application/json")
 		path := strings.TrimPrefix(r.URL.Path, "/api/items/")
 		parts := strings.Split(path, "/")
-		if len(parts) < 2 {
-			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
-			return
-		}
 		itemID := strings.TrimSpace(parts[0])
 		if itemID == "" {
 			http.Error(w, `{"error":"invalid_item_id"}`, http.StatusBadRequest)
 			return
 		}
-
+		if itemID == "bulk-edit" {
+			if r.Method != http.MethodPost {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				ItemIDs []string        `json:"item_ids"`
+				Changes collection.Item `json:"changes"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			result, err := collectionRepo.BulkEditItems(r.Context(), req.ItemIDs, req.Changes)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_bulk_edit"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(result)
+			return
+		}
+		if len(parts) == 1 {
+			if r.Method != http.MethodPut {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			var req collection.Item
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			updated, err := collectionRepo.UpdateItem(r.Context(), itemID, req)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(updated)
+			return
+		}
 		switch parts[1] {
 		case "barcodes":
 			switch r.Method {
@@ -1706,6 +1740,29 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			}
 		case "instances":
+			if len(parts) == 3 {
+				if r.Method != http.MethodPut {
+					http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+					return
+				}
+				instanceID := strings.TrimSpace(parts[2])
+				if instanceID == "" {
+					http.Error(w, `{"error":"invalid_instance_id"}`, http.StatusBadRequest)
+					return
+				}
+				var req collection.Instance
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				updated, err := collectionRepo.UpdateInstance(r.Context(), instanceID, req)
+				if err != nil {
+					http.Error(w, `{"error":"invalid_instance"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(updated)
+				return
+			}
 			switch r.Method {
 			case http.MethodGet:
 				instances, err := collectionRepo.ListInstancesByItemID(r.Context(), itemID)

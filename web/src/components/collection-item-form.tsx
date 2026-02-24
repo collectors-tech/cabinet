@@ -6,8 +6,8 @@ import { BoundTextInput, Form, SubmitButton, TextAreaInput } from "./forms";
 const collectionItemSchema = z.object({
   part_number: z.string().trim().min(1, "Part number is required"),
   title: z.string().trim().min(1, "Title is required"),
-  brand: z.string().trim().min(1, "Brand is required"),
-  category: z.string().trim().min(1, "Category is required"),
+  brand: z.string().trim().optional(),
+  category: z.string().trim().optional(),
   make: z.string().trim().optional(),
   model: z.string().trim().optional(),
   year: z.string().trim().optional(),

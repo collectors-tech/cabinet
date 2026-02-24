@@ -133,6 +133,11 @@ export function App() {
   const [columnCategory, setColumnCategory] = useState("");
   const [columnSeries, setColumnSeries] = useState("");
   const [selectedItemID, setSelectedItemID] = useState("");
+  const [selectedCollectionItemIDs, setSelectedCollectionItemIDs] = useState<string[]>([]);
+  const [bulkEditDraft, setBulkEditDraft] = useState({ brand: "", category: "" });
+  const [bulkEditPreview, setBulkEditPreview] = useState("");
+  const [inlineEditDraft, setInlineEditDraft] = useState<Record<string, { title: string; brand: string }>>({});
+  const [collectionStatus, setCollectionStatus] = useState("");
   const [photos, setPhotos] = useState<Array<{ id: string; item_id: string; filename: string; is_primary?: boolean }>>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<{ id: string; filename: string } | null>(null);
@@ -533,6 +538,16 @@ export function App() {
   }, [activeProfile?.id, collectionQuery.text, collectionQuery.brand, collectionQuery.category, collectionQuery.sort_by]);
 
   useEffect(() => {
+    setInlineEditDraft((current) => {
+      const next: Record<string, { title: string; brand: string }> = {};
+      for (const item of items) {
+        next[item.id] = current[item.id] || { title: item.title || "", brand: item.brand || "" };
+      }
+      return next;
+    });
+  }, [items]);
+
+  useEffect(() => {
     let disposed = false;
     async function loadRequirements() {
       if (!activeProfile?.id) {
@@ -851,8 +866,8 @@ export function App() {
   async function addItemWithPayload(payload: {
     part_number: string;
     title: string;
-    brand: string;
-    category: string;
+    brand?: string;
+    category?: string;
     make?: string;
     model?: string;
     year?: string;
@@ -870,7 +885,11 @@ export function App() {
       const resp = await fetch("/api/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          brand: payload.brand || "Unknown",
+          category: payload.category || "General",
+        }),
       });
       if (!resp.ok) {
         throw new Error("failed_to_create_item");
@@ -934,6 +953,95 @@ export function App() {
       category: "General",
     });
     setCollectionFormKey((current) => current + 1);
+    setCollectionStatus("item_added");
+  }
+
+  function toggleCollectionItemSelection(itemID: string, checked: boolean) {
+    setSelectedCollectionItemIDs((current) => {
+      if (checked) {
+        if (current.includes(itemID)) {
+          return current;
+        }
+        return [...current, itemID];
+      }
+      return current.filter((id) => id !== itemID);
+    });
+  }
+
+  function previewBulkEdit() {
+    const changes: string[] = [];
+    if (bulkEditDraft.brand.trim()) {
+      changes.push(`brand -> ${bulkEditDraft.brand.trim()}`);
+    }
+    if (bulkEditDraft.category.trim()) {
+      changes.push(`category -> ${bulkEditDraft.category.trim()}`);
+    }
+    if (changes.length === 0) {
+      setItemsError("bulk_changes_required");
+      return;
+    }
+    setItemsError("");
+    setBulkEditPreview(changes.join(", "));
+  }
+
+  async function applyBulkEdit() {
+    if (selectedCollectionItemIDs.length === 0) {
+      setItemsError("bulk_selection_required");
+      return;
+    }
+    const changes: Record<string, string> = {};
+    if (bulkEditDraft.brand.trim()) {
+      changes.brand = bulkEditDraft.brand.trim();
+    }
+    if (bulkEditDraft.category.trim()) {
+      changes.category = bulkEditDraft.category.trim();
+    }
+    if (!changes.brand && !changes.category) {
+      setItemsError("bulk_changes_required");
+      return;
+    }
+    setItemsError("");
+    try {
+      const resp = await fetch("/api/items/bulk-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_ids: selectedCollectionItemIDs, changes }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_bulk_edit_items");
+      }
+      setItems((current) =>
+        current.map((item) => (selectedCollectionItemIDs.includes(item.id) ? { ...item, brand: changes.brand || item.brand, category: changes.category || item.category } : item)),
+      );
+      setCollectionStatus(`bulk_edit_applied:${selectedCollectionItemIDs.length}`);
+      setBulkEditPreview("");
+      setSelectedCollectionItemIDs([]);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_bulk_edit_items");
+    }
+  }
+
+  async function saveInlineEdit(itemID: string) {
+    const draft = inlineEditDraft[itemID];
+    if (!draft) {
+      return;
+    }
+    setItemsError("");
+    try {
+      const resp = await fetch(`/api/items/${encodeURIComponent(itemID)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: draft.title, brand: draft.brand }),
+      });
+      if (!resp.ok) {
+        throw new Error("failed_to_update_item");
+      }
+      const updated = (await resp.json()) as { id: string; title: string; brand?: string };
+      setItems((current) => current.map((item) => (item.id === itemID ? { ...item, title: updated.title, brand: updated.brand } : item)));
+      setCollectionStatus(`inline_updated:${itemID}`);
+    } catch (e) {
+      setItemsError(e instanceof Error ? e.message : "failed_to_update_item");
+    }
   }
 
   async function loadInstances() {
@@ -3241,7 +3349,7 @@ export function App() {
                 </button>
               </div>
               <ul>
-                {savedFilters.map((filter) => (
+              {savedFilters.map((filter) => (
                   <li key={filter.id}>
                     <button type="button" onClick={() => applySavedFilter(filter)}>
                       {filter.name}
@@ -3254,20 +3362,53 @@ export function App() {
                 onSubmit={addCollectionItem}
                 initialValues={collectionFormSeed}
               />
+              <div className="cabinet-collection-bulk-bar" aria-label="Bulk edit bar">
+                <p>{selectedCollectionItemIDs.length} selected</p>
+                <input
+                  value={bulkEditDraft.brand}
+                  onChange={(e) => setBulkEditDraft((current) => ({ ...current, brand: e.target.value }))}
+                  placeholder="Brand"
+                  aria-label="Bulk edit brand"
+                />
+                <input
+                  value={bulkEditDraft.category}
+                  onChange={(e) => setBulkEditDraft((current) => ({ ...current, category: e.target.value }))}
+                  placeholder="Category"
+                  aria-label="Bulk edit category"
+                />
+                <button type="button" onClick={previewBulkEdit}>
+                  Preview Bulk Edit
+                </button>
+                <button type="button" onClick={applyBulkEdit}>
+                  Apply Bulk Edit
+                </button>
+                {bulkEditPreview ? <p>{bulkEditPreview}</p> : null}
+              </div>
+              {collectionStatus ? <p>{collectionStatus}</p> : null}
               {itemsLoading ? <p>Loading items...</p> : null}
               {itemsError ? <p>Item error: {itemsError}</p> : null}
               {!itemsLoading && items.length === 0 ? <p>No items found for current filters.</p> : null}
               <table>
                 <thead>
                   <tr>
+                    <th>Select</th>
                     <th>Part Number</th>
                     <th>Title</th>
                     <th>Brand</th>
+                    <th>Inline Edit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedCollectionItemIDs.includes(item.id)}
+                          aria-label={`Select item ${item.part_number}`}
+                          onChange={(e) => toggleCollectionItemSelection(item.id, e.target.checked)}
+                        />
+                      </td>
                       <td>
                         <button type="button" onClick={() => setSelectedItemID(item.id)}>
                           {item.part_number}
@@ -3275,6 +3416,31 @@ export function App() {
                       </td>
                       <td>{item.title}</td>
                       <td>{item.brand || "-"}</td>
+                      <td>
+                        <input
+                          value={inlineEditDraft[item.id]?.title || ""}
+                          aria-label={`Inline title ${item.part_number}`}
+                          onChange={(e) =>
+                            setInlineEditDraft((current) => ({
+                              ...current,
+                              [item.id]: { title: e.target.value, brand: current[item.id]?.brand || item.brand || "" },
+                            }))
+                          }
+                        />
+                        <input
+                          value={inlineEditDraft[item.id]?.brand || ""}
+                          aria-label={`Inline brand ${item.part_number}`}
+                          onChange={(e) =>
+                            setInlineEditDraft((current) => ({
+                              ...current,
+                              [item.id]: { title: current[item.id]?.title || item.title, brand: e.target.value },
+                            }))
+                          }
+                        />
+                        <button type="button" onClick={() => void saveInlineEdit(item.id)}>
+                          Save Inline
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

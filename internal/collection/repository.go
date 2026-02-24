@@ -45,6 +45,10 @@ type Repository struct {
 	db *sql.DB
 }
 
+type BulkEditResult struct {
+	UpdatedCount int `json:"updated_count"`
+}
+
 var allowedStatuses = map[string]struct{}{
 	"sealed":   {},
 	"blister":  {},
@@ -62,12 +66,9 @@ func (r *Repository) CreateItem(ctx context.Context, in Item) (Item, error) {
 }
 
 func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string, in Item) (Item, error) {
-	in.Brand = strings.TrimSpace(in.Brand)
-	in.Category = strings.TrimSpace(in.Category)
-	in.PartNumber = strings.TrimSpace(in.PartNumber)
-	in.Title = strings.TrimSpace(in.Title)
-	if in.Brand == "" || in.Category == "" || in.PartNumber == "" || in.Title == "" {
-		return Item{}, fmt.Errorf("brand, category, part_number, and title are required")
+	in = normalizeItemForCreate(in)
+	if in.PartNumber == "" || in.Title == "" {
+		return Item{}, fmt.Errorf("part_number and title are required")
 	}
 
 	tagsJSON, err := json.Marshal(in.Tags)
@@ -85,6 +86,101 @@ func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string,
 	}
 
 	return r.GetItemByID(ctx, in.ID)
+}
+
+func normalizeItemForCreate(in Item) Item {
+	in.Brand = strings.TrimSpace(in.Brand)
+	if in.Brand == "" {
+		in.Brand = "Unknown"
+	}
+	in.Category = strings.TrimSpace(in.Category)
+	if in.Category == "" {
+		in.Category = "General"
+	}
+	in.PartNumber = strings.TrimSpace(in.PartNumber)
+	in.Title = strings.TrimSpace(in.Title)
+	in.Make = strings.TrimSpace(in.Make)
+	in.Model = strings.TrimSpace(in.Model)
+	in.Year = strings.TrimSpace(in.Year)
+	in.Scale = strings.TrimSpace(in.Scale)
+	in.Series = strings.TrimSpace(in.Series)
+	in.Description = strings.TrimSpace(in.Description)
+	return in
+}
+
+func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (Item, error) {
+	current, err := r.GetItemByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return Item{}, err
+	}
+	next := current
+	if v := strings.TrimSpace(changes.Brand); v != "" {
+		next.Brand = v
+	}
+	if v := strings.TrimSpace(changes.Category); v != "" {
+		next.Category = v
+	}
+	if v := strings.TrimSpace(changes.PartNumber); v != "" {
+		next.PartNumber = v
+	}
+	if v := strings.TrimSpace(changes.Title); v != "" {
+		next.Title = v
+	}
+	if v := strings.TrimSpace(changes.Make); v != "" {
+		next.Make = v
+	}
+	if v := strings.TrimSpace(changes.Model); v != "" {
+		next.Model = v
+	}
+	if v := strings.TrimSpace(changes.Year); v != "" {
+		next.Year = v
+	}
+	if v := strings.TrimSpace(changes.Scale); v != "" {
+		next.Scale = v
+	}
+	if v := strings.TrimSpace(changes.Series); v != "" {
+		next.Series = v
+	}
+	if v := strings.TrimSpace(changes.Description); v != "" {
+		next.Description = v
+	}
+	if len(changes.Tags) > 0 {
+		next.Tags = changes.Tags
+	}
+	if next.Brand == "" || next.Category == "" || next.PartNumber == "" || next.Title == "" {
+		return Item{}, fmt.Errorf("brand, category, part_number, and title are required")
+	}
+
+	tagsJSON, err := json.Marshal(next.Tags)
+	if err != nil {
+		return Item{}, fmt.Errorf("marshal tags: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET brand = ?, category = ?, part_number = ?, title = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), id); err != nil {
+		return Item{}, fmt.Errorf("update item: %w", err)
+	}
+	return r.GetItemByID(ctx, id)
+}
+
+func (r *Repository) BulkEditItems(ctx context.Context, ids []string, changes Item) (BulkEditResult, error) {
+	if len(ids) == 0 {
+		return BulkEditResult{}, fmt.Errorf("item_ids are required")
+	}
+	updated := 0
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		if _, err := r.UpdateItem(ctx, trimmed, changes); err != nil {
+			return BulkEditResult{}, err
+		}
+		updated++
+	}
+	return BulkEditResult{UpdatedCount: updated}, nil
 }
 
 func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
@@ -218,4 +314,48 @@ func (r *Repository) ListInstancesByItemID(ctx context.Context, itemID string) (
 		return nil, fmt.Errorf("iterate instances: %w", err)
 	}
 	return out, nil
+}
+
+func (r *Repository) UpdateInstance(ctx context.Context, id string, in Instance) (Instance, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Instance{}, fmt.Errorf("instance id is required")
+	}
+	current, err := r.GetInstanceByID(ctx, id)
+	if err != nil {
+		return Instance{}, err
+	}
+	next := current
+	if v := strings.TrimSpace(in.Condition); v != "" {
+		next.Condition = v
+	}
+	if v := strings.ToLower(strings.TrimSpace(in.Status)); v != "" {
+		if _, ok := allowedStatuses[v]; !ok {
+			return Instance{}, fmt.Errorf("invalid status %q", v)
+		}
+		next.Status = v
+	}
+	if in.Quantity > 0 {
+		next.Quantity = in.Quantity
+	}
+	if v := strings.TrimSpace(in.StorageLocation); v != "" {
+		next.StorageLocation = v
+	}
+	if in.AcquisitionPrice > 0 {
+		next.AcquisitionPrice = in.AcquisitionPrice
+	}
+	if v := strings.TrimSpace(in.AcquisitionDate); v != "" {
+		next.AcquisitionDate = v
+	}
+	if v := strings.TrimSpace(in.Notes); v != "" {
+		next.Notes = v
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE instances
+		SET condition = ?, status = ?, quantity = ?, storage_location = ?, acquisition_price = ?, acquisition_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, next.Condition, next.Status, next.Quantity, next.StorageLocation, next.AcquisitionPrice, next.AcquisitionDate, next.Notes, id); err != nil {
+		return Instance{}, fmt.Errorf("update instance: %w", err)
+	}
+	return r.GetInstanceByID(ctx, id)
 }

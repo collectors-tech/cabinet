@@ -1283,6 +1283,102 @@ describe("App shell", () => {
     expect((await screen.findAllByText(/pn-002/i)).length).toBeGreaterThan(0);
   });
 
+  it("supports quick add with only part number and title", async () => {
+    let capturedBody = "";
+    let items = [{ id: "i1", part_number: "PN-001", title: "Existing", brand: "AFX", category: "Cars" }];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ items }), { status: 200 });
+      }
+      if (url === "/api/items" && init?.method === "POST") {
+        capturedBody = String(init.body || "");
+        const created = { id: "i2", part_number: "PN-003", title: "Quick Add", brand: "Unknown", category: "General" };
+        items = [...items, created];
+        return new Response(JSON.stringify(created), { status: 201 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    fireEvent.change(await screen.findByLabelText(/part number/i), { target: { value: "PN-003" } });
+    fireEvent.change(await screen.findByLabelText(/item title/i), { target: { value: "Quick Add" } });
+    fireEvent.click(await screen.findByRole("button", { name: /add item/i }));
+
+    expect((await screen.findAllByText(/pn-003/i)).length).toBeGreaterThan(0);
+    const payload = JSON.parse(capturedBody || "{}");
+    expect(payload.part_number).toBe("PN-003");
+    expect(payload.title).toBe("Quick Add");
+  });
+
+  it("supports selection and bulk edit from inventory list", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items" && (!init || init.method === undefined)) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: "i1", part_number: "PN-001", title: "Item One", brand: "AFX", category: "Cars" },
+              { id: "i2", part_number: "PN-002", title: "Item Two", brand: "Tyco", category: "Cars" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url === "/api/items/bulk-edit" && init?.method === "POST") {
+        return new Response(JSON.stringify({ updated_count: 2 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const activate = await screen.findByRole("button", { name: /use alpha/i });
+    activate.click();
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: /select item pn-001/i }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /select item pn-002/i }));
+    expect(await screen.findByText(/2 selected/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText(/bulk edit brand/i), { target: { value: "Auto World" } });
+    fireEvent.click(await screen.findByRole("button", { name: /preview bulk edit/i }));
+    expect(await screen.findByText(/brand -> Auto World/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /apply bulk edit/i }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/items/bulk-edit",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("loads photos for selected item", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
