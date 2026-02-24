@@ -54,6 +54,22 @@ describe("App shell", () => {
     expect(link).toHaveAttribute("href", "/apidocs");
   });
 
+  it("opens and closes the global chat copilot rail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const openChat = await screen.findByRole("button", { name: /toggle chat copilot/i });
+    fireEvent.click(openChat);
+    expect(await screen.findByRole("complementary", { name: /chat copilot/i })).toBeInTheDocument();
+
+    const closeChat = await screen.findByRole("button", { name: /close chat copilot/i });
+    fireEvent.click(closeChat);
+    expect(screen.queryByRole("complementary", { name: /chat copilot/i })).not.toBeInTheDocument();
+  });
+
   it("shows app version and build date in left nav footer", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -148,6 +164,39 @@ describe("App shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /hide collection/i }));
     expect(within(navMain).queryByRole("button", { name: /^collection$/i })).not.toBeInTheDocument();
+  });
+
+  it("renders semantic collection browser base layout in advanced workspace", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "AFX Camaro", brand: "AFX", category: "Cars" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^collection$/i }));
+
+    expect(await screen.findByTestId("collection-browser")).toBeInTheDocument();
+    expect(screen.getByTestId("collection-tree")).toBeInTheDocument();
+    expect(screen.getByTestId("collection-results")).toBeInTheDocument();
+    expect(screen.getByTestId("collection-summary-strip")).toBeInTheDocument();
   });
 
   it("switches visible advanced workspace section from sidebar navigation", async () => {

@@ -191,6 +191,11 @@ export function App() {
   const [onboardingFinishing, setOnboardingFinishing] = useState(false);
   const [advancedWorkspace, setAdvancedWorkspace] = useState(false);
   const [activeScreen, setActiveScreen] = useState<TopLevelScreen>("all");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatThread, setChatThread] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
+    { role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." },
+  ]);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
   const [navConfig, setNavConfig] = useState<NavItemConfig[]>(() => NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
@@ -2548,8 +2553,23 @@ export function App() {
       </button>
     ));
 
+  function sendChatDraft() {
+    const trimmed = chatDraft.trim();
+    if (!trimmed) {
+      return;
+    }
+    setChatThread((current) => [
+      ...current,
+      { role: "user", text: trimmed },
+      { role: "assistant", text: "Base chat scaffold is active. Action previews will be connected in the next implementation pass." },
+    ]);
+    setChatDraft("");
+  }
+
+  const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
+
   return (
-    <main data-testid="app-shell" className={`cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}`}>
+    <main data-testid="app-shell" className={shellClassName}>
       <aside className={`cabinet-sidebar primary-nav${navCollapsed ? " cabinet-sidebar-collapsed" : ""}`}>
         <div className="cabinet-sidebar-head">
           <h1>{navCollapsed ? "C" : "Cabinet"}</h1>
@@ -2642,6 +2662,13 @@ export function App() {
             </button>
             <strong>Runtime connected. UI foundation active.</strong>
           </div>
+          <button
+            type="button"
+            aria-label="Toggle Chat Copilot"
+            onClick={() => setChatOpen((current) => !current)}
+          >
+            {chatOpen ? "Close Chat" : "Open Chat"}
+          </button>
           <button
             id="theme-toggle"
             type="button"
@@ -2909,6 +2936,70 @@ export function App() {
                 <button type="button" onClick={() => setWorkspaceMode(false)}>
                   Back to Starter View
                 </button>
+              </div>
+              <div className="cabinet-collection-summary" data-testid="collection-summary-strip">
+                <span>
+                  Folders: <strong>{brands.length + categoriesForBrand.length}</strong>
+                </span>
+                <span>
+                  Items: <strong>{items.length}</strong>
+                </span>
+                <span>
+                  Active Brand: <strong>{columnBrand || "All"}</strong>
+                </span>
+                <span>
+                  Active Category: <strong>{columnCategory || "All"}</strong>
+                </span>
+              </div>
+              <div className="cabinet-collection-browser" data-testid="collection-browser">
+                <aside className="cabinet-collection-tree" data-testid="collection-tree">
+                  <h4>Folders</h4>
+                  <ul>
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setColumnBrand("");
+                          setColumnCategory("");
+                          setColumnSeries("");
+                        }}
+                      >
+                        All Items
+                      </button>
+                    </li>
+                    {brands.map((brand) => (
+                      <li key={brand}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setColumnBrand(brand);
+                            setColumnCategory("");
+                            setColumnSeries("");
+                          }}
+                        >
+                          {brand}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </aside>
+                <section className="cabinet-collection-results" data-testid="collection-results">
+                  <h4>Collection Browser</h4>
+                  <div className="cabinet-collection-card-grid">
+                    {items.slice(0, 12).map((item) => (
+                      <article key={item.id} className="cabinet-collection-card">
+                        <div className="cabinet-collection-card-image" />
+                        <div className="cabinet-collection-card-body">
+                          <p className="cabinet-collection-card-title">{item.title}</p>
+                          <p className="cabinet-collection-card-meta">
+                            {item.part_number} · {item.brand || "Unbranded"}
+                          </p>
+                        </div>
+                      </article>
+                    ))}
+                    {items.length === 0 ? <p>No collection cards yet. Add an item to populate this workspace.</p> : null}
+                  </div>
+                </section>
               </div>
               <div>
                 <input
@@ -3698,6 +3789,34 @@ export function App() {
         </section>
         </div>
       </section>
+      {chatOpen ? (
+        <aside className="cabinet-chat-rail" role="complementary" aria-label="Chat Copilot">
+          <div className="cabinet-chat-head">
+            <h2>Chat Copilot</h2>
+            <button type="button" aria-label="Close Chat Copilot" onClick={() => setChatOpen(false)}>
+              Close
+            </button>
+          </div>
+          <div className="cabinet-chat-thread">
+            {chatThread.map((entry, index) => (
+              <p key={`${entry.role}-${index}`} className={`cabinet-chat-msg cabinet-chat-msg-${entry.role}`}>
+                <strong>{entry.role === "assistant" ? "Assistant" : "You"}:</strong> {entry.text}
+              </p>
+            ))}
+          </div>
+          <div className="cabinet-chat-composer">
+            <textarea
+              aria-label="Chat message"
+              value={chatDraft}
+              onChange={(e) => setChatDraft(e.target.value)}
+              placeholder="Ask about collection gaps, pricing, or add-item ideas..."
+            />
+            <button type="button" onClick={sendChatDraft}>
+              Send
+            </button>
+          </div>
+        </aside>
+      ) : null}
     </main>
   );
 }
