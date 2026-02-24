@@ -1,6 +1,6 @@
 # UI Endpoint Parity Matrix
 
-Last updated: 2026-02-23
+Last updated: 2026-02-24
 
 ## Purpose
 Track parity between top-level UI screens, core API workflows, and automated tests.
@@ -11,7 +11,12 @@ Track parity between top-level UI screens, core API workflows, and automated tes
 | Dashboard | `screen-dashboard` | Implemented |
 | Collection | `screen-collection` | Implemented |
 | Scanner | `screen-scanner` | Implemented |
+| Discoveries | `screen-discoveries` | Implemented |
+| AI Assist | `screen-ai` | Implemented |
+| Barcodes | `screen-barcodes` | Implemented |
+| Photos | `screen-photos` | Implemented |
 | Pricing | `screen-pricing` | Implemented |
+| Reports | `screen-reports` | Implemented |
 | Settings | `screen-settings` | Implemented |
 
 ## Endpoint Coverage by Screen
@@ -40,6 +45,22 @@ Track parity between top-level UI screens, core API workflows, and automated tes
 | Scanner | `POST /api/matching/run` | Scanner -> Run Matching |
 | Scanner | `GET /api/matching/results` | Scanner -> Matching summary |
 | Scanner | `GET /api/discovery/not-in-collection` | Scanner -> Not In Collection -> Load |
+| Discoveries | `GET /api/discovery/not-in-collection` | Discoveries -> Load Not In Collection (stock_state/stock_count rendered) |
+| Discoveries | `POST /api/discovery/action` | Discoveries -> Ignore/Wishlist/Track/Create actions |
+| AI Assist | `POST /api/ai/test` | AI Assist -> Test AI |
+| AI Assist | `POST /api/ai/suggest/title` | AI Assist -> Suggest Metadata from Title |
+| AI Assist | `POST /api/ai/suggest/photo` | AI Assist -> Suggest Metadata from Photo |
+| Barcodes | `POST /api/items/{itemID}/barcodes` | Barcodes -> Add Barcode |
+| Barcodes | `GET /api/items/{itemID}/barcodes` | Barcodes -> Load Barcodes |
+| Barcodes | `GET /api/barcodes/{barcode}` | Barcodes -> Lookup Barcode |
+| Photos | `GET /api/items/{itemID}/photos` | Photos -> Load Photos |
+| Photos | `POST /api/items/{itemID}/photos` | Photos -> Upload Staged Photos |
+| Photos | `POST /api/items/{itemID}/photos/reorder` | Photos -> Move Up/Move Down (reorder persistence) |
+| Reports | `GET /api/wishlist/hits` | Reports -> Load Wishlist Report |
+| Reports | `GET /api/pricing/trend` | Reports -> Load Trend Summary |
+| Reports | `GET /api/pricing/stats` | Reports -> Load Trend Summary |
+| Reports | `GET /api/pricing/by-source` | Reports -> Load Source Summary (stock_count rows) |
+| Reports | `GET /api/pricing/history/export` | Reports -> Export Report History |
 | Pricing | `GET /api/wishlist` | Pricing -> Load Wishlist |
 | Pricing | `POST /api/wishlist` | Pricing -> Add Wishlist Item |
 | Pricing | `DELETE /api/wishlist` | Pricing -> Remove Wishlist Item |
@@ -51,6 +72,7 @@ Track parity between top-level UI screens, core API workflows, and automated tes
 | Pricing | `GET /api/pricing/stats` | Pricing -> Load Pricing Stats |
 | Pricing | `GET /api/pricing/trend` | Pricing -> Load Pricing Trend |
 | Pricing | `POST /api/pricing/snapshot/run` | Pricing -> Run Pricing Snapshot |
+| Pricing | `GET /api/pricing/history/export` | Pricing -> Export Pricing History |
 | Settings | `GET /api/profiles/{profileID}/settings` | Settings -> Load Profile Settings |
 | Settings | `PUT /api/profiles/{profileID}/settings` | Settings -> Save Profile Settings |
 | Settings | `PUT /api/profiles/{profileID}/secrets` | Settings -> Save Secrets |
