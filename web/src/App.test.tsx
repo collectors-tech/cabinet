@@ -466,7 +466,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: /^scanner$/i })).toHaveAttribute("aria-current", "page");
   });
 
-  it("shows onboarding create flow when no profiles exist", async () => {
+  it("ONB-001 shows onboarding create flow when no profiles exist", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -572,7 +572,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/media: \/tmp\/p2\/media/i)).toBeInTheDocument();
   });
 
-  it("starts WebAuthn registration for active profile", async () => {
+  it("AUTH-001 begins and finishes WebAuthn registration", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
@@ -593,6 +593,9 @@ describe("App shell", () => {
       if (url === "/api/auth/webauthn/register/begin" && init?.method === "POST") {
         return new Response(JSON.stringify({ session_id: "sess-reg-1", options: {} }), { status: 200 });
       }
+      if (url === "/api/auth/webauthn/register/finish" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
       return new Response(JSON.stringify({}), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -604,6 +607,44 @@ describe("App shell", () => {
     const begin = await screen.findByRole("button", { name: /begin webauthn registration/i });
     begin.click();
     expect(await screen.findByText(/auth session: sess-reg-1/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /finish registration/i }));
+    expect(await screen.findByText(/auth status: registration_finished/i)).toBeInTheDocument();
+  });
+
+  it("AUTH-002 begins and finishes WebAuthn login", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p2", name: "Beta" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p2", name: "Beta" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p2/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p2.db", media_dir: "/tmp/p2/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p2")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/login/begin" && init?.method === "POST") {
+        return new Response(JSON.stringify({ session_id: "sess-login-1", options: {} }), { status: 200 });
+      }
+      if (url === "/api/auth/webauthn/login/finish" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use beta/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /begin webauthn login/i }));
+    expect(await screen.findByText(/auth session: sess-login-1/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /finish login/i }));
+    await waitFor(() => expect(localStorage.getItem("cabinet.onboarding.identity_completed.p2")).toBe("1"));
   });
 
   it("auto-loads onboarding sample data after registration finish", async () => {
@@ -975,7 +1016,7 @@ describe("App shell", () => {
     expect(screen.queryByText(/onboarding sample data loaded/i)).not.toBeInTheDocument();
   });
 
-  it("runs sample-data seeding from step 3 and handles idempotent reruns", async () => {
+  it("ONB-003 runs sample-data seeding from step 3 and handles idempotent reruns", async () => {
     let sampleCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -1078,7 +1119,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/current items: 1/i)).toBeInTheDocument();
   });
 
-  it("persists step-5 preferences, completes onboarding, and reopens in advanced workspace", async () => {
+  it("ONB-004 persists step-5 preferences, completes onboarding, and reopens in advanced workspace", async () => {
     let settingsPayload: Record<string, unknown> | null = null;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -1193,7 +1234,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/step 3 of 5/i)).toBeInTheDocument();
   });
 
-  it("keeps step 2 blocked when identity action fails and allows retry", async () => {
+  it("ONB-002 keeps step 2 blocked when identity action fails and allows retry", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/profiles" && (!init || init.method === undefined)) {
