@@ -323,6 +323,7 @@ Scope rule:
 - URL includes selected record id:
   - `?selected=<id>`
 - Refresh/back/forward preserves selected context.
+- App should also persist last selected context/view per screen so reload restores previous working state when possible.
 
 ### 8.3 Thumbnail click opens Lightbox (media-bearing tables only)
 - Clicking row image opens modal `Media Lightbox` (not drawer).
@@ -333,7 +334,8 @@ Scope rule:
 
 ### 8.4 Selection mode for bulk actions
 - Checkbox column is explicit selection control.
-- When any checkbox is selected, row click toggles selection and does not open drawer.
+- In bulk mode, row click behavior remains unchanged from normal mode.
+- Selection actions are checkbox-driven (row click does not toggle selection).
 - `Esc` exits selection mode.
 - `Open details` action remains available for single selected row.
 
@@ -344,8 +346,8 @@ Scope rule:
   - status chip
   - link
 - Double-click behavior is optional:
-  - may open edit dialog directly
-  - can be deferred if interaction noise is high
+  - open edit modal directly
+  - modal supports previous/next record navigation within current table result set
 
 ### 8.6 Mobile behavior
 - Row tap opens full-screen detail sheet.
@@ -358,8 +360,80 @@ Scope rule:
 
 ### 8.8 Hidden/deleted behavior
 - `Deleted` rows are hidden by default and shown via status filter.
-- If direct URL references hidden/deleted row, open details with status warning banner.
+- If direct URL references hidden/deleted row, open details with status warning banner and `Restore` CTA.
 
 ### 8.9 Integrations-specific application
-- `Integrations` rows follow the same row click + drawer + `?selected=<id>` contract.
+- `Integrations` rows open a details modal that includes:
+  - provider details
+  - available actions
+  - setup instructions
+  - credentials/keys storage section
 - Lightbox is disabled for integrations unless a media thumbnail column is explicitly introduced in that screen.
+- If integrations are rendered as table/list rows, selection URL state still uses `?selected=<id>`.
+
+### 8.10 Carousel order source
+- Lightbox and row-to-row navigation order must always follow the active table source order:
+  - current filters
+  - current sort
+  - current visible result set
+
+## 9. Keyboard Shortcuts Standard
+
+Standard shortcuts:
+- `Cmd/Ctrl+K` open global search/command
+- `Enter` on focused row opens details drawer/modal
+- `Space` on focused thumbnail opens lightbox
+- `Esc` closes drawer/lightbox and exits bulk mode
+
+Display requirement:
+- Show platform-specific labels in UI:
+  - macOS: `⌘`, `⌥`, `⇧`
+  - Windows: `Ctrl`, `Alt`, `Shift`
+
+## 10. User and Database Access Model
+
+### 10.1 Scope
+- Users are scoped to the current database.
+- If a user has their own account/database, that is a separate database scope.
+
+### 10.2 Initial roles
+- `View`
+- `Admin`
+
+### 10.3 Invite/Add behavior (initial)
+- `Add User` is active and writes to local DB user store.
+- `Invite User` does not depend on email delivery initially; user records can be added for same-network access scenarios.
+
+## 11. Status and Grading Configurability
+
+### 11.1 Initial status sets (default)
+- Inventory: `New | Ungraded | Graded | Deleted`
+- Wishlist: `Discovered | Wishlist | Deleted`
+
+### 11.2 Configurability
+- Status enums must be configurable (global per database).
+- Grading enums must be configurable (global per database).
+
+### 11.3 Grading field type
+- `Car Grade Type`: enum list (configurable)
+- `Packaging Grade Type`: enum list (configurable)
+- Use provided defaults from this document as seed values.
+
+## 12. Delete and Recycle Lifecycle Policy
+
+### 12.1 Soft delete flow
+- First delete action sets status to `Deleted` (hidden from default list views).
+- Items with status `Deleted` can be moved to `Recycle` on explicit delete action.
+
+### 12.2 Recycle behavior
+- `Recycle` is a separate list/workspace.
+- Recycle supports:
+  - restore item
+  - permanent delete one-by-one
+  - permanent delete all (subject to link constraints)
+
+### 12.3 Link constraints
+- Items in `Recycle` cannot be permanently deleted while linked dependencies exist.
+
+### 12.4 Retention
+- Recycle retention is indefinite for now.
