@@ -304,33 +304,53 @@ Applies to:
 - `Inventory Workspace`
 - `Wishlist Workspace`
 
-### 8.1 Row click behavior
-- Single click row:
-  - select row
-  - open/update right `Details Panel`
-- Double click row (or `Enter` key):
-  - open full `Item Detail Drawer`
-- Click thumbnail in row:
-  - open `Media Lightbox` (does not replace row details action)
+### 8.1 Base interaction model
+- Use split interaction model for fast/predictable behavior.
 
-### 8.2 Lightbox behavior
-- Left/right navigation moves through current filtered/sorted result set.
-- `Esc` closes lightbox and returns focus to active row.
+### 8.2 Row click opens Details Drawer
+- Click anywhere on non-interactive row area opens right-side `Details Drawer`.
+- Drawer includes:
+  - full metadata
+  - schedule info
+  - linked media/posts
+  - audit fields
+  - row-level actions
+- URL includes selected record id:
+  - `?selected=<id>`
+- Refresh/back/forward preserves selected context.
 
-### 8.3 URL state behavior
-- Selected row is reflected in URL query:
-  - `?item=<id>`
-- Refresh/back/forward restores selected item context.
+### 8.3 Thumbnail click opens Lightbox
+- Clicking row image opens modal `Media Lightbox` (not drawer).
+- Left/right navigates adjacent items in current filtered/sorted result set.
+- Keyboard:
+  - `Enter` from focused row opens drawer
+  - `Space` on focused thumbnail opens lightbox
 
-### 8.4 Keyboard behavior
-- `Up/Down`: move selection row-to-row.
-- `Enter`: open `Item Detail Drawer`.
-- `Esc`: close drawer/lightbox.
+### 8.4 Selection mode for bulk actions
+- Checkbox column is explicit selection control.
+- When any checkbox is selected, row click toggles selection and does not open drawer.
+- `Esc` exits selection mode.
+- `Open details` action remains available for single selected row.
 
-### 8.5 Unsaved changes guard
+### 8.5 Interaction guards
+- Clicks on interactive controls do not trigger row open:
+  - checkbox
+  - menu button
+  - status chip
+  - link
+- Double-click behavior is optional:
+  - may open edit dialog directly
+  - can be deferred if interaction noise is high
+
+### 8.6 Mobile behavior
+- Row tap opens full-screen detail sheet.
+- Thumbnail tap opens lightbox.
+- Bulk mode is entered via explicit `Select` action button.
+
+### 8.7 Unsaved changes guard
 - If details form has unsaved changes and user changes row or closes drawer:
   - show `Save / Discard / Cancel` confirmation.
 
-### 8.6 Hidden/deleted behavior
+### 8.8 Hidden/deleted behavior
 - `Deleted` rows are hidden by default and shown via status filter.
-- If a direct URL references a hidden/deleted row, open details with a status warning banner.
+- If direct URL references hidden/deleted row, open details with status warning banner.
