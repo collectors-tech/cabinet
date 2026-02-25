@@ -335,3 +335,25 @@ func TestInventoryWishlistViewToggleAccessibilityContract(t *testing.T) {
 		}
 	}
 }
+
+func TestClerkSessionBootstrapContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/routes/clerk/_authenticated/route.tsx")
+	if err != nil {
+		t.Fatalf("read clerk authenticated route: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"useAuth",
+		"useUser",
+		"/api/auth/cloud/session/bootstrap",
+		"auth.setUser",
+		"auth.setAccessToken",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("clerk bootstrap route missing required token: %s", token)
+		}
+	}
+}
