@@ -297,3 +297,40 @@ Use these labels exactly in issues, specs, and components:
 - `Cloud Authentication`
 - `Settings Workspace`
 - `Help Center`
+
+## 8. Row-to-Detail Interaction Standard
+
+Applies to:
+- `Inventory Workspace`
+- `Wishlist Workspace`
+
+### 8.1 Row click behavior
+- Single click row:
+  - select row
+  - open/update right `Details Panel`
+- Double click row (or `Enter` key):
+  - open full `Item Detail Drawer`
+- Click thumbnail in row:
+  - open `Media Lightbox` (does not replace row details action)
+
+### 8.2 Lightbox behavior
+- Left/right navigation moves through current filtered/sorted result set.
+- `Esc` closes lightbox and returns focus to active row.
+
+### 8.3 URL state behavior
+- Selected row is reflected in URL query:
+  - `?item=<id>`
+- Refresh/back/forward restores selected item context.
+
+### 8.4 Keyboard behavior
+- `Up/Down`: move selection row-to-row.
+- `Enter`: open `Item Detail Drawer`.
+- `Esc`: close drawer/lightbox.
+
+### 8.5 Unsaved changes guard
+- If details form has unsaved changes and user changes row or closes drawer:
+  - show `Save / Discard / Cancel` confirmation.
+
+### 8.6 Hidden/deleted behavior
+- `Deleted` rows are hidden by default and shown via status filter.
+- If a direct URL references a hidden/deleted row, open details with a status warning banner.
