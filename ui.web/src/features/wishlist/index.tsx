@@ -5,6 +5,7 @@ export function Wishlist() {
     <Tasks
       title='Wishlist'
       description='Track discovered items, target entries, and scheduling priority.'
+      routePath='/_authenticated/wishlist/'
     />
   )
 }

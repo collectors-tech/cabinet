@@ -13,12 +13,14 @@ import { tasks } from './data/tasks'
 type TasksProps = {
   title?: string
   description?: string
+  routePath?: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 }
 
 export function Tasks({
   title = 'Tasks',
   description = "Here's a list of your tasks for this month!",
-}: TasksProps = {}) {
+  routePath = '/_authenticated/inventory/',
+}: TasksProps) {
   return (
     <TasksProvider>
       <Header fixed>
@@ -38,7 +40,7 @@ export function Tasks({
           </div>
           <TasksPrimaryButtons />
         </div>
-        <TasksTable data={tasks} />
+        <TasksTable data={tasks} routePath={routePath} />
       </Main>
 
       <TasksDialogs />

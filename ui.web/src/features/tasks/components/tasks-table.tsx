@@ -28,13 +28,19 @@ import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { tasksColumns as columns } from './tasks-columns'
 
-const route = getRouteApi('/_authenticated/tasks/')
+type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
 type DataTableProps = {
   data: Task[]
+  routePath: TasksRoutePath
 }
 
-export function TasksTable({ data }: DataTableProps) {
+export function TasksTable({ data, routePath }: DataTableProps) {
+  const route =
+    routePath === '/_authenticated/inventory/'
+      ? getRouteApi('/_authenticated/inventory/')
+      : getRouteApi('/_authenticated/wishlist/')
+
   // Local UI-only states
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])

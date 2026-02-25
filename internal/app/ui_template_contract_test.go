@@ -71,3 +71,79 @@ func TestUITemplateProfileMenusContract(t *testing.T) {
 		}
 	}
 }
+
+func TestUIMigratedScreensRouteBindingContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		file      string
+		forbidden []string
+		required  []string
+	}{
+		{
+			file: "../../ui.web/src/features/inventory/index.tsx",
+			forbidden: []string{
+				"/_authenticated/tasks/",
+			},
+			required: []string{
+				"from '@/features/tasks'",
+			},
+		},
+		{
+			file: "../../ui.web/src/features/wishlist/index.tsx",
+			forbidden: []string{
+				"/_authenticated/tasks/",
+			},
+			required: []string{
+				"from '@/features/tasks'",
+			},
+		},
+		{
+			file: "../../ui.web/src/features/integrations/index.tsx",
+			forbidden: []string{
+				"/_authenticated/apps/",
+			},
+			required: []string{
+				"from '@/features/apps'",
+			},
+		},
+		{
+			file: "../../ui.web/src/features/tasks/components/tasks-table.tsx",
+			forbidden: []string{
+				"getRouteApi('/_authenticated/tasks/')",
+			},
+			required: []string{
+				"getRouteApi('/_authenticated/inventory/')",
+				"getRouteApi('/_authenticated/wishlist/')",
+			},
+		},
+		{
+			file: "../../ui.web/src/features/apps/index.tsx",
+			forbidden: []string{
+				"getRouteApi('/_authenticated/apps/')",
+			},
+			required: []string{
+				"getRouteApi('/_authenticated/integrations/')",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		b, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		src := string(b)
+
+		for _, token := range tc.required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required token: %s", tc.file, token)
+			}
+		}
+		for _, token := range tc.forbidden {
+			if strings.Contains(src, token) {
+				t.Fatalf("%s contains forbidden stale route token: %s", tc.file, token)
+			}
+		}
+	}
+}

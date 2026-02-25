@@ -5,6 +5,7 @@ export function Inventory() {
     <Tasks
       title='Inventory'
       description='Manage collection items, grading status, packaging, and media.'
+      routePath='/_authenticated/inventory/'
     />
   )
 }
