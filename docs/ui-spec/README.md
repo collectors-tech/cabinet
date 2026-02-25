@@ -17,6 +17,7 @@ Documents:
 - `12-PERF-VALIDATION-S2-S3.md`
 - `13-UI-UX-STRATEGY-GATE.md`
 - `14-SEMANTIC-COMPONENT-LAYER.md`
+- `15-TEMPLATE-SECTION-NAMES-AND-MAPPING.md`
 - `screens/README.md` (per-screen split specs)
 
 Usage:
