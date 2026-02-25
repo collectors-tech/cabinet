@@ -87,6 +87,14 @@ const NAV_ITEMS: NavItemDefinition[] = [
   { screen: "settings", label: "Settings", icon: "ST" },
 ];
 
+const NAV_GROUPS: Array<{ title: "General" | "Pages" | "Other"; screens: NavScreen[] }> = [
+  { title: "General", screens: ["dashboard", "collection", "scanner", "discoveries", "ai"] },
+  { title: "Pages", screens: ["barcodes", "photos", "pricing", "reports"] },
+  { title: "Other", screens: ["diagnostics", "settings"] },
+];
+
+const HEADER_TABS = ["Overview", "Customers", "Products", "Settings"] as const;
+
 const COLLECTION_CONTEXT_NODES: CollectionContextNode[] = [
   { id: "all-items", label: "All Items", kind: "all" },
   { id: "watchlist", label: "Watch List", kind: "saved" },
@@ -3114,8 +3122,10 @@ export function App() {
     setNavEditMode(false);
   }
 
-  const navLinks = (forDrawer = false) =>
-    visibleNav.map((item) => (
+  const navLinks = (screens?: NavScreen[], forDrawer = false) =>
+    visibleNav
+      .filter((item) => !screens || screens.includes(item.screen))
+      .map((item) => (
       <button
         key={item.screen}
         type="button"
@@ -3131,7 +3141,7 @@ export function App() {
         </span>
         <span className="cabinet-nav-label">{item.label}</span>
       </button>
-    ));
+      ));
 
   const activeContext = COLLECTION_CONTEXT_NODES.find((node) => node.id === activeContextID) ?? COLLECTION_CONTEXT_NODES[0];
   const filteredContextNodes = COLLECTION_CONTEXT_NODES.filter((node) =>
@@ -3266,7 +3276,15 @@ export function App() {
     <main data-testid="app-shell" className={shellClassName}>
       <aside className={`cabinet-sidebar primary-nav${navCollapsed ? " cabinet-sidebar-collapsed" : ""}`}>
         <div className="cabinet-sidebar-head">
-          <h1>{navCollapsed ? "C" : "Cabinet"}</h1>
+          <div className="cabinet-brand-block">
+            <h1>{navCollapsed ? "C" : "Cabinet"}</h1>
+            {!navCollapsed ? (
+              <>
+                <p className="cabinet-brand-title">Cabinet Admin</p>
+                <p className="cabinet-brand-plan">Desktop Workspace</p>
+              </>
+            ) : null}
+          </div>
           <div className="cabinet-nav-controls">
             <button type="button" aria-label={navCollapsed ? "Expand primary navigation" : "Collapse primary navigation"} onClick={() => setNavCollapsed((value) => !value)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -3357,7 +3375,16 @@ export function App() {
             </ul>
           </section>
         ) : null}
-        {!navEditMode ? <nav className="nav-main">{navLinks()}</nav> : null}
+        {!navEditMode ? (
+          <nav className="nav-main" aria-label="Primary navigation">
+            {NAV_GROUPS.map((group) => (
+              <section key={group.title} className="cabinet-nav-group">
+                {navCollapsed ? null : <p className="cabinet-nav-group-title">{group.title}</p>}
+                <div className="cabinet-nav-group-items">{navLinks(group.screens)}</div>
+              </section>
+            ))}
+          </nav>
+        ) : null}
         <div className="cabinet-nav-edit-row">
           {navEditMode ? (
             <div className="cabinet-nav-edit-actions" aria-label="Nav main edit actions">
@@ -3458,7 +3485,7 @@ export function App() {
                 Close
               </button>
             </div>
-            <nav className="nav-main" onClick={() => setMobileNavOpen(false)}>{navLinks(true)}</nav>
+            <nav className="nav-main" onClick={() => setMobileNavOpen(false)}>{navLinks(undefined, true)}</nav>
             <div className="cabinet-drawer-context" onClick={() => setMobileNavOpen(false)}>
               {contextPane(true)}
             </div>
@@ -3481,8 +3508,14 @@ export function App() {
             </button>
             <div className="cabinet-page-header-copy">
               <p aria-label="Current page title">{headerTitle}</p>
-              <p>Quick actions</p>
             </div>
+            <nav className="cabinet-top-tabs" aria-label="Top tabs">
+              {HEADER_TABS.map((tab, index) => (
+                <button key={tab} type="button" aria-current={index === 0 ? "page" : undefined}>
+                  {tab}
+                </button>
+              ))}
+            </nav>
             <label className="cabinet-command-search">
               <span className="cabinet-command-search-label">Search</span>
               <input
