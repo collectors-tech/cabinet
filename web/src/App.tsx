@@ -23,6 +23,7 @@ import {
 } from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
+type UIDensity = "comfortable" | "cozy" | "compact";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
 type TopLevelScreen =
   | "all"
@@ -145,6 +146,14 @@ function detectInitialTheme(): Theme {
   return "light";
 }
 
+function detectInitialDensity(): UIDensity {
+  const saved = localStorage.getItem("cabinet.ui.density");
+  if (saved === "comfortable" || saved === "cozy" || saved === "compact") {
+    return saved;
+  }
+  return "comfortable";
+}
+
 function detectInitialCloudEntitlement() {
   const plan = localStorage.getItem("cabinet.cloud.plan") || "free";
   const rawFeatures = localStorage.getItem("cabinet.cloud.features");
@@ -166,6 +175,7 @@ export function App() {
   const ONBOARDING_STEPS = ["Welcome", "Identity", "Starter Data", "First Item", "Preferences"] as const;
   const cloudAuthEnabled = Boolean((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim()) && !import.meta.env.VITEST;
   const [theme, setTheme] = useState<Theme>(detectInitialTheme);
+  const [uiDensity, setUIDensity] = useState<UIDensity>(detectInitialDensity);
   const [cloudEntitlement, setCloudEntitlement] = useState(detectInitialCloudEntitlement);
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [activeProfile, setActiveProfile] = useState<{ id: string; name: string } | null>(null);
@@ -341,6 +351,9 @@ export function App() {
   const [sessionToken, setSessionToken] = useState("");
   const [recoveryPassphrase, setRecoveryPassphrase] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [densityControlsOpen, setDensityControlsOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [globalCommandSearch, setGlobalCommandSearch] = useState("");
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -348,6 +361,10 @@ export function App() {
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem("cabinet.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("cabinet.ui.density", uiDensity);
+  }, [uiDensity]);
 
   useEffect(() => {
     const refreshEntitlement = () => {
@@ -3007,6 +3024,10 @@ export function App() {
       void loadWishlist();
     }
   }
+  function updateUIDensity(next: UIDensity) {
+    setUIDensity(next);
+    setDensityControlsOpen(false);
+  }
 
   const orderedNav = navConfig
     .map((cfg) => {
@@ -3239,7 +3260,7 @@ export function App() {
     setChatAttachments((current) => current.filter((attachment) => attachment.id !== attachmentID));
   }
 
-  const shellClassName = `cabinet-shell${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${contextPaneCollapsed ? " cabinet-shell-context-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
+  const shellClassName = `cabinet-shell cabinet-density-${uiDensity}${navCollapsed ? " cabinet-shell-nav-collapsed" : ""}${contextPaneCollapsed ? " cabinet-shell-context-collapsed" : ""}${chatOpen ? " cabinet-shell-chat-open" : ""}`;
 
   return (
     <main data-testid="app-shell" className={shellClassName}>
@@ -3258,6 +3279,31 @@ export function App() {
             </button>
           </div>
         </div>
+        {!navCollapsed ? (
+          <div className="cabinet-workspace-switch">
+            <label htmlFor="workspace-db-selector">Workspace DB</label>
+            <select
+              id="workspace-db-selector"
+              aria-label="Workspace DB selector"
+              value={activeProfile?.id || ""}
+              onChange={(e) => {
+                const profileID = e.target.value;
+                if (!profileID) {
+                  return;
+                }
+                void activateProfile(profileID);
+              }}
+              disabled={profiles.length === 0}
+            >
+              <option value="">Local workspace</option>
+              {profiles.map((profileEntry) => (
+                <option key={profileEntry.id} value={profileEntry.id}>
+                  {profileEntry.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         {navEditMode ? (
           <section className="cabinet-nav-editor" aria-label="Nav main editor">
             <ul>
@@ -3342,6 +3388,43 @@ export function App() {
           )}
         </div>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
+          <div className="cabinet-profile-menu">
+            <button
+              type="button"
+              aria-label="Open profile menu"
+              onClick={() => setProfileMenuOpen((current) => !current)}
+            >
+              {activeProfile ? activeProfile.name : "Profile"}
+            </button>
+            {profileMenuOpen ? (
+              <div className="cabinet-profile-menu-panel" role="menu" aria-label="Profile menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    if (navEnabled) {
+                      setActiveScreen("settings");
+                    }
+                  }}
+                >
+                  Profile Preferences
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    if (sessionToken) {
+                      void lockSession();
+                    }
+                  }}
+                >
+                  Lock Session
+                </button>
+              </div>
+            ) : null}
+          </div>
           <p className="cabinet-runtime-status">Runtime connected. UI workspace active.</p>
           <p>
             <strong>Version:</strong> {appVersionLabel}
@@ -3400,8 +3483,38 @@ export function App() {
               <p aria-label="Current page title">{headerTitle}</p>
               <p>Quick actions</p>
             </div>
+            <label className="cabinet-command-search">
+              <span className="cabinet-command-search-label">Search</span>
+              <input
+                type="search"
+                aria-label="Global command search"
+                placeholder="Search commands, items, screens"
+                value={globalCommandSearch}
+                onChange={(e) => setGlobalCommandSearch(e.target.value)}
+              />
+            </label>
           </div>
           <div className="cabinet-topbar-actions">
+            <button
+              type="button"
+              aria-label="Open density controls"
+              onClick={() => setDensityControlsOpen((current) => !current)}
+            >
+              Density
+            </button>
+            {densityControlsOpen ? (
+              <div className="cabinet-density-panel" aria-label="Density controls panel">
+                <button type="button" aria-label="Set comfortable density" onClick={() => updateUIDensity("comfortable")}>
+                  Comfortable
+                </button>
+                <button type="button" aria-label="Set cozy density" onClick={() => updateUIDensity("cozy")}>
+                  Cozy
+                </button>
+                <button type="button" aria-label="Set compact density" onClick={() => updateUIDensity("compact")}>
+                  Compact
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               aria-label="Toggle Chat Copilot"

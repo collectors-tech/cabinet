@@ -205,6 +205,28 @@ body {
   margin-bottom: 8px;
 }
 
+.cabinet-workspace-switch {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cabinet-workspace-switch label {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cabinet-workspace-switch select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0 10px;
+}
+
 .cabinet-nav-controls {
   display: flex;
   gap: 6px;
@@ -268,6 +290,41 @@ body {
   border-top: 1px solid var(--line);
   color: var(--text-soft);
   font-size: 0.82rem;
+}
+
+.cabinet-profile-menu {
+  margin-bottom: 10px;
+}
+
+.cabinet-profile-menu > button {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  padding: 0 10px;
+}
+
+.cabinet-profile-menu-panel {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.cabinet-profile-menu-panel button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  padding: 0 8px;
 }
 
 .cabinet-sidebar-meta p {
@@ -628,6 +685,28 @@ body {
   gap: 10px;
 }
 
+.cabinet-command-search {
+  display: grid;
+  gap: 4px;
+}
+
+.cabinet-command-search-label {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cabinet-command-search input {
+  width: min(360px, 42vw);
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0 10px;
+}
+
 .cabinet-page-header-copy p:first-child {
   margin: 0;
   font-size: 1.1rem;
@@ -648,6 +727,16 @@ body {
   gap: 8px;
 }
 
+.cabinet-density-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 4px;
+}
+
 .cabinet-nav-toggle {
   display: none;
 }
@@ -659,6 +748,24 @@ body {
   background: var(--surface-2);
   color: var(--text);
   padding: 0 12px;
+}
+
+.cabinet-density-comfortable .cabinet-topbar button {
+  height: 38px;
+}
+
+.cabinet-density-compact .cabinet-topbar button {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.cabinet-density-compact .cabinet-nav-link {
+  min-height: 46px;
+  padding: 8px 10px;
+}
+
+.cabinet-density-cozy .cabinet-nav-link {
+  min-height: 50px;
 }
 
 .cabinet-page-meta {
