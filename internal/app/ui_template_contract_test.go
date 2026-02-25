@@ -183,3 +183,25 @@ func TestDashboardUsesRuntimeSummaryContract(t *testing.T) {
 		}
 	}
 }
+
+func TestInventoryWishlistViewToggleContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/tasks/components/tasks-table.tsx")
+	if err != nil {
+		t.Fatalf("read tasks table: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"Rows",
+		"Cards",
+		"cabinet.viewMode.",
+		"routePath",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("tasks table missing view-toggle contract token: %s", token)
+		}
+	}
+}

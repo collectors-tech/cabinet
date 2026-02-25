@@ -14,6 +14,8 @@ import {
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -35,23 +37,30 @@ type DataTableProps = {
   routePath: TasksRoutePath
 }
 
+type ViewMode = 'rows' | 'cards'
+
 export function TasksTable({ data, routePath }: DataTableProps) {
   const route =
     routePath === '/_authenticated/inventory/'
       ? getRouteApi('/_authenticated/inventory/')
       : getRouteApi('/_authenticated/wishlist/')
 
-  // Local UI-only states
+  const storageKey =
+    routePath === '/_authenticated/wishlist/'
+      ? 'cabinet.viewMode.wishlist'
+      : 'cabinet.viewMode.inventory'
+
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') {
+      return 'rows'
+    }
+    const saved = window.localStorage.getItem(storageKey)
+    return saved === 'cards' ? 'cards' : 'rows'
+  })
 
-  // Local state management for table (uncomment to use local-only state, not synced with URL)
-  // const [globalFilter, onGlobalFilterChange] = useState('')
-  // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
-  // const [pagination, onPaginationChange] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
-
-  // Synced with URL states (updated to match route search schema defaults)
   const {
     globalFilter,
     onGlobalFilterChange,
@@ -91,7 +100,6 @@ export function TasksTable({ data, routePath }: DataTableProps) {
       const id = String(row.getValue('id')).toLowerCase()
       const title = String(row.getValue('title')).toLowerCase()
       const searchValue = String(filterValue).toLowerCase()
-
       return id.includes(searchValue) || title.includes(searchValue)
     },
     getCoreRowModel: getCoreRowModel(),
@@ -110,10 +118,17 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     ensurePageInRange(pageCount)
   }, [pageCount, ensurePageInRange])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(storageKey, viewMode)
+  }, [storageKey, viewMode])
+
   return (
     <div
       className={cn(
-        'max-sm:has-[div[role="toolbar"]]:mb-16', // Add margin bottom to the table on mobile when the toolbar is visible
+        'max-sm:has-[div[role="toolbar"]]:mb-16',
         'flex flex-1 flex-col gap-4'
       )}
     >
@@ -133,13 +148,31 @@ export function TasksTable({ data, routePath }: DataTableProps) {
           },
         ]}
       />
-      <div className='overflow-hidden rounded-md border'>
-        <Table className='min-w-xl'>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
+
+      <div className='flex items-center justify-end gap-2'>
+        <Button
+          size='sm'
+          variant={viewMode === 'rows' ? 'default' : 'outline'}
+          onClick={() => setViewMode('rows')}
+        >
+          Rows
+        </Button>
+        <Button
+          size='sm'
+          variant={viewMode === 'cards' ? 'default' : 'outline'}
+          onClick={() => setViewMode('cards')}
+        >
+          Cards
+        </Button>
+      </div>
+
+      {viewMode === 'rows' ? (
+        <div className='overflow-hidden rounded-md border'>
+          <Table className='min-w-xl'>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
@@ -155,47 +188,85 @@ export function TasksTable({ data, routePath }: DataTableProps) {
                             header.getContext()
                           )}
                     </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={cn(
-                        cell.column.columnDef.meta?.className,
-                        cell.column.columnDef.meta?.tdClassName
-                      )}
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className='h-24 text-center'
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          cell.column.columnDef.meta?.className,
+                          cell.column.columnDef.meta?.tdClassName
+                        )}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className='h-24 text-center'
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+          {table.getRowModel().rows?.length ? (
+            table.getRowModel().rows.map((row) => (
+              <div
+                key={row.id}
+                className='space-y-2 rounded-md border p-4'
+                data-state={row.getIsSelected() && 'selected'}
+              >
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='space-y-1'>
+                    <p className='text-xs text-muted-foreground'>
+                      {row.original.id}
+                    </p>
+                    <p className='font-medium'>{row.original.title}</p>
+                  </div>
+                  <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(checked) =>
+                      row.toggleSelected(Boolean(checked))
+                    }
+                    aria-label={`Select ${row.original.title}`}
+                  />
+                </div>
+                <div className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
+                  <span>Status: {row.original.status}</span>
+                  <span>Priority: {row.original.priority}</span>
+                  <span>Type: {row.original.label}</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className='rounded-md border p-6 text-sm text-muted-foreground'>
+              No results.
+            </div>
+          )}
+        </div>
+      )}
+
       <DataTablePagination table={table} className='mt-auto' />
       <DataTableBulkActions table={table} />
     </div>
