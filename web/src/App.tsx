@@ -3244,6 +3244,7 @@ export function App() {
           </button>
         </div>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
+          <p className="cabinet-runtime-status">Runtime connected. UI workspace active.</p>
           <p>
             <strong>Version:</strong> {appVersionLabel}
           </p>
@@ -3321,7 +3322,6 @@ export function App() {
         </header>
         <div className="cabinet-content-scroll">
         <section className="cabinet-page-meta" aria-label="Page context">
-          <p>Runtime connected. UI workspace active.</p>
           <p>Collection context: {activeContext.label}</p>
         </section>
         {recoveryDiagnostics?.recovery_required ? (

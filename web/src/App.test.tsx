@@ -36,6 +36,21 @@ describe("App shell", () => {
     expect(within(header as HTMLElement).getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
   });
 
+  it("shows runtime status in nav footer and not in page context strip", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const footer = screen.getByLabelText(/app build metadata/i);
+    expect(within(footer).getByText(/runtime connected\. ui workspace active\./i)).toBeInTheDocument();
+    expect(within(footer).getByText(/version:/i)).toBeInTheDocument();
+
+    const pageContext = screen.getByLabelText(/page context/i);
+    expect(within(pageContext).queryByText(/runtime connected\. ui workspace active\./i)).not.toBeInTheDocument();
+  });
+
   it("uses fixed shell semantics with sticky topbar and scrolling content container", () => {
     vi.stubGlobal(
       "fetch",

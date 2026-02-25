@@ -354,24 +354,36 @@ test("collection bulk edit, inline edit, photo staging, and shell scroll ownersh
 
   const shellStyles = await page.evaluate(() => {
     const nav = document.querySelector("aside.primary-nav");
+    const navMain = document.querySelector("aside.primary-nav .nav-main");
+    const navMeta = document.querySelector("aside.primary-nav .cabinet-sidebar-meta");
     const header = document.querySelector("header.page-header");
     const content = document.querySelector(".cabinet-content");
     const contentScroll = document.querySelector(".cabinet-content-scroll");
-    if (!nav || !header || !content || !contentScroll) {
+    const pageMeta = document.querySelector(".cabinet-page-meta");
+    if (!nav || !navMain || !navMeta || !header || !content || !contentScroll || !pageMeta) {
       return { ready: false };
     }
+    const navMetaRect = navMeta.getBoundingClientRect();
     return {
       ready: true,
       navOverflow: getComputedStyle(nav).overflowY,
+      navMainOverflow: getComputedStyle(navMain).overflowY,
       headerPosition: getComputedStyle(header).position,
       contentOverflow: getComputedStyle(content).overflowY,
       scrollOverflow: getComputedStyle(contentScroll).overflowY,
+      navMetaInViewport: navMetaRect.bottom <= window.innerHeight,
+      runtimeInPageMeta: pageMeta.textContent?.includes("Runtime connected. UI workspace active.") ?? false,
+      runtimeInNavMeta: navMeta.textContent?.includes("Runtime connected. UI workspace active.") ?? false,
     };
   });
   expect(shellStyles.ready).toBe(true);
   expect(shellStyles.headerPosition).toBe("sticky");
   expect(shellStyles.contentOverflow).toBe("hidden");
   expect(shellStyles.scrollOverflow).toBe("auto");
+  expect(shellStyles.navMainOverflow).toBe("auto");
+  expect(shellStyles.navMetaInViewport).toBe(true);
+  expect(shellStyles.runtimeInPageMeta).toBe(false);
+  expect(shellStyles.runtimeInNavMeta).toBe(true);
 
   await page.getByRole("button", { name: /^collection$/i }).first().click();
   await page.getByRole("checkbox", { name: /select item pn-001/i }).check();
