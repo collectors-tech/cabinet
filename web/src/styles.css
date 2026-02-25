@@ -276,12 +276,15 @@ body {
   align-items: center;
   gap: 10px;
   color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  border: 2px solid color-mix(in srgb, var(--line) 78%, var(--text) 22%);
+  border-radius: 12px;
+  min-height: 52px;
+  padding: 12px 12px;
   background: var(--surface-2);
   text-align: left;
   font: inherit;
+  font-weight: 620;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
@@ -290,13 +293,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
-  border: 1px solid var(--line);
+  border: 2px solid color-mix(in srgb, var(--line) 72%, var(--text) 28%);
   background: var(--surface);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.74rem;
+  font-weight: 800;
 }
 
 .cabinet-nav-label {
@@ -304,13 +307,14 @@ body {
 }
 
 .cabinet-nav-link:hover {
-  background: var(--surface-3);
+  background: color-mix(in srgb, var(--surface-3) 84%, var(--accent) 16%);
   border-color: var(--focus);
 }
 
 .cabinet-nav-link-active {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 88%, var(--text) 12%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .cabinet-nav-link:disabled {
@@ -321,6 +325,7 @@ body {
 .cabinet-sidebar-collapsed .cabinet-nav-link-icon-only {
   justify-content: center;
   padding: 10px 6px;
+  min-height: 48px;
 }
 
 .cabinet-sidebar-collapsed .cabinet-nav-link-icon-only .cabinet-nav-label {
