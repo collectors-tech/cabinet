@@ -33,6 +33,19 @@ type ScannerQuerySetRecord = {
   max_retry_count?: number;
 };
 
+const SCREEN_TITLES: Record<NavScreen, string> = {
+  dashboard: "Dashboard",
+  collection: "Collection",
+  scanner: "Scanner",
+  discoveries: "Discoveries",
+  ai: "AI Assist",
+  barcodes: "Barcodes",
+  photos: "Photos",
+  pricing: "Pricing",
+  reports: "Reports",
+  settings: "Settings",
+};
+
 const NAV_ITEMS: NavItemDefinition[] = [
   { screen: "dashboard", label: "Dashboard", icon: "DB" },
   { screen: "collection", label: "Collection", icon: "CL" },
@@ -3005,6 +3018,11 @@ export function App() {
   const filteredContextNodes = COLLECTION_CONTEXT_NODES.filter((node) =>
     node.label.toLowerCase().includes(contextFilter.trim().toLowerCase()),
   );
+  const headerTitle = !showAdvancedWorkspace
+    ? "Home"
+    : activeScreen === "all"
+      ? "Dashboard"
+      : SCREEN_TITLES[activeScreen];
 
   const contextPane = (forDrawer = false) => (
     <aside className={`collection-context-pane${contextPaneCollapsed && !forDrawer ? " collection-context-pane-collapsed" : ""}`} aria-label="Collection context pane">
@@ -3253,25 +3271,33 @@ export function App() {
             >
               Menu
             </button>
-            <strong>Runtime connected. UI foundation active.</strong>
-            <span className="cabinet-active-context-pill">Context: {activeContext.label}</span>
+            <div className="cabinet-page-header-copy">
+              <p aria-label="Current page title">{headerTitle}</p>
+              <p>Quick actions</p>
+            </div>
           </div>
-          <button
-            type="button"
-            aria-label="Toggle Chat Copilot"
-            onClick={() => setChatOpen((current) => !current)}
-          >
-            {chatOpen ? "Close Chat" : "Open Chat"}
-          </button>
-          <button
-            id="theme-toggle"
-            type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-          >
-            Toggle Theme
-          </button>
+          <div className="cabinet-topbar-actions">
+            <button
+              type="button"
+              aria-label="Toggle Chat Copilot"
+              onClick={() => setChatOpen((current) => !current)}
+            >
+              {chatOpen ? "Close Chat" : "Open Chat"}
+            </button>
+            <button
+              id="theme-toggle"
+              type="button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            >
+              Toggle Theme
+            </button>
+          </div>
         </header>
         <div className="cabinet-content-scroll">
+        <section className="cabinet-page-meta" aria-label="Page context">
+          <p>Runtime connected. UI workspace active.</p>
+          <p>Collection context: {activeContext.label}</p>
+        </section>
         {recoveryDiagnostics?.recovery_required ? (
           <section className="cabinet-card" role="alert" aria-label="Recovery required">
             <strong>Recovery required.</strong> Cabinet detected an incomplete previous session and recommends diagnostics review.

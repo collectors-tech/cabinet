@@ -325,6 +325,25 @@ test("left navigation switches visible advanced-workspace screens (desktop + mob
   await expect(page.getByText(/debug mode: disabled/i)).toBeVisible();
 });
 
+test("top header uses page title and quick actions, not runtime/context scaffold labels", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  const header = page.locator("header.page-header");
+  await expect(header.getByLabel(/current page title/i)).toHaveText(/dashboard/i);
+  await expect(header.getByText(/runtime connected\. ui foundation active\./i)).toHaveCount(0);
+  await expect(header.getByText(/context:/i)).toHaveCount(0);
+  await expect(header.getByRole("button", { name: /toggle chat copilot/i })).toBeVisible();
+  await expect(header.getByRole("button", { name: /toggle theme/i })).toBeVisible();
+
+  await page.getByRole("button", { name: /^collection$/i }).first().click();
+  await expect(header.getByLabel(/current page title/i)).toHaveText(/collection/i);
+});
+
 test("collection bulk edit, inline edit, photo staging, and shell scroll ownership", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: false });
   await page.addInitScript(() => {

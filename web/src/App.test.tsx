@@ -20,6 +20,22 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
   });
 
+  it("uses top header for page title and actions instead of scaffold runtime/context labels", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
+    );
+    render(<App />);
+
+    const header = document.querySelector("header.page-header");
+    expect(header).toBeTruthy();
+    expect(within(header as HTMLElement).getByLabelText(/current page title/i)).toHaveTextContent(/^home$/i);
+    expect(within(header as HTMLElement).queryByText(/runtime connected\. ui foundation active\./i)).not.toBeInTheDocument();
+    expect(within(header as HTMLElement).queryByText(/context:/i)).not.toBeInTheDocument();
+    expect(within(header as HTMLElement).getByRole("button", { name: /toggle chat copilot/i })).toBeInTheDocument();
+    expect(within(header as HTMLElement).getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
+  });
+
   it("uses fixed shell semantics with sticky topbar and scrolling content container", () => {
     vi.stubGlobal(
       "fetch",
