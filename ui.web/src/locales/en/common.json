@@ -11,5 +11,12 @@
   },
   "status": {
     "loading": "Loading..."
+  },
+  "search": {
+    "placeholder": "Search"
+  },
+  "workspace": {
+    "label": "Workspace DB",
+    "add": "Add workspace"
   }
 }

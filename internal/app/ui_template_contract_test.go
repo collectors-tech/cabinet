@@ -273,3 +273,42 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 		"Collection Browser",
 	})
 }
+
+func TestI18nShellSharedLabelsContract(t *testing.T) {
+	t.Parallel()
+
+	checkContains := func(path string, required []string, forbidden []string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		for _, token := range required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required i18n shell token: %s", path, token)
+			}
+		}
+		for _, token := range forbidden {
+			if strings.Contains(src, token) {
+				t.Fatalf("%s contains hardcoded shell text token: %s", path, token)
+			}
+		}
+	}
+
+	checkContains(
+		"../../ui.web/src/components/search.tsx",
+		[]string{"useTranslation", "common:search.placeholder"},
+		[]string{"placeholder = 'Search'"},
+	)
+	checkContains(
+		"../../ui.web/src/components/layout/team-switcher.tsx",
+		[]string{"useTranslation", "common:workspace.label", "common:workspace.add"},
+		[]string{"Teams", "Add team"},
+	)
+	checkContains(
+		"../../ui.web/src/locales/en/common.json",
+		[]string{"\"search\"", "\"workspace\""},
+		nil,
+	)
+}
