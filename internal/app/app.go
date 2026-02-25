@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -94,6 +97,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	cloudLeases := newCloudLeaseStore()
+	cloudEntitlements := newCloudEntitlementStore()
 
 	mux := http.NewServeMux()
 	var previousClean string
@@ -2164,6 +2168,9 @@ func New(cfg config.Config) (*App, error) {
 		if plan == "" {
 			plan = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_plan")))
 		}
+		if override, ok := cloudEntitlements.Get(userID); ok {
+			plan = override
+		}
 		if plan == "" {
 			plan = "free"
 		}
@@ -2174,6 +2181,43 @@ func New(cfg config.Config) (*App, error) {
 			"email":    email,
 			"plan":     plan,
 			"features": features,
+		})
+	})
+	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_body"}`, http.StatusBadRequest)
+			return
+		}
+		secret := strings.TrimSpace(os.Getenv("CABINET_CLERK_WEBHOOK_SECRET"))
+		if secret == "" {
+			secret = "dev-secret"
+		}
+		signature := strings.TrimSpace(r.Header.Get("X-Cabinet-Webhook-Signature"))
+		if !verifyWebhookSignature(secret, body, signature) {
+			http.Error(w, `{"error":"invalid_signature"}`, http.StatusUnauthorized)
+			return
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		userID, plan, err := clerkWebhookPlanTransition(payload)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_webhook_payload"}`, http.StatusBadRequest)
+			return
+		}
+		cloudEntitlements.Set(userID, plan)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user_id":  userID,
+			"plan":     plan,
+			"features": entitlementFeaturesFromPlan(plan),
 		})
 	})
 	mux.HandleFunc("/api/auth/cloud/lease/issue", func(w http.ResponseWriter, r *http.Request) {
@@ -2430,6 +2474,28 @@ type cloudLeaseStore struct {
 	leases map[string]cloudLease
 }
 
+type cloudEntitlementStore struct {
+	mu    sync.Mutex
+	plans map[string]string
+}
+
+func newCloudEntitlementStore() *cloudEntitlementStore {
+	return &cloudEntitlementStore{plans: map[string]string{}}
+}
+
+func (s *cloudEntitlementStore) Set(userID, plan string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.plans[strings.TrimSpace(userID)] = normalizePlan(plan)
+}
+
+func (s *cloudEntitlementStore) Get(userID string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	plan, ok := s.plans[strings.TrimSpace(userID)]
+	return plan, ok
+}
+
 func newCloudLeaseStore() *cloudLeaseStore {
 	return &cloudLeaseStore{leases: map[string]cloudLease{}}
 }
@@ -2495,6 +2561,48 @@ func durationFromSeconds(seconds int) time.Duration {
 		return 24 * time.Hour
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func verifyWebhookSignature(secret string, body []byte, signature string) bool {
+	if strings.TrimSpace(signature) == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write(body)
+	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(signature)))
+}
+
+func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		return "", "", fmt.Errorf("missing data")
+	}
+	userID := strings.TrimSpace(claimAsString(data, "user_id"))
+	if userID == "" {
+		customer, _ := data["customer"].(map[string]any)
+		userID = strings.TrimSpace(claimAsString(customer, "id"))
+	}
+	if userID == "" {
+		return "", "", fmt.Errorf("missing user_id")
+	}
+	plan := normalizePlan(claimAsString(data, "plan"))
+	if plan == "free" {
+		meta, _ := data["public_metadata"].(map[string]any)
+		plan = normalizePlan(claimAsString(meta, "cabinet_plan"))
+	}
+	if plan == "free" {
+		plan = normalizePlan(claimAsString(data, "cabinet_plan"))
+	}
+	return userID, plan, nil
+}
+
+func normalizePlan(plan string) string {
+	normalized := strings.TrimSpace(strings.ToLower(plan))
+	if normalized == "" {
+		return "free"
+	}
+	return normalized
 }
 
 func parseUnverifiedJWTPayload(token string) (map[string]any, error) {
