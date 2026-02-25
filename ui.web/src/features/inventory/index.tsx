@@ -1,8 +1,8 @@
-import { Tasks } from '@/features/tasks'
+import { Collection } from '@/features/collection'
 
 export function Inventory() {
   return (
-    <Tasks
+    <Collection
       title='Inventory'
       description='Manage collection items, grading status, packaging, and media.'
       routePath='/_authenticated/inventory/'

@@ -84,9 +84,10 @@ func TestUIMigratedScreensRouteBindingContract(t *testing.T) {
 			file: "../../ui.web/src/features/inventory/index.tsx",
 			forbidden: []string{
 				"/_authenticated/tasks/",
+				"from '@/features/tasks'",
 			},
 			required: []string{
-				"from '@/features/tasks'",
+				"from '@/features/collection'",
 			},
 		},
 		{
@@ -242,4 +243,33 @@ func TestLegacyTasksAppsRoutesRemovedContract(t *testing.T) {
 			t.Fatalf("legacy route file should be removed: %s", file)
 		}
 	}
+}
+
+func TestCollectionWorkspaceSemanticContract(t *testing.T) {
+	t.Parallel()
+
+	checkContains := func(path string, required []string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		for _, token := range required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required collection workspace token: %s", path, token)
+			}
+		}
+	}
+
+	checkContains("../../ui.web/src/features/inventory/index.tsx", []string{
+		"from '@/features/collection'",
+	})
+	checkContains("../../ui.web/src/features/collection/index.tsx", []string{
+		"Collection",
+		"Command Row",
+		"Summary Strip",
+		"Folders",
+		"Collection Browser",
+	})
 }
