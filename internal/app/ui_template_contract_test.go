@@ -205,3 +205,26 @@ func TestInventoryWishlistViewToggleContract(t *testing.T) {
 		}
 	}
 }
+
+func TestI18nBootstrapContract(t *testing.T) {
+	t.Parallel()
+
+	checkContains := func(path string, required []string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		for _, token := range required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required i18n token: %s", path, token)
+			}
+		}
+	}
+
+	checkContains("../../ui.web/src/main.tsx", []string{"./i18n"})
+	checkContains("../../ui.web/src/components/layout/app-sidebar.tsx", []string{"useTranslation"})
+	checkContains("../../ui.web/src/i18n/index.ts", []string{"initReactI18next", "i18next"})
+	checkContains("../../ui.web/src/locales/en/nav.json", []string{"Dashboard", "Inventory", "Wishlist"})
+}

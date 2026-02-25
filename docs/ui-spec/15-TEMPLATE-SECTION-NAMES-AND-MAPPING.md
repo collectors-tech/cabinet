@@ -71,9 +71,21 @@ Context: auth and error routes.
 
 ### Cabinet decision
 - Add explicit i18n framework integration during migration (`i18next` + `react-i18next`).
-- Initial locales:
-  - `en-AU` (default)
-  - `en-US` (secondary)
+- Bootstrap with one locale in v1:
+  - `en` (default and only active locale)
+- Store locale resources under:
+  - `ui.web/src/locales/{lang}/{namespace}.json`
+- Required namespaces:
+  - `common`
+  - `nav`
+  - `pages`
+
+### UI principles (mandatory)
+- No new hard-coded shell labels in components once i18n is wired.
+- All top-level shell labels (sidebar groups/items, page header primitives) must resolve through translation keys.
+- Translation keys must be stable and semantic (`groups.general`, `items.dashboard`), not presentation-dependent.
+- Unknown/missing keys must render safe default text (do not break navigation rendering).
+- Locale architecture must support adding new languages without structural refactor.
 
 ### Canonical naming
 - `Localization Layer`

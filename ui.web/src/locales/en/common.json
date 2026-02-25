@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "Cabinet"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "open": "Open",
+    "rows": "Rows",
+    "cards": "Cards"
+  },
+  "status": {
+    "loading": "Loading..."
+  }
+}

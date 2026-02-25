@@ -1,0 +1,21 @@
+{
+  "groups": {
+    "general": "General",
+    "other": "Other"
+  },
+  "items": {
+    "dashboard": "Dashboard",
+    "inventory": "Inventory",
+    "wishlist": "Wishlist",
+    "integrations": "Integrations",
+    "chats": "Chats",
+    "users": "Users",
+    "settings": "Settings",
+    "profile": "Profile",
+    "account": "Account",
+    "appearance": "Appearance",
+    "notifications": "Notifications",
+    "display": "Display",
+    "help-center": "Help Center"
+  }
+}

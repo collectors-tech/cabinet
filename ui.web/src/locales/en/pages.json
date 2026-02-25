@@ -1,0 +1,12 @@
+{
+  "dashboard": {
+    "title": "Home",
+    "subtitle": "What needs action now in your collection."
+  },
+  "inventory": {
+    "title": "Inventory"
+  },
+  "wishlist": {
+    "title": "Wishlist"
+  }
+}
