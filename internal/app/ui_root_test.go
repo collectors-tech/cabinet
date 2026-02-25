@@ -25,6 +25,9 @@ func TestRootServesAppShell(t *testing.T) {
 	if !strings.Contains(body, "<script type=\"module\"") {
 		t.Fatalf("expected SPA entry script in root page")
 	}
+	if !strings.Contains(body, "<title>Cabinet Admin</title>") {
+		t.Fatalf("expected admin template title in root page")
+	}
 }
 
 func TestAPIDocsRoutes(t *testing.T) {

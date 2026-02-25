@@ -26,16 +26,24 @@ go run ./cmd/cabinet
 - `http://127.0.0.1:17880/api/runtime`
 
 ## Frontend Development
-- Frontend source: `web/`
-- Embedded output: `internal/ui/static/`
+- Legacy frontend source: `web/`
+- Template baseline frontend source: `ui.web/` (shadcn-admin aligned)
+- Embedded output served by Go: `internal/ui/static/`
 
 Commands:
+
+```powershell
+cd ui.web
+npm install
+npm run build
+```
+
+Legacy frontend checks remain available in `web/`:
 
 ```powershell
 cd web
 npm install
 npm run test
-npm run build
 npm run e2e:smoke
 npm run e2e:playwright
 ```
