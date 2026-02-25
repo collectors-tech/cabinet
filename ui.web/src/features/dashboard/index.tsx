@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -6,215 +7,212 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Analytics } from './components/analytics'
-import { Overview } from './components/overview'
-import { RecentSales } from './components/recent-sales'
+
+type DashboardCard = {
+  title: string
+  value: number
+  link: string
+}
+
+type DashboardSummary = {
+  new_discoveries: number
+  wishlist_hits: number
+  price_drops: number
+  low_stock_discoveries: number
+  restocks: number
+  recently_added: string[]
+  total_items: number
+  total_instances: number
+  estimated_value: number
+  cards: DashboardCard[]
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value)
+}
 
 export function Dashboard() {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/dashboard')
+      if (!response.ok) {
+        throw new Error(`dashboard_fetch_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as DashboardSummary
+      setSummary(payload)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'dashboard_fetch_failed'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadDashboard()
+  }, [loadDashboard])
+
+  const metricCards = useMemo(() => {
+    if (!summary) {
+      return []
+    }
+    return [
+      { title: 'Inventory Items', value: `${summary.total_items}` },
+      { title: 'Inventory Units', value: `${summary.total_instances}` },
+      { title: 'Wishlist Hits', value: `${summary.wishlist_hits}` },
+      { title: 'Estimated Value', value: formatCurrency(summary.estimated_value) },
+    ]
+  }, [summary])
+
   return (
     <>
-      {/* ===== Top Heading ===== */}
-      <Header>
-        <TopNav links={topNav} />
+      <Header fixed>
+        <Search />
         <div className='ms-auto flex items-center space-x-4'>
-          <Search />
           <ThemeSwitch />
           <ConfigDrawer />
           <ProfileDropdown />
         </div>
       </Header>
 
-      {/* ===== Main ===== */}
-      <Main>
-        <div className='mb-2 flex items-center justify-between space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
-          <div className='flex items-center space-x-2'>
-            <Button>Download</Button>
+      <Main className='space-y-6'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>Home</h1>
+            <p className='text-muted-foreground'>
+              What needs action now in your collection.
+            </p>
           </div>
+          <Button onClick={() => void loadDashboard()} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Refresh Dashboard'}
+          </Button>
         </div>
-        <Tabs
-          orientation='vertical'
-          defaultValue='overview'
-          className='space-y-4'
-        >
-          <div className='w-full overflow-x-auto pb-2'>
-            <TabsList>
-              <TabsTrigger value='overview'>Overview</TabsTrigger>
-              <TabsTrigger value='analytics'>Analytics</TabsTrigger>
-              <TabsTrigger value='reports' disabled>
-                Reports
-              </TabsTrigger>
-              <TabsTrigger value='notifications' disabled>
-                Notifications
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value='overview' className='space-y-4'>
-            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Total Revenue
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
+
+        {error ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Dashboard unavailable</CardTitle>
+              <CardDescription>{error}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant='outline' onClick={() => void loadDashboard()}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+          {loading
+            ? [1, 2, 3, 4].map((slot) => (
+                <Card key={slot}>
+                  <CardHeader className='pb-2'>
+                    <CardTitle className='text-sm font-medium'>
+                      Loading...
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold'>--</div>
+                  </CardContent>
+                </Card>
+              ))
+            : metricCards.map((card) => (
+                <Card key={card.title}>
+                  <CardHeader className='pb-2'>
+                    <CardTitle className='text-sm font-medium'>
+                      {card.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold'>{card.value}</div>
+                  </CardContent>
+                </Card>
+              ))}
+        </div>
+
+        <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
+          <Card className='col-span-1 lg:col-span-4'>
+            <CardHeader>
+              <CardTitle>What needs attention now</CardTitle>
+              <CardDescription>
+                New discoveries, watch-list hits, and price movement.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3'>
+              {loading ? (
+                <p className='text-sm text-muted-foreground'>
+                  Loading activity signals...
+                </p>
+              ) : summary?.cards?.length ? (
+                summary.cards.map((card) => (
+                  <div
+                    key={card.title}
+                    className='flex items-center justify-between rounded-md border p-3'
                   >
-                    <path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>$45,231.89</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +20.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Subscriptions
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' />
-                    <circle cx='9' cy='7' r='4' />
-                    <path d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+2350</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +180.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Sales</CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <rect width='20' height='14' x='2' y='5' rx='2' />
-                    <path d='M2 10h20' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+12,234</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +19% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Active Now
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <path d='M22 12h-4l-3 9L9 3l-3 9H2' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+573</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +201 since last hour
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
-              <Card className='col-span-1 lg:col-span-4'>
-                <CardHeader>
-                  <CardTitle>Overview</CardTitle>
-                </CardHeader>
-                <CardContent className='ps-2'>
-                  <Overview />
-                </CardContent>
-              </Card>
-              <Card className='col-span-1 lg:col-span-3'>
-                <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
-                  <CardDescription>
-                    You made 265 sales this month.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentSales />
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          <TabsContent value='analytics' className='space-y-4'>
-            <Analytics />
-          </TabsContent>
-        </Tabs>
+                    <div>
+                      <div className='text-sm font-medium'>{card.title}</div>
+                      <div className='text-xs text-muted-foreground'>
+                        {card.value} pending
+                      </div>
+                    </div>
+                    <Button asChild variant='outline' size='sm'>
+                      <a href={card.link}>Open</a>
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <p className='text-sm text-muted-foreground'>
+                  No action items right now.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className='col-span-1 lg:col-span-3'>
+            <CardHeader>
+              <CardTitle>Recently added</CardTitle>
+              <CardDescription>Latest items added to inventory.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className='text-sm text-muted-foreground'>Loading items...</p>
+              ) : summary?.recently_added?.length ? (
+                <ul className='space-y-2'>
+                  {summary.recently_added.map((item) => (
+                    <li
+                      key={item}
+                      className='truncate rounded-md border px-3 py-2 text-sm'
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className='text-sm text-muted-foreground'>
+                  No recently added items yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </Main>
     </>
   )
 }
-
-const topNav = [
-  {
-    title: 'Overview',
-    href: 'dashboard/overview',
-    isActive: true,
-    disabled: false,
-  },
-  {
-    title: 'Customers',
-    href: 'dashboard/customers',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Products',
-    href: 'dashboard/products',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Settings',
-    href: 'dashboard/settings',
-    isActive: false,
-    disabled: true,
-  },
-]

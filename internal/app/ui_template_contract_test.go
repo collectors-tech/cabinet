@@ -147,3 +147,39 @@ func TestUIMigratedScreensRouteBindingContract(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardUsesRuntimeSummaryContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/dashboard/index.tsx")
+	if err != nil {
+		t.Fatalf("read dashboard feature: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"/api/dashboard",
+		"new_discoveries",
+		"wishlist_hits",
+		"price_drops",
+		"total_items",
+		"total_instances",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("dashboard missing required runtime token: %s", token)
+		}
+	}
+
+	forbidden := []string{
+		"Total Revenue",
+		"Recent Sales",
+		"Customers",
+		"Products",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("dashboard contains stale template token: %s", token)
+		}
+	}
+}
