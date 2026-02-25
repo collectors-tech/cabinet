@@ -303,6 +303,11 @@ Use these labels exactly in issues, specs, and components:
 Applies to:
 - `Inventory Workspace`
 - `Wishlist Workspace`
+- `Integrations` (table/list variants)
+
+Scope rule:
+- Drawer + URL selection behavior is mandatory across all table-based screens.
+- Lightbox/carousel behavior is only enabled for media-bearing tables.
 
 ### 8.1 Base interaction model
 - Use split interaction model for fast/predictable behavior.
@@ -319,7 +324,7 @@ Applies to:
   - `?selected=<id>`
 - Refresh/back/forward preserves selected context.
 
-### 8.3 Thumbnail click opens Lightbox
+### 8.3 Thumbnail click opens Lightbox (media-bearing tables only)
 - Clicking row image opens modal `Media Lightbox` (not drawer).
 - Left/right navigates adjacent items in current filtered/sorted result set.
 - Keyboard:
@@ -354,3 +359,7 @@ Applies to:
 ### 8.8 Hidden/deleted behavior
 - `Deleted` rows are hidden by default and shown via status filter.
 - If direct URL references hidden/deleted row, open details with status warning banner.
+
+### 8.9 Integrations-specific application
+- `Integrations` rows follow the same row click + drawer + `?selected=<id>` contract.
+- Lightbox is disabled for integrations unless a media thumbnail column is explicitly introduced in that screen.
