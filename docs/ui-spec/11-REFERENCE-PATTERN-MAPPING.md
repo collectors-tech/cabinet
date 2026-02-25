@@ -1,12 +1,6 @@
-# 11 - Sortly Pattern Mapping (Semantic + Workflow)
+# 11 - Reference Pattern Mapping (Semantic + Workflow)
 
-This document converts reviewed Sortly references into strict Cabinet requirements.
-
-Reviewed references:
-- https://help.sortly.com/hc/en-us/articles/360036515592-Sortly-Product-Overview
-- https://help.sortly.com/hc/en-us/articles/360030575572-Adding-Photos-to-Items-or-Folders
-- https://help.sortly.com/hc/en-us/articles/360001995132-How-to-Update-Your-Inventory
-- https://help.sortly.com/hc/en-us/articles/360016384492-Bulk-Edit-Items-and-Folders
+This document converts reviewed competitor inventory UX patterns into strict Cabinet requirements.
 
 ## 1. Reference Semantic Structure (from overview screenshot)
 
@@ -51,7 +45,7 @@ main.app-shell
 5. Photo-first inventory trust
 - Photo workflows must be obvious and resilient: add, preview, set primary, retry on failure.
 
-## 3. Workflow Requirements from Sortly Help Flows
+## 3. Workflow Requirements from Competitor Help Flows
 
 ### 3.1 Adding Photos
 - Entry points:
