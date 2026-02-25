@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2127,6 +2128,51 @@ func New(cfg config.Config) (*App, error) {
 		authService.LockUnlockedSession(req.SessionToken)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
+	mux.HandleFunc("/api/auth/cloud/session/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Provider string `json:"provider"`
+			Token    string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
+			return
+		}
+		claims, err := parseUnverifiedJWTPayload(req.Token)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_token"}`, http.StatusBadRequest)
+			return
+		}
+		userID := strings.TrimSpace(claimAsString(claims, "sub"))
+		if userID == "" {
+			http.Error(w, `{"error":"invalid_token_subject"}`, http.StatusBadRequest)
+			return
+		}
+		email := strings.TrimSpace(claimAsString(claims, "email"))
+		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
+		if plan == "" {
+			plan = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_plan")))
+		}
+		if plan == "" {
+			plan = "free"
+		}
+		features := entitlementFeaturesFromPlan(plan)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "clerk",
+			"user_id":  userID,
+			"email":    email,
+			"plan":     plan,
+			"features": features,
+		})
+	})
 
 	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !requiresUnlockedSession(r) {
@@ -2254,6 +2300,46 @@ func sessionTokenFromRequest(r *http.Request) string {
 		return strings.TrimSpace(authz[7:])
 	}
 	return strings.TrimSpace(r.URL.Query().Get("session_token"))
+}
+
+func parseUnverifiedJWTPayload(token string) (map[string]any, error) {
+	parts := strings.Split(strings.TrimSpace(token), ".")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid token format")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("decode payload: %w", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("decode claims: %w", err)
+	}
+	return claims, nil
+}
+
+func claimAsString(claims map[string]any, key string) string {
+	raw, ok := claims[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	switch v := raw.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func entitlementFeaturesFromPlan(plan string) []string {
+	switch strings.TrimSpace(strings.ToLower(plan)) {
+	case "pro", "paid", "plus":
+		return []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}
+	default:
+		return []string{"collection_core"}
+	}
 }
 
 func runtimeBuildMetadata() (string, string) {

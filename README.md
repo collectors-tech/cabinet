@@ -112,6 +112,7 @@ go run ./cmd/cabinet
 - `POST /api/auth/recovery/reset/begin` with `{ "profile_id": "<id>", "passphrase": "..." }`
 - `POST /api/auth/session/validate` with `{ "session_token": "..." }`
 - `POST /api/auth/session/lock` with `{ "session_token": "..." }`
+- `POST /api/auth/cloud/session/bootstrap` with `{ "provider": "clerk", "token": "<jwt>" }`
 - `POST /api/onboarding/sample-data`
 
 ## Environment Variables
@@ -128,6 +129,7 @@ go run ./cmd/cabinet
 - `CABINET_WEBAUTHN_ORIGIN` default: `http://127.0.0.1:17880`
 - `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
+- `VITE_CLERK_PUBLISHABLE_KEY` enables Clerk sign-in gate and cloud entitlement bootstrap in the web UI
 
 eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
 - `ebay_bearer_token`

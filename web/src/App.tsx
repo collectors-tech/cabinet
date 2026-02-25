@@ -7,6 +7,7 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
+import { resolveEntitlementState } from "./cloud-auth";
 import {
   AIScreen,
   BarcodesScreen,
@@ -144,9 +145,28 @@ function detectInitialTheme(): Theme {
   return "light";
 }
 
+function detectInitialCloudEntitlement() {
+  const plan = localStorage.getItem("cabinet.cloud.plan") || "free";
+  const rawFeatures = localStorage.getItem("cabinet.cloud.features");
+  let features: string[] = [];
+  if (rawFeatures) {
+    try {
+      const parsed = JSON.parse(rawFeatures) as unknown;
+      if (Array.isArray(parsed)) {
+        features = parsed.map((entry) => String(entry));
+      }
+    } catch {
+      features = [];
+    }
+  }
+  return resolveEntitlementState({ plan, features });
+}
+
 export function App() {
   const ONBOARDING_STEPS = ["Welcome", "Identity", "Starter Data", "First Item", "Preferences"] as const;
+  const cloudAuthEnabled = Boolean((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim()) && !import.meta.env.VITEST;
   const [theme, setTheme] = useState<Theme>(detectInitialTheme);
+  const [cloudEntitlement, setCloudEntitlement] = useState(detectInitialCloudEntitlement);
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [activeProfile, setActiveProfile] = useState<{ id: string; name: string } | null>(null);
   const [profileStorage, setProfileStorage] = useState<{ db_path?: string; media_dir?: string } | null>(null);
@@ -328,6 +348,18 @@ export function App() {
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem("cabinet.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const refreshEntitlement = () => {
+      setCloudEntitlement(detectInitialCloudEntitlement());
+    };
+    window.addEventListener("storage", refreshEntitlement);
+    window.addEventListener("cabinet-cloud-entitlement-updated", refreshEntitlement);
+    return () => {
+      window.removeEventListener("storage", refreshEntitlement);
+      window.removeEventListener("cabinet-cloud-entitlement-updated", refreshEntitlement);
+    };
+  }, []);
 
   useEffect(() => {
     if (!mobileNavOpen) {
@@ -2932,6 +2964,9 @@ export function App() {
       }
     : undefined;
   const showAdvancedWorkspace = Boolean(activeProfile && advancedWorkspace);
+  const aiAssistUnlocked = !cloudAuthEnabled || cloudEntitlement.canUse.aiAssist;
+  const pricingUnlocked = !cloudAuthEnabled || cloudEntitlement.canUse.priceTracking;
+  const scannerAutomationUnlocked = !cloudAuthEnabled || cloudEntitlement.canUse.scannerAutomation;
   const barcodeMatchStatus = barcodeLookupMatches.length > 0 ? "matched" : "no_match";
   function stockStateLabel(state?: string) {
     const normalized = (state || "").trim().toLowerCase();
@@ -4133,13 +4168,14 @@ export function App() {
                 <button type="button" onClick={runScannerNow}>
                   Run Now
                 </button>{" "}
-                <button type="button" onClick={runScheduledScans}>
+                <button type="button" onClick={runScheduledScans} disabled={!scannerAutomationUnlocked}>
                   Run Scheduled
                 </button>{" "}
                 <button type="button" onClick={loadCandidates}>
                   Load Candidates
                 </button>
               </div>
+              {!scannerAutomationUnlocked ? <p>Scanner automation is locked. Upgrade your billing plan to Pro.</p> : null}
               <div>
                 <button type="button" onClick={loadScannerFailures}>
                   Load Scanner Failures
@@ -4395,31 +4431,36 @@ export function App() {
                 <button type="button" onClick={createWishlistEntry}>
                   Add Wishlist Item
                 </button>{" "}
-                <button type="button" onClick={trackPricingItem}>
+                <button type="button" onClick={trackPricingItem} disabled={!pricingUnlocked}>
                   Track Pricing
                 </button>{" "}
-                <button type="button" onClick={loadPricingGraph}>
+                <button type="button" onClick={loadPricingGraph} disabled={!pricingUnlocked}>
                   Load Pricing Graph
                 </button>{" "}
-                <button type="button" onClick={loadPricingBySource}>
+                <button type="button" onClick={loadPricingBySource} disabled={!pricingUnlocked}>
                   Load Pricing Sources
                 </button>{" "}
-                <button type="button" onClick={loadPricingHistory}>
+                <button type="button" onClick={loadPricingHistory} disabled={!pricingUnlocked}>
                   Load Pricing History
                 </button>{" "}
-                <button type="button" onClick={loadPricingStats}>
+                <button type="button" onClick={loadPricingStats} disabled={!pricingUnlocked}>
                   Load Pricing Stats
                 </button>{" "}
-                <button type="button" onClick={loadPricingTrend}>
+                <button type="button" onClick={loadPricingTrend} disabled={!pricingUnlocked}>
                   Load Pricing Trend
                 </button>{" "}
-                <button type="button" onClick={runPricingSnapshot}>
+                <button type="button" onClick={runPricingSnapshot} disabled={!pricingUnlocked}>
                   Run Pricing Snapshot
                 </button>{" "}
-                <button type="button" onClick={() => exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history")}>
+                <button
+                  type="button"
+                  onClick={() => exportText(`/api/pricing/history/export?item_id=${encodeURIComponent(selectedItemID)}`, "pricing_history")}
+                  disabled={!pricingUnlocked}
+                >
                   Export Pricing History
                 </button>
               </div>
+              {!pricingUnlocked ? <p>Price tracking is locked. Upgrade your billing plan to Pro.</p> : null}
               <div>
                 <input
                   value={wishlistDraft.item_id}
@@ -4708,18 +4749,22 @@ export function App() {
           {showAdvancedWorkspace && (activeScreen === "all" || activeScreen === "ai") ? (
             <AIScreen id="ai">
               <h3>AI Assist</h3>
-              <AIAssistForms
-                aiEnabled={aiEnabled}
-                aiError={aiError}
-                suggestion={aiSuggestion}
-                lastAction={aiLastAction}
-                onToggle={toggleAI}
-                onTest={testAI}
-                onSuggestTitle={suggestFromTitle}
-                onSuggestPhoto={suggestFromPhoto}
-                onApplySuggestion={applySuggestion}
-                onRetry={retryLastAIAction}
-              />
+              {!aiAssistUnlocked ? (
+                <p>AI Assist is locked. Upgrade your billing plan to Pro.</p>
+              ) : (
+                <AIAssistForms
+                  aiEnabled={aiEnabled}
+                  aiError={aiError}
+                  suggestion={aiSuggestion}
+                  lastAction={aiLastAction}
+                  onToggle={toggleAI}
+                  onTest={testAI}
+                  onSuggestTitle={suggestFromTitle}
+                  onSuggestPhoto={suggestFromPhoto}
+                  onApplySuggestion={applySuggestion}
+                  onRetry={retryLastAIAction}
+                />
+              )}
             </AIScreen>
           ) : null}
           {showAdvancedWorkspace && activeScreen === "diagnostics" ? (

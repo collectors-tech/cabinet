@@ -44,6 +44,17 @@ body {
   overflow: hidden;
 }
 
+.cabinet-cloud-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.cabinet-cloud-gate .cabinet-card {
+  width: min(560px, 100%);
+}
+
 .cabinet-shell-nav-collapsed {
   grid-template-columns: 88px 260px 1fr;
 }

@@ -17,6 +17,7 @@
     "e2e:smoke": "start-server-and-test serve:go http://127.0.0.1:17880 e2e:run-smoke"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.0",
