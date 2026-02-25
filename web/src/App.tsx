@@ -313,6 +313,7 @@ export function App() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [contextPaneCollapsed, setContextPaneCollapsed] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
+  const [navEditDraft, setNavEditDraft] = useState<NavItemConfig[] | null>(null);
   const [activeContextID, setActiveContextID] = useState<string>("all-items");
   const [contextFilter, setContextFilter] = useState("");
   const [navConfig, setNavConfig] = useState<NavItemConfig[]>(() => NAV_ITEMS.map((item) => ({ screen: item.screen, visible: true })));
@@ -448,6 +449,7 @@ export function App() {
     const savedContextCollapsed = localStorage.getItem(contextPaneCollapsedStorageKey(profileID));
     setContextPaneCollapsed(savedContextCollapsed === "1" || savedContextCollapsed?.toLowerCase() === "true");
     setNavEditMode(false);
+    setNavEditDraft(null);
   }, [activeProfile?.id]);
 
   useEffect(() => {
@@ -2967,6 +2969,15 @@ export function App() {
       return { ...definition, visible: cfg.visible !== false };
     })
     .filter((item): item is NavItemDefinition & { visible: boolean } => Boolean(item));
+  const editorOrderedNav = (navEditDraft ?? navConfig)
+    .map((cfg) => {
+      const definition = NAV_ITEMS.find((item) => item.screen === cfg.screen);
+      if (!definition) {
+        return null;
+      }
+      return { ...definition, visible: cfg.visible !== false };
+    })
+    .filter((item): item is NavItemDefinition & { visible: boolean } => Boolean(item));
   const visibleNav = orderedNav.filter((item) => item.visible);
 
   useEffect(() => {
@@ -2980,16 +2991,18 @@ export function App() {
   }, [activeScreen, showAdvancedWorkspace, visibleNav]);
 
   function moveNavItem(screen: NavScreen, direction: "up" | "down") {
-    setNavConfig((current) => {
-      const index = current.findIndex((entry) => entry.screen === screen);
+    setNavEditDraft((current) => {
+      const source = current ?? navConfig;
+      const currentConfig = source.map((entry) => ({ ...entry }));
+      const index = currentConfig.findIndex((entry) => entry.screen === screen);
       if (index < 0) {
-        return current;
+        return currentConfig;
       }
       const nextIndex = direction === "up" ? index - 1 : index + 1;
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current;
+      if (nextIndex < 0 || nextIndex >= currentConfig.length) {
+        return currentConfig;
       }
-      const next = [...current];
+      const next = [...currentConfig];
       const [moved] = next.splice(index, 1);
       next.splice(nextIndex, 0, moved);
       return next;
@@ -2997,9 +3010,11 @@ export function App() {
   }
 
   function toggleNavVisibility(screen: NavScreen) {
-    setNavConfig((current) => {
-      const visibleCount = current.filter((entry) => entry.visible !== false).length;
-      return current.map((entry) => {
+    setNavEditDraft((current) => {
+      const source = current ?? navConfig;
+      const currentConfig = source.map((entry) => ({ ...entry }));
+      const visibleCount = currentConfig.filter((entry) => entry.visible !== false).length;
+      return currentConfig.map((entry) => {
         if (entry.screen !== screen) {
           return entry;
         }
@@ -3011,14 +3026,23 @@ export function App() {
     });
   }
 
-  function toggleNavEdit() {
-    setNavEditMode((current) => {
-      const next = !current;
-      if (next) {
-        setNavCollapsed(false);
-      }
-      return next;
-    });
+  function beginNavEdit() {
+    setNavCollapsed(false);
+    setNavEditDraft(navConfig.map((entry) => ({ ...entry })));
+    setNavEditMode(true);
+  }
+
+  function saveNavEdit() {
+    if (navEditDraft) {
+      setNavConfig(navEditDraft.map((entry) => ({ ...entry })));
+    }
+    setNavEditDraft(null);
+    setNavEditMode(false);
+  }
+
+  function cancelNavEdit() {
+    setNavEditDraft(null);
+    setNavEditMode(false);
   }
 
   const navLinks = (forDrawer = false) =>
@@ -3189,20 +3213,31 @@ export function App() {
         {navEditMode ? (
           <section className="cabinet-nav-editor" aria-label="Nav main editor">
             <ul>
-              {orderedNav.map((item, index) => (
+              {editorOrderedNav.map((item, index) => (
                 <li key={item.screen}>
                   <span>{item.label}</span>
                   <div>
-                    <button type="button" aria-label={`Move ${item.label} up`} onClick={() => moveNavItem(item.screen, "up")} disabled={index === 0}>
-                      Up
+                    <button
+                      type="button"
+                      className="cabinet-nav-editor-arrow"
+                      aria-label={`Move ${item.label} up`}
+                      onClick={() => moveNavItem(item.screen, "up")}
+                      disabled={index === 0}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 6l-6 6h12l-6-6Z" fill="currentColor" />
+                      </svg>
                     </button>
                     <button
                       type="button"
+                      className="cabinet-nav-editor-arrow"
                       aria-label={`Move ${item.label} down`}
                       onClick={() => moveNavItem(item.screen, "down")}
-                      disabled={index === orderedNav.length - 1}
+                      disabled={index === editorOrderedNav.length - 1}
                     >
-                      Down
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 18l6-6H6l6 6Z" fill="currentColor" />
+                      </svg>
                     </button>
                     <button
                       type="button"
@@ -3230,18 +3265,33 @@ export function App() {
         ) : null}
         {!navEditMode ? <nav className="nav-main">{navLinks()}</nav> : null}
         <div className="cabinet-nav-edit-row">
-          <button type="button" aria-label={navEditMode ? "Finish nav main editing" : "Edit nav main"} onClick={toggleNavEdit}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17v3Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          {navEditMode ? (
+            <div className="cabinet-nav-edit-actions" aria-label="Nav main edit actions">
+              <button type="button" aria-label="Save nav main edits" onClick={saveNavEdit}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button type="button" aria-label="Cancel nav main edits" onClick={cancelNavEdit}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <button type="button" aria-label="Edit nav main" onClick={beginNavEdit}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17v3Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="cabinet-sidebar-meta" aria-label="App build metadata">
           <p className="cabinet-runtime-status">Runtime connected. UI workspace active.</p>

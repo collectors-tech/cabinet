@@ -418,6 +418,29 @@ test("collection bulk edit, inline edit, photo staging, and shell scroll ownersh
   expect(firstAfter).not.toBe(firstBefore);
 });
 
+test("nav editor uses icon arrows and supports save/cancel controls", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await page.getByRole("button", { name: /edit nav main/i }).click();
+  const moveDown = page.getByRole("button", { name: /move dashboard down/i });
+  await expect(moveDown.locator("svg")).toBeVisible();
+  await moveDown.click();
+  await page.getByRole("button", { name: /save nav main edits/i }).click();
+
+  const mainNav = page.locator("aside.primary-nav nav.nav-main");
+  await expect(mainNav.getByRole("button").first()).toHaveText(/collection/i);
+
+  await page.getByRole("button", { name: /edit nav main/i }).click();
+  await page.getByRole("button", { name: /hide collection/i }).click();
+  await page.getByRole("button", { name: /cancel nav main edits/i }).click();
+  await expect(mainNav.getByRole("button", { name: /^collection$/i })).toBeVisible();
+});
+
 test("collection command bar supports summarize toggle and view controls", async ({ page }) => {
   await installWizardMocks(page, { requiresRegistration: false });
   await page.addInitScript(() => {

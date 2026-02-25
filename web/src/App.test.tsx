@@ -358,18 +358,55 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
     expect(screen.getByLabelText(/nav main editor/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^dashboard$/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /move dashboard down/i }));
-    fireEvent.click(screen.getByRole("button", { name: /finish nav main editing/i }));
+    const moveDown = screen.getByRole("button", { name: /move dashboard down/i });
+    expect(moveDown.querySelector("svg")).toBeTruthy();
+    fireEvent.click(moveDown);
+    fireEvent.click(screen.getByRole("button", { name: /save nav main edits/i }));
 
     const navMainAfterMove = screen.getAllByRole("navigation")[0];
     expect(within(navMainAfterMove).getAllByRole("button")[0]).toHaveAccessibleName("Collection");
 
     fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
     fireEvent.click(screen.getByRole("button", { name: /hide collection/i }));
-    fireEvent.click(screen.getByRole("button", { name: /finish nav main editing/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save nav main edits/i }));
 
     const navMainAfterHide = screen.getAllByRole("navigation")[0];
     expect(within(navMainAfterHide).queryByRole("button", { name: /^collection$/i })).not.toBeInTheDocument();
+  });
+
+  it("cancels nav edits and restores previous nav configuration", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /edit nav main/i }));
+    fireEvent.click(screen.getByRole("button", { name: /hide collection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancel nav main edits/i }));
+
+    const navMain = screen.getAllByRole("navigation")[0];
+    expect(within(navMain).getByRole("button", { name: /^collection$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/nav main editor/i)).not.toBeInTheDocument();
   });
 
   it("renders semantic collection browser base layout in advanced workspace", async () => {

@@ -232,6 +232,11 @@ body {
   cursor: pointer;
 }
 
+.cabinet-nav-edit-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
 .cabinet-sidebar nav {
   display: grid;
   gap: 8px;
@@ -373,6 +378,16 @@ body {
   padding: 4px 8px;
   font: inherit;
   cursor: pointer;
+}
+
+.cabinet-nav-editor-arrow {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
 }
 
 .cabinet-nav-editor-eye {
