@@ -228,3 +228,18 @@ func TestI18nBootstrapContract(t *testing.T) {
 	checkContains("../../ui.web/src/i18n/index.ts", []string{"initReactI18next", "i18next"})
 	checkContains("../../ui.web/src/locales/en/nav.json", []string{"Dashboard", "Inventory", "Wishlist"})
 }
+
+func TestLegacyTasksAppsRoutesRemovedContract(t *testing.T) {
+	t.Parallel()
+
+	legacyFiles := []string{
+		"../../ui.web/src/routes/_authenticated/tasks/index.tsx",
+		"../../ui.web/src/routes/_authenticated/apps/index.tsx",
+	}
+
+	for _, file := range legacyFiles {
+		if _, err := os.Stat(file); err == nil {
+			t.Fatalf("legacy route file should be removed: %s", file)
+		}
+	}
+}
