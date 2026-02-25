@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/collectors-tech/cabinet/internal/ai"
@@ -91,6 +93,7 @@ func New(cfg config.Config) (*App, error) {
 		conn.Close()
 		return nil, err
 	}
+	cloudLeases := newCloudLeaseStore()
 
 	mux := http.NewServeMux()
 	var previousClean string
@@ -2173,6 +2176,119 @@ func New(cfg config.Config) (*App, error) {
 			"features": features,
 		})
 	})
+	mux.HandleFunc("/api/auth/cloud/lease/issue", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Provider        string `json:"provider"`
+			Token           string `json:"token"`
+			DurationSeconds int    `json:"duration_seconds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(strings.ToLower(req.Provider)) != "clerk" {
+			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
+			return
+		}
+		claims, err := parseUnverifiedJWTPayload(req.Token)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_token"}`, http.StatusBadRequest)
+			return
+		}
+		userID := strings.TrimSpace(claimAsString(claims, "sub"))
+		if userID == "" {
+			http.Error(w, `{"error":"invalid_token_subject"}`, http.StatusBadRequest)
+			return
+		}
+		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
+		if plan == "" {
+			plan = "free"
+		}
+		lease, err := cloudLeases.Issue(userID, plan, durationFromSeconds(req.DurationSeconds))
+		if err != nil {
+			http.Error(w, `{"error":"lease_issue_failed"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"lease_token": lease.Token,
+			"user_id":     lease.UserID,
+			"plan":        lease.Plan,
+			"features":    entitlementFeaturesFromPlan(lease.Plan),
+			"expires_at":  lease.ExpiresAt.UTC().Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/api/auth/cloud/lease/renew", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			LeaseToken      string `json:"lease_token"`
+			DurationSeconds int    `json:"duration_seconds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		lease, err := cloudLeases.Renew(strings.TrimSpace(req.LeaseToken), durationFromSeconds(req.DurationSeconds))
+		if err != nil {
+			http.Error(w, `{"error":"lease_expired"}`, http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"lease_token": lease.Token,
+			"user_id":     lease.UserID,
+			"plan":        lease.Plan,
+			"features":    entitlementFeaturesFromPlan(lease.Plan),
+			"expires_at":  lease.ExpiresAt.UTC().Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/api/auth/cloud/lease/validate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		token := strings.TrimSpace(r.URL.Query().Get("lease_token"))
+		lease, err := cloudLeases.Validate(token)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{"valid": false})
+			return
+		}
+		remaining := int(time.Until(lease.ExpiresAt).Seconds())
+		if remaining < 0 {
+			remaining = 0
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"valid":             true,
+			"user_id":           lease.UserID,
+			"plan":              lease.Plan,
+			"expires_at":        lease.ExpiresAt.UTC().Format(time.RFC3339),
+			"seconds_remaining": remaining,
+		})
+	})
+	mux.HandleFunc("/api/auth/cloud/offline/protected", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		token := strings.TrimSpace(r.Header.Get("X-Cabinet-Lease"))
+		if token == "" {
+			token = strings.TrimSpace(r.URL.Query().Get("lease_token"))
+		}
+		if _, err := cloudLeases.Validate(token); err != nil {
+			http.Error(w, `{"error":"lease_expired"}`, http.StatusLocked)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
 
 	protectedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !requiresUnlockedSession(r) {
@@ -2300,6 +2416,85 @@ func sessionTokenFromRequest(r *http.Request) string {
 		return strings.TrimSpace(authz[7:])
 	}
 	return strings.TrimSpace(r.URL.Query().Get("session_token"))
+}
+
+type cloudLease struct {
+	Token     string
+	UserID    string
+	Plan      string
+	ExpiresAt time.Time
+}
+
+type cloudLeaseStore struct {
+	mu     sync.Mutex
+	leases map[string]cloudLease
+}
+
+func newCloudLeaseStore() *cloudLeaseStore {
+	return &cloudLeaseStore{leases: map[string]cloudLease{}}
+}
+
+func (s *cloudLeaseStore) Issue(userID, plan string, ttl time.Duration) (cloudLease, error) {
+	token, err := randomToken(24)
+	if err != nil {
+		return cloudLease{}, err
+	}
+	lease := cloudLease{
+		Token:     token,
+		UserID:    strings.TrimSpace(userID),
+		Plan:      strings.TrimSpace(strings.ToLower(plan)),
+		ExpiresAt: time.Now().Add(ttl),
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.leases[token] = lease
+	return lease, nil
+}
+
+func (s *cloudLeaseStore) Validate(token string) (cloudLease, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lease, ok := s.leases[strings.TrimSpace(token)]
+	if !ok {
+		return cloudLease{}, fmt.Errorf("lease_not_found")
+	}
+	if time.Now().After(lease.ExpiresAt) {
+		return cloudLease{}, fmt.Errorf("lease_expired")
+	}
+	return lease, nil
+}
+
+func (s *cloudLeaseStore) Renew(token string, ttl time.Duration) (cloudLease, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lease, ok := s.leases[strings.TrimSpace(token)]
+	if !ok {
+		return cloudLease{}, fmt.Errorf("lease_not_found")
+	}
+	if time.Now().After(lease.ExpiresAt) {
+		return cloudLease{}, fmt.Errorf("lease_expired")
+	}
+	lease.ExpiresAt = time.Now().Add(ttl)
+	s.leases[lease.Token] = lease
+	return lease, nil
+}
+
+func randomToken(size int) (string, error) {
+	if size <= 0 {
+		size = 24
+	}
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func durationFromSeconds(seconds int) time.Duration {
+	if seconds == 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func parseUnverifiedJWTPayload(token string) (map[string]any, error) {
