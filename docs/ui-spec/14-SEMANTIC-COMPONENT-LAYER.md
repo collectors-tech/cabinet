@@ -1,7 +1,7 @@
-# 14 - Sortly Semantic Component Layer (Build Contract)
+# 14 - Semantic Component Layer (Build Contract)
 
 ## Purpose
-Define the semantic UI component layer needed to build a Sortly-style Cabinet experience with composable, testable parts.
+Define the semantic UI component layer needed to build the target Cabinet experience with composable, testable parts.
 
 This is the implementation contract for moving from one large page file to reusable UI primitives.
 
@@ -78,7 +78,7 @@ main.app-shell
 
 ## L2 - Workspace Components
 
-## 2.1 Home Workspace (Sortly-inspired action board)
+## 2.1 Home Workspace (Action Board)
 1. `HomeCommandCenter`
 - Container for top-level home layout.
 
@@ -108,7 +108,7 @@ State model:
 - Empty: calm state with one primary CTA.
 - Error: inline retry panel.
 
-## 2.2 Collection Workspace (Sortly core)
+## 2.2 Collection Workspace (Core)
 ```text
 CollectionWorkspace
   CollectionCommandRow
@@ -260,4 +260,3 @@ web/src/components/semantic/
 3. Unit test covers main rendering and primary action.
 4. E2E path still passes for affected workflow.
 5. No regression to scroll ownership or sticky header behavior.
-

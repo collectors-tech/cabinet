@@ -34,7 +34,7 @@ Applies to all Cabinet desktop screens, with strict priority on `Home` and `Coll
   - one state test (empty/loading/error).
 - PR cannot close issue scope unless targeted tests pass in-session.
 
-## Sortly Alignment Checklist (Used in Reviews)
+## Reference Alignment Checklist (Used in Reviews)
 1. Page title + command row are obvious and stable.
 2. Search and view controls are colocated with item results.
 3. Summary strip appears before result content.
@@ -46,4 +46,3 @@ Applies to all Cabinet desktop screens, with strict priority on `Home` and `Coll
 2. Gap list mapped to this gate checklist.
 3. Test evidence for new/changed behavior.
 4. Follow-up issues for unresolved gaps.
-

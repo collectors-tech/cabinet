@@ -16,7 +16,7 @@ Documents:
 - `11-SORTLY-PATTERN-MAPPING.md`
 - `12-PERF-VALIDATION-S2-S3.md`
 - `13-UI-UX-STRATEGY-GATE.md`
-- `14-SORTLY-SEMANTIC-COMPONENT-LAYER.md`
+- `14-SEMANTIC-COMPONENT-LAYER.md`
 - `screens/README.md` (per-screen split specs)
 
 Usage:
@@ -30,7 +30,7 @@ Usage:
 8. Close gaps from `08` before release.
 9. Implement component contracts from `09`.
 10. Use semantic page/template tree from `10`.
-11. Apply Sortly-inspired inventory/photo/update patterns from `11`.
+11. Apply reference inventory/photo/update patterns from `11`.
 12. Validate UI scale/perf dataset from `12`.
 13. Enforce release quality gates from `13`.
 14. Implement semantic component architecture from `14`.
