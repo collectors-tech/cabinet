@@ -1,20 +1,12 @@
 import {
   IconTelegram,
-  IconNotion,
-  IconFigma,
-  IconTrello,
-  IconSlack,
-  IconZoom,
-  IconStripe,
   IconGmail,
-  IconMedium,
-  IconSkype,
-  IconDocker,
   IconGithub,
-  IconGitlab,
-  IconDiscord,
   IconWhatsapp,
 } from '@/assets/brand-icons'
+import { Store } from 'lucide-react'
+
+const StoreLogo = () => <Store className='size-4' />
 
 export const apps = [
   {
@@ -24,64 +16,10 @@ export const apps = [
     desc: 'Connect with Telegram for real-time communication.',
   },
   {
-    name: 'Notion',
-    logo: <IconNotion />,
-    connected: true,
-    desc: 'Effortlessly sync Notion pages for seamless collaboration.',
-  },
-  {
-    name: 'Figma',
-    logo: <IconFigma />,
-    connected: true,
-    desc: 'View and collaborate on Figma designs in one place.',
-  },
-  {
-    name: 'Trello',
-    logo: <IconTrello />,
-    connected: false,
-    desc: 'Sync Trello cards for streamlined project management.',
-  },
-  {
-    name: 'Slack',
-    logo: <IconSlack />,
-    connected: false,
-    desc: 'Integrate Slack for efficient team communication',
-  },
-  {
-    name: 'Zoom',
-    logo: <IconZoom />,
-    connected: true,
-    desc: 'Host Zoom meetings directly from the dashboard.',
-  },
-  {
-    name: 'Stripe',
-    logo: <IconStripe />,
-    connected: false,
-    desc: 'Easily manage Stripe transactions and payments.',
-  },
-  {
     name: 'Gmail',
     logo: <IconGmail />,
     connected: true,
     desc: 'Access and manage Gmail messages effortlessly.',
-  },
-  {
-    name: 'Medium',
-    logo: <IconMedium />,
-    connected: false,
-    desc: 'Explore and share Medium stories on your dashboard.',
-  },
-  {
-    name: 'Skype',
-    logo: <IconSkype />,
-    connected: false,
-    desc: 'Connect with Skype contacts seamlessly.',
-  },
-  {
-    name: 'Docker',
-    logo: <IconDocker />,
-    connected: false,
-    desc: 'Effortlessly manage Docker containers on your dashboard.',
   },
   {
     name: 'GitHub',
@@ -90,21 +28,57 @@ export const apps = [
     desc: 'Streamline code management with GitHub integration.',
   },
   {
-    name: 'GitLab',
-    logo: <IconGitlab />,
-    connected: false,
-    desc: 'Efficiently manage code projects with GitLab integration.',
-  },
-  {
-    name: 'Discord',
-    logo: <IconDiscord />,
-    connected: false,
-    desc: 'Connect with Discord for seamless team communication.',
-  },
-  {
     name: 'WhatsApp',
     logo: <IconWhatsapp />,
     connected: false,
     desc: 'Easily integrate WhatsApp for direct messaging.',
+  },
+  {
+    name: 'Mr Toys',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'Voglers',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'WA Slot Cars',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'Bonza Slot Cars',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'K & K Creative Toys',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'Hobbyco',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'Frontline Hobbies',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
+  },
+  {
+    name: 'Metro Hobbies',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Retail provider connector for availability and price checks.',
   },
 ]

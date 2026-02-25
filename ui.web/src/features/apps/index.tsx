@@ -24,12 +24,20 @@ const route = getRouteApi('/_authenticated/apps/')
 type AppType = 'all' | 'connected' | 'notConnected'
 
 const appText = new Map<AppType, string>([
-  ['all', 'All Apps'],
+  ['all', 'All Integrations'],
   ['connected', 'Connected'],
   ['notConnected', 'Not Connected'],
 ])
 
-export function Apps() {
+type AppsProps = {
+  title?: string
+  description?: string
+}
+
+export function Apps({
+  title = 'App Integrations',
+  description = "Here's a list of your apps for the integration!",
+}: AppsProps = {}) {
   const {
     filter = '',
     type = 'all',
@@ -96,12 +104,8 @@ export function Apps() {
       {/* ===== Content ===== */}
       <Main fixed>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>
-            App Integrations
-          </h1>
-          <p className='text-muted-foreground'>
-            Here&apos;s a list of your apps for the integration!
-          </p>
+          <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
+          <p className='text-muted-foreground'>{description}</p>
         </div>
         <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
           <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
@@ -116,7 +120,7 @@ export function Apps() {
                 <SelectValue>{appText.get(appType)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='all'>All Apps</SelectItem>
+              <SelectItem value='all'>All Integrations</SelectItem>
                 <SelectItem value='connected'>Connected</SelectItem>
                 <SelectItem value='notConnected'>Not Connected</SelectItem>
               </SelectContent>
