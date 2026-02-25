@@ -7,11 +7,35 @@ import { ScannerQuerySetForm, type ScannerQuerySetValues } from "./components/sc
 import { AIAssistForms } from "./components/ai-assist-forms";
 import { ProfileSettingsForm, SecretsForm, type ProfileSettingsValues, type SecretsValues } from "./components/settings-secrets-forms";
 import { StarterQuickAddForm, type StarterQuickAddValues } from "./components/starter-quick-add-form";
-import { AIScreen, BarcodesScreen, CollectionScreen, DashboardScreen, DiscoveriesScreen, PhotosScreen, PricingScreen, ReportsScreen, ScannerScreen, SettingsScreen } from "./screens/top-level-screens";
+import {
+  AIScreen,
+  BarcodesScreen,
+  CollectionScreen,
+  DashboardScreen,
+  DiagnosticsScreen,
+  DiscoveriesScreen,
+  PhotosScreen,
+  PricingScreen,
+  ReportsScreen,
+  ScannerScreen,
+  SettingsScreen,
+} from "./screens/top-level-screens";
 
 type Theme = "light" | "dark";
 type OnboardingStep = 1 | 2 | 3 | 4 | 5;
-type TopLevelScreen = "all" | "dashboard" | "collection" | "scanner" | "discoveries" | "ai" | "barcodes" | "photos" | "pricing" | "reports" | "settings";
+type TopLevelScreen =
+  | "all"
+  | "dashboard"
+  | "collection"
+  | "scanner"
+  | "discoveries"
+  | "ai"
+  | "barcodes"
+  | "photos"
+  | "pricing"
+  | "reports"
+  | "diagnostics"
+  | "settings";
 type NavScreen = Exclude<TopLevelScreen, "all">;
 type NavItemDefinition = { screen: NavScreen; label: string; icon: string };
 type NavItemConfig = { screen: NavScreen; visible: boolean };
@@ -43,6 +67,7 @@ const SCREEN_TITLES: Record<NavScreen, string> = {
   photos: "Photos",
   pricing: "Pricing",
   reports: "Reports",
+  diagnostics: "Diagnostics",
   settings: "Settings",
 };
 
@@ -56,6 +81,7 @@ const NAV_ITEMS: NavItemDefinition[] = [
   { screen: "photos", label: "Photos", icon: "PH" },
   { screen: "pricing", label: "Pricing", icon: "PR" },
   { screen: "reports", label: "Reports", icon: "RP" },
+  { screen: "diagnostics", label: "Diagnostics", icon: "DG" },
   { screen: "settings", label: "Settings", icon: "ST" },
 ];
 
@@ -4636,25 +4662,27 @@ export function App() {
               />
             </AIScreen>
           ) : null}
+          {showAdvancedWorkspace && activeScreen === "diagnostics" ? (
+            <DiagnosticsScreen id="diagnostics">
+              <h3>Diagnostics</h3>
+              <p>Runtime diagnostics and API checks for troubleshooting.</p>
+              <ul>
+                <li>
+                  <a href="/healthz">Health Check</a>
+                </li>
+                <li>
+                  <a href="/api/runtime">Runtime</a>
+                </li>
+                <li>
+                  <a href="/api/runtime/recovery">Recovery State</a>
+                </li>
+                <li>
+                  <a href="/apidocs">API Kitchen Sync</a>
+                </li>
+              </ul>
+            </DiagnosticsScreen>
+          ) : null}
           {error ? <p>Profile error: {error}</p> : null}
-          <details className="cabinet-home-diagnostics">
-            <summary>Diagnostics</summary>
-            <p>Runtime diagnostics and API checks for troubleshooting.</p>
-            <ul>
-              <li>
-                <a href="/healthz">Health Check</a>
-              </li>
-              <li>
-                <a href="/api/runtime">Runtime</a>
-              </li>
-              <li>
-                <a href="/api/runtime/recovery">Recovery State</a>
-              </li>
-              <li>
-                <a href="/apidocs">API Kitchen Sync</a>
-              </li>
-            </ul>
-          </details>
         </section>
         </div>
       </section>

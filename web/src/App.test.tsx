@@ -107,19 +107,40 @@ describe("App shell", () => {
     expect(screen.getByTestId("app-shell")).not.toHaveClass("cabinet-shell-context-collapsed");
   });
 
-  it("keeps diagnostics links collapsed behind diagnostics summary", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [] }), { status: 200 })),
-    );
+  it("moves diagnostics links to a dedicated diagnostics page", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.setItem("cabinet.onboarding.completed.p1", "1");
+
     render(<App />);
-    const diagnostics = document.querySelector(".cabinet-home-diagnostics");
-    expect(diagnostics).toBeTruthy();
-    expect(diagnostics).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText(/^diagnostics$/i));
-    expect(diagnostics).toHaveAttribute("open");
-    const link = await screen.findByRole("link", { name: /api kitchen sync/i });
-    expect(link).toHaveAttribute("href", "/apidocs");
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    expect(screen.queryByRole("link", { name: /health check/i })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^diagnostics$/i }));
+    expect(await screen.findByRole("heading", { name: /diagnostics/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /health check/i })).toHaveAttribute("href", "/healthz");
+    expect(await screen.findByRole("link", { name: /runtime/i })).toHaveAttribute("href", "/api/runtime");
+    expect(await screen.findByRole("link", { name: /recovery state/i })).toHaveAttribute("href", "/api/runtime/recovery");
+    expect(await screen.findByRole("link", { name: /api kitchen sync/i })).toHaveAttribute("href", "/apidocs");
   });
 
   it("opens and closes the global chat copilot rail", async () => {

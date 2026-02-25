@@ -53,3 +53,7 @@ export function PhotosScreen(props: PropsWithChildren<{ id?: string }>) {
 export function SettingsScreen(props: PropsWithChildren<{ id?: string }>) {
   return <ScreenContainer testId="screen-settings" title="Settings" id={props.id}>{props.children}</ScreenContainer>;
 }
+
+export function DiagnosticsScreen(props: PropsWithChildren<{ id?: string }>) {
+  return <ScreenContainer testId="screen-diagnostics" title="Diagnostics" id={props.id}>{props.children}</ScreenContainer>;
+}

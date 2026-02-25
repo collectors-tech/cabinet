@@ -590,7 +590,13 @@ test("home screen adapts for first-run and returning users", async ({ page }) =>
   await page.getByRole("button", { name: /use default/i }).click();
   await expect(page.getByText(/onboarding complete\./i)).toBeVisible();
   await expect(page.getByRole("heading", { name: /starter onboarding wizard/i })).toHaveCount(0);
-  await expect(page.locator(".cabinet-home-diagnostics")).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("link", { name: /health check/i })).toHaveCount(0);
+  await page.getByRole("button", { name: /^diagnostics$/i }).click();
+  await expect(page.getByRole("heading", { name: /diagnostics/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /health check/i })).toHaveAttribute("href", "/healthz");
+  await expect(page.getByRole("link", { name: /runtime/i })).toHaveAttribute("href", "/api/runtime");
+  await expect(page.getByRole("link", { name: /recovery state/i })).toHaveAttribute("href", "/api/runtime/recovery");
+  await expect(page.getByRole("link", { name: /api kitchen sync/i })).toHaveAttribute("href", "/apidocs");
 });
 
 test("home attention cards support dismiss and snooze persistence", async ({ page }) => {
