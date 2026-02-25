@@ -2903,6 +2903,19 @@ export function App() {
   function snoozeAttentionCard(key: string, durationHours: number) {
     setSnoozedAttentionUntil((current) => ({ ...current, [key]: Date.now() + durationHours * 60 * 60 * 1000 }));
   }
+  function prepareCollectionAddItem() {
+    setCollectionFormSeed({
+      part_number: "",
+      title: "",
+      brand: "",
+      category: "General",
+    });
+    setCollectionStatus("Item form ready below. Add core details to create the item.");
+    selectScreen("collection");
+  }
+  function prepareCollectionAddFolder() {
+    setCollectionStatus("Folder creation flow is scheduled for the next remediation wave.");
+  }
   const editingQuerySet = querySets.find((querySet) => querySet.id === editingQuerySetID);
   const querySetInitialValues: Partial<ScannerQuerySetValues> | undefined = editingQuerySet
     ? {
@@ -3709,6 +3722,12 @@ export function App() {
               </div>
               <section className="cabinet-collection-command-bar" role="region" aria-label="Collection command bar">
                 <div className="cabinet-collection-command-primary">
+                  <button type="button" onClick={prepareCollectionAddItem}>
+                    Add Item
+                  </button>
+                  <button type="button" onClick={prepareCollectionAddFolder}>
+                    Add Folder
+                  </button>
                   <input
                     value={collectionQuery.text}
                     onChange={(e) => setCollectionQuery((current) => ({ ...current, text: e.target.value }))}
@@ -4283,26 +4302,17 @@ export function App() {
                   <button type="button" onClick={loadDashboard} disabled={dashboardLoading}>
                     {dashboardLoading ? "Refreshing Dashboard..." : "Refresh Dashboard"}
                   </button>
+                  <button type="button" onClick={prepareCollectionAddItem}>
+                    Add Item
+                  </button>
                   <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
                     Run Scanner Now
                   </button>
-                  <button type="button" onClick={() => openWorkspaceFromDashboard("collection")}>
-                    Open Collection Workspace
-                  </button>
-                  <button type="button" onClick={() => openWorkspaceFromDashboard("scanner")}>
-                    Open Scanner Workspace
-                  </button>
                   <button type="button" onClick={() => openWorkspaceFromDashboard("discoveries")}>
-                    Open Discoveries Workspace
+                    Open Discover
                   </button>
-                  <button type="button" onClick={() => openWorkspaceFromDashboard("ai")}>
-                    Open AI Workspace
-                  </button>
-                  <button type="button" onClick={() => openWorkspaceFromDashboard("pricing")}>
-                    Open Pricing Workspace
-                  </button>
-                  <button type="button" onClick={() => openWorkspaceFromDashboard("settings")}>
-                    Open Settings Workspace
+                  <button type="button" onClick={() => runDataMaintenance("/api/backup/run", "backup")}>
+                    Backup Now
                   </button>
                 </div>
               </section>

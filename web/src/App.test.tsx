@@ -442,6 +442,79 @@ describe("App shell", () => {
     expect(screen.getByTestId("collection-summary-strip")).toBeInTheDocument();
   });
 
+  it("renders strict home quick actions and removes overflow workspace shortcuts", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/dashboard") {
+        return new Response(JSON.stringify({ new_discoveries: 2, wishlist_hits: 1, price_drops: 1, total_items: 10, total_instances: 12 }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url === "/api/backup/run" && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^dashboard$/i }));
+
+    expect(await screen.findByRole("button", { name: /^add item$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /run scanner now/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^open discover$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /backup now/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open ai workspace/i })).not.toBeInTheDocument();
+  });
+
+  it("renders collection command row with primary actions and search", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/profiles" && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ profiles: [{ id: "p1", name: "Alpha" }] }), { status: 200 });
+      }
+      if (url === "/api/profiles/active" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ id: "p1", name: "Alpha" }), { status: 200 });
+      }
+      if (url.includes("/api/profiles/p1/storage")) {
+        return new Response(JSON.stringify({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" }), { status: 200 });
+      }
+      if (url.includes("/api/auth/requirements?profile_id=p1")) {
+        return new Response(JSON.stringify({ requires_registration: false }), { status: 200 });
+      }
+      if (url === "/api/items") {
+        return new Response(JSON.stringify({ items: [{ id: "i1", part_number: "PN-1", title: "AFX Camaro", brand: "AFX", category: "Cars" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem("cabinet.workspace.p1", "1");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /use alpha/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^collection$/i }));
+
+    const commandBar = await screen.findByRole("region", { name: /collection command bar/i });
+    expect(within(commandBar).getByRole("button", { name: /^add item$/i })).toBeInTheDocument();
+    expect(within(commandBar).getByRole("button", { name: /^add folder$/i })).toBeInTheDocument();
+    expect(within(commandBar).getByLabelText(/collection search/i)).toBeInTheDocument();
+  });
+
   it("renders eye icon toggle control for nav item visibility in edit mode", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

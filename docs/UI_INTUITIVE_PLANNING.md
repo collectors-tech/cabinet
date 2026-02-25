@@ -89,3 +89,6 @@ Include:
 - Add optimistic UI updates for simple actions (ignore, wishlist, track).
 - Log all attention actions in activity log for auditability.
 
+## Strategy Operationalization
+- The enforceable delivery gate is defined in `docs/ui-spec/13-UI-UX-STRATEGY-GATE.md`.
+- Every UI remediation issue must map acceptance criteria to that gate and include test evidence.
