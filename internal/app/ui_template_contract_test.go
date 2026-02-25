@@ -312,3 +312,26 @@ func TestI18nShellSharedLabelsContract(t *testing.T) {
 		nil,
 	)
 }
+
+func TestInventoryWishlistViewToggleAccessibilityContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/tasks/components/tasks-table.tsx")
+	if err != nil {
+		t.Fatalf("read tasks table: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"aria-pressed",
+		"aria-label='Switch to rows view'",
+		"aria-label='Switch to cards view'",
+		"'cabinet.viewMode.inventory'",
+		"'cabinet.viewMode.wishlist'",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("tasks table missing accessibility/persistence token: %s", token)
+		}
+	}
+}

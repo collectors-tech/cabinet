@@ -154,6 +154,8 @@ export function TasksTable({ data, routePath }: DataTableProps) {
           size='sm'
           variant={viewMode === 'rows' ? 'default' : 'outline'}
           onClick={() => setViewMode('rows')}
+          aria-pressed={viewMode === 'rows'}
+          aria-label='Switch to rows view'
         >
           Rows
         </Button>
@@ -161,6 +163,8 @@ export function TasksTable({ data, routePath }: DataTableProps) {
           size='sm'
           variant={viewMode === 'cards' ? 'default' : 'outline'}
           onClick={() => setViewMode('cards')}
+          aria-pressed={viewMode === 'cards'}
+          aria-label='Switch to cards view'
         >
           Cards
         </Button>
