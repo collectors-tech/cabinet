@@ -15,6 +15,8 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
+import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
+import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { tasks } from '@/features/tasks/data/tasks'
 
 type CollectionWorkspaceProps = {
@@ -48,7 +50,7 @@ export function Collection({
   )
 
   return (
-    <>
+    <TasksProvider>
       <Header fixed>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
@@ -136,6 +138,7 @@ export function Collection({
           </Card>
         </div>
       </Main>
-    </>
+      <TasksDialogs />
+    </TasksProvider>
   )
 }

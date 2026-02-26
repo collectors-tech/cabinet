@@ -399,3 +399,23 @@ func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectionWorkspaceUsesTasksProviderContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read collection workspace: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"TasksProvider",
+		"<TasksProvider>",
+		"TasksDialogs",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("collection workspace missing tasks context token: %s", token)
+		}
+	}
+}
