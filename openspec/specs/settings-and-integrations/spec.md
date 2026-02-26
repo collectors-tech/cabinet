@@ -25,3 +25,11 @@ Cabinet SHALL display integration providers and details from runtime sources, no
 - **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user navigates to integrations workspace
 - **THEN** route SHALL load provider states from API-backed data path
+
+### Requirement: Integrations workspace SHALL consume canonical provider registry
+Cabinet SHALL use `provider-registry` capability as source-of-truth for provider listing, capability badges, and provider-specific configuration routes.
+
+#### Scenario: Render provider list from registry
+- **GIVEN** provider registry definitions are available
+- **WHEN** integrations workspace renders provider list
+- **THEN** provider rows SHALL reflect registry-defined provider IDs and capability metadata

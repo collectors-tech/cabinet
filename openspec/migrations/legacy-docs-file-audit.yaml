@@ -66,6 +66,10 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
+      - openspec/specs/provider-registry/spec.md
+      - openspec/specs/provider-ebay/spec.md
+      - openspec/specs/provider-amazon/spec.md
+      - openspec/specs/provider-au-webshops/spec.md
       - openspec/specs/settings-and-integrations/spec.md
       - openspec/specs/scanner-and-candidates/spec.md
   - source: docs/SPEC.md

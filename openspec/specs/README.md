@@ -22,6 +22,10 @@ Legacy markdown under `docs/` has been migrated and removed.
 - `non-functional-and-security`
 - `chat-copilot`
 - `cloud-auth-billing`
+- `provider-registry`
+- `provider-ebay`
+- `provider-amazon`
+- `provider-au-webshops`
 - `documentation-governance`
 
 ### UI Foundations
