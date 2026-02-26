@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v openspec >/dev/null 2>&1; then
+  echo "ERROR: openspec CLI not found. Install with: npm install -g @fission-ai/openspec@latest"
+  exit 1
+fi
+
+echo "[pre-push] Validating OpenSpec..."
+openspec validate --all --strict --no-interactive
+
+echo "[pre-push] Running fast API docs smoke test..."
+go test ./internal/app -run TestAPIDocsRoutes -count=1

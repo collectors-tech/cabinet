@@ -66,6 +66,18 @@ Validate:
 openspec validate --changes --strict --no-interactive
 ```
 
+## Git Hooks (Recommended)
+Install local hook templates for commit/push policy enforcement:
+
+```powershell
+./scripts/install-githooks.ps1
+```
+
+Installed hooks:
+- `.githooks/commit-msg` enforces `#<issue-number>` commit prefix
+- `.githooks/pre-commit` validates OpenSpec when OpenSpec artifacts are staged
+- `.githooks/pre-push` validates OpenSpec and runs fast API docs smoke test
+
 ## Current Seeded Changes
 - `stabilize-inventory-runtime-regressions`
 - `complete-screen-api-parity-audits`

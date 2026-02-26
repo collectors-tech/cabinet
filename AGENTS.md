@@ -41,3 +41,6 @@ Apply and follow these files:
 
 - This file is intended to make rule discovery explicit for agents that prioritize `AGENTS.md`.
 - Rule content remains maintained in `.cursor/rules/`; update those files as the canonical policy documents.
+- OpenSpec migration source-of-truth docs:
+  - `docs/OPENSPEC_MIGRATION_CATALOG.md`
+  - `docs/OPENSPEC_MIGRATION_TODO.md`

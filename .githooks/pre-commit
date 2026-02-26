@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v openspec >/dev/null 2>&1; then
+  echo "ERROR: openspec CLI not found. Install with: npm install -g @fission-ai/openspec@latest"
+  exit 1
+fi
+
+staged_files="$(git diff --cached --name-only)"
+if [ -z "$staged_files" ]; then
+  exit 0
+fi
+
+echo "$staged_files" | grep -Eq '^openspec/' || exit 0
+
+echo "[pre-commit] OpenSpec files staged; validating..."
+openspec validate --all --strict --no-interactive

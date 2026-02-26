@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+set -eu
+
+msg_file="$1"
+msg="$(head -n 1 "$msg_file" | tr -d '\r')"
+
+# Require leading issue reference: "#<issue-number> "
+case "$msg" in
+  \#[0-9]*\ *) exit 0 ;;
+  *)
+    echo "ERROR: Commit message must start with '#<issue-number> '."
+    echo "Example: #161 docs(openspec): enforce spec validation gates"
+    exit 1
+    ;;
+esac
