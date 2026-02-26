@@ -15,18 +15,27 @@
 - Legacy section intent: eBay official API feasibility and policy
   - New IDs: `INTEGRATION-005`, `INTEGRATION-006`, `INTEGRATION-007`
   - Validating tests:
-    - `TestProviderSpecsExistAndRegistryLinksThem`
-    - TODO: add API contract test for eBay provider response fields/status codes
+    - `TestProviderSpecsExistAndRegistryLinksThem` (`internal/app/openspec_provider_specs_test.go`)
+    - `TestEbayProviderResponseContract` (`tests/shop_providers_contract_test.go`)
+  - Verification:
+    - status: done
+    - commit: pending `#182`
 - Legacy section intent: Amazon constrained API/program eligibility
   - New IDs: `INTEGRATION-008`, `INTEGRATION-009`, `INTEGRATION-010`
   - Validating tests:
-    - `TestProviderSpecsExistAndRegistryLinksThem`
-    - TODO: add API contract test for disabled-mode `409 PROVIDER_DISABLED`
+    - `TestProviderSpecsExistAndRegistryLinksThem` (`internal/app/openspec_provider_specs_test.go`)
+    - `TestAmazonDisabledModeReturns409ContractEnvelope` (`tests/shop_providers_contract_test.go`)
+  - Verification:
+    - status: done
+    - commit: pending `#182`
 - Legacy section intent: integration policy for web ingestion
   - New IDs: `OPS-001`, `INTEGRATION-012`, `INTEGRATION-013`, `INTEGRATION-014`, `INTEGRATION-015`
   - Validating tests:
-    - `TestProviderSpecsExistAndRegistryLinksThem`
-    - TODO: add scheduler throttling conformance test for `OPS-001`
+    - `TestProviderSpecsExistAndRegistryLinksThem` (`internal/app/openspec_provider_specs_test.go`)
+    - `TestAUWebshopThrottlingConformanceOPS001` (`tests/shop_providers_contract_test.go`)
+  - Verification:
+    - status: done
+    - commit: pending `#182`
 
 ## PR Gate Notes
 - Requirement IDs touched:
@@ -38,4 +47,3 @@
   - `openspec validate --all`
 - OpenAPI changed: `no`
 - Changed paths/schemas if yes: `n/a`
-
