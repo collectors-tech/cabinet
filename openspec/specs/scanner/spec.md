@@ -25,3 +25,21 @@ Cabinet SHALL log failures and support retry by query set.
 - **GIVEN** query set has a failed scanner run
 - **WHEN** user requests retry
 - **THEN** Cabinet SHALL schedule immediate retry and log outcome
+
+### Requirement INTEGRATION-015: Scanner normalization MUST map provider outputs to common candidate schema
+Cabinet MUST normalize all provider outputs (official APIs and web ingestion) to shared candidate/pricing/stock fields before persistence.
+
+#### Scenario: Provider normalization contract
+- **GIVEN** scanner run receives heterogeneous provider payloads (API JSON and web-ingestion parse outputs)
+- **WHEN** normalization pipeline runs before persistence
+- **THEN** persisted candidate contract MUST include:
+  - `listing_id`
+  - `title`
+  - `price.amount`
+  - `price.currency`
+  - `url`
+  - `seller`
+  - `stock_signal.normalized_state`
+  - `source.provider_id`
+  - `first_seen`
+  - `last_seen`
