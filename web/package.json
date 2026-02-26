@@ -14,7 +14,9 @@
     "e2e": "cypress run --browser electron",
     "serve:go": "go run ../cmd/cabinet",
     "e2e:run-smoke": "cypress run --browser electron --spec cypress/e2e/smoke.cy.ts",
-    "e2e:smoke": "start-server-and-test serve:go http://127.0.0.1:17880 e2e:run-smoke"
+    "e2e:smoke": "start-server-and-test serve:go http://127.0.0.1:17880 e2e:run-smoke",
+    "e2e:run-inventory": "cypress run --browser electron --spec cypress/e2e/inventory-non500.cy.ts",
+    "e2e:inventory": "start-server-and-test serve:go http://127.0.0.1:17880 e2e:run-inventory"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.1",
