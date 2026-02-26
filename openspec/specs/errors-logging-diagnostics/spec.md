@@ -6,6 +6,7 @@ Define error handling, recovery, logging, and diagnostics behavior.
 Cabinet SHALL present user-readable errors and recovery actions for known failure states.
 
 #### Scenario: Scanner operation error
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** scanner provider call fails
 - **THEN** Cabinet SHALL show clear failure message with retry path
 
@@ -13,6 +14,7 @@ Cabinet SHALL present user-readable errors and recovery actions for known failur
 Cabinet SHALL support activity logs, debug toggle, and export functionality.
 
 #### Scenario: Export diagnostics log
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user requests log export
 - **THEN** Cabinet SHALL return diagnostics bundle output
 
@@ -20,6 +22,7 @@ Cabinet SHALL support activity logs, debug toggle, and export functionality.
 Cabinet SHALL redact API keys, tokens, and credentials from log outputs.
 
 #### Scenario: Log redaction
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** sensitive values are present in event context
 - **THEN** persisted/exported logs SHALL contain redacted values
 
@@ -27,5 +30,6 @@ Cabinet SHALL redact API keys, tokens, and credentials from log outputs.
 Cabinet SHALL expose crash/recovery indicators to guide user remediation.
 
 #### Scenario: Abnormal shutdown detected
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** runtime starts after abnormal termination
 - **THEN** recovery state SHALL indicate diagnostics recommendation

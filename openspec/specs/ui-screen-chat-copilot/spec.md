@@ -6,6 +6,7 @@ Define Chat Copilot screen/rail behavior for conversational workflows and guarde
 Chat SHALL support local profile-scoped thread and message persistence.
 
 #### Scenario: Reopen thread history
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user reopens existing thread
 - **THEN** thread history SHALL render prior messages
 
@@ -13,6 +14,7 @@ Chat SHALL support local profile-scoped thread and message persistence.
 Chat SHALL support user-selected file attachments and preview-before-apply actions.
 
 #### Scenario: Apply action from preview
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user confirms apply for previewed action
 - **THEN** mutation SHALL execute and log outcome
 
@@ -20,6 +22,7 @@ Chat SHALL support user-selected file attachments and preview-before-apply actio
 Chat SHALL support loading, empty, error, and ready states for threads/messages.
 
 #### Scenario: Chat service error
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** thread/message API fails
 - **THEN** chat SHALL show actionable error state with retry
 

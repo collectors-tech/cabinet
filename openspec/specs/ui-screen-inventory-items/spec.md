@@ -6,6 +6,7 @@ Define Inventory Items screen behavior for high-volume item browsing, editing, a
 Inventory Items SHALL support row-details behavior, selection mode, and filter/sort workflows.
 
 #### Scenario: Row details open
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user clicks non-interactive row area
 - **THEN** item details drawer SHALL open for selected row
 
@@ -13,10 +14,12 @@ Inventory Items SHALL support row-details behavior, selection mode, and filter/s
 Inventory Items SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Inventory empty state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** no items match active filters
 - **THEN** screen SHALL render empty state with add/search guidance
 
 #### Scenario: Inventory error state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** items API fails
 - **THEN** screen SHALL render inline retry/error without fatal route failure
 
@@ -24,6 +27,7 @@ Inventory Items SHALL support loading, empty, error, and ready states.
 The screen SHALL remain usable with both starter and stress datasets.
 
 #### Scenario: Bulk dataset interaction
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user filters/sorts large item lists
 - **THEN** interactions SHALL remain responsive and deterministic
 

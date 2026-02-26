@@ -6,6 +6,7 @@ Define Settings screen behavior for configuration, maintenance, licensing, and d
 Settings SHALL load and persist profile settings and secret values through API-backed flows.
 
 #### Scenario: Save settings and reload
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user updates settings and reloads
 - **THEN** saved values SHALL persist for active profile
 
@@ -13,6 +14,7 @@ Settings SHALL load and persist profile settings and secret values through API-b
 Settings SHALL expose reindex, repair, backup, restore, and diagnostic export workflows.
 
 #### Scenario: Backup restore workflow
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user confirms restore
 - **THEN** restore operation SHALL execute and show completion state
 
@@ -20,6 +22,7 @@ Settings SHALL expose reindex, repair, backup, restore, and diagnostic export wo
 Settings SHALL support loading, empty, error, and ready states across sections.
 
 #### Scenario: Settings section load failure
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** section data fetch fails
 - **THEN** section SHALL show actionable error state without breaking entire route
 

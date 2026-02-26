@@ -6,6 +6,7 @@ Define Scanner screen behavior for query set management, execution, and diagnost
 Scanner SHALL allow creating/loading query sets and triggering manual/scheduled runs.
 
 #### Scenario: Run query set
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user runs a selected query set
 - **THEN** scanner execution status and outputs SHALL update
 
@@ -13,6 +14,7 @@ Scanner SHALL allow creating/loading query sets and triggering manual/scheduled 
 Scanner SHALL expose health diagnostics and retry controls for failed runs.
 
 #### Scenario: Retry failed query set
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user retries failed scanner run
 - **THEN** retry SHALL execute and status SHALL update
 
@@ -20,6 +22,7 @@ Scanner SHALL expose health diagnostics and retry controls for failed runs.
 The screen SHALL support loading, empty, error, and ready states for query sets and candidates.
 
 #### Scenario: Scanner empty state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** no query sets exist
 - **THEN** screen SHALL provide create-first guidance
 

@@ -6,6 +6,7 @@ Define Home screen behavior as the primary command center with testable, action-
 Home SHALL present actionable discovery, pricing, and health signals above the fold.
 
 #### Scenario: Home priority view ready state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** Home screen data loads successfully
 - **THEN** users SHALL see actionable priority signals with direct actions
 
@@ -13,14 +14,17 @@ Home SHALL present actionable discovery, pricing, and health signals above the f
 Home SHALL support loading, empty, error, and ready states for each major panel.
 
 #### Scenario: Home loading state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** Home data is still loading
 - **THEN** Home SHALL render loading placeholders without layout shift
 
 #### Scenario: Home empty state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** no actionable items exist
 - **THEN** Home SHALL render calm-state guidance with at least one next action
 
 #### Scenario: Home error state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** Home API fetch fails
 - **THEN** Home SHALL render actionable retry/error messaging without route crash
 
@@ -28,6 +32,7 @@ Home SHALL support loading, empty, error, and ready states for each major panel.
 Each quick action SHALL navigate to the correct destination with preserved context.
 
 #### Scenario: Quick action navigation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user clicks a Home quick action
 - **THEN** app SHALL open the expected screen/workflow context
 

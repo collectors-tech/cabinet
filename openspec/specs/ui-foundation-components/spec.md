@@ -6,6 +6,7 @@ Define normative UI component contracts so any engineer can implement Cabinet sc
 Each component family SHALL define required inputs, outputs, state model, accessibility requirements, and deterministic error behavior.
 
 #### Scenario: Implementing a new component instance
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** an engineer implements a Button, Input, Select, Dialog, Drawer, or domain component
 - **THEN** implementation SHALL follow the contract shape for inputs, outputs, states, and accessibility
 
@@ -13,6 +14,7 @@ Each component family SHALL define required inputs, outputs, state model, access
 Data-bound components SHALL expose deterministic rendering behavior for all primary operational states.
 
 #### Scenario: Data-bound component enters error state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a data request fails for a component
 - **THEN** the component SHALL render explicit error state with retry-capable action where applicable
 
@@ -20,6 +22,7 @@ Data-bound components SHALL expose deterministic rendering behavior for all prim
 Mutating actions in forms and action panels SHALL enforce busy-state locking and idempotent intent handling.
 
 #### Scenario: Repeated submit clicks
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user clicks submit repeatedly while request is in-flight
 - **THEN** component SHALL block duplicate submissions until current request resolves
 
@@ -27,6 +30,7 @@ Mutating actions in forms and action panels SHALL enforce busy-state locking and
 Inputs, dialogs, drawers, and action controls SHALL meet keyboard and semantic accessibility behavior.
 
 #### Scenario: Keyboard-only dialog interaction
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user opens dialog with keyboard and exits with Escape
 - **THEN** focus SHALL be trapped while open and restored to trigger on close
 
@@ -34,6 +38,7 @@ Inputs, dialogs, drawers, and action controls SHALL meet keyboard and semantic a
 Each major component family SHALL define acceptance criteria, success criteria, and test mapping requirements.
 
 #### Scenario: Component readiness review
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a component family is marked implementation-ready
 - **THEN** acceptance and success criteria plus test mapping SHALL be present in spec and linked to automated tests
 

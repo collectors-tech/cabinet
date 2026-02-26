@@ -6,6 +6,7 @@ Define Discover screen behavior for not-in-collection triage actions.
 Discover SHALL support query/price/date filtering and list rendering.
 
 #### Scenario: Filtered triage list
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user applies filters
 - **THEN** discover list SHALL render filtered candidates
 
@@ -13,6 +14,7 @@ Discover SHALL support query/price/date filtering and list rendering.
 Discover SHALL support ignore, wishlist, track, and create-item actions.
 
 #### Scenario: Candidate action apply
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user chooses action on candidate
 - **THEN** candidate state and downstream linkage SHALL update
 
@@ -20,6 +22,7 @@ Discover SHALL support ignore, wishlist, track, and create-item actions.
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Discover error state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** discover API request fails
 - **THEN** screen SHALL present actionable retry state
 

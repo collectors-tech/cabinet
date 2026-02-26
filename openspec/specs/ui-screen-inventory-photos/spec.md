@@ -6,6 +6,7 @@ Define Inventory Photos screen behavior for upload, media management, and fullsc
 Photos screen SHALL support upload, list, primary selection, and delete workflows.
 
 #### Scenario: Upload and primary update
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user uploads image and sets primary
 - **THEN** media list SHALL reflect updated primary state
 
@@ -13,10 +14,12 @@ Photos screen SHALL support upload, list, primary selection, and delete workflow
 Photos screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Photos empty state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** selected item has no photos
 - **THEN** screen SHALL show empty guidance for upload actions
 
 #### Scenario: Photos error state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** media API fails
 - **THEN** screen SHALL show retry-capable error state
 
@@ -24,6 +27,7 @@ Photos screen SHALL support loading, empty, error, and ready states.
 Photos SHALL open in fullscreen view with stable controls.
 
 #### Scenario: Fullscreen open
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user requests fullscreen view
 - **THEN** fullscreen viewer SHALL render selected media
 

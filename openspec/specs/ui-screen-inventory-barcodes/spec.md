@@ -6,6 +6,7 @@ Define Inventory Barcodes screen behavior for add, lookup, and variant-safe reso
 The screen SHALL support item barcode add and local lookup display.
 
 #### Scenario: Add and lookup barcode
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user adds barcode and performs lookup
 - **THEN** barcode list and lookup result SHALL update
 
@@ -13,6 +14,7 @@ The screen SHALL support item barcode add and local lookup display.
 If local matches are absent, screen SHALL provide external search pathway.
 
 #### Scenario: No local match fallback
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** local lookup has no results
 - **THEN** external search action SHALL be available
 
@@ -20,6 +22,7 @@ If local matches are absent, screen SHALL provide external search pathway.
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Barcode lookup error
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** barcode lookup endpoint fails
 - **THEN** screen SHALL show actionable error state with retry
 

@@ -6,6 +6,7 @@ Define mandatory UI/UX governance gates that determine when a screen is truly do
 Each screen SHALL present one primary above-the-fold outcome and SHALL de-prioritize secondary or technical controls.
 
 #### Scenario: Hierarchy review
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a screen is reviewed for completion
 - **THEN** one primary outcome SHALL be clearly dominant above the fold
 
@@ -13,6 +14,7 @@ Each screen SHALL present one primary above-the-fold outcome and SHALL de-priori
 Primary action controls SHALL be visible without scrolling on desktop and SHALL use task language labels.
 
 #### Scenario: Action row validation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user opens a top-level screen
 - **THEN** primary action controls SHALL be visible and semantically task-oriented
 
@@ -20,6 +22,7 @@ Primary action controls SHALL be visible without scrolling on desktop and SHALL 
 Left navigation SHALL remain fixed, page header SHALL remain sticky, and page body SHALL own vertical scroll.
 
 #### Scenario: Scroll ownership validation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** content exceeds viewport height
 - **THEN** side navigation and header SHALL remain fixed while body content scrolls
 
@@ -27,6 +30,7 @@ Left navigation SHALL remain fixed, page header SHALL remain sticky, and page bo
 Diagnostic and admin-heavy controls SHALL not dominate first-run surfaces and SHALL be behind dedicated screens or expansion boundaries.
 
 #### Scenario: First-run usability validation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a first-run user enters starter workflows
 - **THEN** advanced diagnostics controls SHALL be de-prioritized from primary action path
 
@@ -34,6 +38,7 @@ Diagnostic and admin-heavy controls SHALL not dominate first-run surfaces and SH
 Each screen SHALL have structure, primary action, and state coverage before issue closure.
 
 #### Scenario: Screen closure readiness
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a screen issue is marked ready for close
 - **THEN** at least one structure test, one primary action test, and one state test SHALL have passing evidence in-session
 
@@ -41,6 +46,7 @@ Each screen SHALL have structure, primary action, and state coverage before issu
 Each remediation wave SHALL include before/after references, gap mapping, and unresolved follow-up issues.
 
 #### Scenario: Remediation wave review
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a remediation wave is completed
 - **THEN** review evidence SHALL include screenshots, gate gap mapping, test evidence, and follow-up issues
 

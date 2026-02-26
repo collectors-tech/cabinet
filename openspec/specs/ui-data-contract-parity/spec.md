@@ -6,6 +6,7 @@ Define strict UI-to-API parity requirements so every production screen is fully 
 Each top-level authenticated screen SHALL declare the APIs it depends on for read and mutation flows.
 
 #### Scenario: Screen parity review
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a screen is reviewed for release readiness
 - **THEN** its required API routes SHALL be explicitly mapped and validated
 
@@ -13,6 +14,7 @@ Each top-level authenticated screen SHALL declare the APIs it depends on for rea
 For each API-backed screen section, UI SHALL define deterministic behavior for loading, empty, error, and ready states.
 
 #### Scenario: API error on screen load
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** required API call fails during screen load
 - **THEN** screen SHALL render actionable error state without collapsing into generic fatal route failure
 
@@ -20,6 +22,7 @@ For each API-backed screen section, UI SHALL define deterministic behavior for l
 Each mutation control SHALL declare request payload contract and expected success/failure rendering behavior.
 
 #### Scenario: Mutation failure handling
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** mutation endpoint returns failure
 - **THEN** UI SHALL preserve current context and render inline actionable error feedback
 
@@ -27,6 +30,7 @@ Each mutation control SHALL declare request payload contract and expected succes
 Each critical endpoint-screen mapping SHALL map to at least one automated E2E validation case (existing or planned).
 
 #### Scenario: Endpoint parity audit
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** endpoint parity is audited
 - **THEN** each critical endpoint SHALL reference a Cypress spec path and test identifier
 

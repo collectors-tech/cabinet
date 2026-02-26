@@ -6,6 +6,7 @@ Define global shell, navigation, context pane, and layout ownership behavior.
 Cabinet SHALL keep primary navigation fixed and assign page-body scroll to content container.
 
 #### Scenario: Page content scroll
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** content exceeds viewport height
 - **THEN** only content column SHALL scroll while primary nav remains fixed
 
@@ -13,6 +14,7 @@ Cabinet SHALL keep primary navigation fixed and assign page-body scroll to conte
 Cabinet SHALL support nav collapse and configurable ordering and visibility controls.
 
 #### Scenario: Edit navigation order
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user enters nav edit mode and reorders entries
 - **THEN** nav order SHALL persist for active profile context
 
@@ -20,6 +22,7 @@ Cabinet SHALL support nav collapse and configurable ordering and visibility cont
 Cabinet SHALL provide context pane behavior for collection and folder navigation.
 
 #### Scenario: Context pane selection
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user changes active collection context
 - **THEN** page content SHALL reflect selected context state
 
@@ -27,5 +30,6 @@ Cabinet SHALL provide context pane behavior for collection and folder navigation
 Cabinet SHALL display app version and build date metadata in sidebar footer region.
 
 #### Scenario: Render shell footer metadata
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** shell renders
 - **THEN** version/build metadata SHALL be visible in footer

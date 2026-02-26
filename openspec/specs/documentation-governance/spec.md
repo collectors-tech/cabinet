@@ -7,6 +7,7 @@ Define documentation source-of-truth, migration lock-in policy, and legacy artif
 Cabinet SHALL treat `openspec/specs/*/spec.md` as the normative source for product, UI, API behavior, and acceptance criteria.
 
 #### Scenario: Normative policy is explicit
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** contributors reference requirements
 - **THEN** they SHALL implement from OpenSpec specs, not legacy markdown notes
 
@@ -14,6 +15,7 @@ Cabinet SHALL treat `openspec/specs/*/spec.md` as the normative source for produ
 The `docs/` directory SHALL contain no `*.md` files. Legacy markdown content SHALL be migrated into canonical OpenSpec specs and then removed.
 
 #### Scenario: Legacy markdown is removed after canonical migration
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** documentation migration runs
 - **THEN** markdown files from `docs/**/*.md` are absorbed into OpenSpec canonical specs
 - **AND** `docs/` has zero markdown files
@@ -22,6 +24,7 @@ The `docs/` directory SHALL contain no `*.md` files. Legacy markdown content SHA
 The runtime API contract SHALL remain at `docs/api/openapi.yaml` for server and docs tooling compatibility.
 
 #### Scenario: OpenAPI contract remains stable
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** API parity tests execute
 - **THEN** they SHALL read `docs/api/openapi.yaml`
 - **AND** documentation migration SHALL NOT relocate that file
@@ -30,6 +33,7 @@ The runtime API contract SHALL remain at `docs/api/openapi.yaml` for server and 
 A migration mapping SHALL preserve the source-to-archive path lineage for every moved markdown file.
 
 #### Scenario: Key legacy files are traceable
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** reviewing migration lineage
 - **THEN** the following source paths are traceable in archived form:
   - `docs/FULL_FEATURE_LIST.md`

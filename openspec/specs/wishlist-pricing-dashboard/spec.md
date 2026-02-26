@@ -6,6 +6,7 @@ Define wishlist, pricing, and dashboard action-signal behavior.
 Cabinet SHALL persist wishlist records with target price, priority, and notes.
 
 #### Scenario: Create wishlist entry
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user adds item to wishlist with target
 - **THEN** Cabinet SHALL persist wishlist-linked record
 
@@ -13,6 +14,7 @@ Cabinet SHALL persist wishlist records with target price, priority, and notes.
 Cabinet SHALL persist min/median/latest pricing and per-source stock transitions.
 
 #### Scenario: Snapshot run
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** pricing snapshot executes for tracked items
 - **THEN** Cabinet SHALL append historical data points per item/source
 
@@ -20,6 +22,7 @@ Cabinet SHALL persist min/median/latest pricing and per-source stock transitions
 Cabinet SHALL support graph, source breakdown, stats/trend, and history export.
 
 #### Scenario: Export price history
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user requests pricing export
 - **THEN** Cabinet SHALL return export payload for selected scope
 
@@ -27,5 +30,6 @@ Cabinet SHALL support graph, source breakdown, stats/trend, and history export.
 Cabinet SHALL show discoveries, wishlist hits, price drops, stock alerts, restock alerts, and collection stats.
 
 #### Scenario: Dashboard attention refresh
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user refreshes dashboard
 - **THEN** dashboard SHALL render current actionable signals from runtime data

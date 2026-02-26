@@ -6,6 +6,7 @@ Define Reports screen behavior for analytics and export workflows.
 Reports SHALL provide summary metrics for wishlist hits, trends, stats, and sources.
 
 #### Scenario: Reports ready state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** reports data loads
 - **THEN** summary panels SHALL render expected analytics output
 
@@ -13,6 +14,7 @@ Reports SHALL provide summary metrics for wishlist hits, trends, stats, and sour
 Reports SHALL allow export of report/pricing history outputs.
 
 #### Scenario: Export report output
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user triggers export
 - **THEN** export payload SHALL be generated for selected scope
 
@@ -20,6 +22,7 @@ Reports SHALL allow export of report/pricing history outputs.
 Reports SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Reports empty state
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** no historical data exists
 - **THEN** reports SHALL show empty guidance and next action
 

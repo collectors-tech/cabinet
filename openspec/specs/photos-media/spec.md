@@ -6,6 +6,7 @@ Define media upload, derivative generation, and photo interaction behavior.
 Cabinet SHALL accept local file uploads for item media from desktop and mobile browsers.
 
 #### Scenario: Upload photo
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user uploads supported image file for an item
 - **THEN** Cabinet SHALL store original media locally
 
@@ -13,6 +14,7 @@ Cabinet SHALL accept local file uploads for item media from desktop and mobile b
 Cabinet SHALL create and maintain derived thumbnail and preview versions.
 
 #### Scenario: Derivative generation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** original photo is saved
 - **THEN** thumbnail and preview derivatives SHALL be generated
 
@@ -20,6 +22,7 @@ Cabinet SHALL create and maintain derived thumbnail and preview versions.
 Cabinet SHALL support reorder and primary-image selection per item.
 
 #### Scenario: Set primary photo
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user marks photo as primary
 - **THEN** item media state SHALL update primary reference
 
@@ -27,5 +30,6 @@ Cabinet SHALL support reorder and primary-image selection per item.
 Cabinet SHALL provide fullscreen media view with navigation for applicable collections.
 
 #### Scenario: Open fullscreen media
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user activates fullscreen action on a photo
 - **THEN** Cabinet SHALL present fullscreen viewer state

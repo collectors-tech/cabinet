@@ -6,6 +6,7 @@ Define Inventory AI Assist screen behavior for suggestion flows with guarded app
 The screen SHALL support title normalization and photo-based identification requests.
 
 #### Scenario: Title normalize request
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user submits listing title
 - **THEN** structured suggestion response SHALL render
 
@@ -13,6 +14,7 @@ The screen SHALL support title normalization and photo-based identification requ
 AI-driven mutations SHALL not execute without explicit user confirmation.
 
 #### Scenario: Apply suggested mutation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user chooses apply
 - **THEN** confirmation SHALL be required before mutation executes
 
@@ -20,6 +22,7 @@ AI-driven mutations SHALL not execute without explicit user confirmation.
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: AI service error
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** AI call fails
 - **THEN** screen SHALL show actionable error state and retry path
 

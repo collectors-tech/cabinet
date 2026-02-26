@@ -6,6 +6,7 @@ Define deterministic UI scale/performance requirements, data profiles, and succe
 Cabinet SHALL validate UI behavior using deterministic dataset profiles S0, S1, S2, and S3 with seed-driven reproducibility.
 
 #### Scenario: Reproduce S2 benchmark
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** a benchmark run uses profile `S2` with a fixed seed
 - **THEN** generated dataset and performance outputs SHALL be reproducible for the same seed inputs
 
@@ -13,6 +14,7 @@ Cabinet SHALL validate UI behavior using deterministic dataset profiles S0, S1, 
 Scalability profiles SHALL include realistic distribution for inventory, discovery, pricing, media, and wishlist data.
 
 #### Scenario: Run table-heavy screen checks on S3
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** UI tests execute on S3
 - **THEN** inventory/discovery/pricing/reports workflows SHALL remain operational without route-crashing
 
@@ -20,6 +22,7 @@ Scalability profiles SHALL include realistic distribution for inventory, discove
 Key UI interactions SHALL have defined threshold targets for S2 and non-crash constraints for S3.
 
 #### Scenario: Validate S2 interaction thresholds
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** S2 interaction benchmark executes
 - **THEN** initial render, navigation, search, sort, and details-open medians SHALL remain within target limits
 
@@ -27,6 +30,7 @@ Key UI interactions SHALL have defined threshold targets for S2 and non-crash co
 Scale testing SHALL include rapid search/filter loops, discovery action throughput, and report export behavior under high data volume.
 
 #### Scenario: Discovery action throughput on S3
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user performs repeated discovery actions under S3 load
 - **THEN** actions SHALL complete within bounded latency and SHALL not cause unrecoverable UI stalls
 
@@ -34,6 +38,7 @@ Scale testing SHALL include rapid search/filter loops, discovery action throughp
 Large data operations SHALL still expose deterministic loading, empty, error, and ready states.
 
 #### Scenario: S3 delayed response handling
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** large list API response is delayed
 - **THEN** UI SHALL show loading state and remain responsive until transition to ready or error state
 

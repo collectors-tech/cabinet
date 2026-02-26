@@ -6,6 +6,7 @@ Define in-app chat copilot behavior, context, and safety model.
 Cabinet SHALL provide right-rail chat panel with open/close controls from header.
 
 #### Scenario: Toggle chat rail
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user activates open/close chat control
 - **THEN** chat rail SHALL toggle visibility without losing current route context
 
@@ -13,6 +14,7 @@ Cabinet SHALL provide right-rail chat panel with open/close controls from header
 Cabinet SHALL persist thread/message history with profile isolation.
 
 #### Scenario: Reopen thread history
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user reopens existing thread
 - **THEN** prior messages SHALL load from profile-local storage
 
@@ -20,6 +22,7 @@ Cabinet SHALL persist thread/message history with profile isolation.
 Cabinet SHALL allow attaching local files selected by user for chat context.
 
 #### Scenario: Attach local file
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user uploads a local attachment in chat
 - **THEN** attachment SHALL be stored and linked to chat thread context
 
@@ -27,5 +30,6 @@ Cabinet SHALL allow attaching local files selected by user for chat context.
 Cabinet SHALL require preview and explicit confirm for mutation actions.
 
 #### Scenario: Apply proposed mutation
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** chat proposes create/update/track/wishlist action
 - **THEN** action SHALL not execute until user confirms apply

@@ -6,6 +6,7 @@ Define account menu content, identity display, and shortcut notation behavior.
 Cabinet SHALL display current user identity and keyboard shortcuts with OS-specific labels.
 
 #### Scenario: Header menu shortcut labels
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** platform is macOS or Windows
 - **THEN** displayed shortcut notation SHALL match platform conventions
 
@@ -13,6 +14,7 @@ Cabinet SHALL display current user identity and keyboard shortcuts with OS-speci
 Cabinet SHALL not show template actions not in Cabinet scope such as New Team or Billing.
 
 #### Scenario: Header menu render
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** header account menu is opened
 - **THEN** out-of-scope template actions SHALL be absent
 
@@ -20,5 +22,6 @@ Cabinet SHALL not show template actions not in Cabinet scope such as New Team or
 Cabinet SHALL not show upgrade prompt entries in sidebar account panel.
 
 #### Scenario: Sidebar account panel render
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** sidebar footer account panel is rendered
 - **THEN** upgrade placeholder rows SHALL not be present

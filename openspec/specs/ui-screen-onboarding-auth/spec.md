@@ -6,6 +6,7 @@ Define onboarding and auth screen behavior for first-run identity and workspace 
 Onboarding/Auth SHALL block advanced workspace access until required identity steps are complete.
 
 #### Scenario: Required identity gate
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user has incomplete identity setup
 - **THEN** advanced workspace SHALL remain locked
 
@@ -13,6 +14,7 @@ Onboarding/Auth SHALL block advanced workspace access until required identity st
 Progress SHALL persist through reload/restart until completion.
 
 #### Scenario: Resume incomplete onboarding
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user returns after restart
 - **THEN** onboarding SHALL resume at last incomplete step
 
@@ -20,6 +22,7 @@ Progress SHALL persist through reload/restart until completion.
 The screen SHALL support loading, empty, error, and ready states for profile and auth checks.
 
 #### Scenario: Auth check error
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** auth requirements fetch fails
 - **THEN** screen SHALL show actionable error with retry
 

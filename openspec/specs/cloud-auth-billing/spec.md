@@ -6,6 +6,7 @@ Define cloud ownership authentication bootstrap and billing-driven entitlement b
 Cabinet SHALL support cloud-account ownership mode alongside local-first authentication model when configured.
 
 #### Scenario: Cloud mode enabled
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** required cloud auth configuration is present
 - **THEN** Cabinet SHALL allow cloud session bootstrap and entitlement resolution
 
@@ -13,6 +14,7 @@ Cabinet SHALL support cloud-account ownership mode alongside local-first authent
 Frontend SHALL post cloud session token to bootstrap endpoint and SHALL receive plan + feature flags used for UI gating.
 
 #### Scenario: Bootstrap entitlement response
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** frontend calls cloud bootstrap endpoint with valid session token
 - **THEN** runtime SHALL return current plan and enabled feature set
 
@@ -20,6 +22,7 @@ Frontend SHALL post cloud session token to bootstrap endpoint and SHALL receive 
 Runtime SHALL process billing lifecycle webhook events and SHALL verify webhook signatures before applying entitlement changes.
 
 #### Scenario: Valid billing webhook update
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** signed billing webhook event for subscription state change is received
 - **THEN** runtime SHALL update entitlement override for associated user identity
 
@@ -27,6 +30,7 @@ Runtime SHALL process billing lifecycle webhook events and SHALL verify webhook 
 Cabinet SHALL gate pro features (AI assist, price tracking, scanner automation) based on resolved entitlement state.
 
 #### Scenario: Downgrade entitlement effect
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** user entitlement changes from pro to free
 - **THEN** pro-gated features SHALL be disabled in UI and enforced in runtime checks
 
@@ -34,6 +38,7 @@ Cabinet SHALL gate pro features (AI assist, price tracking, scanner automation) 
 Production cloud auth mode SHALL not rely on unsigned/unchecked token claim parsing for entitlement trust decisions.
 
 #### Scenario: Invalid token presented
+- **GIVEN** the required preconditions and context for this scenario are satisfied
 - **WHEN** bootstrap receives invalid or unverifiable cloud token
 - **THEN** runtime SHALL reject bootstrap request and return auth failure state
 
