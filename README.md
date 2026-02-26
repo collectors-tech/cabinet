@@ -62,6 +62,15 @@ go run ./cmd/cabinet
 - Validate spec: `./scripts/validate-openapi.ps1`
 - Generate static docs: `./scripts/generate-api-docs.ps1`
 
+## OpenSpec (Spec-First Workflow)
+- OpenSpec workspace: `openspec/`
+- Workflow guide: `docs/OPENSPEC_WORKFLOW.md`
+- Validate active changes:
+
+```powershell
+openspec validate --changes --strict --no-interactive
+```
+
 ## API (Current Scaffold)
 - `GET /api/profiles`
 - `POST /api/profiles` with `{ "name": "Default" }`
