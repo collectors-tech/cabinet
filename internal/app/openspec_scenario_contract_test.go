@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +11,21 @@ import (
 func TestOpenSpecScenariosRequireGivenWhenThen(t *testing.T) {
 	t.Parallel()
 
-	specFiles, err := filepath.Glob("../../openspec/specs/*/spec.md")
+	var specFiles []string
+	err := filepath.WalkDir("../../openspec/specs", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Name() == "spec.md" {
+			specFiles = append(specFiles, path)
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("glob spec files: %v", err)
+		t.Fatalf("walk spec files: %v", err)
 	}
 	if len(specFiles) == 0 {
 		t.Fatal("no openspec spec files found")
@@ -63,4 +76,3 @@ func TestOpenSpecScenariosRequireGivenWhenThen(t *testing.T) {
 		t.Fatalf("scenarios missing GIVEN/WHEN/THEN: %v", failures)
 	}
 }
-

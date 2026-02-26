@@ -91,4 +91,5 @@ Use for pagination, virtualization, and interaction latency validation.
 
 ## Notes for Implementation
 - Component contracts in this spec are the canonical baseline for implementation and tests.
-- This capability is normative for all current and future `ui-screen-*` specs.
+- This capability is normative for all current and future `openspec/specs/ui/screens/*/spec.md` specs.
+

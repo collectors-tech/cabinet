@@ -22,16 +22,20 @@ Legacy markdown under `docs/` has been migrated and removed.
 - `non-functional-and-security`
 - `chat-copilot`
 - `cloud-auth-billing`
-- `ui-data-contract-parity`
+- `documentation-governance`
+
+### UI Foundations
 - `ui-foundation-shell-navigation`
 - `ui-foundation-auth-menus-shortcuts`
 - `ui-foundation-theme-rtl-i18n`
 - `ui-foundation-interactions-and-accessibility`
 - `ui-foundation-components`
-- `ui-governance-gates`
-- `ui-scale-and-performance`
 - `ui-semantic-component-layer`
-- `documentation-governance`
+
+### UI Contracts and Gates
+- `ui-data-contract-parity`
+- `ui-scale-and-performance`
+- `ui-governance-gates`
 
 ## Screen Specs
 - `ui-screen-home`
@@ -126,3 +130,4 @@ All screen specs include critical UC-to-E2E mapping tables:
 - `ui-screen-reports`
 - `ui-screen-settings`
 - `ui-screen-chat-copilot`
+

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -52,5 +53,22 @@ func TestLegacyDocsMigrationMatrixCoversAllHistoricMarkdownFiles(t *testing.T) {
 	}
 	if bytes.Count(b, []byte("targets:")) < len(files) {
 		t.Fatalf("migration audit must include targets for every source file")
+	}
+
+	for _, line := range strings.Split(audit, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		target := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+		if target == "" || strings.HasPrefix(target, "source:") || strings.HasPrefix(target, "status:") || strings.HasPrefix(target, "requirement_markers:") || target == "targets:" {
+			continue
+		}
+		if strings.HasPrefix(target, "openspec/") || strings.HasPrefix(target, "docs/") {
+			p := filepath.Clean(filepath.Join("../..", filepath.FromSlash(target)))
+			if _, err := os.Stat(p); err != nil {
+				t.Fatalf("migration audit target path does not exist: %s", target)
+			}
+		}
 	}
 }
