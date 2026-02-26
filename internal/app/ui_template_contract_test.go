@@ -357,3 +357,24 @@ func TestClerkSessionBootstrapContract(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationsEditPersistenceContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"/api/profiles/active",
+		"/api/profiles/${activeProfileId}/settings",
+		"method: 'PUT'",
+		"Save Integration",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations edit contract missing token: %s", token)
+		}
+	}
+}

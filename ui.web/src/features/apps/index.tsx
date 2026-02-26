@@ -1,4 +1,4 @@
-import { type ChangeEvent, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -22,6 +29,11 @@ import { apps } from './data/apps'
 const route = getRouteApi('/_authenticated/integrations/')
 
 type AppType = 'all' | 'connected' | 'notConnected'
+type IntegrationForm = {
+  baseURL: string
+  token: string
+  marketplace: string
+}
 
 const appText = new Map<AppType, string>([
   ['all', 'All Integrations'],
@@ -48,8 +60,59 @@ export function Apps({
   const [sort, setSort] = useState(initSort)
   const [appType, setAppType] = useState(type)
   const [searchTerm, setSearchTerm] = useState(filter)
+  const [activeProfileId, setActiveProfileId] = useState('')
+  const [settings, setSettings] = useState<Record<string, string>>({})
+  const [editingIntegration, setEditingIntegration] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [form, setForm] = useState<IntegrationForm>({
+    baseURL: '',
+    token: '',
+    marketplace: '',
+  })
 
-  const filteredApps = apps
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const activeResp = await fetch('/api/profiles/active')
+        if (!activeResp.ok) {
+          return
+        }
+        const active = (await activeResp.json()) as { id?: string }
+        const profileID = active.id ?? ''
+        if (!profileID) {
+          return
+        }
+        setActiveProfileId(profileID)
+        const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
+        if (!settingsResp.ok) {
+          return
+        }
+        const payload = (await settingsResp.json()) as {
+          settings?: Record<string, string>
+        }
+        setSettings(payload.settings ?? {})
+      } catch {
+        // Keep integrations available even if settings load fails.
+      }
+    }
+    void load()
+  }, [])
+
+  const resolvedApps = useMemo(() => {
+    const ebayConnected =
+      Boolean(settings['ebay_bearer_token']) || settings['integration.ebay.enabled'] === 'true'
+    return apps.map((app) =>
+      app.name === 'eBay'
+        ? {
+            ...app,
+            connected: ebayConnected,
+          }
+        : app
+    )
+  }, [settings])
+
+  const filteredApps = resolvedApps
     .sort((a, b) =>
       sort === 'asc'
         ? a.name.localeCompare(b.name)
@@ -87,6 +150,65 @@ export function Apps({
   const handleSortChange = (sort: 'asc' | 'desc') => {
     setSort(sort)
     navigate({ search: (prev) => ({ ...prev, sort }) })
+  }
+
+  const openIntegration = (name: string) => {
+    setSaveError(null)
+    setEditingIntegration(name)
+    if (name === 'eBay') {
+      setForm({
+        baseURL: settings['ebay_base_url'] ?? '',
+        token: settings['ebay_bearer_token'] ?? '',
+        marketplace: settings['ebay_marketplace'] ?? 'EBAY-US',
+      })
+      return
+    }
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    setForm({
+      baseURL: settings[`integration.${slug}.base_url`] ?? '',
+      token: settings[`integration.${slug}.token`] ?? '',
+      marketplace: settings[`integration.${slug}.marketplace`] ?? '',
+    })
+  }
+
+  const saveIntegration = async () => {
+    if (!activeProfileId || !editingIntegration) {
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const slug = editingIntegration.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+      const next: Record<string, string> = {
+        ...settings,
+      }
+      if (editingIntegration === 'eBay') {
+        next['ebay_base_url'] = form.baseURL
+        next['ebay_bearer_token'] = form.token
+        next['ebay_marketplace'] = form.marketplace
+        next['integration.ebay.enabled'] = String(Boolean(form.token))
+      } else {
+        next[`integration.${slug}.base_url`] = form.baseURL
+        next[`integration.${slug}.token`] = form.token
+        next[`integration.${slug}.marketplace`] = form.marketplace
+        next[`integration.${slug}.enabled`] = String(Boolean(form.token))
+      }
+      const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: next }),
+      })
+      if (!response.ok) {
+        throw new Error(`save_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as { settings?: Record<string, string> }
+      setSettings(payload.settings ?? next)
+      setEditingIntegration(null)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'save_failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -166,8 +288,9 @@ export function Apps({
                   variant='outline'
                   size='sm'
                   className={`${app.connected ? 'border border-blue-300 bg-blue-50 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:hover:bg-blue-900' : ''}`}
+                  onClick={() => openIntegration(app.name)}
                 >
-                  {app.connected ? 'Connected' : 'Connect'}
+                  {app.connected ? 'Edit' : 'Connect'}
                 </Button>
               </div>
               <div>
@@ -178,6 +301,62 @@ export function Apps({
           ))}
         </ul>
       </Main>
+
+      <Dialog
+        open={editingIntegration !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingIntegration(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingIntegration ?? 'Integration'}</DialogTitle>
+            <DialogDescription>
+              Update provider credentials and connection details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-3'>
+            <Input
+              placeholder='Base URL'
+              value={form.baseURL}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, baseURL: e.target.value }))
+              }
+            />
+            <Input
+              placeholder='Token / API key'
+              value={form.token}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, token: e.target.value }))
+              }
+            />
+            <Input
+              placeholder='Marketplace / Region'
+              value={form.marketplace}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, marketplace: e.target.value }))
+              }
+            />
+            {saveError ? (
+              <p className='text-sm text-destructive'>{saveError}</p>
+            ) : null}
+            <div className='flex justify-end gap-2'>
+              <Button
+                variant='outline'
+                onClick={() => setEditingIntegration(null)}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button onClick={() => void saveIntegration()} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Integration'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

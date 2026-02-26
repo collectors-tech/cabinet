@@ -10,6 +10,12 @@ const StoreLogo = () => <Store className='size-4' />
 
 export const apps = [
   {
+    name: 'eBay',
+    logo: <StoreLogo />,
+    connected: false,
+    desc: 'Marketplace connector for scanner discovery, pricing, and matching.',
+  },
+  {
     name: 'Telegram',
     logo: <IconTelegram />,
     connected: false,
