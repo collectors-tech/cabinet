@@ -100,3 +100,25 @@ func TestBulkEditItemsEndpoint(t *testing.T) {
 		}
 	}
 }
+
+func TestListItemsReturnsEmptyArrayWhenNoItems(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	resp := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", resp.Code, resp.Body.String())
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	rawItems, ok := payload["items"]
+	if !ok {
+		t.Fatalf("expected items field, got %s", resp.Body.String())
+	}
+	if string(rawItems) == "null" {
+		t.Fatalf("expected items to be empty array, got null: %s", resp.Body.String())
+	}
+}

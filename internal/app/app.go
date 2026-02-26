@@ -440,6 +440,9 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_list_items"}`, http.StatusInternalServerError)
 				return
 			}
+			if items == nil {
+				items = make([]collection.Item, 0)
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 		case http.MethodPost:
 			if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
