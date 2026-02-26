@@ -11,7 +11,7 @@ files:
     requirement_markers: 0
     targets:
       - openspec/specs/runtime-core/spec.md
-      - openspec/specs/non-functional-and-security/spec.md
+      - openspec/specs/non-functional/spec.md
   - source: docs/FORM_ARCHITECTURE.md
     status: migrated
     requirement_markers: 0
@@ -61,7 +61,7 @@ files:
     status: reference_only
     requirement_markers: 0
     targets:
-      - openspec/specs/non-functional-and-security/spec.md
+      - openspec/specs/non-functional/spec.md
   - source: docs/SHOP_PROVIDERS.md
     status: migrated
     requirement_markers: 0
@@ -70,8 +70,8 @@ files:
       - openspec/specs/provider-ebay/spec.md
       - openspec/specs/provider-amazon/spec.md
       - openspec/specs/provider-au-webshops/spec.md
-      - openspec/specs/settings-and-integrations/spec.md
-      - openspec/specs/scanner-and-candidates/spec.md
+      - openspec/specs/settings/spec.md
+      - openspec/specs/scanner/spec.md
   - source: docs/SPEC.md
     status: migrated
     requirement_markers: 0
@@ -111,12 +111,12 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/auth-and-profiles/spec.md
+      - openspec/specs/auth/spec.md
   - source: docs/features/03-user-profiles.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/auth-and-profiles/spec.md
+      - openspec/specs/auth/spec.md
   - source: docs/features/04-collection-management.md
     status: migrated
     requirement_markers: 0
@@ -131,7 +131,7 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/barcodes-and-lookup/spec.md
+      - openspec/specs/barcodes/spec.md
   - source: docs/features/07-ai-assist.md
     status: migrated
     requirement_markers: 0
@@ -141,17 +141,17 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/scanner-and-candidates/spec.md
+      - openspec/specs/scanner/spec.md
   - source: docs/features/09-matching-engine.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/matching-and-discovery/spec.md
+      - openspec/specs/matching/spec.md
   - source: docs/features/10-not-in-my-collection.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/matching-and-discovery/spec.md
+      - openspec/specs/matching/spec.md
   - source: docs/features/11-wishlist.md
     status: migrated
     requirement_markers: 0
@@ -172,22 +172,22 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/search-and-data-management/spec.md
+      - openspec/specs/search/spec.md
   - source: docs/features/15-data-management.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/search-and-data-management/spec.md
+      - openspec/specs/search/spec.md
   - source: docs/features/16-licensing-system.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/licensing-and-entitlements/spec.md
+      - openspec/specs/licensing/spec.md
   - source: docs/features/17-settings.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/settings-and-integrations/spec.md
+      - openspec/specs/settings/spec.md
   - source: docs/features/18-error-handling.md
     status: migrated
     requirement_markers: 0
@@ -207,12 +207,12 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/non-functional-and-security/spec.md
+      - openspec/specs/non-functional/spec.md
   - source: docs/features/22-security-and-privacy-requirements.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/non-functional-and-security/spec.md
+      - openspec/specs/non-functional/spec.md
   - source: docs/features/23-in-app-chat-copilot.md
     status: migrated
     requirement_markers: 0
@@ -264,7 +264,7 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/ui-scale-and-performance/spec.md
+      - openspec/specs/ui-scale/spec.md
   - source: docs/ui-spec/08-GAP-AND-INTUITIVENESS-REVIEW.md
     status: migrated
     requirement_markers: 0
@@ -294,7 +294,7 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/ui-scale-and-performance/spec.md
+      - openspec/specs/ui-scale/spec.md
   - source: docs/ui-spec/13-UI-UX-STRATEGY-GATE.md
     status: migrated
     requirement_markers: 0
@@ -375,5 +375,6 @@ files:
     requirement_markers: 0
     targets:
       - openspec/specs/ui-screen-settings/spec.md
+
 
 
