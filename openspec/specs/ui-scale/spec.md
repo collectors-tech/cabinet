@@ -2,7 +2,7 @@
 Define dataset-scale behavior requirements for UI workflows.
 
 ## Requirements
-### Requirement: UI scalability validation SHALL use deterministic dataset profiles
+### Requirement UI-SCALE-001: UI scalability validation SHALL use deterministic dataset profiles
 Cabinet SHALL validate UI behavior with deterministic S0/S1/S2/S3 data profiles.
 
 #### Scenario: Reproduce S2 benchmark
@@ -10,7 +10,7 @@ Cabinet SHALL validate UI behavior with deterministic S0/S1/S2/S3 data profiles.
 - **WHEN** scale benchmark runs
 - **THEN** generated dataset and outputs SHALL be reproducible for same seed
 
-### Requirement: Data profiles SHALL define sample and bulk coverage for table-heavy screens
+### Requirement UI-SCALE-002: Data profiles SHALL define sample and bulk coverage for table-heavy screens
 Scale profiles SHALL include realistic distributions for inventory, discovery, pricing, media, and wishlist.
 
 #### Scenario: Run table-heavy checks on S3
@@ -18,7 +18,7 @@ Scale profiles SHALL include realistic distributions for inventory, discovery, p
 - **WHEN** table-heavy workflows execute
 - **THEN** workflows SHALL remain operational without route crashes
 
-### Requirement: Scale validation SHALL include high-volume action workflows
+### Requirement UI-SCALE-003: Scale validation SHALL include high-volume action workflows
 Scale testing SHALL include rapid search/filter loops, discovery throughput, and report export under high volume.
 
 #### Scenario: Discovery action throughput on S3

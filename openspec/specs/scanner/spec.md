@@ -2,7 +2,7 @@
 Define scanner query-set lifecycle, execution controls, and failure recovery behavior.
 
 ## Requirements
-### Requirement: Scanner query sets SHALL support user-defined market criteria
+### Requirement SCANNER-001: Scanner query sets SHALL support user-defined market criteria
 Cabinet SHALL support query set criteria including keywords, exclusions, max price, region, condition, and scheduling metadata.
 
 #### Scenario: Create query set
@@ -10,7 +10,7 @@ Cabinet SHALL support query set criteria including keywords, exclusions, max pri
 - **WHEN** user submits query set form
 - **THEN** Cabinet SHALL persist query set definition
 
-### Requirement: Scanner execution SHALL support manual and scheduled runs with rate limits
+### Requirement SCANNER-002: Scanner execution SHALL support manual and scheduled runs with rate limits
 Cabinet SHALL support run-now and scheduled execution under rate-limited controls.
 
 #### Scenario: Scheduled scanner run
@@ -18,7 +18,7 @@ Cabinet SHALL support run-now and scheduled execution under rate-limited control
 - **WHEN** scheduler triggers execution
 - **THEN** scan SHALL execute with rate-limit policy
 
-### Requirement: Scanner failures SHALL be diagnosable and retryable
+### Requirement SCANNER-003: Scanner failures SHALL be diagnosable and retryable
 Cabinet SHALL log failures and support retry by query set.
 
 #### Scenario: Retry failed scan

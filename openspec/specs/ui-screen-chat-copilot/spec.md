@@ -2,27 +2,27 @@
 Define Chat Copilot screen/rail behavior for conversational workflows and guarded actions.
 
 ## Requirements
-### Requirement: Chat Copilot SHALL support persistent threads and messages
+### Requirement UI-SCREEN-CHAT-COPILOT-001: Chat Copilot SHALL support persistent threads and messages
 Chat SHALL support local profile-scoped thread and message persistence.
 
 #### Scenario: Reopen thread history
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user reopens existing thread
 - **THEN** thread history SHALL render prior messages
 
-### Requirement: Chat Copilot SHALL support attachment and action preview flows
+### Requirement UI-SCREEN-CHAT-COPILOT-002: Chat Copilot SHALL support attachment and action preview flows
 Chat SHALL support user-selected file attachments and preview-before-apply actions.
 
 #### Scenario: Apply action from preview
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user confirms apply for previewed action
 - **THEN** mutation SHALL execute and log outcome
 
-### Requirement: Chat Copilot SHALL support deterministic state handling
+### Requirement UI-SCREEN-CHAT-COPILOT-003: Chat Copilot SHALL support deterministic state handling
 Chat SHALL support loading, empty, error, and ready states for threads/messages.
 
 #### Scenario: Chat service error
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** thread/message API fails
 - **THEN** chat SHALL show actionable error state with retry
 

@@ -2,7 +2,7 @@
 Define feature-gate entitlement enforcement behavior.
 
 ## Requirements
-### Requirement: Entitlements SHALL enforce free/pro limits
+### Requirement ENTITLEMENTS-001: Entitlements SHALL enforce free/pro limits
 Cabinet SHALL enforce free-tier limits and pro feature unlocks.
 
 #### Scenario: Free-tier limit reached

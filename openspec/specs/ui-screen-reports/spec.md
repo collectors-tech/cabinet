@@ -2,27 +2,27 @@
 Define Reports screen behavior for analytics and export workflows.
 
 ## Requirements
-### Requirement: Reports SHALL render wishlist and pricing summaries
+### Requirement UI-SCREEN-REPORTS-001: Reports SHALL render wishlist and pricing summaries
 Reports SHALL provide summary metrics for wishlist hits, trends, stats, and sources.
 
 #### Scenario: Reports ready state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** reports data loads
 - **THEN** summary panels SHALL render expected analytics output
 
-### Requirement: Reports SHALL support export operations
+### Requirement UI-SCREEN-REPORTS-002: Reports SHALL support export operations
 Reports SHALL allow export of report/pricing history outputs.
 
 #### Scenario: Export report output
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user triggers export
 - **THEN** export payload SHALL be generated for selected scope
 
-### Requirement: Reports SHALL support deterministic state handling
+### Requirement UI-SCREEN-REPORTS-003: Reports SHALL support deterministic state handling
 Reports SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Reports empty state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** no historical data exists
 - **THEN** reports SHALL show empty guidance and next action
 

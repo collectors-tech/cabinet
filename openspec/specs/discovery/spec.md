@@ -2,7 +2,7 @@
 Define not-in-collection discovery triage behavior.
 
 ## Requirements
-### Requirement: Not-in-collection panel SHALL support actionable triage
+### Requirement DISCOVERY-001: Not-in-collection panel SHALL support actionable triage
 Cabinet SHALL support ignore, add-to-wishlist, track-price, and create-item actions.
 
 #### Scenario: Discovery triage action
@@ -10,7 +10,7 @@ Cabinet SHALL support ignore, add-to-wishlist, track-price, and create-item acti
 - **WHEN** user applies a triage action
 - **THEN** Cabinet SHALL persist the requested action outcome
 
-### Requirement: Discovery filters SHALL support price/query/date
+### Requirement DISCOVERY-002: Discovery filters SHALL support price/query/date
 Cabinet SHALL provide filtering for discovery queue triage.
 
 #### Scenario: Discovery filtered view

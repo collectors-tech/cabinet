@@ -9,6 +9,7 @@ Cabinet SHALL classify Amazon integration mode (official API, affiliate feed, or
 - **GIVEN** provider registry request is made for `amazon`
 - **WHEN** `GET /api/providers/registry` resolves Amazon entry
 - **THEN** payload MUST include:
+- API outcome MUST be explicit: `200` on success, `4xx` for validation/auth conflicts, and `5xx` for unexpected failures
   - `provider_id: "amazon"`
   - `integration_mode` (`program_api|disabled`)
   - `eligibility_required` (boolean)

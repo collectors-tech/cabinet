@@ -2,7 +2,7 @@
 Define the semantic UI component layering contract so Cabinet UI is composable, testable, and implementation-independent from low-level UI libraries.
 
 ## Requirements
-### Requirement: Semantic component architecture SHALL be structured into L0-L4 layers
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-001: Semantic component architecture SHALL be structured into L0-L4 layers
 Cabinet UI SHALL follow a layered model:
 - L0 tokens/primitives
 - L1 app shell
@@ -11,55 +11,55 @@ Cabinet UI SHALL follow a layered model:
 - L4 overlays/interactions
 
 #### Scenario: Component placement review
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** a new UI component is introduced
 - **THEN** it SHALL be assigned to a valid semantic layer with clear ownership boundaries
 
-### Requirement: L0 primitives SHALL provide shared visual and state consistency
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-002: L0 primitives SHALL provide shared visual and state consistency
 L0 primitives SHALL include page/card/form/status primitives and SHALL define common styling and state conventions.
 
 #### Scenario: Primitive reuse
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** a new screen section is implemented
 - **THEN** it SHALL compose from L0 primitives rather than duplicating raw style behavior
 
-### Requirement: L1 app shell SHALL own global layout responsibilities
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-003: L1 app shell SHALL own global layout responsibilities
 L1 SHALL define app shell, primary nav, context pane, sticky page header, and main content scroll ownership.
 
 #### Scenario: Shell behavior validation
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user navigates across top-level screens
 - **THEN** shell ownership (fixed nav, sticky header, body scroll) SHALL remain stable
 
-### Requirement: L2 workspace components SHALL model screen-level workflows with deterministic states
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-004: L2 workspace components SHALL model screen-level workflows with deterministic states
 L2 workspaces SHALL expose loading, empty, error, and ready states for all data-bound regions.
 
 #### Scenario: Workspace data state transition
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** data fetch resolves from loading to ready or error
 - **THEN** workspace SHALL transition through deterministic state rendering behavior
 
-### Requirement: L3 domain blocks SHALL be reusable across workspaces
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-005: L3 domain blocks SHALL be reusable across workspaces
 L3 blocks (toolbars, summary strips, grids/tables, media pickers, status panels) SHALL be reusable and context-configurable.
 
 #### Scenario: Domain block reuse
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** inventory and wishlist need shared table behavior
 - **THEN** both SHALL consume the same semantic table block contract with contextual props
 
-### Requirement: L4 overlays SHALL enforce interaction safety and focus behavior
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-006: L4 overlays SHALL enforce interaction safety and focus behavior
 L4 overlays (dialogs, drawers, command palette, chat rail) SHALL enforce focus management, explicit open/close controls, and destructive action guardrails.
 
 #### Scenario: Confirm dialog guardrail
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user initiates destructive action
 - **THEN** confirm dialog SHALL require explicit confirmation before mutation execution
 
-### Requirement: Semantic layer SHALL enforce accessibility contract
+### Requirement UI-SEMANTIC-COMPONENT-LAYER-007: Semantic layer SHALL enforce accessibility contract
 All layers SHALL comply with landmark semantics, input labeling, keyboard navigation, and non-color-only state signaling.
 
 #### Scenario: Keyboard-only workflow
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user navigates shell and overlays without mouse
 - **THEN** all primary interactions SHALL remain reachable and operable
 

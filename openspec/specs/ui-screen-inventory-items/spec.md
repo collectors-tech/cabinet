@@ -2,32 +2,32 @@
 Define Inventory Items screen behavior for high-volume item browsing, editing, and bulk operations.
 
 ## Requirements
-### Requirement: Inventory Items SHALL support list/card browsing with consistent interactions
+### Requirement UI-SCREEN-INVENTORY-ITEMS-001: Inventory Items SHALL support list/card browsing with consistent interactions
 Inventory Items SHALL support row-details behavior, selection mode, and filter/sort workflows.
 
 #### Scenario: Row details open
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user clicks non-interactive row area
 - **THEN** item details drawer SHALL open for selected row
 
-### Requirement: Inventory Items SHALL support deterministic state handling
+### Requirement UI-SCREEN-INVENTORY-ITEMS-002: Inventory Items SHALL support deterministic state handling
 Inventory Items SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Inventory empty state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** no items match active filters
 - **THEN** screen SHALL render empty state with add/search guidance
 
 #### Scenario: Inventory error state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** items API fails
 - **THEN** screen SHALL render inline retry/error without fatal route failure
 
-### Requirement: Inventory Items SHALL support sample and bulk data usage
+### Requirement UI-SCREEN-INVENTORY-ITEMS-003: Inventory Items SHALL support sample and bulk data usage
 The screen SHALL remain usable with both starter and stress datasets.
 
 #### Scenario: Bulk dataset interaction
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user filters/sorts large item lists
 - **THEN** interactions SHALL remain responsive and deterministic
 

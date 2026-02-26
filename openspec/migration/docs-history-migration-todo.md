@@ -47,3 +47,13 @@
   - `openspec validate --all`
 - OpenAPI changed: `no`
 - Changed paths/schemas if yes: `n/a`
+
+## Hardening Ledger
+- Pass: OpenSpec full hardening for executable requirements + deterministic ID discipline
+- Tracking issue: `#184`
+- Baseline commit: `d0fd84c`
+- Evidence artifacts:
+  - `openspec/migration/spec-hardening-audit.md`
+  - `openspec/migration/spec-hardening-summary.json`
+  - `openspec/migration/spec-hardening-changed-files.txt`
+  - `openspec/migration/spec-hardening-review-notes.md`

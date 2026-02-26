@@ -2,27 +2,27 @@
 Define Settings screen behavior for configuration, maintenance, licensing, and diagnostics workflows.
 
 ## Requirements
-### Requirement: Settings SHALL persist configuration and secrets via API
+### Requirement UI-SCREEN-SETTINGS-001: Settings SHALL persist configuration and secrets via API
 Settings SHALL load and persist profile settings and secret values through API-backed flows.
 
 #### Scenario: Save settings and reload
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user updates settings and reloads
 - **THEN** saved values SHALL persist for active profile
 
-### Requirement: Settings SHALL support maintenance and recovery operations
+### Requirement UI-SCREEN-SETTINGS-002: Settings SHALL support maintenance and recovery operations
 Settings SHALL expose reindex, repair, backup, restore, and diagnostic export workflows.
 
 #### Scenario: Backup restore workflow
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user confirms restore
 - **THEN** restore operation SHALL execute and show completion state
 
-### Requirement: Settings SHALL support deterministic state handling
+### Requirement UI-SCREEN-SETTINGS-003: Settings SHALL support deterministic state handling
 Settings SHALL support loading, empty, error, and ready states across sections.
 
 #### Scenario: Settings section load failure
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** section data fetch fails
 - **THEN** section SHALL show actionable error state without breaking entire route
 

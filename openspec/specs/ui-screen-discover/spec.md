@@ -2,27 +2,27 @@
 Define Discover screen behavior for not-in-collection triage actions.
 
 ## Requirements
-### Requirement: Discover SHALL support filterable candidate triage
+### Requirement UI-SCREEN-DISCOVER-001: Discover SHALL support filterable candidate triage
 Discover SHALL support query/price/date filtering and list rendering.
 
 #### Scenario: Filtered triage list
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user applies filters
 - **THEN** discover list SHALL render filtered candidates
 
-### Requirement: Discover SHALL support all primary candidate actions
+### Requirement UI-SCREEN-DISCOVER-002: Discover SHALL support all primary candidate actions
 Discover SHALL support ignore, wishlist, track, and create-item actions.
 
 #### Scenario: Candidate action apply
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user chooses action on candidate
 - **THEN** candidate state and downstream linkage SHALL update
 
-### Requirement: Discover SHALL support deterministic state handling
+### Requirement UI-SCREEN-DISCOVER-003: Discover SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Discover error state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** discover API request fails
 - **THEN** screen SHALL present actionable retry state
 

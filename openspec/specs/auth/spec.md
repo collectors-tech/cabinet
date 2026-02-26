@@ -2,7 +2,7 @@
 Define local identity authentication, WebAuthn, locking, and recovery behavior.
 
 ## Requirements
-### Requirement: WebAuthn SHALL be required for first-run local identity
+### Requirement AUTH-001: WebAuthn SHALL be required for first-run local identity
 Cabinet SHALL require creation of at least one WebAuthn credential before full workspace access.
 
 #### Scenario: First credential registration
@@ -10,7 +10,7 @@ Cabinet SHALL require creation of at least one WebAuthn credential before full w
 - **WHEN** user completes setup
 - **THEN** successful WebAuthn registration SHALL be required before workspace unlock
 
-### Requirement: Cabinet SHALL enforce session locking behavior
+### Requirement AUTH-002: Cabinet SHALL enforce session locking behavior
 Cabinet SHALL lock at startup and SHALL support auto-lock after inactivity.
 
 #### Scenario: Startup lock gate
@@ -18,7 +18,7 @@ Cabinet SHALL lock at startup and SHALL support auto-lock after inactivity.
 - **WHEN** app starts
 - **THEN** protected routes SHALL remain blocked until unlock succeeds
 
-### Requirement: Recovery SHALL exist as optional fallback
+### Requirement AUTH-003: Recovery SHALL exist as optional fallback
 Cabinet SHALL support recovery passphrase reset flow when usable authenticators are unavailable.
 
 #### Scenario: Recovery reset begin

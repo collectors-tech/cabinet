@@ -2,7 +2,7 @@
 Define candidate persistence and deduplication behavior.
 
 ## Requirements
-### Requirement: Candidate records SHALL preserve listing and stock context
+### Requirement CANDIDATES-001: Candidate records SHALL preserve listing and stock context
 Cabinet SHALL store listing id, pricing, seller, URL, media, first/last seen, status, and stock observations.
 
 #### Scenario: Candidate persistence
@@ -10,7 +10,7 @@ Cabinet SHALL store listing id, pricing, seller, URL, media, first/last seen, st
 - **WHEN** ingestion persists candidates
 - **THEN** Cabinet SHALL store candidate records with stock context fields
 
-### Requirement: Candidate ingestion SHALL deduplicate via fingerprint
+### Requirement CANDIDATES-002: Candidate ingestion SHALL deduplicate via fingerprint
 Cabinet SHALL compute deterministic candidate fingerprint and prevent duplicate record creation for same provider/query-set scope.
 
 #### Scenario: Duplicate candidate returned across runs

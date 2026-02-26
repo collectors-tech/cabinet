@@ -2,7 +2,7 @@
 Define full-text and structured filtering behavior for collection query workflows.
 
 ## Requirements
-### Requirement: Search SHALL support full-text query and structured filtering
+### Requirement SEARCH-001: Search SHALL support full-text query and structured filtering
 Cabinet SHALL support full-text search with brand, condition, status, tags, and scale filters.
 
 #### Scenario: Filtered search
@@ -10,7 +10,7 @@ Cabinet SHALL support full-text search with brand, condition, status, tags, and 
 - **WHEN** user applies query and filter set
 - **THEN** Cabinet SHALL return filtered and sorted results
 
-### Requirement: Saved filters SHALL be profile-scoped and reusable
+### Requirement SEARCH-002: Saved filters SHALL be profile-scoped and reusable
 Cabinet SHALL support create, update, delete, and reuse for saved filters.
 
 #### Scenario: Save and reload filter

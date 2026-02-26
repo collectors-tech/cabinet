@@ -2,43 +2,43 @@
 Define normative UI component contracts so any engineer can implement Cabinet screens consistently without external knowledge.
 
 ## Requirements
-### Requirement: Every foundation component family SHALL define explicit contract surface
+### Requirement UI-FOUNDATION-COMPONENTS-001: Every foundation component family SHALL define explicit contract surface
 Each component family SHALL define required inputs, outputs, state model, accessibility requirements, and deterministic error behavior.
 
 #### Scenario: Implementing a new component instance
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** an engineer implements a Button, Input, Select, Dialog, Drawer, or domain component
 - **THEN** implementation SHALL follow the contract shape for inputs, outputs, states, and accessibility
 
-### Requirement: Foundation components SHALL support loading, empty, error, and ready states where data-bound
+### Requirement UI-FOUNDATION-COMPONENTS-002: Foundation components SHALL support loading, empty, error, and ready states where data-bound
 Data-bound components SHALL expose deterministic rendering behavior for all primary operational states.
 
 #### Scenario: Data-bound component enters error state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** a data request fails for a component
 - **THEN** the component SHALL render explicit error state with retry-capable action where applicable
 
-### Requirement: Mutating component flows SHALL prevent double submit and race actions
+### Requirement UI-FOUNDATION-COMPONENTS-003: Mutating component flows SHALL prevent double submit and race actions
 Mutating actions in forms and action panels SHALL enforce busy-state locking and idempotent intent handling.
 
 #### Scenario: Repeated submit clicks
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user clicks submit repeatedly while request is in-flight
 - **THEN** component SHALL block duplicate submissions until current request resolves
 
-### Requirement: Accessibility behavior SHALL be non-optional for foundation components
+### Requirement UI-FOUNDATION-COMPONENTS-004: Accessibility behavior SHALL be non-optional for foundation components
 Inputs, dialogs, drawers, and action controls SHALL meet keyboard and semantic accessibility behavior.
 
 #### Scenario: Keyboard-only dialog interaction
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user opens dialog with keyboard and exits with Escape
 - **THEN** focus SHALL be trapped while open and restored to trigger on close
 
-### Requirement: Component-level contracts SHALL include testability artifacts
+### Requirement UI-FOUNDATION-COMPONENTS-005: Component-level contracts SHALL include testability artifacts
 Each major component family SHALL define acceptance criteria, success criteria, and test mapping requirements.
 
 #### Scenario: Component readiness review
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** a component family is marked implementation-ready
 - **THEN** acceptance and success criteria plus test mapping SHALL be present in spec and linked to automated tests
 

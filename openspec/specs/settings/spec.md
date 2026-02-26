@@ -2,7 +2,7 @@
 Define per-profile settings persistence and secure credential storage behavior.
 
 ## Requirements
-### Requirement: Settings SHALL persist per-profile configuration
+### Requirement SETTINGS-001: Settings SHALL persist per-profile configuration
 Cabinet SHALL persist profile settings including theme, scanner schedule, update channel, backup frequency, and database location.
 
 #### Scenario: Save settings
@@ -10,7 +10,7 @@ Cabinet SHALL persist profile settings including theme, scanner schedule, update
 - **WHEN** user saves settings
 - **THEN** values SHALL persist across restart for active profile
 
-### Requirement: Settings SHALL manage provider and AI credentials
+### Requirement SETTINGS-002: Settings SHALL manage provider and AI credentials
 Cabinet SHALL support profile-scoped provider and AI credential configuration.
 
 #### Scenario: Update provider credential

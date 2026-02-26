@@ -2,7 +2,7 @@
 Define measurable runtime performance and reliability constraints for release readiness.
 
 ## Requirements
-### Requirement: Runtime performance SHALL meet v1 thresholds
+### Requirement NON-FUNCTIONAL-001: Runtime performance SHALL meet v1 thresholds
 Cabinet SHALL meet startup, search, and scanner runtime targets defined for v1.
 
 #### Scenario: Startup benchmark
@@ -10,7 +10,7 @@ Cabinet SHALL meet startup, search, and scanner runtime targets defined for v1.
 - **WHEN** startup benchmark run is measured
 - **THEN** startup SHALL complete within target threshold
 
-### Requirement: Reliability SHALL meet beta crash-free objective
+### Requirement NON-FUNCTIONAL-002: Reliability SHALL meet beta crash-free objective
 Cabinet SHALL target crash-free session rate above 99 percent for beta.
 
 #### Scenario: Beta reliability assessment

@@ -2,7 +2,7 @@
 Define security and privacy controls for secrets and offline trust.
 
 ## Requirements
-### Requirement: Secrets SHALL never be stored in plaintext SQLite records
+### Requirement SECURITY-001: Secrets SHALL never be stored in plaintext SQLite records
 Cabinet SHALL store sensitive keys in OS-backed secure storage.
 
 #### Scenario: Secret persistence
@@ -10,7 +10,7 @@ Cabinet SHALL store sensitive keys in OS-backed secure storage.
 - **WHEN** persistence operation completes
 - **THEN** plaintext secret SHALL not be persisted in SQLite tables
 
-### Requirement: License verification SHALL function offline
+### Requirement SECURITY-002: License verification SHALL function offline
 Cabinet SHALL verify license state without requiring cloud access.
 
 #### Scenario: Offline license check

@@ -2,27 +2,27 @@
 Define Inventory AI Assist screen behavior for suggestion flows with guarded apply.
 
 ## Requirements
-### Requirement: Inventory AI Assist SHALL support title and photo suggestion workflows
+### Requirement UI-SCREEN-INVENTORY-AI-ASSIST-001: Inventory AI Assist SHALL support title and photo suggestion workflows
 The screen SHALL support title normalization and photo-based identification requests.
 
 #### Scenario: Title normalize request
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user submits listing title
 - **THEN** structured suggestion response SHALL render
 
-### Requirement: Inventory AI Assist SHALL enforce confirm-before-apply
+### Requirement UI-SCREEN-INVENTORY-AI-ASSIST-002: Inventory AI Assist SHALL enforce confirm-before-apply
 AI-driven mutations SHALL not execute without explicit user confirmation.
 
 #### Scenario: Apply suggested mutation
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user chooses apply
 - **THEN** confirmation SHALL be required before mutation executes
 
-### Requirement: Inventory AI Assist SHALL support deterministic state handling
+### Requirement UI-SCREEN-INVENTORY-AI-ASSIST-003: Inventory AI Assist SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: AI service error
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** AI call fails
 - **THEN** screen SHALL show actionable error state and retry path
 

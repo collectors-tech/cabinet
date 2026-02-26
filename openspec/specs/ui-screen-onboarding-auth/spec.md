@@ -2,27 +2,27 @@
 Define onboarding and auth screen behavior for first-run identity and workspace unlock.
 
 ## Requirements
-### Requirement: Onboarding/Auth SHALL enforce WebAuthn-first completion
+### Requirement UI-SCREEN-ONBOARDING-AUTH-001: Onboarding/Auth SHALL enforce WebAuthn-first completion
 Onboarding/Auth SHALL block advanced workspace access until required identity steps are complete.
 
 #### Scenario: Required identity gate
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user has incomplete identity setup
 - **THEN** advanced workspace SHALL remain locked
 
-### Requirement: Onboarding/Auth SHALL persist and resume progress
+### Requirement UI-SCREEN-ONBOARDING-AUTH-002: Onboarding/Auth SHALL persist and resume progress
 Progress SHALL persist through reload/restart until completion.
 
 #### Scenario: Resume incomplete onboarding
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user returns after restart
 - **THEN** onboarding SHALL resume at last incomplete step
 
-### Requirement: Onboarding/Auth SHALL support deterministic state handling
+### Requirement UI-SCREEN-ONBOARDING-AUTH-003: Onboarding/Auth SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states for profile and auth checks.
 
 #### Scenario: Auth check error
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** auth requirements fetch fails
 - **THEN** screen SHALL show actionable error with retry
 

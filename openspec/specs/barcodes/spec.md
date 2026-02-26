@@ -2,7 +2,7 @@
 Define canonical barcode capture, validation, and attachment behavior for item records.
 
 ## Requirements
-### Requirement: Cabinet SHALL support manual and image-assisted barcode workflows
+### Requirement BARCODES-001: Cabinet SHALL support manual and image-assisted barcode workflows
 Cabinet SHALL support manual barcode entry and barcode detection from uploaded media.
 
 #### Scenario: Manual barcode add
@@ -10,7 +10,7 @@ Cabinet SHALL support manual barcode entry and barcode detection from uploaded m
 - **WHEN** user submits a barcode
 - **THEN** Cabinet SHALL attach barcode to the item's barcode set
 
-### Requirement: Duplicate barcode handling SHALL support variant-aware resolution
+### Requirement BARCODES-002: Duplicate barcode handling SHALL support variant-aware resolution
 Cabinet SHALL support duplicate barcode resolution across variants without destructive overwrite.
 
 #### Scenario: Duplicate barcode attach attempt

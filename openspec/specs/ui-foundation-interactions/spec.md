@@ -2,7 +2,7 @@
 Define cross-screen row, selection, and modal interaction behavior.
 
 ## Requirements
-### Requirement: Row-to-detail interaction model SHALL be consistent across data screens
+### Requirement UI-FOUNDATION-INTERACTIONS-001: Row-to-detail interaction model SHALL be consistent across data screens
 Cabinet SHALL open details on non-interactive row click and reserve thumbnail click for media lightbox where applicable.
 
 #### Scenario: Row click details
@@ -15,7 +15,7 @@ Cabinet SHALL open details on non-interactive row click and reserve thumbnail cl
 - **WHEN** user clicks thumbnail
 - **THEN** lightbox SHALL open with previous/next navigation in active result order
 
-### Requirement: Bulk mode SHALL be explicit and checkbox-driven
+### Requirement UI-FOUNDATION-INTERACTIONS-002: Bulk mode SHALL be explicit and checkbox-driven
 Cabinet SHALL use checkbox controls for selection and SHALL not overload row-click with selection toggles.
 
 #### Scenario: Bulk selection mode

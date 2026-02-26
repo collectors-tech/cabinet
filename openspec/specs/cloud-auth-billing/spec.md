@@ -2,43 +2,43 @@
 Define cloud ownership authentication bootstrap and billing-driven entitlement behavior for Cabinet.
 
 ## Requirements
-### Requirement: Cloud auth billing capability SHALL be in-scope as optional ownership mode
+### Requirement CLOUD-AUTH-BILLING-001: Cloud auth billing capability SHALL be in-scope as optional ownership mode
 Cabinet SHALL support cloud-account ownership mode alongside local-first authentication model when configured.
 
 #### Scenario: Cloud mode enabled
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** required cloud auth configuration is present
 - **THEN** Cabinet SHALL allow cloud session bootstrap and entitlement resolution
 
-### Requirement: Frontend cloud session bootstrap SHALL resolve plan and feature entitlements
+### Requirement CLOUD-AUTH-BILLING-002: Frontend cloud session bootstrap SHALL resolve plan and feature entitlements
 Frontend SHALL post cloud session token to bootstrap endpoint and SHALL receive plan + feature flags used for UI gating.
 
 #### Scenario: Bootstrap entitlement response
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** frontend calls cloud bootstrap endpoint with valid session token
 - **THEN** runtime SHALL return current plan and enabled feature set
 
-### Requirement: Billing webhook SHALL update entitlement state with signature verification
+### Requirement CLOUD-AUTH-BILLING-003: Billing webhook SHALL update entitlement state with signature verification
 Runtime SHALL process billing lifecycle webhook events and SHALL verify webhook signatures before applying entitlement changes.
 
 #### Scenario: Valid billing webhook update
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** signed billing webhook event for subscription state change is received
 - **THEN** runtime SHALL update entitlement override for associated user identity
 
-### Requirement: Pro-gated features SHALL be controlled by entitlement state
+### Requirement CLOUD-AUTH-BILLING-004: Pro-gated features SHALL be controlled by entitlement state
 Cabinet SHALL gate pro features (AI assist, price tracking, scanner automation) based on resolved entitlement state.
 
 #### Scenario: Downgrade entitlement effect
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user entitlement changes from pro to free
 - **THEN** pro-gated features SHALL be disabled in UI and enforced in runtime checks
 
-### Requirement: Production auth claims SHALL be verified
+### Requirement CLOUD-AUTH-BILLING-005: Production auth claims SHALL be verified
 Production cloud auth mode SHALL not rely on unsigned/unchecked token claim parsing for entitlement trust decisions.
 
 #### Scenario: Invalid token presented
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** bootstrap receives invalid or unverifiable cloud token
 - **THEN** runtime SHALL reject bootstrap request and return auth failure state
 

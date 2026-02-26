@@ -2,27 +2,27 @@
 Define Inventory Barcodes screen behavior for add, lookup, and variant-safe resolution.
 
 ## Requirements
-### Requirement: Inventory Barcodes SHALL support add and local lookup workflows
+### Requirement UI-SCREEN-INVENTORY-BARCODES-001: Inventory Barcodes SHALL support add and local lookup workflows
 The screen SHALL support item barcode add and local lookup display.
 
 #### Scenario: Add and lookup barcode
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user adds barcode and performs lookup
 - **THEN** barcode list and lookup result SHALL update
 
-### Requirement: Inventory Barcodes SHALL support external fallback search
+### Requirement UI-SCREEN-INVENTORY-BARCODES-002: Inventory Barcodes SHALL support external fallback search
 If local matches are absent, screen SHALL provide external search pathway.
 
 #### Scenario: No local match fallback
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** local lookup has no results
 - **THEN** external search action SHALL be available
 
-### Requirement: Inventory Barcodes SHALL support deterministic state handling
+### Requirement UI-SCREEN-INVENTORY-BARCODES-003: Inventory Barcodes SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Barcode lookup error
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** barcode lookup endpoint fails
 - **THEN** screen SHALL show actionable error state with retry
 

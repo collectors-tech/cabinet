@@ -2,32 +2,32 @@
 Define Inventory Photos screen behavior for upload, media management, and fullscreen inspection.
 
 ## Requirements
-### Requirement: Inventory Photos SHALL support full media lifecycle
+### Requirement UI-SCREEN-INVENTORY-PHOTOS-001: Inventory Photos SHALL support full media lifecycle
 Photos screen SHALL support upload, list, primary selection, and delete workflows.
 
 #### Scenario: Upload and primary update
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user uploads image and sets primary
 - **THEN** media list SHALL reflect updated primary state
 
-### Requirement: Inventory Photos SHALL support deterministic state handling
+### Requirement UI-SCREEN-INVENTORY-PHOTOS-002: Inventory Photos SHALL support deterministic state handling
 Photos screen SHALL support loading, empty, error, and ready states.
 
 #### Scenario: Photos empty state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** selected item has no photos
 - **THEN** screen SHALL show empty guidance for upload actions
 
 #### Scenario: Photos error state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** media API fails
 - **THEN** screen SHALL show retry-capable error state
 
-### Requirement: Inventory Photos SHALL support fullscreen inspection
+### Requirement UI-SCREEN-INVENTORY-PHOTOS-003: Inventory Photos SHALL support fullscreen inspection
 Photos SHALL open in fullscreen view with stable controls.
 
 #### Scenario: Fullscreen open
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user requests fullscreen view
 - **THEN** fullscreen viewer SHALL render selected media
 

@@ -42,6 +42,7 @@ Cabinet SHALL include AU webshop providers from product scope:
 - **GIVEN** current runtime loads AU webshop provider family
 - **WHEN** `GET /api/providers/registry` returns provider entries
 - **THEN** all configured domains MUST be represented in `base_domain` field
+- API outcome MUST be explicit: `200` on success, `4xx` for validation/auth conflicts, and `5xx` for unexpected failures
 
 ### Requirement INTEGRATION-004: Registry entries MUST map to provider capability specs
 Each provider entry SHALL map to a provider-specific OpenSpec capability.

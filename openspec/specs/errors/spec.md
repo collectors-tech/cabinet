@@ -2,7 +2,7 @@
 Define application error surfacing, user recovery actions, and failure-state UX contracts.
 
 ## Requirements
-### Requirement: Cabinet SHALL provide clear app error flows
+### Requirement ERRORS-001: Cabinet SHALL provide clear app error flows
 Cabinet SHALL present user-readable errors with contextual recovery actions for known failure states across scanner, import, auth, and integrations workflows.
 
 #### Scenario: Scanner operation error
@@ -10,7 +10,7 @@ Cabinet SHALL present user-readable errors with contextual recovery actions for 
 - **WHEN** failure state is returned to UI
 - **THEN** Cabinet SHALL show clear error message, reason category, and retry action
 
-### Requirement: Error screens SHALL preserve safe navigation
+### Requirement ERRORS-002: Error screens SHALL preserve safe navigation
 Cabinet SHALL provide safe route recovery controls (`go back`, `go home`, and `retry`) without data-destructive side effects.
 
 #### Scenario: Route-level runtime error
@@ -18,7 +18,7 @@ Cabinet SHALL provide safe route recovery controls (`go back`, `go home`, and `r
 - **WHEN** error boundary renders fallback
 - **THEN** user SHALL be offered safe navigation and retry options
 
-### Requirement: Error taxonomy SHALL map to deterministic user actions
+### Requirement ERRORS-003: Error taxonomy SHALL map to deterministic user actions
 Cabinet SHALL classify errors into validation, provider, connectivity, authorization, and internal categories with deterministic next action guidance.
 
 #### Scenario: Error category guidance

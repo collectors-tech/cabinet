@@ -2,7 +2,7 @@
 Define matching engine confidence classification behavior.
 
 ## Requirements
-### Requirement: Matching engine SHALL classify candidates by confidence state
+### Requirement MATCHING-001: Matching engine SHALL classify candidates by confidence state
 Cabinet SHALL classify candidates into matched, suggested, or not-in-collection states.
 
 #### Scenario: Matching classification
@@ -10,7 +10,7 @@ Cabinet SHALL classify candidates into matched, suggested, or not-in-collection 
 - **WHEN** matching run executes
 - **THEN** each candidate SHALL receive a confidence-state classification
 
-### Requirement: Part-number extraction SHALL feed matching decision
+### Requirement MATCHING-002: Part-number extraction SHALL feed matching decision
 Cabinet SHALL extract candidate part numbers from listing metadata for canonical comparison.
 
 #### Scenario: Part-number extraction

@@ -2,7 +2,7 @@
 Define barcode lookup and external resolution behavior.
 
 ## Requirements
-### Requirement: Barcode lookup SHALL support local and external resolution
+### Requirement LOOKUP-001: Barcode lookup SHALL support local and external resolution
 Cabinet SHALL support local match lookup and external search integrations.
 
 #### Scenario: Local barcode lookup

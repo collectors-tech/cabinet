@@ -2,27 +2,27 @@
 Define Scanner screen behavior for query set management, execution, and diagnostics.
 
 ## Requirements
-### Requirement: Scanner SHALL support query set CRUD and run controls
+### Requirement UI-SCREEN-SCANNER-001: Scanner SHALL support query set CRUD and run controls
 Scanner SHALL allow creating/loading query sets and triggering manual/scheduled runs.
 
 #### Scenario: Run query set
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user runs a selected query set
 - **THEN** scanner execution status and outputs SHALL update
 
-### Requirement: Scanner SHALL expose provider health and failure retry
+### Requirement UI-SCREEN-SCANNER-002: Scanner SHALL expose provider health and failure retry
 Scanner SHALL expose health diagnostics and retry controls for failed runs.
 
 #### Scenario: Retry failed query set
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user retries failed scanner run
 - **THEN** retry SHALL execute and status SHALL update
 
-### Requirement: Scanner SHALL support deterministic state handling
+### Requirement UI-SCREEN-SCANNER-003: Scanner SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states for query sets and candidates.
 
 #### Scenario: Scanner empty state
-- **GIVEN** the required preconditions and context for this scenario are satisfied
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** no query sets exist
 - **THEN** screen SHALL provide create-first guidance
 
