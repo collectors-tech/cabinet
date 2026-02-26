@@ -5,16 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/collectors-tech/cabinet/internal/app"
+	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/db"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/scanner"
+	"github.com/collectors-tech/cabinet/internal/update"
 )
 
 func TestEbayProviderResponseContract(t *testing.T) {
@@ -174,7 +180,40 @@ func TestAmazonDisabledModeReturns409ContractEnvelope(t *testing.T) {
 	}
 }
 
-func TestAUWebshopThrottlingConformanceOPS001(t *testing.T) {
+func TestAmazonProviderHealthAppRouterPathFeasibility(t *testing.T) {
+	t.Parallel()
+
+	baseURL, shutdown := startTestRuntimeApp(t)
+	t.Cleanup(shutdown)
+
+	resp, err := http.Get(baseURL + "/api/provider/health?provider=amazon")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 from app router provider health path, got %d body=%s", resp.StatusCode, string(b))
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode provider health payload: %v", err)
+	}
+	for _, k := range []string{"provider", "status", "message"} {
+		v, ok := payload[k]
+		if !ok {
+			t.Fatalf("missing %q in provider health payload: %#v", k, payload)
+		}
+		if _, ok := v.(string); !ok {
+			t.Fatalf("expected string %q, got %#v", k, v)
+		}
+	}
+	if payload["provider"] != "amazon" {
+		t.Fatalf("expected provider amazon, got %#v", payload["provider"])
+	}
+}
+
+func TestAUWebshopThrottlingConformanceOPS001_RegionAU(t *testing.T) {
 	t.Parallel()
 
 	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
@@ -187,6 +226,7 @@ func TestAUWebshopThrottlingConformanceOPS001(t *testing.T) {
 	qs, err := svc.CreateQuerySet(context.Background(), scanner.QuerySet{
 		Name:          "AU Webshop Throttle",
 		Keywords:      []string{"afx", "mega g"},
+		Region:        "AU",
 		Enabled:       true,
 		RateLimitRPS:  1000, // service enforces a deterministic 100ms minimum backoff.
 		MaxRetryCount: 2,
@@ -240,6 +280,72 @@ func TestAUWebshopThrottlingConformanceOPS001(t *testing.T) {
 			t.Fatalf("failure[%d] message must preserve throttling signal, got %#v", i, f)
 		}
 	}
+}
+
+func startTestRuntimeApp(t *testing.T) (string, func()) {
+	t.Helper()
+
+	_ = os.Setenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK", "1")
+	base := t.TempDir()
+	addr := allocateLoopbackAddr(t)
+	cfg := config.Config{
+		Addr:           addr,
+		DataDir:        base,
+		DBPath:         filepath.Join(base, "cabinet.db"),
+		UpdateChannel:  update.ChannelStable,
+		WebAuthnRPID:   "127.0.0.1",
+		WebAuthnOrigin: "http://" + addr,
+		WebAuthnName:   "Cabinet Test",
+		BackupInterval: 60,
+	}
+	runtimeApp, err := app.New(cfg)
+	if err != nil {
+		t.Fatalf("app.New() failed: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- runtimeApp.Run(ctx)
+	}()
+	baseURL := "http://" + addr
+	waitForHealthz(t, baseURL)
+	return baseURL, func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("app shutdown returned error: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for app shutdown")
+		}
+	}
+}
+
+func allocateLoopbackAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("allocate port: %v", err)
+	}
+	defer l.Close()
+	return l.Addr().String()
+}
+
+func waitForHealthz(t *testing.T, baseURL string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(baseURL + "/healthz")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("healthz did not become ready at %s", baseURL)
 }
 
 type alwaysFailProvider struct {
