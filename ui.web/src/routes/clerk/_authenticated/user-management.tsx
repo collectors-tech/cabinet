@@ -11,6 +11,7 @@ import { ExternalLink, Loader2 } from 'lucide-react'
 import { ClerkLogo } from '@/assets/clerk-logo'
 import { Button } from '@/components/ui/button'
 import { Header } from '@/components/layout/header'
+import { LanguageSwitch } from '@/components/language-switch'
 import { Main } from '@/components/layout/main'
 import { LearnMore } from '@/components/learn-more'
 import { Search } from '@/components/search'
@@ -51,6 +52,7 @@ function UserManagement() {
           <Header fixed>
             <Search />
             <div className='ms-auto flex items-center space-x-4'>
+              <LanguageSwitch />
               <ThemeSwitch />
               <UserButton />
             </div>

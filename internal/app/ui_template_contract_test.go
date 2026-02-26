@@ -419,3 +419,31 @@ func TestCollectionWorkspaceUsesTasksProviderContract(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderLanguageSwitchContract(t *testing.T) {
+	t.Parallel()
+
+	checkOrder := func(path string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		langIdx := strings.Index(src, "<LanguageSwitch")
+		themeIdx := strings.Index(src, "<ThemeSwitch")
+		if langIdx == -1 {
+			t.Fatalf("%s missing LanguageSwitch in header actions", path)
+		}
+		if themeIdx == -1 {
+			t.Fatalf("%s missing ThemeSwitch in header actions", path)
+		}
+		if langIdx > themeIdx {
+			t.Fatalf("%s has LanguageSwitch after ThemeSwitch; expected before", path)
+		}
+	}
+
+	checkOrder("../../ui.web/src/features/dashboard/index.tsx")
+	checkOrder("../../ui.web/src/features/collection/index.tsx")
+	checkOrder("../../ui.web/src/features/apps/index.tsx")
+}

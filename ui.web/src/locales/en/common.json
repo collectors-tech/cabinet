@@ -18,5 +18,8 @@
   "workspace": {
     "label": "Workspace DB",
     "add": "Add workspace"
+  },
+  "language": {
+    "label": "Language"
   }
 }
