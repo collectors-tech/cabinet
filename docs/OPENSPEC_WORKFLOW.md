@@ -71,6 +71,10 @@ openspec validate --changes --strict --no-interactive
 - `complete-screen-api-parity-audits`
 - `finalize-onboarding-and-collector-ux`
 
+## Migration Control Docs
+- Spec migration catalog: `docs/OPENSPEC_MIGRATION_CATALOG.md`
+- Strict migration TODO: `docs/OPENSPEC_MIGRATION_TODO.md`
+
 ## Mapping to Existing Backlog
 - Stability and non-500 reliability: `#151`, `#149`, `#147`, `#154`
 - Screen/API parity audits: `#143`, `#144`, `#145`, `#152`
