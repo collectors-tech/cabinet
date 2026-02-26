@@ -13,7 +13,9 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -142,7 +144,34 @@ func New(cfg config.Config) (*App, error) {
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 		_, _ = w.Write(openapiSpec)
 	})
-	mux.Handle("/", http.FileServer(http.FS(sub)))
+	fileServer := http.FileServer(http.FS(sub))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		cleanPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if cleanPath == "." {
+			cleanPath = ""
+		}
+
+		if cleanPath == "" || strings.Contains(cleanPath, ".") {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		if _, err := fs.Stat(sub, cleanPath); err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		rr := *r
+		rr.URL = &url.URL{}
+		*rr.URL = *r.URL
+		rr.URL.Path = "/"
+		fileServer.ServeHTTP(w, &rr)
+	}))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

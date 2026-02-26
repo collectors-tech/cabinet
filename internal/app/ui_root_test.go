@@ -30,6 +30,20 @@ func TestRootServesAppShell(t *testing.T) {
 	}
 }
 
+func TestSPADeepLinksServeAppShell(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	resp := doRequest(t, a, http.MethodGet, "/_authenticated/inventory/", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.Code, http.StatusOK)
+	}
+	body := resp.Body.String()
+	if !strings.Contains(body, "id=\"root\"") {
+		t.Fatalf("expected SPA mount node in deep-link response")
+	}
+}
+
 func TestAPIDocsRoutes(t *testing.T) {
 	t.Parallel()
 
