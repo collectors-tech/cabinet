@@ -26,6 +26,14 @@ Cabinet SHALL store listing id, pricing, seller, URL, media, first/last seen, st
 - **WHEN** provider returns listing candidates
 - **THEN** Cabinet SHALL persist normalized candidate records with stock state fields
 
+### Requirement: Candidate ingestion SHALL deduplicate via fingerprint
+Cabinet SHALL compute a deterministic candidate fingerprint during normalization and SHALL prevent duplicate candidate record creation for the same fingerprint within the same provider/query-set scope.
+
+#### Scenario: Duplicate candidate returned across runs
+- **GIVEN** an existing candidate record already exists for the same provider/query-set fingerprint
+- **WHEN** scanner ingestion receives a candidate with the same fingerprint in a later run
+- **THEN** Cabinet SHALL update `last_seen` and mutable fields on the existing record instead of inserting a new record
+
 ### Requirement: Scanner failures SHALL be diagnosable and retryable
 Cabinet SHALL log failures and support retry by query set.
 
