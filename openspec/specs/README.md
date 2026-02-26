@@ -24,7 +24,9 @@ Legacy markdown under `docs/` has been migrated and removed.
 - `entitlements`
 - `settings`
 - `integrations`
-- `errors-logging-diagnostics`
+- `errors`
+- `logging`
+- `diagnostics`
 - `future-hooks`
 - `non-functional`
 - `security`
@@ -107,7 +109,7 @@ Rules:
 | UC-17 Dashboard weekly review | `wishlist-pricing-dashboard` | `ui-screen-home` |
 | UC-18 AI assist suggestions | `ai-assist` | `ui-screen-inventory-ai-assist` |
 | UC-19 License and gating | `entitlements` | `ui-screen-settings` |
-| UC-20 Logs and diagnostics export | `errors-logging-diagnostics` | `ui-screen-settings` |
+| UC-20 Logs and diagnostics export | `logging` / `diagnostics` | `ui-screen-settings` |
 | UC-21 Restore backup | `data-management` | `ui-screen-settings` |
 | UC-22 Safe upgrade | `runtime-core` | `ui-screen-settings` |
 | UC-23 Chat copilot actions | `chat-copilot` | `ui-screen-chat-copilot` |
@@ -134,7 +136,9 @@ Rules:
 | entitlements | API integration | `internal/app/license_api_test.go` |
 | settings | API integration + E2E | planned parity suites for settings |
 | integrations | API integration + E2E | planned parity suites for integrations |
-| errors-logging-diagnostics | API integration | `internal/app/logging_recovery_api_test.go` |
+| errors | API integration | `internal/app/logging_recovery_api_test.go` |
+| logging | API integration | `internal/app/logging_recovery_api_test.go` |
+| diagnostics | API integration | `internal/app/logging_recovery_api_test.go` |
 | chat-copilot | API integration + E2E | `internal/app/chat_api_test.go`, planned ui chat suite |
 | cloud-auth-billing | API integration | `internal/app/cloud_*_api_test.go`, `clerk_billing_webhook_api_test.go` |
 

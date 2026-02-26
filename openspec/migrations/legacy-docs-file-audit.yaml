@@ -192,12 +192,13 @@ files:
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/errors-logging-diagnostics/spec.md
+      - openspec/specs/errors/spec.md
   - source: docs/features/19-logging-and-diagnostics.md
     status: migrated
     requirement_markers: 0
     targets:
-      - openspec/specs/errors-logging-diagnostics/spec.md
+      - openspec/specs/logging/spec.md
+      - openspec/specs/diagnostics/spec.md
   - source: docs/features/20-future-hooks.md
     status: migrated
     requirement_markers: 0
