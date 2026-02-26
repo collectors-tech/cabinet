@@ -378,3 +378,24 @@ func TestIntegrationsEditPersistenceContract(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/errors/general-error.tsx")
+	if err != nil {
+		t.Fatalf("read general error component: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"dynamically imported module",
+		"window.location.reload()",
+		"sessionStorage",
+		"cabinet.chunk-reload-once",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("general error chunk recovery missing token: %s", token)
+		}
+	}
+}
