@@ -64,7 +64,7 @@ go run ./cmd/cabinet
 
 ## OpenSpec (Spec-First Workflow)
 - OpenSpec workspace: `openspec/`
-- Workflow guide: `docs/OPENSPEC_WORKFLOW.md`
+- Workflow guide: `openspec/WORKFLOW.md`
 - Validate active changes:
 
 ```powershell

@@ -1,32 +1,93 @@
 package app
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestOpenSpecMigrationCatalogIsFinalized(t *testing.T) {
+func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 	t.Parallel()
 
-	b, err := os.ReadFile("../../docs/OPENSPEC_MIGRATION_CATALOG.md")
+	var markdownFiles []string
+	err := filepath.WalkDir("../../docs", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			markdownFiles = append(markdownFiles, filepath.ToSlash(path))
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("read migration catalog: %v", err)
+		t.Fatalf("walk docs directory: %v", err)
 	}
-	src := string(b)
-
-	if strings.Contains(src, "PARTIAL") {
-		t.Fatalf("migration catalog still contains PARTIAL status markers")
-	}
-	if strings.Contains(src, "PENDING") {
-		t.Fatalf("migration catalog still contains PENDING status markers")
-	}
-	if !strings.Contains(src, "Tracking issue: `#171`") {
-		t.Fatalf("migration catalog must reference lock-in issue #171")
+	if len(markdownFiles) > 0 {
+		t.Fatalf("docs folder still contains markdown files: %v", markdownFiles)
 	}
 }
 
-func TestLegacyDocsStatusAndSourceOfTruthContract(t *testing.T) {
+func TestOpenSpecDocumentationGovernanceContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../openspec/specs/documentation-governance/spec.md")
+	if err != nil {
+		t.Fatalf("read documentation governance spec: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"## Requirements",
+		"### Requirement: OpenSpec Is The Normative Documentation Source",
+		"### Requirement: Legacy Docs Directory Contains No Markdown Sources",
+		"### Requirement: OpenAPI Contract Remains in docs/api/openapi.yaml",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("documentation governance spec missing token: %s", token)
+		}
+	}
+}
+
+func TestOpenSpecWorkflowReferencesDocumentationGovernanceSpec(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../openspec/specs/README.md")
+	if err != nil {
+		t.Fatalf("read openspec specs readme: %v", err)
+	}
+	src := string(b)
+	if !strings.Contains(src, "documentation-governance") {
+		t.Fatalf("openspec/specs/README.md must reference documentation-governance spec")
+	}
+}
+
+func TestNoLegacyDocsReferencesInAgentPolicy(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../AGENTS.md")
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	src := string(b)
+	forbidden := []string{
+		"docs/OPENSPEC_MIGRATION_CATALOG.md",
+		"docs/OPENSPEC_MIGRATION_TODO.md",
+		"docs/OPENSPEC_WORKFLOW.md",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("AGENTS.md contains legacy docs reference: %s", token)
+		}
+	}
+}
+
+func TestOpenSpecWorkflowContentMigrated(t *testing.T) {
 	t.Parallel()
 
 	read := func(path string) string {
@@ -38,23 +99,17 @@ func TestLegacyDocsStatusAndSourceOfTruthContract(t *testing.T) {
 		return string(b)
 	}
 
-	readme := read("../../docs/README.md")
-	if !strings.Contains(readme, "OpenSpec is the normative source of requirements") {
-		t.Fatalf("docs/README.md must declare OpenSpec as normative requirements source")
-	}
-
-	legacy := read("../../docs/LEGACY_DOCS_STATUS.md")
-	requiredLegacyTokens := []string{
+	governance := read("../../openspec/specs/documentation-governance/spec.md")
+	requiredTokens := []string{
 		"docs/FULL_FEATURE_LIST.md",
 		"docs/SPEC.md",
 		"docs/USE_CASES_AND_SCENARIOS.md",
 		"docs/ui-spec/02-SCREEN-SPECS.md",
 		"docs/ui-spec/05-TEST-MATRIX-UI.md",
-		"MIGRATED_TO_OPENSPEC",
 	}
-	for _, token := range requiredLegacyTokens {
-		if !strings.Contains(legacy, token) {
-			t.Fatalf("legacy doc status missing token: %s", token)
+	for _, token := range requiredTokens {
+		if !strings.Contains(governance, token) {
+			t.Fatalf("documentation governance spec missing migrated legacy token: %s", token)
 		}
 	}
 }

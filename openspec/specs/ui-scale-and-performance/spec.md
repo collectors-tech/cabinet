@@ -107,6 +107,4 @@ Each scenario SHALL map to:
 - pass/fail threshold criteria
 
 ## Source Mapping
-- `docs/ui-spec/07-SCALABILITY-DATA-PLAN.md`
-- `docs/ui-spec/12-PERF-VALIDATION-S2-S3.md`
-- `docs/ui-spec/12-PERF-VALIDATION-S2-S3.json`
+- Scale and performance constraints are canonically captured in this spec.

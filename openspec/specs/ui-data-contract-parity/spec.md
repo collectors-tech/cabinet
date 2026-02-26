@@ -75,5 +75,4 @@ Each mapped test must include:
 Bulk profile SHALL be used for parity behavior under table/grid-heavy screens to ensure API contracts remain stable under scale.
 
 ## Source Mapping
-- `docs/UI_ENDPOINT_PARITY.md`
-- `docs/ui-spec/04-DATA-CONTRACTS-UI.md`
+- Legacy endpoint parity notes are normalized into this capability.

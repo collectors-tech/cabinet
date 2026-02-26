@@ -85,5 +85,5 @@ Use for rapid component behavior checks.
 Use for pagination, virtualization, and interaction latency validation.
 
 ## Notes for Implementation
-- Component specs from `docs/ui-spec/09-COMPONENT-SPECS-STRICT.md` are the source migration basis.
+- Component contracts in this spec are the canonical baseline for implementation and tests.
 - This capability is normative for all current and future `ui-screen-*` specs.

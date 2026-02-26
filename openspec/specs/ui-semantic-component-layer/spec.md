@@ -75,4 +75,4 @@ Minimum required test coverage tied to this spec:
 - Reuse tests: shared L3 block behavior in at least two screens
 
 ## Source Mapping
-- `docs/ui-spec/14-SEMANTIC-COMPONENT-LAYER.md`
+- Semantic component definitions are canonically captured in this spec.

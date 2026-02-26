@@ -2,13 +2,7 @@
 
 This directory is the primary behavioral source of truth for Cabinet product and UI specifications.
 
-Source migration references:
-- `docs/FULL_FEATURE_LIST.md`
-- `docs/SPEC.md`
-- `docs/USE_CASES_AND_SCENARIOS.md`
-- `docs/APP_COMPLETION_ANALYSIS.md`
-- `docs/UI_ENDPOINT_PARITY.md`
-- `docs/ui-spec/*.md`
+Legacy markdown under `docs/` has been migrated and removed.
 
 ## Capability Specs
 - `runtime-core`
@@ -37,6 +31,7 @@ Source migration references:
 - `ui-governance-gates`
 - `ui-scale-and-performance`
 - `ui-semantic-component-layer`
+- `documentation-governance`
 
 ## Screen Specs
 - `ui-screen-home`

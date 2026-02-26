@@ -55,4 +55,4 @@ Each remediation wave SHALL include before/after references, gap mapping, and un
 3. Navigation/header/layout behavior remains stable across screens.
 
 ## Source Mapping
-- `docs/ui-spec/13-UI-UX-STRATEGY-GATE.md`
+- Governance gates are fully defined in this canonical spec.
