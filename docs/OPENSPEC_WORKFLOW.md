@@ -19,6 +19,13 @@ This repo still follows:
 
 OpenSpec adds planning rigor before implementation.
 
+## Source of Truth (Locked)
+- OpenSpec specs under `openspec/specs/` are the normative requirement source.
+- Legacy docs in `docs/` are non-normative unless explicitly marked otherwise.
+- Migration/legacy disposition is tracked in:
+  - `docs/OPENSPEC_MIGRATION_CATALOG.md`
+  - `docs/LEGACY_DOCS_STATUS.md`
+
 ## Repository Layout
 - `openspec/changes/<change-name>/`
   - `proposal.md`
