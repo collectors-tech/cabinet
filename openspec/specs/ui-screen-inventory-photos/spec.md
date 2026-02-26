@@ -1,17 +1,49 @@
 ## Purpose
-Define Inventory Photos screen behavior and media management use cases.
+Define Inventory Photos screen behavior for upload, media management, and fullscreen inspection.
 
 ## Requirements
-### Requirement: Inventory Photos screen SHALL support upload and media management lifecycle
-The screen SHALL support item selection, upload, derivative view, primary selection, and delete.
+### Requirement: Inventory Photos SHALL support full media lifecycle
+Photos screen SHALL support upload, list, primary selection, and delete workflows.
 
-#### Scenario: Use case - upload and set primary photo
-- **WHEN** user uploads a photo and sets primary
-- **THEN** photo list SHALL update and reflect primary state
+#### Scenario: Upload and primary update
+- **WHEN** user uploads image and sets primary
+- **THEN** media list SHALL reflect updated primary state
 
-### Requirement: Inventory Photos screen SHALL support fullscreen viewing interactions
-The screen SHALL provide fullscreen media view for selected photos.
+### Requirement: Inventory Photos SHALL support deterministic state handling
+Photos screen SHALL support loading, empty, error, and ready states.
 
-#### Scenario: Use case - inspect media fullscreen
-- **WHEN** user opens fullscreen on selected photo
-- **THEN** viewer SHALL render media in fullscreen mode
+#### Scenario: Photos empty state
+- **WHEN** selected item has no photos
+- **THEN** screen SHALL show empty guidance for upload actions
+
+#### Scenario: Photos error state
+- **WHEN** media API fails
+- **THEN** screen SHALL show retry-capable error state
+
+### Requirement: Inventory Photos SHALL support fullscreen inspection
+Photos SHALL open in fullscreen view with stable controls.
+
+#### Scenario: Fullscreen open
+- **WHEN** user requests fullscreen view
+- **THEN** fullscreen viewer SHALL render selected media
+
+## Acceptance Criteria
+- UC IDs cover upload, primary, fullscreen, and error-state paths.
+- E2E mappings defined for media lifecycle.
+
+## Success Criteria
+- Users complete photo workflows without leaving screen context.
+- Media actions never require manual DB recovery due to UI failures.
+
+## Data Profiles
+- Sample: 300 photos across 100 items
+- Bulk: 150,000 media metadata rows
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-PHO-01 | Upload photo | Photo appears in list | planned: `cypress/e2e/ui/photos.cy.ts` `photo-upload` |
+| UC-PHO-02 | Set primary | Primary indicator updates | planned: `cypress/e2e/ui/photos.cy.ts` `photo-set-primary` |
+| UC-PHO-03 | No photos for item | Empty state guidance appears | planned: `cypress/e2e/ui/photos.cy.ts` `photo-empty-state` |
+| UC-PHO-04 | Media API failure | Error + retry appears | planned: `cypress/e2e/ui/photos.cy.ts` `photo-error-state` |
+| UC-PHO-05 | Open fullscreen | Fullscreen viewer renders media | planned: `cypress/e2e/ui/photos.cy.ts` `photo-fullscreen` |

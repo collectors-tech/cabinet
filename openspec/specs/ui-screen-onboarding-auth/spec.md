@@ -1,17 +1,40 @@
 ## Purpose
-Define first-run onboarding and authentication screen flow.
+Define onboarding and auth screen behavior for first-run identity and workspace unlock.
 
 ## Requirements
-### Requirement: Onboarding/auth screen SHALL enforce WebAuthn-first identity setup
-The onboarding/auth screen SHALL require credential registration before advanced workspace access.
+### Requirement: Onboarding/Auth SHALL enforce WebAuthn-first completion
+Onboarding/Auth SHALL block advanced workspace access until required identity steps are complete.
 
-#### Scenario: Use case - first-time identity setup
-- **WHEN** first-time user authenticates
-- **THEN** onboarding SHALL guide user through required identity completion
+#### Scenario: Required identity gate
+- **WHEN** user has incomplete identity setup
+- **THEN** advanced workspace SHALL remain locked
 
-### Requirement: Onboarding/auth screen SHALL persist and resume progress
-Onboarding/auth progress SHALL survive reload/restart until completion.
+### Requirement: Onboarding/Auth SHALL persist and resume progress
+Progress SHALL persist through reload/restart until completion.
 
-#### Scenario: Use case - resume onboarding
-- **WHEN** user exits mid-onboarding and returns
-- **THEN** screen SHALL resume from last incomplete step
+#### Scenario: Resume incomplete onboarding
+- **WHEN** user returns after restart
+- **THEN** onboarding SHALL resume at last incomplete step
+
+### Requirement: Onboarding/Auth SHALL support deterministic state handling
+The screen SHALL support loading, empty, error, and ready states for profile and auth checks.
+
+#### Scenario: Auth check error
+- **WHEN** auth requirements fetch fails
+- **THEN** screen SHALL show actionable error with retry
+
+## Acceptance Criteria
+- Each onboarding critical step has UC ID and deterministic outcome.
+- E2E mapping includes first-run completion and resume behavior.
+
+## Success Criteria
+- New users complete onboarding without dead-end states.
+- Identity completion state is consistent after restart.
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-ONB-01 | First run identity setup | WebAuthn completion required before unlock | planned: `cypress/e2e/auth/onboarding.cy.ts` `first-run-webauthn-gate` |
+| UC-ONB-02 | Restart mid-onboarding | Flow resumes last incomplete step | planned: `cypress/e2e/auth/onboarding.cy.ts` `resume-onboarding` |
+| UC-ONB-03 | Onboarding data empty | Guided default state appears | planned: `cypress/e2e/auth/onboarding.cy.ts` `onboarding-empty-state` |
+| UC-ONB-04 | Auth requirement error | Error + retry shown, no crash | planned: `cypress/e2e/auth/onboarding.cy.ts` `auth-error-retry` |
