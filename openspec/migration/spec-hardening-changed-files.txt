@@ -1,4 +1,8 @@
 openspec/migration/docs-history-migration-todo.md
+openspec/migration/spec-hardening-audit.md
+openspec/migration/spec-hardening-changed-files.txt
+openspec/migration/spec-hardening-review-notes.md
+openspec/migration/spec-hardening-summary.json
 openspec/specs/ai-assist/spec.md
 openspec/specs/auth/spec.md
 openspec/specs/barcodes/spec.md

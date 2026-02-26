@@ -1,12 +1,12 @@
 {
-  "completedAt": "2026-02-26T16:23:52.4100472Z",
-  "commit": "d0fd84c",
+  "completedAt": "2026-02-26T16:31:51.6335637Z",
+  "commit": "9ca1215",
   "specFilesProcessed": 54,
   "requirementsScanned": 166,
-  "idsAdded": 166,
-  "idCoverageBefore": 0,
+  "idsAdded": 150,
+  "idCoverageBefore": 9.64,
   "idCoverageAfter": 100.0,
-  "placeholderGivenBefore": 0,
+  "placeholderGivenBefore": 104,
   "placeholderGivenAfter": 0,
   "validateAll": {
     "passed": true,
@@ -15,6 +15,10 @@
   },
   "changedFiles": [
     "openspec/migration/docs-history-migration-todo.md",
+    "openspec/migration/spec-hardening-audit.md",
+    "openspec/migration/spec-hardening-changed-files.txt",
+    "openspec/migration/spec-hardening-review-notes.md",
+    "openspec/migration/spec-hardening-summary.json",
     "openspec/specs/ai-assist/spec.md",
     "openspec/specs/auth/spec.md",
     "openspec/specs/barcodes/spec.md",

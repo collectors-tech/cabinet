@@ -1,18 +1,18 @@
 # OpenSpec Hardening Review Notes
 
 ## What was fixed
-- Added deterministic IDs to every requirement heading missing IDs across all spec files.
-- Replaced vague placeholder GIVEN preconditions with concrete actor/config/data preconditions.
-- Added explicit API status-code acceptance bullets where API-trigger scenarios previously lacked status expectations.
-- Regenerated traceability matrix to cover all requirement IDs with implemented test links or explicit planned TODO mappings.
+- Added deterministic IDs to every requirement heading previously missing IDs.
+- Replaced vague placeholder GIVENs with concrete preconditions (actor, profile/config, fixture data).
+- Added explicit API status semantics to API-trigger scenarios lacking status-code outcomes.
+- Regenerated global traceability mapping for all requirement IDs with implemented or planned test links.
 
 ## ID namespaces used
-- Namespace format derived from capability folder names (e.g., `AI-ASSIST-001`, `UI-SCREEN-HOME-001`, `RUNTIME-CORE-001`).
-- Existing IDs were preserved unchanged (e.g., `INTEGRATION-*`, `OPS-001`).
+- Capability-derived prefixes from each spec folder (e.g., AI-ASSIST-*, RUNTIME-CORE-*, UI-SCREEN-HOME-*).
+- Existing IDs kept unchanged (notably INTEGRATION-*, OPS-001).
 
 ## Any deprecations
-- No requirement IDs were deprecated in this pass.
+- None in this pass.
 
 ## Remaining planned tests
-- Traceability entries marked `planned` or `partial` represent requirement IDs without direct runtime/E2E assertion coverage yet.
-- Priority planned gaps remain around extended provider contracts and UI workflow runtime validations.
+- IDs marked planned/partial in openspec/traceability.md still require direct runtime/API/E2E test proof.
+- Provider and selected UI workflow IDs have explicit TODO test mappings pending implementation.
