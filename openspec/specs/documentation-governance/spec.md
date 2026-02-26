@@ -30,7 +30,7 @@ The runtime API contract SHALL remain at `docs/api/openapi.yaml` for server and 
 - **AND** documentation migration SHALL NOT relocate that file
 
 ### Requirement: Legacy Migration Mapping Is Preserved
-A migration mapping SHALL preserve the source-to-archive path lineage for every moved markdown file.
+A migration mapping SHALL preserve file-by-file lineage and requirement-marker counts for every moved markdown file.
 
 #### Scenario: Key legacy files are traceable
 - **GIVEN** the required preconditions and context for this scenario are satisfied
@@ -41,6 +41,18 @@ A migration mapping SHALL preserve the source-to-archive path lineage for every 
   - `docs/USE_CASES_AND_SCENARIOS.md`
   - `docs/ui-spec/02-SCREEN-SPECS.md`
   - `docs/ui-spec/05-TEST-MATRIX-UI.md`
+
+### Requirement: File-By-File Migration Audit Is Maintained
+Cabinet SHALL maintain a strict per-file migration audit at `openspec/migrations/legacy-docs-file-audit.yaml` covering every legacy docs markdown file from baseline commit `82294546bf0b715fe49394e1c5a885d3045294d2`.
+
+#### Scenario: Migration audit covers entire baseline
+- **GIVEN** the baseline commit and docs markdown inventory are known
+- **WHEN** migration completeness is validated
+- **THEN** each baseline markdown source SHALL exist in the audit with:
+  - source path
+  - migration status (`migrated` or `reference_only`)
+  - requirement marker count
+  - one or more target canonical locations
 
 ## Migration Inventory (Source -> Canonical)
 - `docs/FULL_FEATURE_LIST.md` -> domain capability specs under `openspec/specs/*`

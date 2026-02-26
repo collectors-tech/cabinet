@@ -1,0 +1,373 @@
+baseline_commit: 82294546bf0b715fe49394e1c5a885d3045294d2
+generated_at: 2026-02-26
+files:
+  - source: docs/APP_COMPLETION_ANALYSIS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/ARCHITECTURE.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/runtime-core/spec.md
+      - openspec/specs/non-functional-and-security/spec.md
+  - source: docs/FORM_ARCHITECTURE.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-foundation-components/spec.md
+  - source: docs/FULL_FEATURE_LIST.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/LEGACY_DOCS_STATUS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/MARKETING.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/OPENSPEC_MIGRATION_CATALOG.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/OPENSPEC_MIGRATION_TODO.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/OPENSPEC_TEST_MATRIX.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/OPENSPEC_WORKFLOW.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/WORKFLOW.md
+  - source: docs/README.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/ROADMAP_90_DAYS.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/non-functional-and-security/spec.md
+  - source: docs/SHOP_PROVIDERS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/settings-and-integrations/spec.md
+      - openspec/specs/scanner-and-candidates/spec.md
+  - source: docs/SPEC.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/UI_ENDPOINT_PARITY.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-data-contract-parity/spec.md
+  - source: docs/UI_INTUITIVE_PLANNING.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-governance-gates/spec.md
+  - source: docs/USE_CASES_AND_SCENARIOS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/api/README.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - docs/api/openapi.yaml
+  - source: docs/auth/CLERK_BILLING_SETUP.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/cloud-auth-billing/spec.md
+  - source: docs/features/01-application-core.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/runtime-core/spec.md
+  - source: docs/features/02-login-and-authentication.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/auth-and-profiles/spec.md
+  - source: docs/features/03-user-profiles.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/auth-and-profiles/spec.md
+  - source: docs/features/04-collection-management.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/collection-domain/spec.md
+  - source: docs/features/05-photo-system.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/photos-media/spec.md
+  - source: docs/features/06-barcode-system.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/barcodes-and-lookup/spec.md
+  - source: docs/features/07-ai-assist.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ai-assist/spec.md
+  - source: docs/features/08-scanner-engine.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/scanner-and-candidates/spec.md
+  - source: docs/features/09-matching-engine.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/matching-and-discovery/spec.md
+  - source: docs/features/10-not-in-my-collection.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/matching-and-discovery/spec.md
+  - source: docs/features/11-wishlist.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/wishlist-pricing-dashboard/spec.md
+  - source: docs/features/12-price-tracking.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/wishlist-pricing-dashboard/spec.md
+  - source: docs/features/13-dashboard.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/wishlist-pricing-dashboard/spec.md
+      - openspec/specs/ui-screen-home/spec.md
+  - source: docs/features/14-search-and-filtering.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/search-and-data-management/spec.md
+  - source: docs/features/15-data-management.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/search-and-data-management/spec.md
+  - source: docs/features/16-licensing-system.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/licensing-and-entitlements/spec.md
+  - source: docs/features/17-settings.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/settings-and-integrations/spec.md
+  - source: docs/features/18-error-handling.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/errors-logging-diagnostics/spec.md
+  - source: docs/features/19-logging-and-diagnostics.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/errors-logging-diagnostics/spec.md
+  - source: docs/features/20-future-hooks.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/future-hooks/spec.md
+  - source: docs/features/21-non-functional-requirements.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/non-functional-and-security/spec.md
+  - source: docs/features/22-security-and-privacy-requirements.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/non-functional-and-security/spec.md
+  - source: docs/features/23-in-app-chat-copilot.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/chat-copilot/spec.md
+  - source: docs/features/README.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/features/SPEC_TEMPLATE.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/ui-spec/01-IA-NAV-STRICT.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-foundation-shell-navigation/spec.md
+  - source: docs/ui-spec/02-SCREEN-SPECS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-home/spec.md
+      - openspec/specs/ui-screen-inventory-items/spec.md
+  - source: docs/ui-spec/03-DASHBOARD-ATTENTION-STRICT.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-home/spec.md
+  - source: docs/ui-spec/04-DATA-CONTRACTS-UI.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-data-contract-parity/spec.md
+  - source: docs/ui-spec/05-TEST-MATRIX-UI.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/documentation-governance/spec.md
+  - source: docs/ui-spec/06-SCREEN-DETAIL-SPECS.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-home/spec.md
+      - openspec/specs/ui-screen-settings/spec.md
+  - source: docs/ui-spec/07-SCALABILITY-DATA-PLAN.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-scale-and-performance/spec.md
+  - source: docs/ui-spec/08-GAP-AND-INTUITIVENESS-REVIEW.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-governance-gates/spec.md
+  - source: docs/ui-spec/09-COMPONENT-SPECS-STRICT.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-foundation-components/spec.md
+  - source: docs/ui-spec/10-COMPONENT-CONTRACT-IMPLEMENTATION-MAP.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-foundation-components/spec.md
+  - source: docs/ui-spec/10-SCREEN-TEMPLATES-SEMANTIC-TREE.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-semantic-component-layer/spec.md
+  - source: docs/ui-spec/11-REFERENCE-PATTERN-MAPPING.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-semantic-component-layer/spec.md
+  - source: docs/ui-spec/12-PERF-VALIDATION-S2-S3.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-scale-and-performance/spec.md
+  - source: docs/ui-spec/13-UI-UX-STRATEGY-GATE.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-governance-gates/spec.md
+  - source: docs/ui-spec/14-SEMANTIC-COMPONENT-LAYER.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-semantic-component-layer/spec.md
+  - source: docs/ui-spec/15-TEMPLATE-SECTION-NAMES-AND-MAPPING.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-semantic-component-layer/spec.md
+  - source: docs/ui-spec/README.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/ui-spec/screens/README.md
+    status: reference_only
+    requirement_markers: 0
+    targets:
+      - openspec/specs/README.md
+  - source: docs/ui-spec/screens/chat-copilot.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-chat-copilot/spec.md
+  - source: docs/ui-spec/screens/discover.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-discover/spec.md
+  - source: docs/ui-spec/screens/home.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-home/spec.md
+  - source: docs/ui-spec/screens/inventory-ai-assist.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-inventory-ai-assist/spec.md
+  - source: docs/ui-spec/screens/inventory-barcodes.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-inventory-barcodes/spec.md
+  - source: docs/ui-spec/screens/inventory-items.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-inventory-items/spec.md
+  - source: docs/ui-spec/screens/inventory-photos.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-inventory-photos/spec.md
+  - source: docs/ui-spec/screens/onboarding-auth.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-onboarding-auth/spec.md
+  - source: docs/ui-spec/screens/reports.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-reports/spec.md
+  - source: docs/ui-spec/screens/scanner.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-scanner/spec.md
+  - source: docs/ui-spec/screens/settings.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/specs/ui-screen-settings/spec.md
