@@ -76,7 +76,7 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=117",
+    "traceability-partial-ids=107",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
     "ui_workflow_e2e_coverage_missing_for_ui_screen_ids"
   ],
@@ -95,6 +95,9 @@
     "wave4_provider_scanner_contracts: partial_before=136 partial_after=127",
     "wave5_collection_discovery_pricing_matching: moved_to_implemented=10",
     "wave5_collection_discovery_pricing_matching: ids=SEARCH-001,SEARCH-002,DISCOVERY-001,DISCOVERY-002,WISHLIST-PRICING-DASHBOARD-001,WISHLIST-PRICING-DASHBOARD-002,WISHLIST-PRICING-DASHBOARD-003,WISHLIST-PRICING-DASHBOARD-004,MATCHING-001,MATCHING-002",
-    "wave5_collection_discovery_pricing_matching: partial_before=127 partial_after=117"
+    "wave5_collection_discovery_pricing_matching: partial_before=127 partial_after=117",
+    "wave6_profiles_collection_data_logging_scanner: moved_to_implemented=10",
+    "wave6_profiles_collection_data_logging_scanner: ids=PROFILES-001,COLLECTION-DOMAIN-001,COLLECTION-DOMAIN-002,COLLECTION-DOMAIN-003,SCANNER-001,SCANNER-003,DATA-MANAGEMENT-001,DATA-MANAGEMENT-002,LOGGING-003,LOGGING-004",
+    "wave6_profiles_collection_data_logging_scanner: partial_before=117 partial_after=107"
   ]
 }

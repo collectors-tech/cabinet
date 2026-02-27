@@ -162,3 +162,21 @@
   - No runtime code changes required; existing API behavior already satisfied these contracts.
 - Test evidence:
   - `internal/app/traceability_wave5_collection_workflows_test.go`
+
+## Wave Evidence
+- Wave: `Wave 6 (profiles/collection/data/logging/scanner contracts)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `49 -> 59`
+  - `partial`: `117 -> 107`
+  - Net reduced partial IDs: `10`
+- IDs moved to implemented:
+  - `PROFILES-001`
+  - `COLLECTION-DOMAIN-001`, `COLLECTION-DOMAIN-002`, `COLLECTION-DOMAIN-003`
+  - `SCANNER-001`, `SCANNER-003`
+  - `DATA-MANAGEMENT-001`, `DATA-MANAGEMENT-002`
+  - `LOGGING-003`, `LOGGING-004`
+- Runtime behavior implemented:
+  - No runtime code changes required; existing API behavior satisfied the contracts after adding deterministic proof tests.
+- Test evidence:
+  - `internal/app/traceability_wave6_ops_contracts_test.go`
