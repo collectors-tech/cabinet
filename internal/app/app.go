@@ -2187,32 +2187,36 @@ func New(cfg config.Config) (*App, error) {
 		}
 		claims, err := parseUnverifiedJWTPayload(req.Token)
 		if err != nil {
-			http.Error(w, `{"error":"invalid_token"}`, http.StatusBadRequest)
+			http.Error(w, `{"error":"invalid_token"}`, http.StatusUnauthorized)
 			return
 		}
 		userID := strings.TrimSpace(claimAsString(claims, "sub"))
 		if userID == "" {
-			http.Error(w, `{"error":"invalid_token_subject"}`, http.StatusBadRequest)
+			http.Error(w, `{"error":"invalid_token_subject"}`, http.StatusUnauthorized)
 			return
 		}
 		email := strings.TrimSpace(claimAsString(claims, "email"))
 		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
+		entitlementSource := "billing"
 		if plan == "" {
 			plan = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_plan")))
 		}
 		if override, ok := cloudEntitlements.Get(userID); ok {
 			plan = override
+			entitlementSource = "override"
 		}
 		if plan == "" {
 			plan = "free"
+			entitlementSource = "trial"
 		}
 		features := entitlementFeaturesFromPlan(plan)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"provider": "clerk",
-			"user_id":  userID,
-			"email":    email,
-			"plan":     plan,
-			"features": features,
+			"provider":           "clerk",
+			"user_id":            userID,
+			"email":              email,
+			"plan":               plan,
+			"features":           features,
+			"entitlement_source": entitlementSource,
 		})
 	})
 	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {

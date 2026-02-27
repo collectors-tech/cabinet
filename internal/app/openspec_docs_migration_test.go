@@ -43,9 +43,9 @@ func TestOpenSpecDocumentationGovernanceContract(t *testing.T) {
 
 	required := []string{
 		"## Requirements",
-		"### Requirement: OpenSpec Is The Normative Documentation Source",
-		"### Requirement: Legacy Docs Directory Contains No Markdown Sources",
-		"### Requirement: OpenAPI Contract Remains in docs/api/openapi.yaml",
+		"### Requirement DOCUMENTATION-GOVERNANCE-001: OpenSpec Is The Normative Documentation Source",
+		"### Requirement DOCUMENTATION-GOVERNANCE-002: Legacy Docs Directory Contains No Markdown Sources",
+		"### Requirement DOCUMENTATION-GOVERNANCE-003: OpenAPI Contract Remains in docs/api/openapi.yaml",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {

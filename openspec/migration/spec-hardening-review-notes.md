@@ -21,4 +21,19 @@
 ## Remaining planned tests
 - IDs marked planned/partial in openspec/traceability.md still require direct runtime/API/E2E test proof.
 - Provider and selected UI workflow IDs have explicit TODO test mappings pending implementation.
-- Current unresolved coverage gap summary: `traceability-partial-ids=156`.
+- Current unresolved coverage gap summary: `traceability-partial-ids=144`.
+
+## Wave 1 evidence (auth/security/error)
+- Wave completed with direct runtime/API/UI contract tests and traceability status updates.
+- IDs moved to implemented:
+  - `AUTH-001`, `AUTH-002`, `AUTH-003`
+  - `CLOUD-AUTH-BILLING-001`, `CLOUD-AUTH-BILLING-002`, `CLOUD-AUTH-BILLING-003`
+  - `DIAGNOSTICS-001`
+  - `ERRORS-001`, `ERRORS-002`
+  - `RUNTIME-CORE-001`, `RUNTIME-CORE-003`
+  - `SECURITY-002`
+- Net reduction: partial IDs `156 -> 144` (12 reduced).
+- Remaining notable blockers in this wave scope:
+  - `CLOUD-AUTH-BILLING-005` still partial pending strict 401/403 plus explicit non-mutation proof path.
+  - `DIAGNOSTICS-002/003/004` remain partial due missing remote telemetry feature-test harness.
+  - `ERRORS-003` remains partial pending deterministic taxonomy-to-guidance UI/API proof.

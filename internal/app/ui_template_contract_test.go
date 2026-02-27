@@ -400,6 +400,27 @@ func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	}
 }
 
+func TestGeneralErrorSafeNavigationContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/errors/general-error.tsx")
+	if err != nil {
+		t.Fatalf("read general error component: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"history.go(-1)",
+		"Go Back",
+		"Back to Home",
+		"navigate({ to: '/' })",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("general error safe navigation missing token: %s", token)
+		}
+	}
+}
+
 func TestCollectionWorkspaceUsesTasksProviderContract(t *testing.T) {
 	t.Parallel()
 

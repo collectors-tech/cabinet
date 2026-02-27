@@ -63,3 +63,27 @@
 | openspec/specs/ui-screen-settings/spec.md | 3 | 0 | 3 | 3 | 0 | UI-SCREEN-SETTINGS-001, UI-SCREEN-SETTINGS-002, UI-SCREEN-SETTINGS-003 | Concrete GIVEN preconditions with actor/config/data context; Deterministic requirement IDs assigned to missing headings | pass |
 | openspec/specs/ui-semantic-component-layer/spec.md | 7 | 0 | 7 | 7 | 0 | UI-SEMANTIC-COMPONENT-LAYER-001, UI-SEMANTIC-COMPONENT-LAYER-002, UI-SEMANTIC-COMPONENT-LAYER-003, UI-SEMANTIC-COMPONENT-LAYER-004, UI-SEMANTIC-COMPONENT-LAYER-005, UI-SEMANTIC-COMPONENT-LAYER-006, UI-SEMANTIC-COMPONENT-LAYER-007 | Concrete GIVEN preconditions with actor/config/data context; Deterministic requirement IDs assigned to missing headings | pass |
 | openspec/specs/wishlist-pricing-dashboard/spec.md | 4 | 0 | 4 | 4 | 0 | WISHLIST-PRICING-DASHBOARD-001, WISHLIST-PRICING-DASHBOARD-002, WISHLIST-PRICING-DASHBOARD-003, WISHLIST-PRICING-DASHBOARD-004 | Concrete GIVEN preconditions with actor/config/data context; Deterministic requirement IDs assigned to missing headings | pass |
+
+## Wave Evidence
+- Wave: `Wave 1 (auth/security/error)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `10 -> 22`
+  - `partial`: `156 -> 144`
+  - Net reduced partial IDs: `12`
+- IDs moved to implemented:
+  - `AUTH-001`, `AUTH-002`, `AUTH-003`
+  - `CLOUD-AUTH-BILLING-001`, `CLOUD-AUTH-BILLING-002`, `CLOUD-AUTH-BILLING-003`
+  - `DIAGNOSTICS-001`
+  - `ERRORS-001`, `ERRORS-002`
+  - `RUNTIME-CORE-001`, `RUNTIME-CORE-003`
+  - `SECURITY-002`
+- Test evidence:
+  - `internal/app/traceability_wave1_auth_security_test.go`
+  - `internal/app/auth_lock_runtime_api_test.go`
+  - `internal/app/cloud_auth_api_test.go`
+  - `internal/app/clerk_billing_webhook_api_test.go`
+  - `internal/app/logging_recovery_api_test.go`
+  - `internal/app/license_api_test.go`
+  - `internal/app/ui_template_contract_test.go`
+  - `tests/shop_providers_contract_test.go`
