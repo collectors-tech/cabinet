@@ -1,5 +1,5 @@
 {
-  "completedAt": "2026-02-27T02:01:33.0000000Z",
+  "completedAt": "2026-02-27T06:03:42.1796613Z",
   "commit": "9ca1215",
   "specFilesProcessed": 54,
   "requirementsScanned": 166,
@@ -76,13 +76,16 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=144",
+    "traceability-partial-ids=138",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
     "planned_provider_contract_tests: INTEGRATION-008, INTEGRATION-009, INTEGRATION-012, INTEGRATION-013, INTEGRATION-014, INTEGRATION-015"
   ],
   "waveEvidence": [
     "wave1_auth_security_error: moved_to_implemented=12",
     "wave1_auth_security_error: ids=AUTH-001,AUTH-002,AUTH-003,CLOUD-AUTH-BILLING-001,CLOUD-AUTH-BILLING-002,CLOUD-AUTH-BILLING-003,DIAGNOSTICS-001,ERRORS-001,ERRORS-002,RUNTIME-CORE-001,RUNTIME-CORE-003,SECURITY-002",
-    "wave1_auth_security_error: partial_before=156 partial_after=144"
+    "wave1_auth_security_error: partial_before=156 partial_after=144",
+    "wave2_runtime_diagnostics_security: moved_to_implemented=6",
+    "wave2_runtime_diagnostics_security: ids=CLOUD-AUTH-BILLING-005,DIAGNOSTICS-002,DIAGNOSTICS-003,DIAGNOSTICS-004,ERRORS-003,SECURITY-001",
+    "wave2_runtime_diagnostics_security: partial_before=144 partial_after=138"
   ]
 }

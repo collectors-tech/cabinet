@@ -37,3 +37,16 @@
   - `CLOUD-AUTH-BILLING-005` still partial pending strict 401/403 plus explicit non-mutation proof path.
   - `DIAGNOSTICS-002/003/004` remain partial due missing remote telemetry feature-test harness.
   - `ERRORS-003` remains partial pending deterministic taxonomy-to-guidance UI/API proof.
+
+## Wave 2 evidence (runtime/diagnostics/security)
+- Wave completed with missing runtime behavior implemented and directly tested.
+- IDs moved to implemented:
+  - `CLOUD-AUTH-BILLING-005`
+  - `DIAGNOSTICS-002`, `DIAGNOSTICS-003`, `DIAGNOSTICS-004`
+  - `ERRORS-003`
+  - `SECURITY-001`
+- Net reduction: partial IDs `144 -> 138` (6 reduced).
+- Security policy decision for plaintext fallback:
+  - API secrets continue to prefer OS keyring.
+  - If explicit insecure fallback is enabled, values are now encrypted-at-rest (`enc:v1:` AES-GCM) and never stored plaintext in SQLite.
+  - Rationale: preserves local development/test operability while eliminating plaintext persistence risk.

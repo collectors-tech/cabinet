@@ -196,6 +196,117 @@ func New(cfg config.Config) (*App, error) {
 		_ = conn.QueryRowContext(r.Context(), `SELECT value FROM app_state WHERE key = 'recovery_required'`).Scan(&value)
 		_ = json.NewEncoder(w).Encode(map[string]any{"recovery_required": value == "1"})
 	})
+	mux.HandleFunc("/api/diagnostics/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			cfg := diagnosticsConfigFromDB(r.Context(), conn)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"remote_opt_in":      cfg.RemoteOptIn,
+				"provider":           cfg.Provider,
+				"remote_url":         cfg.RemoteURL,
+				"sentry_compatible":  true,
+				"local_storage_only": !cfg.RemoteOptIn,
+			})
+		case http.MethodPut:
+			var req struct {
+				RemoteOptIn bool   `json:"remote_opt_in"`
+				Provider    string `json:"provider"`
+				RemoteURL   string `json:"remote_url"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			cfg := diagnosticsConfig{
+				RemoteOptIn: req.RemoteOptIn,
+				Provider:    strings.TrimSpace(strings.ToLower(req.Provider)),
+				RemoteURL:   strings.TrimSpace(req.RemoteURL),
+			}
+			if cfg.Provider == "" {
+				cfg.Provider = "sentry"
+			}
+			if err := persistDiagnosticsConfig(r.Context(), conn, cfg); err != nil {
+				http.Error(w, `{"error":"failed_to_update_diagnostics_config"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"remote_opt_in":      cfg.RemoteOptIn,
+				"provider":           cfg.Provider,
+				"remote_url":         cfg.RemoteURL,
+				"sentry_compatible":  true,
+				"local_storage_only": !cfg.RemoteOptIn,
+			})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/diagnostics/event", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Type      string         `json:"type"`
+			Category  string         `json:"category"`
+			Message   string         `json:"message"`
+			SessionID string         `json:"session_id"`
+			Details   map[string]any `json:"details"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		cfg := diagnosticsConfigFromDB(r.Context(), conn)
+		if req.Details == nil {
+			req.Details = map[string]any{}
+		}
+		logSvc.Log(r.Context(), "error", "diagnostics_event_local", map[string]any{
+			"type":       req.Type,
+			"category":   req.Category,
+			"message":    req.Message,
+			"session_id": req.SessionID,
+			"details":    req.Details,
+		})
+		remoteSent := false
+		remoteStatus := "local_only"
+		if cfg.RemoteOptIn {
+			envelope := buildSentryCompatibleEnvelope(req.Type, req.Category, req.Message, req.SessionID, req.Details)
+			if err := sendDiagnosticsEnvelope(r.Context(), cfg, envelope); err != nil {
+				remoteStatus = "remote_error"
+			} else {
+				remoteSent = true
+				remoteStatus = "remote_sent"
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"accepted":        true,
+			"remote_sent":     remoteSent,
+			"delivery_status": remoteStatus,
+		})
+	})
+	mux.HandleFunc("/api/errors/classify", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ErrorCode string `json:"error_code"`
+			Message   string `json:"message"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		category, nextAction, guidance := classifyErrorTaxonomy(req.ErrorCode, req.Message)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"category":    category,
+			"next_action": nextAction,
+			"guidance":    guidance,
+		})
+	})
 	mux.HandleFunc("/api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -2185,7 +2296,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"unsupported_provider"}`, http.StatusBadRequest)
 			return
 		}
-		claims, err := parseUnverifiedJWTPayload(req.Token)
+		claims, err := parseCloudAuthClaims(req.Token)
 		if err != nil {
 			http.Error(w, `{"error":"invalid_token"}`, http.StatusUnauthorized)
 			return
@@ -2607,6 +2718,174 @@ func verifyWebhookSignature(secret string, body []byte, signature string) bool {
 	_, _ = mac.Write(body)
 	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(signature)))
+}
+
+type diagnosticsConfig struct {
+	RemoteOptIn bool
+	Provider    string
+	RemoteURL   string
+}
+
+func diagnosticsConfigFromDB(ctx context.Context, conn *sql.DB) diagnosticsConfig {
+	cfg := diagnosticsConfig{
+		RemoteOptIn: false,
+		Provider:    "sentry",
+	}
+	var v string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'diagnostics.remote_opt_in'`).Scan(&v); err == nil {
+		cfg.RemoteOptIn = strings.TrimSpace(v) == "1"
+	}
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'diagnostics.provider'`).Scan(&v); err == nil && strings.TrimSpace(v) != "" {
+		cfg.Provider = strings.TrimSpace(strings.ToLower(v))
+	}
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'diagnostics.remote_url'`).Scan(&v); err == nil {
+		cfg.RemoteURL = strings.TrimSpace(v)
+	}
+	return cfg
+}
+
+func persistDiagnosticsConfig(ctx context.Context, conn *sql.DB, cfg diagnosticsConfig) error {
+	optVal := "0"
+	if cfg.RemoteOptIn {
+		optVal = "1"
+	}
+	updates := map[string]string{
+		"diagnostics.remote_opt_in": optVal,
+		"diagnostics.provider":      cfg.Provider,
+		"diagnostics.remote_url":    cfg.RemoteURL,
+	}
+	for k, v := range updates {
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO app_state(key, value, updated_at)
+			VALUES(?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+		`, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func buildSentryCompatibleEnvelope(eventType, category, message, sessionID string, details map[string]any) map[string]any {
+	level := "info"
+	if strings.EqualFold(strings.TrimSpace(eventType), "error") {
+		level = "error"
+	}
+	eventID, _ := randomToken(12)
+	return map[string]any{
+		"event_id":  eventID,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"level":     level,
+		"message":   strings.TrimSpace(message),
+		"tags": map[string]any{
+			"category": strings.TrimSpace(strings.ToLower(category)),
+			"type":     strings.TrimSpace(strings.ToLower(eventType)),
+		},
+		"contexts": map[string]any{
+			"session": map[string]any{
+				"id": strings.TrimSpace(sessionID),
+			},
+			"diagnostics": details,
+		},
+	}
+}
+
+func sendDiagnosticsEnvelope(ctx context.Context, cfg diagnosticsConfig, envelope map[string]any) error {
+	if !cfg.RemoteOptIn {
+		return nil
+	}
+	if cfg.Provider != "sentry" || strings.TrimSpace(cfg.RemoteURL) == "" {
+		return fmt.Errorf("diagnostics provider not configured")
+	}
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.RemoteURL, strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("diagnostics remote send status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func classifyErrorTaxonomy(errorCode, message string) (category, nextAction, guidance string) {
+	input := strings.ToLower(strings.TrimSpace(errorCode) + " " + strings.TrimSpace(message))
+	switch {
+	case strings.Contains(input, "provider"), strings.Contains(input, "ebay"), strings.Contains(input, "amazon"), strings.Contains(input, "scanner"), strings.Contains(input, "timeout"):
+		return "provider", "check_provider_health_and_credentials", "Check provider health, credentials, and retry the operation."
+	case strings.Contains(input, "network"), strings.Contains(input, "connect"), strings.Contains(input, "dns"), strings.Contains(input, "offline"):
+		return "connectivity", "check_network_and_retry", "Verify network connectivity and retry."
+	case strings.Contains(input, "unauthorized"), strings.Contains(input, "forbidden"), strings.Contains(input, "session_locked"), strings.Contains(input, "invalid_signature"), strings.Contains(input, "invalid_token"):
+		return "authorization", "re_authenticate_or_unlock_session", "Re-authenticate, unlock the session, or refresh access credentials."
+	case strings.Contains(input, "invalid"), strings.Contains(input, "validation"), strings.Contains(input, "bad_request"), strings.Contains(input, "missing"):
+		return "validation", "correct_request_payload", "Correct the request payload and try again."
+	default:
+		return "internal", "review_logs_and_report", "Review diagnostics logs and report with context."
+	}
+}
+
+func parseCloudAuthClaims(token string) (map[string]any, error) {
+	if os.Getenv("CABINET_CLOUD_AUTH_ENFORCE_SIGNED_TOKENS") != "1" {
+		return parseUnverifiedJWTPayload(token)
+	}
+	secret := strings.TrimSpace(os.Getenv("CABINET_CLOUD_AUTH_HS256_SECRET"))
+	if secret == "" {
+		return nil, fmt.Errorf("strict cloud auth verification enabled but CABINET_CLOUD_AUTH_HS256_SECRET missing")
+	}
+	return parseVerifiedHS256JWTPayload(token, secret)
+}
+
+func parseVerifiedHS256JWTPayload(token, secret string) (map[string]any, error) {
+	parts := strings.Split(strings.TrimSpace(token), ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid jwt token")
+	}
+	decode := func(s string) ([]byte, error) {
+		b, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(s))
+		if err != nil {
+			return nil, fmt.Errorf("decode jwt segment: %w", err)
+		}
+		return b, nil
+	}
+	headerRaw, err := decode(parts[0])
+	if err != nil {
+		return nil, err
+	}
+	var header map[string]any
+	if err := json.Unmarshal(headerRaw, &header); err != nil {
+		return nil, fmt.Errorf("decode jwt header: %w", err)
+	}
+	if strings.TrimSpace(strings.ToUpper(claimAsString(header, "alg"))) != "HS256" {
+		return nil, fmt.Errorf("unsupported jwt algorithm")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(parts[0] + "." + parts[1]))
+	expected := mac.Sum(nil)
+	gotSig, err := decode(parts[2])
+	if err != nil {
+		return nil, err
+	}
+	if !hmac.Equal(expected, gotSig) {
+		return nil, fmt.Errorf("invalid jwt signature")
+	}
+	payloadRaw, err := decode(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payloadRaw, &claims); err != nil {
+		return nil, fmt.Errorf("decode jwt payload: %w", err)
+	}
+	return claims, nil
 }
 
 func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {

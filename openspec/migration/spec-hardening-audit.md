@@ -87,3 +87,24 @@
   - `internal/app/license_api_test.go`
   - `internal/app/ui_template_contract_test.go`
   - `tests/shop_providers_contract_test.go`
+
+## Wave Evidence
+- Wave: `Wave 2 (runtime/diagnostics/security)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `22 -> 28`
+  - `partial`: `144 -> 138`
+  - Net reduced partial IDs: `6`
+- IDs moved to implemented:
+  - `CLOUD-AUTH-BILLING-005`
+  - `DIAGNOSTICS-002`, `DIAGNOSTICS-003`, `DIAGNOSTICS-004`
+  - `ERRORS-003`
+  - `SECURITY-001`
+- Runtime behavior implemented:
+  - Strict cloud auth token verification mode (`CABINET_CLOUD_AUTH_ENFORCE_SIGNED_TOKENS=1`) with HS256 signature validation (`CABINET_CLOUD_AUTH_HS256_SECRET`).
+  - Diagnostics API contracts: `/api/diagnostics/config` and `/api/diagnostics/event` with explicit opt-in and local-only behavior.
+  - Deterministic error taxonomy contract: `/api/errors/classify`.
+  - Secret fallback hardening: encrypted fallback storage (`enc:v1:`) when explicit insecure fallback is enabled.
+- Test evidence:
+  - `internal/app/traceability_wave2_priority_test.go`
+  - `internal/profile/secrets_fallback_security_test.go`
