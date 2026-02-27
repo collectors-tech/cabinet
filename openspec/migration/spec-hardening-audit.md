@@ -126,3 +126,22 @@
     - `UPDATE_CHANNEL_MISMATCH` (`409`)
 - Test evidence:
   - `internal/app/traceability_wave3_priority_test.go`
+
+## Wave Evidence
+- Wave: `Wave 4 (provider/scanner contracts)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `30 -> 39`
+  - `partial`: `136 -> 127`
+  - Net reduced partial IDs: `9`
+- IDs moved to implemented:
+  - `CANDIDATES-001`, `CANDIDATES-002`
+  - `INTEGRATION-008`, `INTEGRATION-009`, `INTEGRATION-012`, `INTEGRATION-013`, `INTEGRATION-014`, `INTEGRATION-015`
+  - `SCANNER-002`
+- Runtime behavior implemented:
+  - Added canonical provider registry endpoint `/api/providers/registry` with Amazon mode metadata and AU webshop catalog domains.
+  - Added `/api/providers/amazon/run` contract path with deterministic disabled-mode `409` envelope and normalized candidate payload when enabled.
+  - Added `/api/providers/au-webshops/parse-stock` to normalize stock signal extraction into deterministic fields.
+  - Expanded scheduled scanner summary contract fields: `run_id`, `query_sets_executed`, `candidates_collected`, `failures`.
+- Test evidence:
+  - `internal/app/traceability_wave4_provider_scanner_test.go`

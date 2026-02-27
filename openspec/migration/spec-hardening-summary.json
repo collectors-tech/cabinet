@@ -76,9 +76,9 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=136",
+    "traceability-partial-ids=127",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
-    "planned_provider_contract_tests: INTEGRATION-008, INTEGRATION-009, INTEGRATION-012, INTEGRATION-013, INTEGRATION-014, INTEGRATION-015"
+    "ui_workflow_e2e_coverage_missing_for_ui_screen_ids"
   ],
   "waveEvidence": [
     "wave1_auth_security_error: moved_to_implemented=12",
@@ -89,6 +89,9 @@
     "wave2_runtime_diagnostics_security: partial_before=144 partial_after=138",
     "wave3_cloud_gating_runtime_update: moved_to_implemented=2",
     "wave3_cloud_gating_runtime_update: ids=CLOUD-AUTH-BILLING-004,RUNTIME-CORE-002",
-    "wave3_cloud_gating_runtime_update: partial_before=138 partial_after=136"
+    "wave3_cloud_gating_runtime_update: partial_before=138 partial_after=136",
+    "wave4_provider_scanner_contracts: moved_to_implemented=9",
+    "wave4_provider_scanner_contracts: ids=CANDIDATES-001,CANDIDATES-002,INTEGRATION-008,INTEGRATION-009,INTEGRATION-012,INTEGRATION-013,INTEGRATION-014,INTEGRATION-015,SCANNER-002",
+    "wave4_provider_scanner_contracts: partial_before=136 partial_after=127"
   ]
 }

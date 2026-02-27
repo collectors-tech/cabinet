@@ -21,7 +21,7 @@
 ## Remaining planned tests
 - IDs marked planned/partial in openspec/traceability.md still require direct runtime/API/E2E test proof.
 - Provider and selected UI workflow IDs have explicit TODO test mappings pending implementation.
-- Current unresolved coverage gap summary: `traceability-partial-ids=144`.
+- Current unresolved coverage gap summary: `traceability-partial-ids=127`.
 
 ## Wave 1 evidence (auth/security/error)
 - Wave completed with direct runtime/API/UI contract tests and traceability status updates.
@@ -60,3 +60,18 @@
 - Runtime behavior implemented:
   - Pro-gated mutation endpoints now enforce deterministic `403` response with consistent envelope (`error`, `error_code`, `feature`, `message`) when resolved entitlement is not pro.
   - Added runtime signed-update harness endpoint `/api/runtime/update/install` with deterministic signature and channel validation outcomes.
+
+## Wave 4 evidence (provider/scanner contracts)
+- Wave completed with runtime provider/scanner contract routes plus direct API tests.
+- IDs moved to implemented:
+  - `CANDIDATES-001`, `CANDIDATES-002`
+  - `INTEGRATION-008`, `INTEGRATION-009`, `INTEGRATION-012`, `INTEGRATION-013`, `INTEGRATION-014`, `INTEGRATION-015`
+  - `SCANNER-002`
+- Net reduction: partial IDs `136 -> 127` (9 reduced).
+- Runtime behavior implemented:
+  - Added canonical provider registry endpoint `/api/providers/registry` with Amazon integration-mode metadata and AU webshop domains.
+  - Added Amazon provider run endpoint `/api/providers/amazon/run` with deterministic `409 PROVIDER_DISABLED` envelope when disabled and normalized candidate contract when enabled.
+  - Added AU webshop stock parser endpoint `/api/providers/au-webshops/parse-stock` returning deterministic `stock_signal` contract.
+  - Expanded scheduled scanner run contract to return summary envelope fields: `run_id`, `query_sets_executed`, `candidates_collected`, `failures`.
+- Test evidence:
+  - `internal/app/traceability_wave4_provider_scanner_test.go`

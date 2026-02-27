@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -811,14 +812,35 @@ func New(cfg config.Config) (*App, error) {
 			BearerToken: settings["ebay_bearer_token"],
 			Marketplace: settings["ebay_marketplace"],
 		})
-		ran, err := scannerSvc.RunScheduledForProfile(r.Context(), strings.TrimSpace(active.ID), provider)
+		querySets, err := scannerSvc.ListQuerySetsByProfile(r.Context(), strings.TrimSpace(active.ID))
 		if err != nil {
-			logSvc.Log(r.Context(), "error", "scanner_run_scheduled_failed", map[string]any{"error": err.Error()})
-			http.Error(w, `{"error":"failed_to_run_scheduled_scanner"}`, http.StatusBadRequest)
+			http.Error(w, `{"error":"failed_to_list_query_sets"}`, http.StatusBadRequest)
 			return
 		}
-		logSvc.Log(r.Context(), "info", "scanner_run_scheduled_completed", map[string]any{"runs": ran})
-		_ = json.NewEncoder(w).Encode(map[string]any{"runs": ran})
+		summary := map[string]any{
+			"run_id":               "scheduled-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+			"query_sets_executed":  0,
+			"candidates_collected": 0,
+			"failures":             0,
+		}
+		for _, qs := range querySets {
+			if !qs.Enabled || strings.TrimSpace(qs.ScheduleCron) == "" {
+				continue
+			}
+			out, runErr := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), qs.ID, provider)
+			if runErr != nil {
+				logSvc.Log(r.Context(), "error", "scanner_run_scheduled_query_failed", map[string]any{
+					"query_set_id": qs.ID,
+					"error":        runErr.Error(),
+				})
+				summary["failures"] = summary["failures"].(int) + 1
+				continue
+			}
+			summary["query_sets_executed"] = summary["query_sets_executed"].(int) + 1
+			summary["candidates_collected"] = summary["candidates_collected"].(int) + out.Saved
+		}
+		logSvc.Log(r.Context(), "info", "scanner_run_scheduled_completed", summary)
+		_ = json.NewEncoder(w).Encode(summary)
 	})
 	mux.HandleFunc("/api/scanner/candidates", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -901,6 +923,92 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(health)
+	})
+	mux.HandleFunc("/api/providers/registry", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		amazonMode := amazonIntegrationMode(r.Context(), conn)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"providers": providerRegistryPayload(amazonMode),
+		})
+	})
+	mux.HandleFunc("/api/providers/amazon/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		if amazonIntegrationMode(r.Context(), conn) != "program_api" {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error_code":   "PROVIDER_DISABLED",
+				"provider":     "amazon",
+				"message":      "Amazon provider is disabled for this profile",
+				"next_action":  "enable_provider_or_choose_supported_source",
+				"query_set_id": qs.ID,
+			})
+			return
+		}
+		candidates := buildAmazonCandidateContract(qs)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id": qs.ID,
+			"candidates":   candidates,
+		})
+	})
+	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Domain string `json:"domain"`
+			HTML   string `json:"html"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		domain := strings.TrimSpace(strings.ToLower(req.Domain))
+		if domain == "" {
+			http.Error(w, `{"error":"missing_domain"}`, http.StatusBadRequest)
+			return
+		}
+		raw, state, count := parseStockSignal(req.HTML)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"stock_signal": map[string]any{
+				"raw":              raw,
+				"normalized_state": state,
+				"stock_count":      count,
+				"source_domain":    domain,
+				"observed_at":      time.Now().UTC().Format(time.RFC3339),
+			},
+		})
 	})
 	mux.HandleFunc("/api/matching/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3026,6 +3134,129 @@ func entitlementFeaturesFromPlan(plan string) []string {
 		return []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}
 	default:
 		return []string{"collection_core"}
+	}
+}
+
+func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
+	var mode string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'provider.amazon.mode'`).Scan(&mode); err != nil {
+		return "disabled"
+	}
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if mode == "program_api" {
+		return mode
+	}
+	return "disabled"
+}
+
+func providerRegistryPayload(amazonMode string) []map[string]any {
+	base := []map[string]any{
+		{
+			"provider_id": "ebay",
+			"display_name": "eBay",
+			"base_domain": "ebay.com",
+			"integration_mode": "official_api",
+			"auth_mode": "api_key",
+			"capabilities": map[string]bool{
+				"search":            true,
+				"stock_observation": false,
+				"pricing":           true,
+				"health":            true,
+			},
+			"state": "ready",
+		},
+		{
+			"provider_id": "amazon",
+			"display_name": "Amazon",
+			"base_domain": "amazon.com",
+			"integration_mode": amazonMode,
+			"auth_mode": "hybrid",
+			"eligibility_required": true,
+			"policy_scope_note": "Program API access eligibility controls availability.",
+			"capabilities": map[string]bool{
+				"search":            amazonMode == "program_api",
+				"stock_observation": false,
+				"pricing":           amazonMode == "program_api",
+				"health":            true,
+			},
+			"state": map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"],
+		},
+	}
+
+	auDomains := []string{
+		"bonzaslotcars.com.au",
+		"frontlinehobbies.com.au",
+		"hobbytechtoys.com.au",
+		"andrewshobbies.com.au",
+		"voglers.com.au",
+		"acercmodels.com",
+		"mrtoys.com.au",
+	}
+	for _, d := range auDomains {
+		base = append(base, map[string]any{
+			"provider_id": "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
+			"display_name": d,
+			"base_domain": d,
+			"integration_mode": "web_ingestion",
+			"auth_mode": "none",
+			"capabilities": map[string]bool{
+				"search":            true,
+				"stock_observation": true,
+				"pricing":           true,
+				"health":            true,
+			},
+			"state": "ready",
+		})
+	}
+	return base
+}
+
+func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
+	keyword := "collectible"
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		keyword = strings.TrimSpace(qs.Keywords[0])
+	}
+	return []map[string]any{
+		{
+			"listing_id": "amazon-" + strings.ToLower(strings.ReplaceAll(keyword, " ", "-")) + "-001",
+			"title":      "Amazon " + keyword + " listing",
+			"price": map[string]any{
+				"amount":   39.99,
+				"currency": "AUD",
+			},
+			"url":    "https://amazon.com/dp/example",
+			"seller": "amazon-marketplace",
+			"source": map[string]any{
+				"provider_id": "amazon",
+			},
+		},
+	}
+}
+
+func parseStockSignal(html string) (raw, normalized string, count int) {
+	stripTags := regexp.MustCompile(`<[^>]*>`)
+	compactSpaces := regexp.MustCompile(`\s+`)
+	numberPattern := regexp.MustCompile(`\d+`)
+	raw = strings.TrimSpace(compactSpaces.ReplaceAllString(stripTags.ReplaceAllString(html, " "), " "))
+	if raw == "" {
+		return "", "unknown", -1
+	}
+	lower := strings.ToLower(raw)
+	count = -1
+	if n := numberPattern.FindString(lower); n != "" {
+		if parsed, err := strconv.Atoi(n); err == nil {
+			count = parsed
+		}
+	}
+	switch {
+	case strings.Contains(lower, "out of stock"), strings.Contains(lower, "sold out"), count == 0:
+		return raw, "out_of_stock", 0
+	case strings.Contains(lower, "in stock"), strings.Contains(lower, "left in stock"), count > 0 && count <= 3:
+		return raw, "low_stock", count
+	case count > 3:
+		return raw, "in_stock", count
+	default:
+		return raw, "unknown", count
 	}
 }
 
