@@ -1,0 +1,7 @@
+internal/app/traceability_wave5_collection_workflows_test.go
+openspec/traceability.md
+openspec/migration/spec-hardening-summary.json
+openspec/migration/spec-hardening-review-notes.md
+openspec/migration/spec-hardening-audit.md
+openspec/migration/wave-5-summary.md
+openspec/migration/wave-5-changed-files.txt

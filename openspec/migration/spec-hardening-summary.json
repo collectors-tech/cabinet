@@ -76,7 +76,7 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=127",
+    "traceability-partial-ids=117",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
     "ui_workflow_e2e_coverage_missing_for_ui_screen_ids"
   ],
@@ -92,6 +92,9 @@
     "wave3_cloud_gating_runtime_update: partial_before=138 partial_after=136",
     "wave4_provider_scanner_contracts: moved_to_implemented=9",
     "wave4_provider_scanner_contracts: ids=CANDIDATES-001,CANDIDATES-002,INTEGRATION-008,INTEGRATION-009,INTEGRATION-012,INTEGRATION-013,INTEGRATION-014,INTEGRATION-015,SCANNER-002",
-    "wave4_provider_scanner_contracts: partial_before=136 partial_after=127"
+    "wave4_provider_scanner_contracts: partial_before=136 partial_after=127",
+    "wave5_collection_discovery_pricing_matching: moved_to_implemented=10",
+    "wave5_collection_discovery_pricing_matching: ids=SEARCH-001,SEARCH-002,DISCOVERY-001,DISCOVERY-002,WISHLIST-PRICING-DASHBOARD-001,WISHLIST-PRICING-DASHBOARD-002,WISHLIST-PRICING-DASHBOARD-003,WISHLIST-PRICING-DASHBOARD-004,MATCHING-001,MATCHING-002",
+    "wave5_collection_discovery_pricing_matching: partial_before=127 partial_after=117"
   ]
 }

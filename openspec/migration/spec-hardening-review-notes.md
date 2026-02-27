@@ -21,7 +21,7 @@
 ## Remaining planned tests
 - IDs marked planned/partial in openspec/traceability.md still require direct runtime/API/E2E test proof.
 - Provider and selected UI workflow IDs have explicit TODO test mappings pending implementation.
-- Current unresolved coverage gap summary: `traceability-partial-ids=127`.
+- Current unresolved coverage gap summary: `traceability-partial-ids=117`.
 
 ## Wave 1 evidence (auth/security/error)
 - Wave completed with direct runtime/API/UI contract tests and traceability status updates.
@@ -75,3 +75,14 @@
   - Expanded scheduled scanner run contract to return summary envelope fields: `run_id`, `query_sets_executed`, `candidates_collected`, `failures`.
 - Test evidence:
   - `internal/app/traceability_wave4_provider_scanner_test.go`
+
+## Wave 5 evidence (collection/discovery/pricing/matching workflows)
+- Wave completed with API-backed workflow contract tests and no runtime code remediation required.
+- IDs moved to implemented:
+  - `SEARCH-001`, `SEARCH-002`
+  - `DISCOVERY-001`, `DISCOVERY-002`
+  - `WISHLIST-PRICING-DASHBOARD-001`, `WISHLIST-PRICING-DASHBOARD-002`, `WISHLIST-PRICING-DASHBOARD-003`, `WISHLIST-PRICING-DASHBOARD-004`
+  - `MATCHING-001`, `MATCHING-002`
+- Net reduction: partial IDs `127 -> 117` (10 reduced).
+- Test evidence:
+  - `internal/app/traceability_wave5_collection_workflows_test.go`

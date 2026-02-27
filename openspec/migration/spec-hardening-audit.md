@@ -145,3 +145,20 @@
   - Expanded scheduled scanner summary contract fields: `run_id`, `query_sets_executed`, `candidates_collected`, `failures`.
 - Test evidence:
   - `internal/app/traceability_wave4_provider_scanner_test.go`
+
+## Wave Evidence
+- Wave: `Wave 5 (collection/discovery/pricing/matching workflows)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `39 -> 49`
+  - `partial`: `127 -> 117`
+  - Net reduced partial IDs: `10`
+- IDs moved to implemented:
+  - `SEARCH-001`, `SEARCH-002`
+  - `DISCOVERY-001`, `DISCOVERY-002`
+  - `WISHLIST-PRICING-DASHBOARD-001`, `WISHLIST-PRICING-DASHBOARD-002`, `WISHLIST-PRICING-DASHBOARD-003`, `WISHLIST-PRICING-DASHBOARD-004`
+  - `MATCHING-001`, `MATCHING-002`
+- Runtime behavior implemented:
+  - No runtime code changes required; existing API behavior already satisfied these contracts.
+- Test evidence:
+  - `internal/app/traceability_wave5_collection_workflows_test.go`
