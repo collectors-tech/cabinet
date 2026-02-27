@@ -131,6 +131,7 @@
   - Chat now persists profile-scoped history across reload and supports deterministic load/error/retry states.
   - Fullscreen photo viewer now supports next/previous navigation with keyboard arrow support.
 - Test evidence:
-  - `web/playwright/e2e/ui-backlog.spec.ts`
+  - `ui.web/cypress/e2e/ui-matrix.cy.ts`
 - Remaining high-priority blocker in this scope:
   - `AI-ASSIST-003` remains partial pending runtime mutation apply endpoint with deterministic `409 AI_CONFIRM_REQUIRED` contract.
+

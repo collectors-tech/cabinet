@@ -223,4 +223,5 @@
   - Added profile-scoped chat history persistence and deterministic load/error/retry chat state handling.
   - Added fullscreen photo previous/next controls and keyboard arrow navigation.
 - Test evidence:
-  - `web/playwright/e2e/ui-backlog.spec.ts`
+  - `ui.web/cypress/e2e/ui-matrix.cy.ts`
+

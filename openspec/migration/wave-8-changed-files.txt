@@ -98,5 +98,6 @@ openspec/migration/spec-hardening-review-notes.md
 openspec/migration/spec-hardening-summary.json
 openspec/migration/wave-7-summary.md
 openspec/traceability.md
-web/playwright/e2e/ui-backlog.spec.ts
-web/src/App.tsx
+ui.web/cypress/e2e/ui-matrix.cy.ts
+ui.web/src/main.tsx
+
