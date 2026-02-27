@@ -21,7 +21,7 @@
 ## Remaining planned tests
 - IDs marked planned/partial in openspec/traceability.md still require direct runtime/API/E2E test proof.
 - Provider and selected UI workflow IDs have explicit TODO test mappings pending implementation.
-- Current unresolved coverage gap summary: `traceability-partial-ids=107`.
+- Current unresolved coverage gap summary: `traceability-partial-ids=90`.
 
 ## Wave 1 evidence (auth/security/error)
 - Wave completed with direct runtime/API/UI contract tests and traceability status updates.
@@ -98,3 +98,20 @@
 - Net reduction: partial IDs `117 -> 107` (10 reduced).
 - Test evidence:
   - `internal/app/traceability_wave6_ops_contracts_test.go`
+
+## Wave 7 evidence (ai/chat/media/lookup/settings/licensing contracts)
+- Wave completed with deterministic API contract coverage for AI availability/toggle, chat persistence + confirmation flow, media upload/reorder derivatives, barcode local+external lookup behavior, entitlement/license gates, and settings credential persistence.
+- IDs moved to implemented:
+  - `AI-ASSIST-001`, `AI-ASSIST-002`, `AI-ASSIST-004`
+  - `CHAT-COPILOT-002`, `CHAT-COPILOT-003`, `CHAT-COPILOT-004`
+  - `PHOTOS-MEDIA-001`, `PHOTOS-MEDIA-002`, `PHOTOS-MEDIA-003`
+  - `BARCODES-001`, `BARCODES-002`, `LOOKUP-001`
+  - `ENTITLEMENTS-001`
+  - `LICENSING-001`, `LICENSING-002`
+  - `SETTINGS-001`, `SETTINGS-002`
+- Net reduction: partial IDs `107 -> 90` (17 reduced).
+- Test evidence:
+  - `internal/app/traceability_wave7_ai_settings_lookup_test.go`
+  - `internal/app/chat_api_test.go`
+  - `internal/app/photos_api_test.go`
+  - `internal/app/license_api_test.go`

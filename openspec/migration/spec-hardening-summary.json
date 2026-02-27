@@ -76,7 +76,7 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=107",
+    "traceability-partial-ids=90",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
     "ui_workflow_e2e_coverage_missing_for_ui_screen_ids"
   ],
@@ -98,6 +98,9 @@
     "wave5_collection_discovery_pricing_matching: partial_before=127 partial_after=117",
     "wave6_profiles_collection_data_logging_scanner: moved_to_implemented=10",
     "wave6_profiles_collection_data_logging_scanner: ids=PROFILES-001,COLLECTION-DOMAIN-001,COLLECTION-DOMAIN-002,COLLECTION-DOMAIN-003,SCANNER-001,SCANNER-003,DATA-MANAGEMENT-001,DATA-MANAGEMENT-002,LOGGING-003,LOGGING-004",
-    "wave6_profiles_collection_data_logging_scanner: partial_before=117 partial_after=107"
+    "wave6_profiles_collection_data_logging_scanner: partial_before=117 partial_after=107",
+    "wave7_ai_chat_media_lookup_settings_licensing: moved_to_implemented=17",
+    "wave7_ai_chat_media_lookup_settings_licensing: ids=AI-ASSIST-001,AI-ASSIST-002,AI-ASSIST-004,CHAT-COPILOT-002,CHAT-COPILOT-003,CHAT-COPILOT-004,PHOTOS-MEDIA-001,PHOTOS-MEDIA-002,PHOTOS-MEDIA-003,BARCODES-001,BARCODES-002,LOOKUP-001,ENTITLEMENTS-001,LICENSING-001,LICENSING-002,SETTINGS-001,SETTINGS-002",
+    "wave7_ai_chat_media_lookup_settings_licensing: partial_before=107 partial_after=90"
   ]
 }
