@@ -115,3 +115,22 @@
   - `internal/app/chat_api_test.go`
   - `internal/app/photos_api_test.go`
   - `internal/app/license_api_test.go`
+
+## Wave 8 evidence (high-value UI/E2E closure)
+- Wave completed with deterministic Playwright UI/E2E coverage for onboarding/auth gating, settings workflows, chat-copilot workflows, shell/navigation behavior, and fullscreen photo navigation.
+- IDs moved to implemented:
+  - `UI-SCREEN-ONBOARDING-AUTH-001`, `UI-SCREEN-ONBOARDING-AUTH-002`, `UI-SCREEN-ONBOARDING-AUTH-003`
+  - `UI-SCREEN-SETTINGS-001`, `UI-SCREEN-SETTINGS-002`, `UI-SCREEN-SETTINGS-003`
+  - `UI-SCREEN-CHAT-COPILOT-001`, `UI-SCREEN-CHAT-COPILOT-002`, `UI-SCREEN-CHAT-COPILOT-003`
+  - `UI-FOUNDATION-SHELL-NAVIGATION-001`, `UI-FOUNDATION-SHELL-NAVIGATION-002`, `UI-FOUNDATION-SHELL-NAVIGATION-003`, `UI-FOUNDATION-SHELL-NAVIGATION-004`
+  - `PHOTOS-MEDIA-004`
+  - `CHAT-COPILOT-001`
+- Net reduction: partial IDs `90 -> 75` (15 reduced), implemented IDs `76 -> 91`.
+- Runtime/UI behavior implemented:
+  - Onboarding now surfaces auth-requirements failure state with explicit retry control.
+  - Chat now persists profile-scoped history across reload and supports deterministic load/error/retry states.
+  - Fullscreen photo viewer now supports next/previous navigation with keyboard arrow support.
+- Test evidence:
+  - `web/playwright/e2e/ui-backlog.spec.ts`
+- Remaining high-priority blocker in this scope:
+  - `AI-ASSIST-003` remains partial pending runtime mutation apply endpoint with deterministic `409 AI_CONFIRM_REQUIRED` contract.

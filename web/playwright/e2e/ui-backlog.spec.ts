@@ -4,6 +4,8 @@ type WizardMockOptions = {
   registerBeginFailsOnce?: boolean;
   sampleFailsOnce?: boolean;
   requiresRegistration?: boolean;
+  authRequirementsFailOnce?: boolean;
+  settingsGetFailsOnce?: boolean;
 };
 
 async function installWizardMocks(page: Parameters<typeof test>[0]["page"], options: WizardMockOptions = {}) {
@@ -21,9 +23,13 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
     nextPhotoNumber: 3,
     sampleCalls: 0,
     registerBeginCalls: 0,
+    authRequirementsCalls: 0,
+    settingsGetCalls: 0,
     registerBeginFailsOnce: Boolean(options.registerBeginFailsOnce),
     sampleFailsOnce: Boolean(options.sampleFailsOnce),
     requiresRegistration: options.requiresRegistration ?? true,
+    authRequirementsFailOnce: Boolean(options.authRequirementsFailOnce),
+    settingsGetFailsOnce: Boolean(options.settingsGetFailsOnce),
   };
 
   await page.route("**/api/**", async (route) => {
@@ -50,7 +56,18 @@ async function installWizardMocks(page: Parameters<typeof test>[0]["page"], opti
       return respondJSON({ db_path: "/tmp/p1.db", media_dir: "/tmp/p1/media" });
     }
     if (path === "/api/auth/requirements" && method === "GET") {
+      state.authRequirementsCalls += 1;
+      if (state.authRequirementsFailOnce && state.authRequirementsCalls === 1) {
+        return respondJSON({ error: "failed_to_get_auth_requirements" }, 500);
+      }
       return respondJSON({ requires_registration: state.requiresRegistration });
+    }
+    if (path === "/api/profiles/p1/settings" && method === "GET") {
+      state.settingsGetCalls += 1;
+      if (state.settingsGetFailsOnce && state.settingsGetCalls === 1) {
+        return respondJSON({ error: "failed_to_get_settings" }, 500);
+      }
+      return respondJSON({ settings: { scanner_schedule: "0 8 * * *", backup_frequency: "daily", "storage.db_path": "/tmp/p1.db" } });
     }
     if (path === "/api/items" && method === "GET") {
       return respondJSON({ items: state.items });
@@ -711,4 +728,99 @@ test("wizard failure path blocks progress then allows retry after identity error
   await page.getByRole("button", { name: /complete identity/i }).click();
   await expect(page.locator(".cabinet-onboarding").getByText(/identity complete: yes/i)).toBeVisible();
   await expect(nextStep).toBeEnabled();
+});
+
+test("onboarding auth requirements failure shows retry and recovers", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: true, authRequirementsFailOnce: true });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "0");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await expect(page.getByLabel(/auth requirements error/i)).toBeVisible();
+  await page.getByRole("button", { name: /retry auth requirements/i }).click();
+  await expect(page.getByLabel(/auth requirements error/i)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /starter onboarding wizard/i })).toBeVisible();
+});
+
+test("settings section failure shows actionable error and route remains usable", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false, settingsGetFailsOnce: true });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+  await page.getByRole("button", { name: /^settings$/i }).first().click();
+
+  await page.getByRole("button", { name: /load profile settings/i }).click();
+  await expect(page.getByText(/admin error: failed_to_get_settings/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /settings and diagnostics/i })).toBeVisible();
+  await page.getByRole("button", { name: /load profile settings/i }).click();
+  await expect(page.getByText(/admin error: failed_to_get_settings/i)).toHaveCount(0);
+});
+
+test("chat history persists per profile across reload and supports error recovery", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+    localStorage.setItem("cabinet.chat.open", "0");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  const ensureChatOpen = async () => {
+    const rail = page.getByRole("complementary", { name: /chat copilot/i });
+    if ((await rail.count()) === 0) {
+      await page.getByRole("button", { name: /toggle chat copilot/i }).click();
+    }
+    await expect(rail).toBeVisible();
+    return rail;
+  };
+
+  const chatRail = await ensureChatOpen();
+  await chatRail.getByLabel(/chat message/i).fill("persist this message");
+  await chatRail.getByRole("button", { name: /^send$/i }).click();
+  await expect(chatRail.getByText(/you:\s*persist this message/i)).toBeVisible();
+  await chatRail.getByRole("button", { name: /close chat copilot/i }).click();
+
+  await page.reload();
+  await page.getByRole("button", { name: /use default/i }).click();
+  await page.getByRole("button", { name: /toggle chat copilot/i }).click();
+  await expect(page.getByRole("complementary", { name: /chat copilot/i }).getByText(/you:\s*persist this message/i)).toBeVisible();
+
+  await page.evaluate(() => {
+    localStorage.setItem("cabinet.chat.thread.p1", "{");
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /use default/i }).click();
+  const chatAfterCorruption = await ensureChatOpen();
+  await expect(chatAfterCorruption.getByRole("status", { name: /chat error state/i })).toBeVisible();
+  await chatAfterCorruption.getByRole("button", { name: /retry chat/i }).click();
+  await expect(chatAfterCorruption.getByRole("status", { name: /chat error state/i })).toHaveCount(0);
+  await expect(chatAfterCorruption.getByText(/assistant:/i)).toBeVisible();
+});
+
+test("photos fullscreen supports next and previous navigation", async ({ page }) => {
+  await installWizardMocks(page, { requiresRegistration: false });
+  await page.addInitScript(() => {
+    localStorage.setItem("cabinet.workspace.p1", "1");
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /use default/i }).click();
+
+  await page.getByRole("button", { name: /^photos$/i }).first().click();
+  await page.getByRole("button", { name: /load photos/i }).click();
+  await page.getByRole("button", { name: /open fullscreen preview/i }).first().click();
+  const dialog = page.getByRole("dialog", { name: /fullscreen photo preview/i });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/fullscreen: a\.jpg/i)).toBeVisible();
+
+  await dialog.getByRole("button", { name: /next photo/i }).click();
+  await expect(dialog.getByText(/fullscreen: b\.jpg/i)).toBeVisible();
+  await dialog.getByRole("button", { name: /previous photo/i }).click();
+  await expect(dialog.getByText(/fullscreen: a\.jpg/i)).toBeVisible();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByText(/fullscreen: b\.jpg/i)).toBeVisible();
 });

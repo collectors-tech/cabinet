@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RecoveryPassphraseForm, SessionTokenForm } from "./components/auth-forms";
 import { CollectionItemForm, type CollectionItemValues } from "./components/collection-item-form";
 import { DataImportExportWizard } from "./components/data-import-export-wizard";
@@ -45,6 +45,7 @@ type CollectionContextNode = { id: string; label: string; kind: "all" | "folder"
 type ChatContextChip = { id: string; label: string; prompt: string };
 type ChatSuggestedAction = { id: string; label: string; description: string; targetScreen: NavScreen };
 type ChatAttachment = { id: string; name: string; size: number; file: File };
+type ChatHistoryEntry = { role: "user" | "assistant"; text: string };
 type ScannerQuerySetRecord = {
   id: string;
   name: string;
@@ -120,6 +121,7 @@ const CHAT_SUGGESTED_ACTIONS: ChatSuggestedAction[] = [
 ];
 const CHAT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const CHAT_ATTACHMENT_ALLOWED_EXTENSIONS = [".txt", ".csv", ".json", ".jpg", ".jpeg", ".png", ".pdf"];
+const CHAT_DEFAULT_THREAD: ChatHistoryEntry[] = [{ role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." }];
 
 function navConfigStorageKey(profileID?: string) {
   return profileID ? `cabinet.nav.main.${profileID}` : "cabinet.nav.main.global";
@@ -328,6 +330,7 @@ export function App() {
   const [recoverySubmitting, setRecoverySubmitting] = useState(false);
   const [authSessionID, setAuthSessionID] = useState("");
   const [requiresRegistration, setRequiresRegistration] = useState<boolean | null>(null);
+  const [authRequirementsError, setAuthRequirementsError] = useState("");
   const [onboardingStatus, setOnboardingStatus] = useState("");
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
@@ -342,9 +345,10 @@ export function App() {
   const [activeScreen, setActiveScreen] = useState<TopLevelScreen>("all");
   const [chatOpen, setChatOpen] = useState(detectInitialChatOpen);
   const [chatDraft, setChatDraft] = useState("");
-  const [chatThread, setChatThread] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
-    { role: "assistant", text: "Ask me about your collection, discoveries, or pricing signals." },
-  ]);
+  const [chatThread, setChatThread] = useState<ChatHistoryEntry[]>(CHAT_DEFAULT_THREAD);
+  const [chatThreadState, setChatThreadState] = useState<"loading" | "ready" | "error">("ready");
+  const [chatThreadError, setChatThreadError] = useState("");
+  const [chatThreadHydrated, setChatThreadHydrated] = useState(false);
   const [chatPendingAction, setChatPendingAction] = useState<ChatSuggestedAction | null>(null);
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [chatAttachmentError, setChatAttachmentError] = useState("");
@@ -364,6 +368,10 @@ export function App() {
   const [globalCommandSearch, setGlobalCommandSearch] = useState("");
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const chatHistoryStorageKey = useCallback((profileID?: string) => {
+    return profileID ? `cabinet.chat.thread.${profileID}` : "cabinet.chat.thread.global";
+  }, []);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -714,39 +722,118 @@ export function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setFullscreenPhoto(null);
+        return;
+      }
+      const currentIndex = photos.findIndex((photo) => photo.id === fullscreenPhoto.id);
+      if (currentIndex < 0 || photos.length <= 1) {
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        const nextIndex = (currentIndex + 1) % photos.length;
+        const next = photos[nextIndex];
+        if (next) {
+          setFullscreenPhoto({ id: next.id, filename: next.filename });
+        }
+      }
+      if (event.key === "ArrowLeft") {
+        const nextIndex = (currentIndex - 1 + photos.length) % photos.length;
+        const next = photos[nextIndex];
+        if (next) {
+          setFullscreenPhoto({ id: next.id, filename: next.filename });
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [fullscreenPhoto]);
+  }, [fullscreenPhoto, photos]);
+
+  const loadAuthRequirements = useCallback(
+    async (profileID: string) => {
+      const reqResp = await fetch(`/api/auth/requirements?profile_id=${encodeURIComponent(profileID)}`);
+      if (!reqResp.ok) {
+        throw new Error("failed_to_get_auth_requirements");
+      }
+      const reqs = (await reqResp.json()) as { requires_registration?: boolean };
+      setRequiresRegistration(Boolean(reqs.requires_registration));
+      setAuthRequirementsError("");
+    },
+    [],
+  );
 
   useEffect(() => {
     let disposed = false;
     async function loadRequirements() {
       if (!activeProfile?.id) {
         setRequiresRegistration(null);
+        setAuthRequirementsError("");
         return;
       }
       try {
-        const reqResp = await fetch(`/api/auth/requirements?profile_id=${encodeURIComponent(activeProfile.id)}`);
-        if (!reqResp.ok) {
-          throw new Error("failed_to_get_auth_requirements");
-        }
-        const reqs = (await reqResp.json()) as { requires_registration?: boolean };
-        if (!disposed) {
-          setRequiresRegistration(Boolean(reqs.requires_registration));
-        }
+        await loadAuthRequirements(activeProfile.id);
       } catch {
         if (!disposed) {
           setRequiresRegistration(null);
+          setAuthRequirementsError("failed_to_get_auth_requirements");
         }
       }
     }
-    loadRequirements();
+    void loadRequirements();
     return () => {
       disposed = true;
     };
-  }, [activeProfile?.id]);
+  }, [activeProfile?.id, loadAuthRequirements]);
+
+  useEffect(() => {
+    if (!activeProfile?.id) {
+      setChatThread(CHAT_DEFAULT_THREAD);
+      setChatThreadState("ready");
+      setChatThreadError("");
+      setChatThreadHydrated(false);
+      return;
+    }
+    setChatThreadState("loading");
+    setChatThreadError("");
+    setChatThreadHydrated(false);
+    try {
+      const raw = localStorage.getItem(chatHistoryStorageKey(activeProfile.id));
+      if (!raw) {
+        setChatThread(CHAT_DEFAULT_THREAD);
+        setChatThreadState("ready");
+        setChatThreadHydrated(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        throw new Error("invalid_chat_history");
+      }
+      const normalized = parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+          const role = (entry as { role?: unknown }).role;
+          const text = (entry as { text?: unknown }).text;
+          if ((role !== "user" && role !== "assistant") || typeof text !== "string") {
+            return null;
+          }
+          return { role, text };
+        })
+        .filter((entry): entry is ChatHistoryEntry => Boolean(entry));
+      setChatThread(normalized.length > 0 ? normalized : CHAT_DEFAULT_THREAD);
+      setChatThreadState("ready");
+      setChatThreadHydrated(true);
+    } catch {
+      setChatThreadState("error");
+      setChatThreadError("chat_history_load_failed");
+    }
+  }, [activeProfile?.id, chatHistoryStorageKey]);
+
+  useEffect(() => {
+    if (!activeProfile?.id || chatThreadState !== "ready" || !chatThreadHydrated) {
+      return;
+    }
+    localStorage.setItem(chatHistoryStorageKey(activeProfile.id), JSON.stringify(chatThread));
+  }, [activeProfile?.id, chatHistoryStorageKey, chatThread, chatThreadState, chatThreadHydrated]);
 
   useEffect(() => {
     if (!activeProfile?.id || requiresRegistration !== true) {
@@ -3219,6 +3306,21 @@ export function App() {
     setChatAttachmentError("");
   }
 
+  function retryChatHistoryLoad() {
+    if (!activeProfile?.id) {
+      setChatThreadState("ready");
+      setChatThread(CHAT_DEFAULT_THREAD);
+      setChatThreadError("");
+      setChatThreadHydrated(true);
+      return;
+    }
+    localStorage.removeItem(chatHistoryStorageKey(activeProfile.id));
+    setChatThread(CHAT_DEFAULT_THREAD);
+    setChatThreadState("ready");
+    setChatThreadError("");
+    setChatThreadHydrated(true);
+  }
+
   function applyChatContextChip(chip: ChatContextChip) {
     setChatDraft(chip.prompt);
   }
@@ -3691,6 +3793,22 @@ export function App() {
                 </p>
                 <p>Current step: {ONBOARDING_STEPS[onboardingStep - 1]}</p>
                 <p>Auth status: {authStatus || "idle"}</p>
+                {authRequirementsError ? (
+                  <div role="status" aria-label="Auth requirements error">
+                    <p>Auth requirements check failed.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!activeProfile?.id) {
+                          return;
+                        }
+                        void loadAuthRequirements(activeProfile.id).catch(() => setAuthRequirementsError("failed_to_get_auth_requirements"));
+                      }}
+                    >
+                      Retry Auth Requirements
+                    </button>
+                  </div>
+                ) : null}
                 {onboardingStatus ? <p>{onboardingStatus}</p> : null}
                 <ol className="cabinet-onboarding-progress" aria-label="Onboarding progress">
                   {ONBOARDING_STEPS.map((stepName, idx) => {
@@ -4281,6 +4399,36 @@ export function App() {
               {fullscreenPhoto ? (
                 <div role="dialog" aria-label="Fullscreen photo preview">
                   <p>Fullscreen: {fullscreenPhoto.filename}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentIndex = photos.findIndex((photo) => photo.id === fullscreenPhoto.id);
+                      if (currentIndex < 0 || photos.length <= 1) {
+                        return;
+                      }
+                      const prev = photos[(currentIndex - 1 + photos.length) % photos.length];
+                      if (prev) {
+                        setFullscreenPhoto({ id: prev.id, filename: prev.filename });
+                      }
+                    }}
+                  >
+                    Previous Photo
+                  </button>{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentIndex = photos.findIndex((photo) => photo.id === fullscreenPhoto.id);
+                      if (currentIndex < 0 || photos.length <= 1) {
+                        return;
+                      }
+                      const next = photos[(currentIndex + 1) % photos.length];
+                      if (next) {
+                        setFullscreenPhoto({ id: next.id, filename: next.filename });
+                      }
+                    }}
+                  >
+                    Next Photo
+                  </button>{" "}
                   <button type="button" onClick={() => setFullscreenPhoto(null)}>
                     Close Fullscreen
                   </button>
@@ -4984,6 +5132,16 @@ export function App() {
             </div>
           ) : null}
           <div className="cabinet-chat-thread">
+            {chatThreadState === "loading" ? <p role="status">Loading chat history...</p> : null}
+            {chatThreadState === "error" ? (
+              <div role="status" aria-label="Chat error state">
+                <p>Chat error: {chatThreadError || "unknown"}</p>
+                <button type="button" onClick={retryChatHistoryLoad}>
+                  Retry Chat
+                </button>
+              </div>
+            ) : null}
+            {chatThreadState === "ready" && chatThread.length === 0 ? <p role="status">No messages yet.</p> : null}
             {chatThread.map((entry, index) => (
               <p key={`${entry.role}-${index}`} className={`cabinet-chat-msg cabinet-chat-msg-${entry.role}`}>
                 <strong>{entry.role === "assistant" ? "Assistant" : "You"}:</strong> {entry.text}

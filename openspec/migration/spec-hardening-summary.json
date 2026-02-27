@@ -76,9 +76,10 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=90",
+    "traceability-partial-ids=75",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
-    "ui_workflow_e2e_coverage_missing_for_ui_screen_ids"
+    "ui_workflow_e2e_coverage_remaining_for_non-wave8_ids",
+    "ai-assist-003-confirm-before-apply-endpoint-missing"
   ],
   "waveEvidence": [
     "wave1_auth_security_error: moved_to_implemented=12",
@@ -101,6 +102,9 @@
     "wave6_profiles_collection_data_logging_scanner: partial_before=117 partial_after=107",
     "wave7_ai_chat_media_lookup_settings_licensing: moved_to_implemented=17",
     "wave7_ai_chat_media_lookup_settings_licensing: ids=AI-ASSIST-001,AI-ASSIST-002,AI-ASSIST-004,CHAT-COPILOT-002,CHAT-COPILOT-003,CHAT-COPILOT-004,PHOTOS-MEDIA-001,PHOTOS-MEDIA-002,PHOTOS-MEDIA-003,BARCODES-001,BARCODES-002,LOOKUP-001,ENTITLEMENTS-001,LICENSING-001,LICENSING-002,SETTINGS-001,SETTINGS-002",
-    "wave7_ai_chat_media_lookup_settings_licensing: partial_before=107 partial_after=90"
+    "wave7_ai_chat_media_lookup_settings_licensing: partial_before=107 partial_after=90",
+    "wave8_high_value_ui_e2e: moved_to_implemented=15",
+    "wave8_high_value_ui_e2e: ids=UI-SCREEN-ONBOARDING-AUTH-001,UI-SCREEN-ONBOARDING-AUTH-002,UI-SCREEN-ONBOARDING-AUTH-003,UI-SCREEN-SETTINGS-001,UI-SCREEN-SETTINGS-002,UI-SCREEN-SETTINGS-003,UI-SCREEN-CHAT-COPILOT-001,UI-SCREEN-CHAT-COPILOT-002,UI-SCREEN-CHAT-COPILOT-003,UI-FOUNDATION-SHELL-NAVIGATION-001,UI-FOUNDATION-SHELL-NAVIGATION-002,UI-FOUNDATION-SHELL-NAVIGATION-003,UI-FOUNDATION-SHELL-NAVIGATION-004,PHOTOS-MEDIA-004,CHAT-COPILOT-001",
+    "wave8_high_value_ui_e2e: partial_before=90 partial_after=75"
   ]
 }

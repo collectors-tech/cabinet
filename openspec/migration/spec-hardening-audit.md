@@ -203,3 +203,24 @@
   - `internal/app/chat_api_test.go`
   - `internal/app/photos_api_test.go`
   - `internal/app/license_api_test.go`
+
+## Wave Evidence
+- Wave: `Wave 8 (high-value ui/e2e partial closure)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `76 -> 91`
+  - `partial`: `90 -> 75`
+  - Net reduced partial IDs: `15`
+- IDs moved to implemented:
+  - `UI-SCREEN-ONBOARDING-AUTH-001`, `UI-SCREEN-ONBOARDING-AUTH-002`, `UI-SCREEN-ONBOARDING-AUTH-003`
+  - `UI-SCREEN-SETTINGS-001`, `UI-SCREEN-SETTINGS-002`, `UI-SCREEN-SETTINGS-003`
+  - `UI-SCREEN-CHAT-COPILOT-001`, `UI-SCREEN-CHAT-COPILOT-002`, `UI-SCREEN-CHAT-COPILOT-003`
+  - `UI-FOUNDATION-SHELL-NAVIGATION-001`, `UI-FOUNDATION-SHELL-NAVIGATION-002`, `UI-FOUNDATION-SHELL-NAVIGATION-003`, `UI-FOUNDATION-SHELL-NAVIGATION-004`
+  - `PHOTOS-MEDIA-004`
+  - `CHAT-COPILOT-001`
+- Runtime/UI behavior implemented:
+  - Added onboarding auth-requirements failure state and explicit retry action.
+  - Added profile-scoped chat history persistence and deterministic load/error/retry chat state handling.
+  - Added fullscreen photo previous/next controls and keyboard arrow navigation.
+- Test evidence:
+  - `web/playwright/e2e/ui-backlog.spec.ts`
