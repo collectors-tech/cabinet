@@ -108,3 +108,21 @@
 - Test evidence:
   - `internal/app/traceability_wave2_priority_test.go`
   - `internal/profile/secrets_fallback_security_test.go`
+
+## Wave Evidence
+- Wave: `Wave 3 (cloud gating/runtime update)`
+- Executed: `2026-02-27`
+- Traceability delta:
+  - `implemented`: `28 -> 30`
+  - `partial`: `138 -> 136`
+  - Net reduced partial IDs: `2`
+- IDs moved to implemented:
+  - `CLOUD-AUTH-BILLING-004`
+  - `RUNTIME-CORE-002`
+- Runtime behavior implemented:
+  - Deterministic pro-gated runtime denial across mutation endpoints for `ai_assist`, `price_tracking`, and `scanner_automation` via consistent `403` envelope and no-side-effect denial path.
+  - Runtime update harness endpoint `/api/runtime/update/install` for signature verification + release-channel compatibility with deterministic error envelopes:
+    - `INVALID_UPDATE_SIGNATURE` (`400`)
+    - `UPDATE_CHANNEL_MISMATCH` (`409`)
+- Test evidence:
+  - `internal/app/traceability_wave3_priority_test.go`

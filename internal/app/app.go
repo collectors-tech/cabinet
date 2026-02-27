@@ -45,6 +45,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
 	"github.com/collectors-tech/cabinet/internal/ui"
+	"github.com/collectors-tech/cabinet/internal/update"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
@@ -184,6 +185,47 @@ func New(cfg config.Config) (*App, error) {
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 			"app_version":                  appVersion,
 			"build_date":                   buildDate,
+		})
+	})
+	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			PayloadBase64   string `json:"payload_base64"`
+			SignatureBase64 string `json:"signature_base64"`
+			ManifestChannel string `json:"manifest_channel"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(cfg.UpdatePublicKey) == "" {
+			writeUpdateInstallError(w, http.StatusBadRequest, "UPDATE_SIGNATURE_UNAVAILABLE", "runtime update signature verification is not configured")
+			return
+		}
+		payload, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.PayloadBase64))
+		if err != nil {
+			writeUpdateInstallError(w, http.StatusBadRequest, "INVALID_UPDATE_PAYLOAD", "unable to decode update payload")
+			return
+		}
+		if err := update.VerifySignature(cfg.UpdatePublicKey, payload, strings.TrimSpace(req.SignatureBase64)); err != nil {
+			writeUpdateInstallError(w, http.StatusBadRequest, "INVALID_UPDATE_SIGNATURE", "update signature verification failed")
+			return
+		}
+		runtimeChannel := update.ParseChannel(string(cfg.UpdateChannel))
+		manifestChannel := update.ParseChannel(strings.TrimSpace(strings.ToLower(req.ManifestChannel)))
+		if manifestChannel != runtimeChannel {
+			writeUpdateInstallError(w, http.StatusConflict, "UPDATE_CHANNEL_MISMATCH", fmt.Sprintf("manifest channel %s does not match runtime channel %s", manifestChannel, runtimeChannel))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":       true,
+			"verified": true,
+			"channel":  runtimeChannel,
+			"action":   "install_approved",
 		})
 	})
 	mux.HandleFunc("/api/runtime/recovery", func(w http.ResponseWriter, r *http.Request) {
@@ -760,12 +802,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "scanner_automation")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_scanner_automation"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "scanner_automation") {
+			writeProFeatureForbidden(w, "scanner_automation")
+			return
 		}
 		provider := ebay.NewProvider(ebay.ProviderConfig{
 			BaseURL:     settings["ebay_base_url"],
@@ -1032,12 +1071,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		if !itemOwnedByProfile(r.Context(), active.ID, req.ItemID) {
 			http.Error(w, `{"error":"invalid_item_for_profile"}`, http.StatusBadRequest)
@@ -1060,12 +1096,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		if err := pricingSvc.RunDailySnapshotForProfile(r.Context(), active.ID); err != nil {
 			http.Error(w, `{"error":"failed_to_run_price_snapshot"}`, http.StatusInternalServerError)
@@ -1084,12 +1117,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
@@ -1114,12 +1144,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
@@ -1144,12 +1171,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
@@ -1174,12 +1198,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
@@ -1213,12 +1234,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+			writeProFeatureForbidden(w, "price_tracking")
+			return
 		}
 		itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
 		if !itemOwnedByProfile(r.Context(), active.ID, itemID) {
@@ -1243,9 +1261,8 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), active.ID, "price_tracking")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_price_tracking"}`, http.StatusPaymentRequired)
+			if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, active.ID, "price_tracking") {
+				writeProFeatureForbidden(w, "price_tracking")
 				return
 			}
 		}
@@ -1399,12 +1416,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, req.ProfileID, "ai_assist") {
+			writeProFeatureForbidden(w, "ai_assist")
+			return
 		}
 		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
 		if settings["ai_enabled"] == "false" {
@@ -1443,12 +1457,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, req.ProfileID, "ai_assist") {
+			writeProFeatureForbidden(w, "ai_assist")
+			return
 		}
 		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
 		if settings["ai_enabled"] == "false" {
@@ -1488,12 +1499,9 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
-			allowed, _ := licenseSvc.Allow(r.Context(), req.ProfileID, "ai_assist")
-			if !allowed {
-				http.Error(w, `{"error":"feature_requires_pro_ai_assist"}`, http.StatusPaymentRequired)
-				return
-			}
+		if !hasProFeatureAccess(r.Context(), conn, licenseSvc, cfg, req.ProfileID, "ai_assist") {
+			writeProFeatureForbidden(w, "ai_assist")
+			return
 		}
 		settings, _ := profiles.GetSettings(r.Context(), req.ProfileID)
 		if settings["ai_enabled"] == "false" {
@@ -2321,6 +2329,7 @@ func New(cfg config.Config) (*App, error) {
 			entitlementSource = "trial"
 		}
 		features := entitlementFeaturesFromPlan(plan)
+		_ = persistCloudPlan(r.Context(), conn, userID, plan)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"provider":           "clerk",
 			"user_id":            userID,
@@ -2361,6 +2370,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		cloudEntitlements.Set(userID, plan)
+		_ = persistCloudPlan(r.Context(), conn, userID, plan)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user_id":  userID,
 			"plan":     plan,
@@ -2886,6 +2896,65 @@ func parseVerifiedHS256JWTPayload(token, secret string) (map[string]any, error) 
 		return nil, fmt.Errorf("decode jwt payload: %w", err)
 	}
 	return claims, nil
+}
+
+func persistCloudPlan(ctx context.Context, conn *sql.DB, userID, plan string) error {
+	updates := map[string]string{
+		"cloud.user_id": strings.TrimSpace(userID),
+		"cloud.plan":    normalizePlan(plan),
+	}
+	for k, v := range updates {
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO app_state(key, value, updated_at)
+			VALUES(?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+		`, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func currentCloudPlanFromState(ctx context.Context, conn *sql.DB) (string, bool) {
+	var plan string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'cloud.plan'`).Scan(&plan); err != nil {
+		return "", false
+	}
+	plan = normalizePlan(plan)
+	if strings.TrimSpace(plan) == "" {
+		return "", false
+	}
+	return plan, true
+}
+
+func hasProFeatureAccess(ctx context.Context, conn *sql.DB, licenseSvc *licensing.Service, cfg config.Config, profileID, feature string) bool {
+	if cloudPlan, ok := currentCloudPlanFromState(ctx, conn); ok {
+		return cloudPlan == "pro"
+	}
+	if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
+		allowed, _ := licenseSvc.Allow(ctx, profileID, feature)
+		return allowed
+	}
+	return true
+}
+
+func writeProFeatureForbidden(w http.ResponseWriter, feature string) {
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":      "forbidden",
+		"error_code": "PRO_FEATURE_REQUIRED",
+		"feature":    strings.TrimSpace(strings.ToLower(feature)),
+		"message":    fmt.Sprintf("pro feature required: %s", strings.TrimSpace(strings.ToLower(feature))),
+	})
+}
+
+func writeUpdateInstallError(w http.ResponseWriter, status int, code, message string) {
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":      "update_validation_failed",
+		"error_code": strings.TrimSpace(code),
+		"message":    strings.TrimSpace(message),
+	})
 }
 
 func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {

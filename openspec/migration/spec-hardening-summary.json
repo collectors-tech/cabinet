@@ -1,5 +1,5 @@
 {
-  "completedAt": "2026-02-27T06:03:42.1796613Z",
+  "completedAt": "2026-02-27T10:13:45.5574573Z",
   "commit": "9ca1215",
   "specFilesProcessed": 54,
   "requirementsScanned": 166,
@@ -76,7 +76,7 @@
     "openspec/traceability.md"
   ],
   "remainingGaps": [
-    "traceability-partial-ids=138",
+    "traceability-partial-ids=136",
     "runtime_api_e2e_proof_missing_for_non-provider_specs",
     "planned_provider_contract_tests: INTEGRATION-008, INTEGRATION-009, INTEGRATION-012, INTEGRATION-013, INTEGRATION-014, INTEGRATION-015"
   ],
@@ -86,6 +86,9 @@
     "wave1_auth_security_error: partial_before=156 partial_after=144",
     "wave2_runtime_diagnostics_security: moved_to_implemented=6",
     "wave2_runtime_diagnostics_security: ids=CLOUD-AUTH-BILLING-005,DIAGNOSTICS-002,DIAGNOSTICS-003,DIAGNOSTICS-004,ERRORS-003,SECURITY-001",
-    "wave2_runtime_diagnostics_security: partial_before=144 partial_after=138"
+    "wave2_runtime_diagnostics_security: partial_before=144 partial_after=138",
+    "wave3_cloud_gating_runtime_update: moved_to_implemented=2",
+    "wave3_cloud_gating_runtime_update: ids=CLOUD-AUTH-BILLING-004,RUNTIME-CORE-002",
+    "wave3_cloud_gating_runtime_update: partial_before=138 partial_after=136"
   ]
 }

@@ -50,3 +50,13 @@
   - API secrets continue to prefer OS keyring.
   - If explicit insecure fallback is enabled, values are now encrypted-at-rest (`enc:v1:` AES-GCM) and never stored plaintext in SQLite.
   - Rationale: preserves local development/test operability while eliminating plaintext persistence risk.
+
+## Wave 3 evidence (cloud gating/runtime update)
+- Wave completed with direct runtime API contract proofs for remaining high-priority blockers.
+- IDs moved to implemented:
+  - `CLOUD-AUTH-BILLING-004`
+  - `RUNTIME-CORE-002`
+- Net reduction: partial IDs `138 -> 136` (2 reduced).
+- Runtime behavior implemented:
+  - Pro-gated mutation endpoints now enforce deterministic `403` response with consistent envelope (`error`, `error_code`, `feature`, `message`) when resolved entitlement is not pro.
+  - Added runtime signed-update harness endpoint `/api/runtime/update/install` with deterministic signature and channel validation outcomes.
