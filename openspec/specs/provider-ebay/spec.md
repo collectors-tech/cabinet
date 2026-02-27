@@ -6,8 +6,8 @@ Define eBay provider contract for scanner/search integration.
 Cabinet SHALL execute eBay listing queries using profile-scoped credentials and query-set criteria.
 
 #### Scenario: Search eBay listings
-- **GIVEN** active profile stores valid OAuth bearer token and query set contains keywords/region/max price
-- **WHEN** scanner calls eBay provider adapter for run request
+- **GIVEN** active profile stores non-empty `ebay_bearer_token`, query set `q1` contains at least one keyword, and optional max-price filter
+- **WHEN** scanner calls eBay provider adapter during run for `q1`
 - **THEN** provider call MUST return `200` and normalized candidates with fields:
   - `listing_id`
   - `title`
@@ -17,12 +17,13 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - `seller`
   - `first_seen`
   - `last_seen`
+  - and MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state
 Cabinet SHALL report eBay provider health and recent failure telemetry via provider health endpoints.
 
 #### Scenario: eBay health check
-- **GIVEN** provider health service is enabled
+- **GIVEN** provider health table has latest status entry for provider `ebay`
 - **WHEN** `GET /api/provider/health?provider=ebay` is requested
 - **THEN** response MUST be `200` with:
   - `provider: "ebay"`
@@ -34,7 +35,7 @@ Cabinet SHALL report eBay provider health and recent failure telemetry via provi
 Cabinet SHALL persist stock/availability observations from eBay listing payloads when present.
 
 #### Scenario: Persist eBay stock observation
-- **GIVEN** normalized eBay candidate includes `availability` or `quantity` signals
+- **GIVEN** normalized eBay candidate contains `availability` text or numeric quantity signal
 - **WHEN** candidate persistence runs
 - **THEN** candidate state MUST transition to `normalized_stock_observed=true` and store:
   - `stock_signal.raw`

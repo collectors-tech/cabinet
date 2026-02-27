@@ -1,5 +1,5 @@
 {
-  "completedAt": "2026-02-26T16:31:51.6335637Z",
+  "completedAt": "2026-02-27T01:24:40.8642210Z",
   "commit": "9ca1215",
   "specFilesProcessed": 54,
   "requirementsScanned": 166,
@@ -75,5 +75,9 @@
     "openspec/specs/wishlist-pricing-dashboard/spec.md",
     "openspec/traceability.md"
   ],
-  "remainingGaps": []
+  "remainingGaps": [
+    "traceability-partial-ids=156",
+    "runtime_api_e2e_proof_missing_for_non-provider_specs",
+    "planned_provider_contract_tests: INTEGRATION-008, INTEGRATION-009, INTEGRATION-012, INTEGRATION-013, INTEGRATION-014, INTEGRATION-015"
+  ]
 }

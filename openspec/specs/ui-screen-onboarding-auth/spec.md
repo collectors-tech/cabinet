@@ -6,25 +6,25 @@ Define onboarding and auth screen behavior for first-run identity and workspace 
 Onboarding/Auth SHALL block advanced workspace access until required identity steps are complete.
 
 #### Scenario: Required identity gate
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** active profile exists and `GET /api/auth/requirements` reports `requires_registration=true` or missing unlock state
 - **WHEN** user has incomplete identity setup
-- **THEN** advanced workspace SHALL remain locked
+- **THEN** advanced workspace routes SHALL remain locked and UI MUST show onboarding gate CTA until `requires_registration=false`
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-002: Onboarding/Auth SHALL persist and resume progress
 Progress SHALL persist through reload/restart until completion.
 
 #### Scenario: Resume incomplete onboarding
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** onboarding progress for active profile is persisted with last incomplete step index
 - **WHEN** user returns after restart
-- **THEN** onboarding SHALL resume at last incomplete step
+- **THEN** onboarding SHALL resume at last incomplete step and step state MUST match persisted profile-scoped progress
 
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-003: Onboarding/Auth SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states for profile and auth checks.
 
 #### Scenario: Auth check error
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** onboarding screen requests auth/profile requirements and API call returns failure
 - **WHEN** auth requirements fetch fails
-- **THEN** screen SHALL show actionable error with retry
+- **THEN** screen SHALL show actionable error with retry and MUST NOT advance wizard state until successful fetch
 
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
