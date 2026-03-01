@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useLayout } from '@/context/layout-provider'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +30,42 @@ export function AppSidebar() {
 
   const normalizeNavKey = (title: string) =>
     title.trim().toLowerCase().replace(/\s+/g, '-')
+  const [runtimeMeta, setRuntimeMeta] = useState<{
+    appVersion: string
+    buildDate: string
+  }>({
+    appVersion: 'unknown',
+    buildDate: 'unknown',
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadRuntimeMeta() {
+      try {
+        const resp = await fetch('/api/runtime')
+        if (!resp.ok) {
+          return
+        }
+        const payload = (await resp.json()) as {
+          app_version?: string
+          build_date?: string
+        }
+        if (cancelled) {
+          return
+        }
+        setRuntimeMeta({
+          appVersion: payload.app_version?.trim() || 'unknown',
+          buildDate: payload.build_date?.trim() || 'unknown',
+        })
+      } catch {
+        // Keep unknown fallback metadata when runtime endpoint is unavailable.
+      }
+    }
+    void loadRuntimeMeta()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const translateItem = (item: NavItem): NavItem => {
     if ('items' in item) {
@@ -77,6 +114,17 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={sidebarUser} />
+        <div
+          className='px-2 pb-2 text-xs text-muted-foreground'
+          data-testid='sidebar-runtime-meta'
+        >
+          <p>
+            Version: <span data-testid='sidebar-app-version'>{runtimeMeta.appVersion}</span>
+          </p>
+          <p>
+            Build Date: <span data-testid='sidebar-build-date'>{runtimeMeta.buildDate}</span>
+          </p>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

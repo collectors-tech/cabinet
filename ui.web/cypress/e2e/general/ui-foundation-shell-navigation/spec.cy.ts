@@ -1,0 +1,57 @@
+describe('ui-foundation-shell-navigation', () => {
+  function signInTo(path: string) {
+    cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
+    cy.get('input[name="email"]').clear().type('e2e-shell-nav@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+  }
+
+  beforeEach(() => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-001 keeps nav/header visible while content container handles scroll', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    cy.get('header').should('have.class', 'sticky')
+    cy.get('header').should('have.class', 'top-0')
+    cy.get('[data-slot="sidebar-container"]').then(($sidebarBefore) => {
+      const topBefore = Math.round(
+        $sidebarBefore[0].getBoundingClientRect().top
+      )
+
+      cy.scrollTo('bottom', { ensureScrollable: false })
+
+      cy.get('[data-slot="sidebar-container"]').then(($sidebarAfter) => {
+        const topAfter = Math.round($sidebarAfter[0].getBoundingClientRect().top)
+        expect(Math.abs(topAfter - topBefore)).to.be.lte(2)
+      })
+    })
+    cy.get('[data-slot="sidebar-container"]').should('be.visible')
+    cy.get('[data-slot="sidebar-header"]').should('be.visible')
+    cy.get('header').should('be.visible')
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-004 renders app version and build date metadata in sidebar footer', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: '2.3.0-e2e',
+        build_date: '2026-03-02T00:00:00Z',
+      },
+    }).as('runtimeMeta')
+
+    signInTo('/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/?$/)
+    cy.wait('@runtimeMeta')
+
+    cy.get('[data-testid="sidebar-runtime-meta"]').should('be.visible')
+    cy.get('[data-testid="sidebar-app-version"]').should('have.text', '2.3.0-e2e')
+    cy.get('[data-testid="sidebar-build-date"]').should(
+      'have.text',
+      '2026-03-02T00:00:00Z'
+    )
+  })
+})

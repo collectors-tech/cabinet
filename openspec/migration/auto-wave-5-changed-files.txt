@@ -1,0 +1,5 @@
+ui.web/src/components/layout/app-sidebar.tsx
+ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-5-summary.md
+openspec/migration/auto-wave-5-changed-files.txt
