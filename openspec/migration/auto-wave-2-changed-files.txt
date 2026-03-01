@@ -1,0 +1,4 @@
+ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-2-summary.md
+openspec/migration/auto-wave-2-changed-files.txt

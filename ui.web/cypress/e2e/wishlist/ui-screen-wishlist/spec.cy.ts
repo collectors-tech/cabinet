@@ -1,0 +1,41 @@
+describe("ui-screen-wishlist", () => {
+  function signInToWishlist() {
+    cy.visit("/sign-in?redirect=%2Fwishlist%2F");
+    cy.get('input[name="email"]').clear().type("e2e-wishlist@example.com");
+    cy.get('input[name="password"]').clear().type("password123");
+    cy.contains("button", "Sign in").click();
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/wishlist\/?$/
+    );
+  }
+
+  it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
+    signInToWishlist();
+
+    cy.contains("Wishlist").should("be.visible");
+    cy.get("table").should("be.visible");
+    cy.contains("button", "Cards").click();
+    cy.window().its("localStorage").invoke("getItem", "cabinet.viewMode.wishlist").should("eq", "cards");
+    cy.contains("Status:").should("be.visible");
+    cy.reload();
+    cy.contains("Status:").should("be.visible");
+
+    cy.contains("button", "Rows").click();
+    cy.get('input[placeholder="Filter by title or ID..."]').type("no-match-wishlist");
+    cy.contains("No results.").should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('button[aria-label="Select all"]').click();
+
+    cy.contains(/selected/i).should("be.visible");
+    cy.get('button[aria-label="Update status"]').should("be.visible");
+    cy.get('button[aria-label="Update priority"]').should("be.visible");
+    cy.get('button[aria-label="Export tasks"]').should("be.visible");
+    cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
+  });
+});
