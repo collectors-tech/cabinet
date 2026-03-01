@@ -10,10 +10,10 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 	t.Parallel()
 
 	requiredSpecs := []string{
-		"../../openspec/specs/provider-registry/spec.md",
-		"../../openspec/specs/provider-ebay/spec.md",
-		"../../openspec/specs/provider-amazon/spec.md",
-		"../../openspec/specs/provider-au-webshops/spec.md",
+		"../../openspec/specs/integrations/provider-registry/spec.md",
+		"../../openspec/specs/integrations/provider-ebay/spec.md",
+		"../../openspec/specs/integrations/provider-amazon/spec.md",
+		"../../openspec/specs/integrations/provider-au-webshops/spec.md",
 	}
 
 	for _, path := range requiredSpecs {
@@ -22,7 +22,7 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 		}
 	}
 
-	registryBytes, err := os.ReadFile("../../openspec/specs/provider-registry/spec.md")
+	registryBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-registry/spec.md")
 	if err != nil {
 		t.Fatalf("read provider registry spec: %v", err)
 	}
@@ -46,4 +46,3 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 		}
 	}
 }
-

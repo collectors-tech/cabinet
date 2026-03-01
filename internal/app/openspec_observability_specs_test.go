@@ -15,9 +15,9 @@ func TestObservabilitySpecsAreSplitAndDefineTriggers(t *testing.T) {
 	}
 
 	required := []string{
-		"../../openspec/specs/errors/spec.md",
-		"../../openspec/specs/logging/spec.md",
-		"../../openspec/specs/diagnostics/spec.md",
+		"../../openspec/specs/general/errors/spec.md",
+		"../../openspec/specs/general/logging/spec.md",
+		"../../openspec/specs/general/diagnostics/spec.md",
 	}
 	for _, path := range required {
 		if _, err := os.Stat(path); err != nil {
@@ -25,7 +25,7 @@ func TestObservabilitySpecsAreSplitAndDefineTriggers(t *testing.T) {
 		}
 	}
 
-	loggingBytes, err := os.ReadFile("../../openspec/specs/logging/spec.md")
+	loggingBytes, err := os.ReadFile("../../openspec/specs/general/logging/spec.md")
 	if err != nil {
 		t.Fatalf("read logging spec: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestObservabilitySpecsAreSplitAndDefineTriggers(t *testing.T) {
 		}
 	}
 
-	diagBytes, err := os.ReadFile("../../openspec/specs/diagnostics/spec.md")
+	diagBytes, err := os.ReadFile("../../openspec/specs/general/diagnostics/spec.md")
 	if err != nil {
 		t.Fatalf("read diagnostics spec: %v", err)
 	}
@@ -58,4 +58,3 @@ func TestObservabilitySpecsAreSplitAndDefineTriggers(t *testing.T) {
 		}
 	}
 }
-

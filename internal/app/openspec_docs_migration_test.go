@@ -35,7 +35,7 @@ func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 func TestOpenSpecDocumentationGovernanceContract(t *testing.T) {
 	t.Parallel()
 
-	b, err := os.ReadFile("../../openspec/specs/documentation-governance/spec.md")
+	b, err := os.ReadFile("../../openspec/specs/general/documentation-governance/spec.md")
 	if err != nil {
 		t.Fatalf("read documentation governance spec: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestOpenSpecWorkflowContentMigrated(t *testing.T) {
 		return string(b)
 	}
 
-	governance := read("../../openspec/specs/documentation-governance/spec.md")
+	governance := read("../../openspec/specs/general/documentation-governance/spec.md")
 	requiredTokens := []string{
 		"docs/FULL_FEATURE_LIST.md",
 		"docs/SPEC.md",
