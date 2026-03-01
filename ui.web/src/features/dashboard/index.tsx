@@ -34,6 +34,16 @@ type DashboardSummary = {
   cards: DashboardCard[]
 }
 
+type OnboardingSeedSummary = {
+  folders_created?: number
+  items_created?: number
+  media_created?: number
+  created_items?: number
+  created_instances?: number
+  created_wishlist_entries?: number
+  already_seeded_for_profile?: boolean
+}
+
 const onboardingSteps = ['Welcome', 'Identity', 'Starter Data', 'First Item', 'Preferences']
 
 function onboardingStorageKey(profileID: string): string {
@@ -54,6 +64,9 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [onboardingScope, setOnboardingScope] = useState('default')
   const [onboardingStepIndex, setOnboardingStepIndex] = useState(0)
+  const [seedLoading, setSeedLoading] = useState(false)
+  const [seedError, setSeedError] = useState<string | null>(null)
+  const [seedSummary, setSeedSummary] = useState<OnboardingSeedSummary | null>(null)
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -155,6 +168,27 @@ export function Dashboard() {
     ]
   }, [summary])
 
+  const handleSeedSampleData = useCallback(async () => {
+    setSeedLoading(true)
+    setSeedError(null)
+    try {
+      const response = await fetch('/api/onboarding/sample-data', {
+        method: 'POST',
+      })
+      if (!response.ok) {
+        throw new Error(`seed_sample_data_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as OnboardingSeedSummary
+      setSeedSummary(payload)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'seed_sample_data_failed'
+      setSeedError(message)
+    } finally {
+      setSeedLoading(false)
+    }
+  }, [])
+
   return (
     <>
       <Header fixed>
@@ -191,6 +225,20 @@ export function Dashboard() {
             <p className='text-sm' data-testid='onboarding-step-label'>
               Current step: {onboardingSteps[onboardingStepIndex]}
             </p>
+            <p className='text-sm text-muted-foreground'>
+              Choose how you want to begin. Quick setup gets you collecting immediately.
+            </p>
+            <div className='flex flex-wrap gap-2'>
+              <Button size='sm' variant='outline'>
+                Start Setup
+              </Button>
+              <Button size='sm' variant='outline'>
+                Import Existing Collection
+              </Button>
+              <Button size='sm' onClick={() => void handleSeedSampleData()} disabled={seedLoading}>
+                {seedLoading ? 'Seeding Sample Data...' : 'Use Sample Data'}
+              </Button>
+            </div>
             <div className='flex gap-2'>
               <Button
                 variant='outline'
@@ -215,6 +263,20 @@ export function Dashboard() {
                 Next Step
               </Button>
             </div>
+            {seedSummary ? (
+              <p className='text-sm' data-testid='onboarding-seed-summary'>
+                Folders: {seedSummary.folders_created ?? 0}
+                {'  '}
+                Items: {seedSummary.items_created ?? seedSummary.created_items ?? 0}
+                {'  '}
+                Media: {seedSummary.media_created ?? seedSummary.created_instances ?? 0}
+              </p>
+            ) : null}
+            {seedError ? (
+              <p className='text-sm text-destructive' data-testid='onboarding-seed-error'>
+                {seedError}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 
