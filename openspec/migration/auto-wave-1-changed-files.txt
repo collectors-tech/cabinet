@@ -1,0 +1,5 @@
+ui.web/src/features/collection/index.tsx
+ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-1-summary.md
+openspec/migration/auto-wave-1-changed-files.txt

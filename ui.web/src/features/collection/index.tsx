@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -19,6 +19,7 @@ import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { tasks } from '@/features/tasks/data/tasks'
+import { type Task } from '@/features/tasks/data/schema'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -40,14 +41,62 @@ export function Collection({
   description = 'Command your inventory and move from folders to item actions quickly.',
   routePath,
 }: CollectionWorkspaceProps) {
+  const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const loadInventoryItems = useCallback(async () => {
+    if (routePath !== '/_authenticated/inventory/') {
+      setTableData(tasks)
+      setLoadError(null)
+      return
+    }
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const response = await fetch('/api/items')
+      if (!response.ok) {
+        throw new Error(`items_api_${response.status}`)
+      }
+      const payload = (await response.json()) as {
+        items?: Array<{
+          id?: string
+          part_number?: string
+          title?: string
+          status?: string
+          category?: string
+        }>
+      }
+      const mapped: Task[] = (payload.items ?? []).map((item, index) => ({
+        id: item.part_number?.trim() || item.id?.trim() || `ITEM-${index + 1}`,
+        title: item.title?.trim() || 'Untitled item',
+        status: item.status?.trim() || 'todo',
+        label: item.category?.trim() || 'feature',
+        priority: 'medium',
+      }))
+      setTableData(mapped)
+    } catch {
+      setLoadError(
+        'Inventory failed to load. Retry and confirm runtime API availability.'
+      )
+      setTableData([])
+    } finally {
+      setLoading(false)
+    }
+  }, [routePath])
+
+  useEffect(() => {
+    void loadInventoryItems()
+  }, [loadInventoryItems])
+
   const summary = useMemo(
     () => ({
       folders: folderNames.length,
-      items: tasks.length,
+      items: tableData.length,
       activeBrand: 'All',
       activeCategory: 'All',
     }),
-    []
+    [tableData.length]
   )
 
   return (
@@ -135,7 +184,29 @@ export function Collection({
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <TasksTable data={tasks} routePath={routePath} />
+              {loading ? (
+                <div className='rounded-md border p-6 text-sm text-muted-foreground'>
+                  Loading inventory...
+                </div>
+              ) : null}
+              {loadError ? (
+                <div
+                  className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
+                  data-testid='inventory-load-error'
+                >
+                  <p className='font-medium'>Inventory load failed</p>
+                  <p className='mt-1 text-muted-foreground'>{loadError}</p>
+                  <Button
+                    className='mt-3'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => void loadInventoryItems()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : null}
+              <TasksTable data={tableData} routePath={routePath} />
             </CardContent>
           </Card>
         </div>
