@@ -6,3 +6,5 @@ ui.web/test-results/
 ui.web/cypress/artifacts/
 *.tmp
 .agentbus/
+internal/
+.logs/
