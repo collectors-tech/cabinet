@@ -2,7 +2,7 @@
 
 | Source (`commit:path`) | OpenSpec targets | Status | Verified By/Date | Evidence (Requirement IDs / PR / Commit) | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `82294546bf0b715fe49394e1c5a885d3045294d2:docs/SHOP_PROVIDERS.md` | `openspec/specs/provider-registry/spec.md`; `openspec/specs/provider-ebay/spec.md`; `openspec/specs/provider-amazon/spec.md`; `openspec/specs/provider-au-webshops/spec.md`; `openspec/specs/integrations/spec.md`; `openspec/specs/scanner/spec.md` | migrated-verified | codex / 2026-02-26 | IDs: `INTEGRATION-001..015`, `OPS-001`; Closure Commit: `e81cca8`; Issue: `#182` | Normative requirements extracted from provider list, API feasibility notes (eBay/Amazon), and integration policy bullets. |
+| `82294546bf0b715fe49394e1c5a885d3045294d2:docs/SHOP_PROVIDERS.md` | `openspec/specs/integrations/provider-registry/spec.md`; `openspec/specs/integrations/provider-ebay/spec.md`; `openspec/specs/integrations/provider-amazon/spec.md`; `openspec/specs/integrations/provider-au-webshops/spec.md`; `openspec/specs/integrations/spec.md`; `openspec/specs/integrations/scanner/spec.md` | migrated-verified | codex / 2026-02-26 | IDs: `INTEGRATION-001..015`, `OPS-001`; Closure Commit: `e81cca8`; Issue: `#182` | Normative requirements extracted from provider list, API feasibility notes (eBay/Amazon), and integration policy bullets. |
 
 ## Traceability Details
 
@@ -57,3 +57,4 @@
   - `openspec/migration/spec-hardening-summary.json`
   - `openspec/migration/spec-hardening-changed-files.txt`
   - `openspec/migration/spec-hardening-review-notes.md`
+

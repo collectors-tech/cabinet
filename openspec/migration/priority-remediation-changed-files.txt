@@ -1,0 +1,4 @@
+ui.web/package.json
+ui.web/package-lock.json
+openspec/migration/priority-remediation-summary.md
+openspec/migration/priority-remediation-changed-files.txt

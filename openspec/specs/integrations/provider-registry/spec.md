@@ -19,6 +19,7 @@ Cabinet SHALL maintain a provider registry with stable provider IDs, display met
   - `capabilities.pricing` (boolean)
   - `capabilities.health` (boolean)
   - `state` (`ready|degraded|disabled`)
+  - `has_token` (boolean, write-only credential presence signal)
 
 ### Requirement INTEGRATION-002: Registry MUST include eBay and Amazon providers
 Cabinet SHALL define provider entries for `ebay` and `amazon` with explicit capability and credential requirements.
@@ -56,3 +57,27 @@ Each provider entry SHALL map to a provider-specific OpenSpec capability.
   - `provider-ebay`
   - `provider-amazon`
   - `provider-au-webshops`
+
+### Requirement INTEGRATION-021: Provider registry MUST include operational health snapshot fields
+Cabinet SHALL expose provider health and last-run metadata required by integrations cards and detail panels.
+
+#### Scenario: Provider operational snapshot load
+- **GIVEN** runtime provider services have health telemetry for configured providers
+- **WHEN** `GET /api/providers/registry` is requested
+- **THEN** each provider entry MUST include:
+  - `health.status` (`ok|degraded|down|unknown`)
+  - `health.last_checked_at` (timestamp or null)
+  - `health.message` (string)
+  - `last_run.status` (`idle|running|success|failed|never`)
+  - `last_run.finished_at` (timestamp or null)
+
+### Requirement INTEGRATION-023: Provider registry MUST expose setup guidance and credential-presence signal
+Cabinet SHALL expose registry fields needed for safe credential UX and guided setup.
+
+#### Scenario: Registry payload supports credential-safe integrations UI
+- **GIVEN** active profile settings and provider registry are loaded
+- **WHEN** `GET /api/providers/registry` returns provider entries
+- **THEN** each provider entry MUST include:
+  - `setup_instructions` (string)
+  - `has_token` (boolean presence signal only)
+- **AND** registry response MUST NOT expose clear credential/token values

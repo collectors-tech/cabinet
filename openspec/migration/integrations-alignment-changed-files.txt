@@ -1,0 +1,10 @@
+internal/app/app.go
+internal/app/traceability_wave4_provider_scanner_test.go
+openspec/specs/integrations/spec.md
+openspec/specs/integrations/provider-registry/spec.md
+openspec/specs/integrations/ui-screen-integrations/spec.md
+openspec/traceability.md
+openspec/migration/integrations-alignment-summary.md
+ui.web/src/features/apps/index.tsx
+ui.web/src/routes/_authenticated/integrations/index.tsx
+ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts

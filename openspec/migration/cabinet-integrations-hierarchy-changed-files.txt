@@ -1,0 +1,6 @@
+cypress.ps1
+ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts
+openspec/migrations/legacy-docs-file-audit.yaml
+openspec/traceability.md
+openspec/migration/cabinet-integrations-hierarchy-summary.md
+openspec/migration/cabinet-integrations-hierarchy-changed-files.txt

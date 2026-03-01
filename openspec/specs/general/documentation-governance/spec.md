@@ -59,7 +59,8 @@ Cabinet SHALL maintain a strict per-file migration audit at `openspec/migrations
 - `docs/FULL_FEATURE_LIST.md` -> domain capability specs under `openspec/specs/*`
 - `docs/SPEC.md` -> domain capability specs under `openspec/specs/*`
 - `docs/USE_CASES_AND_SCENARIOS.md` -> UC mappings in `openspec/specs/README.md` + screen specs
-- `docs/UI_ENDPOINT_PARITY.md` -> `openspec/specs/ui-data-contract-parity/spec.md`
+- `docs/UI_ENDPOINT_PARITY.md` -> `openspec/specs/general/ui-data-contract-parity/spec.md`
 - `docs/ui-spec/*.md` -> `openspec/specs/ui-*/spec.md`
-- `docs/auth/CLERK_BILLING_SETUP.md` -> `openspec/specs/cloud-auth-billing/spec.md`
+- `docs/auth/CLERK_BILLING_SETUP.md` -> `openspec/specs/general/cloud-auth-billing/spec.md`
+
 

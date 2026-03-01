@@ -1,0 +1,27 @@
+## Purpose
+Define global login and session-entry behavior that is not tied to a single feature section.
+
+## Requirements
+### Requirement UI-LOGIN-SESSION-001: Login routes SHALL gate access to authenticated workspace routes
+Cabinet SHALL redirect unauthenticated users to login and preserve intended destination for post-login return.
+
+#### Scenario: Redirect to sign-in with return target
+- **GIVEN** user is unauthenticated and requests an authenticated route
+- **WHEN** router resolves route guards
+- **THEN** UI MUST redirect to sign-in and preserve redirect target for successful session bootstrap
+
+### Requirement UI-LOGIN-SESSION-002: Login state SHALL support deterministic error and retry behavior
+Cabinet SHALL surface actionable auth failure states and allow retry without hard refresh.
+
+#### Scenario: Invalid credential or auth bootstrap failure
+- **GIVEN** sign-in request fails due to invalid credential or auth bootstrap error
+- **WHEN** login form submits
+- **THEN** UI MUST display inline error guidance and keep form state available for retry
+
+### Requirement UI-LOGIN-SESSION-003: Session entry SHALL support profile-aware activation
+Cabinet SHALL support selecting/activating profile context after successful authentication when multiple profiles exist.
+
+#### Scenario: Select profile context after login
+- **GIVEN** authenticated session exists and profile list has at least two profiles
+- **WHEN** user selects an active profile
+- **THEN** workspace context MUST switch to selected profile and subsequent API calls MUST use active profile scope
