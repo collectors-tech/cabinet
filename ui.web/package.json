@@ -11,7 +11,9 @@
     "serve:go": "go run ../cmd/cabinet",
     "e2e": "cypress run --browser electron",
     "e2e:journeys": "cypress run --browser electron --spec cypress/e2e/journeys/**/*.cy.ts",
-    "e2e:foundation": "start-server-and-test serve:go http://127.0.0.1:17880 e2e:journeys",
+    "e2e:foundation": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
+    "e2e:run-smoke": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
+    "e2e:run-inventory": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts -Browser chrome",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "knip": "knip"

@@ -1,0 +1,3 @@
+openspec/migration/auto-wave-20-summary.md
+openspec/migration/auto-wave-20-changed-files.txt
+ui.web/package.json
