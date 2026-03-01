@@ -1,0 +1,6 @@
+ui.web/src/features/help-center/index.tsx
+ui.web/src/routes/_authenticated/help-center/index.tsx
+ui.web/cypress/e2e/helpcenter/ui-screen-help-center/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-7-summary.md
+openspec/migration/auto-wave-7-changed-files.txt
