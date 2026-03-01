@@ -1,0 +1,4 @@
+openspec/migration/auto-wave-19-summary.md
+openspec/migration/auto-wave-19-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts

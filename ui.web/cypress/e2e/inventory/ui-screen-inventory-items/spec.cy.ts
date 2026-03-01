@@ -47,6 +47,21 @@ describe("inventory-management", () => {
     cy.contains("No results.").should("be.visible");
   });
 
+  it("renders empty inventory state without global 500 fallback", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsEmpty");
+
+    signIn();
+    cy.wait("@itemsEmpty");
+
+    cy.contains("500").should("not.exist");
+    cy.contains("Oops! Something went wrong").should("not.exist");
+    cy.contains("Inventory").should("be.visible");
+    cy.contains("No results.").should("be.visible");
+  });
+
   it("UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry", () => {
     let attempts = 0;
     cy.intercept("GET", "/api/items", (req) => {
