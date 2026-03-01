@@ -36,8 +36,9 @@ import {
 export function NavGroup({ title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
+  const groupKey = title.trim().toLowerCase().replace(/\s+/g, '-')
   return (
-    <SidebarGroup>
+    <SidebarGroup data-testid={`sidebar-nav-group-${groupKey}`}>
       <SidebarGroupLabel>{title}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
@@ -64,9 +65,11 @@ function NavBadge({ children }: { children: ReactNode }) {
 
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
   const { setOpenMobile } = useSidebar()
+  const itemKey = item.title.trim().toLowerCase().replace(/\s+/g, '-')
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
+        data-testid={`sidebar-nav-link-${itemKey}`}
         asChild
         isActive={checkIsActive(href, item)}
         tooltip={item.title}

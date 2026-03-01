@@ -54,4 +54,62 @@ describe('ui-foundation-shell-navigation', () => {
       '2026-03-02T00:00:00Z'
     )
   })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-002 supports nav edit mode reorder and visibility persistence', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+      cy.get('[data-testid^="sidebar-nav-link-"]')
+        .then(($links) =>
+          [...$links].map((link) => link.getAttribute('data-testid') || '')
+        )
+        .should('deep.equal', [
+          'sidebar-nav-link-dashboard',
+          'sidebar-nav-link-inventory',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-integrations',
+          'sidebar-nav-link-chats',
+          'sidebar-nav-link-users',
+          'sidebar-nav-link-reports',
+        ])
+    })
+
+    cy.get('[data-testid="sidebar-nav-edit-toggle"]').click()
+    cy.get('[data-testid="sidebar-nav-edit-panel"]').should('be.visible')
+    cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+    cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
+    cy.get('[data-testid="sidebar-nav-edit-toggle"]').click()
+
+    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+      cy.get('[data-testid^="sidebar-nav-link-"]')
+        .then(($links) =>
+          [...$links].map((link) => link.getAttribute('data-testid') || '')
+        )
+        .should('deep.equal', [
+          'sidebar-nav-link-dashboard',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-inventory',
+          'sidebar-nav-link-chats',
+          'sidebar-nav-link-users',
+          'sidebar-nav-link-reports',
+        ])
+    })
+
+    cy.reload()
+    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+      cy.get('[data-testid^="sidebar-nav-link-"]')
+        .then(($links) =>
+          [...$links].map((link) => link.getAttribute('data-testid') || '')
+        )
+        .should('deep.equal', [
+          'sidebar-nav-link-dashboard',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-inventory',
+          'sidebar-nav-link-chats',
+          'sidebar-nav-link-users',
+          'sidebar-nav-link-reports',
+        ])
+    })
+  })
 })
