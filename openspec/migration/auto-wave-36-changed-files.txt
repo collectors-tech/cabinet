@@ -1,0 +1,4 @@
+ui.web/cypress/e2e/general/ui-foundation-auth-menus-shortcuts/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-36-summary.md
+openspec/migration/auto-wave-36-changed-files.txt
