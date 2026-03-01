@@ -1,0 +1,3 @@
+openspec/migration/auto-wave-11-summary.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/api-docs/spec.cy.ts
