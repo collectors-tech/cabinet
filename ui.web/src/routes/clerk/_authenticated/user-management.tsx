@@ -96,7 +96,7 @@ function UserManagement() {
             </div>
           </Main>
 
-          <UsersDialogs />
+          <UsersDialogs onMutated={() => {}} />
         </UsersProvider>
       </SignedIn>
     </>

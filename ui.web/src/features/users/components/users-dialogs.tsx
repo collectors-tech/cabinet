@@ -3,7 +3,11 @@ import { UsersDeleteDialog } from './users-delete-dialog'
 import { UsersInviteDialog } from './users-invite-dialog'
 import { useUsers } from './users-provider'
 
-export function UsersDialogs() {
+type UsersDialogsProps = {
+  onMutated: () => Promise<void> | void
+}
+
+export function UsersDialogs({ onMutated }: UsersDialogsProps) {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
   return (
     <>
@@ -11,12 +15,14 @@ export function UsersDialogs() {
         key='user-add'
         open={open === 'add'}
         onOpenChange={() => setOpen('add')}
+        onSaved={onMutated}
       />
 
       <UsersInviteDialog
         key='user-invite'
         open={open === 'invite'}
         onOpenChange={() => setOpen('invite')}
+        onInvited={onMutated}
       />
 
       {currentRow && (
@@ -31,6 +37,7 @@ export function UsersDialogs() {
               }, 500)
             }}
             currentRow={currentRow}
+            onSaved={onMutated}
           />
 
           <UsersDeleteDialog
@@ -43,6 +50,7 @@ export function UsersDialogs() {
               }, 500)
             }}
             currentRow={currentRow}
+            onDeleted={onMutated}
           />
         </>
       )}

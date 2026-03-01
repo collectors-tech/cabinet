@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,20 +12,39 @@ type UserDeleteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow: User
+  onDeleted: () => Promise<void> | void
 }
 
 export function UsersDeleteDialog({
   open,
   onOpenChange,
   currentRow,
+  onDeleted,
 }: UserDeleteDialogProps) {
   const [value, setValue] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    setError(null)
     if (value.trim() !== currentRow.username) return
 
-    onOpenChange(false)
-    showSubmittedData(currentRow, 'The following user has been deleted:')
+    try {
+      const response = await fetch(`/api/users/${currentRow.id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error(`users_delete_failed_${response.status}`)
+      }
+      await onDeleted()
+      setValue('')
+      onOpenChange(false)
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'users_delete_failed'
+      setError(message)
+    }
   }
 
   return (
@@ -72,6 +90,7 @@ export function UsersDeleteDialog({
               Please be careful, this operation can not be rolled back.
             </AlertDescription>
           </Alert>
+          {error ? <p className='text-sm font-medium text-destructive'>{error}</p> : null}
         </div>
       }
       confirmText='Delete'

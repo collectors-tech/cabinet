@@ -1,22 +1,51 @@
 import { getRouteApi } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { Button } from '@/components/ui/button'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider } from './components/users-provider'
 import { UsersTable } from './components/users-table'
-import { users } from './data/users'
+import { type User } from './data/schema'
 
 const route = getRouteApi('/_authenticated/users/')
 
 export function Users() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const response = await fetch('/api/users')
+      if (!response.ok) {
+        throw new Error(`users_fetch_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as { users?: User[] }
+      setUsers(payload.users ?? [])
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'users_fetch_failed'
+      setLoadError(message)
+      setUsers([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadUsers()
+  }, [loadUsers])
 
   return (
     <UsersProvider>
@@ -40,10 +69,33 @@ export function Users() {
           </div>
           <UsersPrimaryButtons />
         </div>
-        <UsersTable data={users} search={search} navigate={navigate} />
+        {loadError ? (
+          <div
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
+            data-testid='users-load-error'
+          >
+            <p className='font-medium'>Users load failed</p>
+            <p className='mt-1 text-muted-foreground'>{loadError}</p>
+            <Button
+              className='mt-3'
+              variant='outline'
+              size='sm'
+              onClick={() => void loadUsers()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {!loadError && loading ? (
+          <div className='rounded-md border p-6 text-sm text-muted-foreground'>
+            Loading users...
+          </div>
+        ) : (
+          <UsersTable data={users} search={search} navigate={navigate} />
+        )}
       </Main>
 
-      <UsersDialogs />
+      <UsersDialogs onMutated={loadUsers} />
     </UsersProvider>
   )
 }

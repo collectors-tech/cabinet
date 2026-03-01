@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { MailPlus, Send } from 'lucide-react'
-import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -40,21 +39,40 @@ type UserInviteForm = z.infer<typeof formSchema>
 type UserInviteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onInvited: () => Promise<void> | void
 }
 
 export function UsersInviteDialog({
   open,
   onOpenChange,
+  onInvited,
 }: UserInviteDialogProps) {
   const form = useForm<UserInviteForm>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: '', role: '', desc: '' },
   })
 
-  const onSubmit = (values: UserInviteForm) => {
-    form.reset()
-    showSubmittedData(values)
-    onOpenChange(false)
+  const onSubmit = async (values: UserInviteForm) => {
+    form.clearErrors('root')
+    try {
+      const response = await fetch('/api/users/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(values),
+      })
+      if (!response.ok) {
+        throw new Error(`users_invite_failed_${response.status}`)
+      }
+      await onInvited()
+      form.reset()
+      onOpenChange(false)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'users_invite_failed'
+      form.setError('root', { message })
+    }
   }
 
   return (
@@ -134,6 +152,11 @@ export function UsersInviteDialog({
                 </FormItem>
               )}
             />
+            {form.formState.errors.root?.message ? (
+              <p className='text-sm font-medium text-destructive'>
+                {form.formState.errors.root.message}
+              </p>
+            ) : null}
           </form>
         </Form>
         <DialogFooter className='gap-y-2'>

@@ -3,7 +3,6 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -97,12 +96,14 @@ type UserActionDialogProps = {
   currentRow?: User
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void> | void
 }
 
 export function UsersActionDialog({
   currentRow,
   open,
   onOpenChange,
+  onSaved,
 }: UserActionDialogProps) {
   const isEdit = !!currentRow
   const form = useForm<UserForm>({
@@ -127,10 +128,40 @@ export function UsersActionDialog({
         },
   })
 
-  const onSubmit = (values: UserForm) => {
-    form.reset()
-    showSubmittedData(values)
-    onOpenChange(false)
+  const onSubmit = async (values: UserForm) => {
+    form.clearErrors('root')
+    const endpoint =
+      isEdit && currentRow ? `/api/users/${currentRow.id}` : '/api/users'
+    const method = isEdit ? 'PUT' : 'POST'
+    const payload = {
+      firstName: values.firstName,
+      lastName: values.lastName,
+      username: values.username,
+      email: values.email,
+      phoneNumber: values.phoneNumber,
+      role: values.role,
+      status: currentRow?.status ?? 'active',
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw new Error(`users_save_failed_${response.status}`)
+      }
+      await onSaved()
+      form.reset()
+      onOpenChange(false)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'users_save_failed'
+      form.setError('root', { message })
+    }
   }
 
   const isPasswordTouched = !!form.formState.dirtyFields.password
@@ -312,6 +343,11 @@ export function UsersActionDialog({
                   </FormItem>
                 )}
               />
+              {form.formState.errors.root?.message ? (
+                <p className='text-sm font-medium text-destructive'>
+                  {form.formState.errors.root.message}
+                </p>
+              ) : null}
             </form>
           </Form>
         </div>
