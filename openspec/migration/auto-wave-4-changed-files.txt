@@ -1,0 +1,4 @@
+ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-4-summary.md
+openspec/migration/auto-wave-4-changed-files.txt
