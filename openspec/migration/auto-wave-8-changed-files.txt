@@ -1,0 +1,4 @@
+ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-8-summary.md
+openspec/migration/auto-wave-8-changed-files.txt
