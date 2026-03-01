@@ -9,6 +9,7 @@ const integrationsSearchSchema = z.object({
     .catch(undefined),
   filter: z.string().optional().catch(''),
   sort: z.enum(['asc', 'desc']).optional().catch(undefined),
+  view: z.enum(['rows', 'cards']).optional().catch(undefined),
 })
 
 export const Route = createFileRoute('/_authenticated/integrations/')({

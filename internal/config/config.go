@@ -15,6 +15,7 @@ type Config struct {
 	Addr            string
 	DataDir         string
 	DBPath          string
+	EnableE2EHooks  bool
 	UpdateChannel   update.Channel
 	UpdatePublicKey string
 	WebAuthnRPID    string
@@ -30,6 +31,7 @@ func Load() Config {
 	dataDir := valueOrDefault("CABINET_DATA_DIR", defaultDataDir())
 	dbPath := valueOrDefault("CABINET_DB_PATH", filepath.Join(dataDir, "cabinet.db"))
 	updateChannel := update.ParseChannel(valueOrDefault("CABINET_UPDATE_CHANNEL", "stable"))
+	enableE2EHooks := parseBoolEnv(valueOrDefault("CABINET_E2E_MODE", "false"))
 	updatePublicKey := os.Getenv("CABINET_UPDATE_PUBLIC_KEY")
 	waRPID := valueOrDefault("CABINET_WEBAUTHN_RP_ID", "127.0.0.1")
 	waOrigin := valueOrDefault("CABINET_WEBAUTHN_ORIGIN", "http://127.0.0.1:17880")
@@ -42,6 +44,7 @@ func Load() Config {
 		Addr:            addr,
 		DataDir:         dataDir,
 		DBPath:          dbPath,
+		EnableE2EHooks:  enableE2EHooks,
 		UpdateChannel:   updateChannel,
 		UpdatePublicKey: updatePublicKey,
 		WebAuthnRPID:    waRPID,
@@ -94,6 +97,15 @@ func valueOrDefault(key, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func parseBoolEnv(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func defaultDataDir() string {

@@ -1,0 +1,6 @@
+openspec/migration/auto-wave-18-summary.md
+openspec/traceability.md
+ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts
+ui.web/src/features/chats/index.tsx
+internal/ui/static/index.html
+internal/ui/static/assets/*

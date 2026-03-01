@@ -1,7 +1,21 @@
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
-import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, SlidersHorizontal, Store } from 'lucide-react'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { LanguageSwitch } from '@/components/language-switch'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -12,28 +26,54 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { apps } from './data/apps'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 const route = getRouteApi('/_authenticated/integrations/')
 
 type AppType = 'all' | 'connected' | 'notConnected'
+type ViewMode = 'rows' | 'cards'
+
+type ProviderRecord = {
+  provider_id: string
+  display_name: string
+  base_domain: string
+  integration_mode: 'official_api' | 'web_ingestion' | 'program_api' | string
+  auth_mode: 'none' | 'oauth' | 'api_key' | 'hybrid' | string
+  state: 'ready' | 'degraded' | 'disabled' | string
+  has_token?: boolean
+  setup_instructions?: string
+  capabilities: {
+    search: boolean
+    stock_observation: boolean
+    pricing: boolean
+    health: boolean
+  }
+  health?: {
+    status: 'ok' | 'degraded' | 'down' | 'unknown' | string
+    last_checked_at?: string | null
+    message?: string
+  }
+  last_run?: {
+    status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
+    finished_at?: string | null
+  }
+}
+
 type IntegrationForm = {
   baseURL: string
   token: string
   marketplace: string
+}
+
+type AppsProps = {
+  title?: string
+  description?: string
 }
 
 const appText = new Map<AppType, string>([
@@ -42,98 +82,164 @@ const appText = new Map<AppType, string>([
   ['notConnected', 'Not Connected'],
 ])
 
-type AppsProps = {
-  title?: string
-  description?: string
+function providerSettingsKeys(providerID: string) {
+  if (providerID === 'ebay') {
+    return {
+      baseURLKey: 'ebay_base_url',
+      tokenKey: 'ebay_bearer_token',
+      marketplaceKey: 'ebay_marketplace',
+      enabledKey: 'integration.ebay.enabled',
+    }
+  }
+  const slug = providerID.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
+  return {
+    baseURLKey: `integration.${slug}.base_url`,
+    tokenKey: `integration.${slug}.token`,
+    marketplaceKey: `integration.${slug}.marketplace`,
+    enabledKey: `integration.${slug}.enabled`,
+  }
+}
+
+function isConnected(provider: ProviderRecord, settings: Record<string, string>) {
+  if (provider.auth_mode === 'none') {
+    return true
+  }
+  const keys = providerSettingsKeys(provider.provider_id)
+  if (provider.has_token) {
+    return true
+  }
+  return settings[keys.enabledKey] === 'true'
+}
+
+function bootstrapErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return 'Failed to bootstrap integrations workspace.'
+  }
+  if (error.message.startsWith('active_profile_')) {
+    return 'Failed to load active profile. Select or create a profile, then retry.'
+  }
+  if (error.message.startsWith('providers_registry_')) {
+    return 'Failed to load provider registry. Retry to reconnect to runtime.'
+  }
+  if (error.message.startsWith('profile_settings_')) {
+    return 'Failed to load profile integration settings. Retry and check runtime logs.'
+  }
+  return 'Failed to bootstrap integrations workspace.'
 }
 
 export function Apps({
-  title = 'App Integrations',
-  description = "Here's a list of your apps for the integration!",
+  title = 'Integrations',
+  description = 'Configure provider credentials, health checks, and sync actions.',
 }: AppsProps = {}) {
   const {
     filter = '',
     type = 'all',
     sort: initSort = 'asc',
+    view,
   } = route.useSearch()
   const navigate = route.useNavigate()
 
   const [sort, setSort] = useState(initSort)
   const [appType, setAppType] = useState(type)
   const [searchTerm, setSearchTerm] = useState(filter)
+  const viewMode: ViewMode = view ?? 'cards'
   const [activeProfileId, setActiveProfileId] = useState('')
   const [settings, setSettings] = useState<Record<string, string>>({})
-  const [editingIntegration, setEditingIntegration] = useState<string | null>(null)
+  const [providers, setProviders] = useState<ProviderRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const [editingProviderID, setEditingProviderID] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [replaceToken, setReplaceToken] = useState(false)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
     token: '',
     marketplace: '',
   })
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const activeResp = await fetch('/api/profiles/active')
-        if (!activeResp.ok) {
-          return
-        }
-        const active = (await activeResp.json()) as { id?: string }
-        const profileID = active.id ?? ''
-        if (!profileID) {
-          return
-        }
-        setActiveProfileId(profileID)
-        const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
-        if (!settingsResp.ok) {
-          return
-        }
-        const payload = (await settingsResp.json()) as {
-          settings?: Record<string, string>
-        }
-        setSettings(payload.settings ?? {})
-      } catch {
-        // Keep integrations available even if settings load fails.
+  const loadBootstrap = useCallback(async () => {
+    setLoading(true)
+    setBootstrapError(null)
+    setActionMessage(null)
+    try {
+      const activeResp = await fetch('/api/profiles/active')
+      if (!activeResp.ok) {
+        throw new Error(`active_profile_${activeResp.status}`)
       }
+      const active = (await activeResp.json()) as { id?: string }
+      const profileID = (active.id ?? '').trim()
+      if (!profileID) {
+        throw new Error('active_profile_missing')
+      }
+      setActiveProfileId(profileID)
+
+      const registryResp = await fetch('/api/providers/registry')
+      if (!registryResp.ok) {
+        throw new Error(`providers_registry_${registryResp.status}`)
+      }
+      const registryPayload = (await registryResp.json()) as {
+        providers?: ProviderRecord[]
+      }
+      setProviders(registryPayload.providers ?? [])
+
+      const settingsResp = await fetch(`/api/profiles/${profileID}/settings`)
+      if (!settingsResp.ok) {
+        throw new Error(`profile_settings_${settingsResp.status}`)
+      }
+      const settingsPayload = (await settingsResp.json()) as {
+        settings?: Record<string, string>
+      }
+      setSettings(settingsPayload.settings ?? {})
+    } catch (error) {
+      setBootstrapError(bootstrapErrorMessage(error))
+    } finally {
+      setLoading(false)
     }
-    void load()
   }, [])
 
-  const resolvedApps = useMemo(() => {
-    const ebayConnected =
-      Boolean(settings['ebay_bearer_token']) || settings['integration.ebay.enabled'] === 'true'
-    return apps.map((app) =>
-      app.name === 'eBay'
-        ? {
-            ...app,
-            connected: ebayConnected,
-          }
-        : app
-    )
-  }, [settings])
+  useEffect(() => {
+    void loadBootstrap()
+  }, [loadBootstrap])
 
-  const filteredApps = resolvedApps
-    .sort((a, b) =>
+  const providerByID = useMemo(
+    () => new Map(providers.map((provider) => [provider.provider_id, provider])),
+    [providers]
+  )
+  const editingProvider =
+    editingProviderID !== null ? providerByID.get(editingProviderID) ?? null : null
+
+  const sortedProviders = useMemo(() => {
+    const list = [...providers]
+    list.sort((a, b) =>
       sort === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name)
+        ? a.display_name.localeCompare(b.display_name)
+        : b.display_name.localeCompare(a.display_name)
     )
-    .filter((app) =>
+    return list
+  }, [providers, sort])
+
+  const filteredProviders = sortedProviders
+    .filter((provider) =>
       appType === 'connected'
-        ? app.connected
+        ? isConnected(provider, settings)
         : appType === 'notConnected'
-          ? !app.connected
+          ? !isConnected(provider, settings)
           : true
     )
-    .filter((app) => app.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((provider) =>
+      provider.display_name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value)
+    const value = e.target.value
+    setSearchTerm(value)
     navigate({
       search: (prev) => ({
         ...prev,
-        filter: e.target.value || undefined,
+        filter: value || undefined,
       }),
     })
   }
@@ -148,52 +254,79 @@ export function Apps({
     })
   }
 
-  const handleSortChange = (sort: 'asc' | 'desc') => {
-    setSort(sort)
-    navigate({ search: (prev) => ({ ...prev, sort }) })
+  const handleSortChange = (nextSort: 'asc' | 'desc') => {
+    setSort(nextSort)
+    navigate({ search: (prev) => ({ ...prev, sort: nextSort }) })
   }
 
-  const openIntegration = (name: string) => {
+  const handleViewChange = (nextView: ViewMode) => {
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        view: nextView === 'cards' ? undefined : nextView,
+      }),
+    })
+  }
+
+  const openIntegration = (provider: ProviderRecord) => {
+    setActionMessage(null)
     setSaveError(null)
-    setEditingIntegration(name)
-    if (name === 'eBay') {
-      setForm({
-        baseURL: settings['ebay_base_url'] ?? '',
-        token: settings['ebay_bearer_token'] ?? '',
-        marketplace: settings['ebay_marketplace'] ?? 'EBAY-US',
-      })
-      return
-    }
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    setEditingProviderID(provider.provider_id)
+    const keys = providerSettingsKeys(provider.provider_id)
     setForm({
-      baseURL: settings[`integration.${slug}.base_url`] ?? '',
-      token: settings[`integration.${slug}.token`] ?? '',
-      marketplace: settings[`integration.${slug}.marketplace`] ?? '',
+      baseURL:
+        settings[keys.baseURLKey] ??
+        (provider.base_domain ? `https://${provider.base_domain}` : ''),
+      token: '',
+      marketplace: settings[keys.marketplaceKey] ?? 'AU',
+    })
+    setReplaceToken(!provider.has_token)
+  }
+
+  const closeIntegration = () => {
+    setEditingProviderID(null)
+    setSaveError(null)
+    setReplaceToken(false)
+    setForm({
+      baseURL: '',
+      token: '',
+      marketplace: '',
     })
   }
 
   const saveIntegration = async () => {
-    if (!activeProfileId || !editingIntegration) {
+    if (!activeProfileId || !editingProvider) {
       return
     }
     setSaving(true)
     setSaveError(null)
+    setActionMessage(null)
     try {
-      const slug = editingIntegration.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+      const keys = providerSettingsKeys(editingProvider.provider_id)
+      const trimmedToken = form.token.trim()
+      if (
+        editingProvider.auth_mode !== 'none' &&
+        !editingProvider.has_token &&
+        trimmedToken === ''
+      ) {
+        throw new Error('token_required_for_provider')
+      }
+
       const next: Record<string, string> = {
-        ...settings,
+        [keys.baseURLKey]: form.baseURL.trim(),
+        [keys.marketplaceKey]: form.marketplace.trim(),
+        [keys.enabledKey]:
+          editingProvider.auth_mode === 'none' ||
+          editingProvider.has_token ||
+          trimmedToken !== ''
+            ? 'true'
+            : 'false',
       }
-      if (editingIntegration === 'eBay') {
-        next['ebay_base_url'] = form.baseURL
-        next['ebay_bearer_token'] = form.token
-        next['ebay_marketplace'] = form.marketplace
-        next['integration.ebay.enabled'] = String(Boolean(form.token))
-      } else {
-        next[`integration.${slug}.base_url`] = form.baseURL
-        next[`integration.${slug}.token`] = form.token
-        next[`integration.${slug}.marketplace`] = form.marketplace
-        next[`integration.${slug}.enabled`] = String(Boolean(form.token))
+
+      if (replaceToken && trimmedToken !== '') {
+        next[keys.tokenKey] = trimmedToken
       }
+
       const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -203,18 +336,78 @@ export function Apps({
         throw new Error(`save_failed_${response.status}`)
       }
       const payload = (await response.json()) as { settings?: Record<string, string> }
-      setSettings(payload.settings ?? next)
-      setEditingIntegration(null)
+      setSettings(payload.settings ?? {})
+      setProviders((prev) =>
+        prev.map((provider) =>
+          provider.provider_id === editingProvider.provider_id
+            ? { ...provider, has_token: provider.has_token || trimmedToken !== '' }
+            : provider
+        )
+      )
+      setActionMessage('Provider configuration saved.')
+      closeIntegration()
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'save_failed')
+      if (err instanceof Error && err.message === 'token_required_for_provider') {
+        setSaveError('Token is required for this provider.')
+      } else {
+        setSaveError(err instanceof Error ? err.message : 'save_failed')
+      }
     } finally {
       setSaving(false)
     }
   }
 
+  const validateProvider = async () => {
+    if (!editingProvider) {
+      return
+    }
+    setValidating(true)
+    setSaveError(null)
+    try {
+      const response = await fetch(
+        `/api/provider/health?provider=${encodeURIComponent(editingProvider.provider_id)}`
+      )
+      if (!response.ok) {
+        throw new Error(`validate_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as {
+        status?: string
+        message?: string
+        updated_at?: string
+      }
+      setProviders((prev) =>
+        prev.map((provider) =>
+          provider.provider_id === editingProvider.provider_id
+            ? {
+                ...provider,
+                health: {
+                  status: payload.status ?? 'unknown',
+                  message: payload.message,
+                  last_checked_at: payload.updated_at ?? null,
+                },
+                last_run: {
+                  status:
+                    payload.status === 'ok'
+                      ? 'success'
+                      : payload.status === 'unknown'
+                        ? 'never'
+                        : 'failed',
+                  finished_at: payload.updated_at ?? null,
+                },
+              }
+            : provider
+        )
+      )
+      setActionMessage(`Validated ${editingProvider.display_name} health.`)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'validate_failed')
+    } finally {
+      setValidating(false)
+    }
+  }
+
   return (
     <>
-      {/* ===== Top Heading ===== */}
       <Header>
         <Search />
         <div className='ms-auto flex items-center gap-4'>
@@ -225,16 +418,33 @@ export function Apps({
         </div>
       </Header>
 
-      {/* ===== Content ===== */}
       <Main fixed>
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
           <p className='text-muted-foreground'>{description}</p>
         </div>
+
+        {bootstrapError ? (
+          <div
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
+            data-testid='integrations-bootstrap-error'
+          >
+            <p className='font-medium'>Integrations bootstrap failed</p>
+            <p className='mt-1 text-muted-foreground'>{bootstrapError}</p>
+            <Button className='mt-3' size='sm' variant='outline' onClick={() => void loadBootstrap()}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+
+        {actionMessage ? (
+          <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm'>{actionMessage}</div>
+        ) : null}
+
         <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
           <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
             <Input
-              placeholder='Filter apps...'
+              placeholder='Filter providers...'
               className='h-9 w-40 lg:w-[250px]'
               value={searchTerm}
               onChange={handleSearch}
@@ -244,7 +454,7 @@ export function Apps({
                 <SelectValue>{appText.get(appType)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-              <SelectItem value='all'>All Integrations</SelectItem>
+                <SelectItem value='all'>All Integrations</SelectItem>
                 <SelectItem value='connected'>Connected</SelectItem>
                 <SelectItem value='notConnected'>Not Connected</SelectItem>
               </SelectContent>
@@ -273,90 +483,232 @@ export function Apps({
             </SelectContent>
           </Select>
         </div>
+
         <Separator className='shadow-sm' />
-        <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
-          {filteredApps.map((app) => (
-            <li
-              key={app.name}
-              className='rounded-lg border p-4 hover:shadow-md'
-            >
-              <div className='mb-8 flex items-center justify-between'>
-                <div
-                  className={`flex size-10 items-center justify-center rounded-lg bg-muted p-2`}
-                >
-                  {app.logo}
+
+        <div className='flex items-center justify-end gap-2 pt-4'>
+          <Button
+            size='sm'
+            variant={viewMode === 'rows' ? 'default' : 'outline'}
+            onClick={() => handleViewChange('rows')}
+            aria-pressed={viewMode === 'rows'}
+            aria-label='Switch to rows view'
+          >
+            Rows
+          </Button>
+          <Button
+            size='sm'
+            variant={viewMode === 'cards' ? 'default' : 'outline'}
+            onClick={() => handleViewChange('cards')}
+            aria-pressed={viewMode === 'cards'}
+            aria-label='Switch to cards view'
+          >
+            Cards
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className='rounded-md border p-6 text-sm text-muted-foreground'>
+            Loading providers...
+          </div>
+        ) : null}
+
+        {!loading && viewMode === 'rows' ? (
+          <div className='overflow-hidden rounded-md border'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Health</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className='text-right'>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProviders.length ? (
+                  filteredProviders.map((provider) => (
+                    <TableRow key={provider.provider_id}>
+                      <TableCell>
+                        <div className='flex items-center gap-2'>
+                          <div className='flex size-8 items-center justify-center rounded-md bg-muted p-1.5'>
+                            <Store className='size-4' />
+                          </div>
+                          <span className='font-medium'>{provider.display_name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {isConnected(provider, settings) ? 'Connected' : 'Not Connected'}
+                      </TableCell>
+                      <TableCell>{provider.health?.status ?? 'unknown'}</TableCell>
+                      <TableCell className='text-muted-foreground'>
+                        {provider.integration_mode}
+                      </TableCell>
+                      <TableCell className='text-right'>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => openIntegration(provider)}
+                        >
+                          {isConnected(provider, settings) ? 'Edit' : 'Connect'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className='h-24 text-center'>
+                      No integrations match current filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+
+        {!loading && viewMode === 'cards' ? (
+          <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto pb-16 md:grid-cols-2 lg:grid-cols-3'>
+            {filteredProviders.map((provider) => (
+              <li
+                key={provider.provider_id}
+                className='rounded-lg border p-4 hover:shadow-md'
+                data-testid={`provider-card-${provider.provider_id}`}
+              >
+                <div className='mb-6 flex items-start justify-between gap-3'>
+                  <div className='space-y-1'>
+                    <h2 className='font-semibold'>{provider.display_name}</h2>
+                    <p className='text-xs text-muted-foreground'>{provider.base_domain}</p>
+                  </div>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    data-testid={`provider-open-${provider.provider_id}`}
+                    onClick={() => openIntegration(provider)}
+                  >
+                    {isConnected(provider, settings) ? 'Edit' : 'Connect'}
+                  </Button>
                 </div>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className={`${app.connected ? 'border border-blue-300 bg-blue-50 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:hover:bg-blue-900' : ''}`}
-                  onClick={() => openIntegration(app.name)}
-                >
-                  {app.connected ? 'Edit' : 'Connect'}
-                </Button>
-              </div>
-              <div>
-                <h2 className='mb-1 font-semibold'>{app.name}</h2>
-                <p className='line-clamp-2 text-gray-500'>{app.desc}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+                <div className='space-y-1 text-xs text-muted-foreground'>
+                  <p>Status: {provider.state}</p>
+                  <p>Health: {provider.health?.status ?? 'unknown'}</p>
+                  <p>Last run: {provider.last_run?.status ?? 'never'}</p>
+                </div>
+                <div className='mt-3 flex flex-wrap gap-1 text-[11px] text-muted-foreground'>
+                  {provider.capabilities.search ? <span className='rounded bg-muted px-2 py-0.5'>Search</span> : null}
+                  {provider.capabilities.stock_observation ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>Stock</span>
+                  ) : null}
+                  {provider.capabilities.pricing ? <span className='rounded bg-muted px-2 py-0.5'>Pricing</span> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </Main>
 
       <Dialog
-        open={editingIntegration !== null}
+        open={editingProvider !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setEditingIntegration(null)
+            closeIntegration()
           }
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingIntegration ?? 'Integration'}</DialogTitle>
+            <DialogTitle>{editingProvider?.display_name ?? 'Integration'}</DialogTitle>
             <DialogDescription>
-              Update provider credentials and connection details.
+              Manage provider credentials, validation, and sync controls.
             </DialogDescription>
           </DialogHeader>
-          <div className='space-y-3'>
-            <Input
-              placeholder='Base URL'
-              value={form.baseURL}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, baseURL: e.target.value }))
-              }
-            />
-            <Input
-              placeholder='Token / API key'
-              value={form.token}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, token: e.target.value }))
-              }
-            />
-            <Input
-              placeholder='Marketplace / Region'
-              value={form.marketplace}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, marketplace: e.target.value }))
-              }
-            />
-            {saveError ? (
-              <p className='text-sm text-destructive'>{saveError}</p>
-            ) : null}
-            <div className='flex justify-end gap-2'>
-              <Button
-                variant='outline'
-                onClick={() => setEditingIntegration(null)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button onClick={() => void saveIntegration()} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Integration'}
-              </Button>
+          {editingProvider ? (
+            <div className='space-y-4'>
+              <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                <p>Mode: {editingProvider.integration_mode}</p>
+                <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
+                <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
+                <p>
+                  Last checked:{' '}
+                  {editingProvider.health?.last_checked_at ?? editingProvider.last_run?.finished_at ?? 'n/a'}
+                </p>
+              </div>
+
+              <div className='rounded-md border p-3 text-xs text-muted-foreground'>
+                {editingProvider.setup_instructions ??
+                  'Enter provider details, validate health, and save configuration.'}
+              </div>
+
+              <Input
+                placeholder='Base URL'
+                value={form.baseURL}
+                onChange={(e) => setForm((prev) => ({ ...prev, baseURL: e.target.value }))}
+              />
+              <Input
+                placeholder='Marketplace / Region'
+                value={form.marketplace}
+                onChange={(e) => setForm((prev) => ({ ...prev, marketplace: e.target.value }))}
+              />
+
+              {editingProvider.auth_mode !== 'none' ? (
+                <div className='space-y-2'>
+                  {editingProvider.has_token && !replaceToken ? (
+                    <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                      <p>Token on file.</p>
+                      <p className='text-muted-foreground'>
+                        Existing token is hidden. Use replace-token to update it.
+                      </p>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='mt-2'
+                        data-testid='replace-token'
+                        onClick={() => setReplaceToken(true)}
+                      >
+                        Replace Token
+                      </Button>
+                    </div>
+                  ) : (
+                    <Input
+                      type='password'
+                      data-testid='provider-token-input'
+                      placeholder='New token / API key'
+                      value={form.token}
+                      onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
+                    />
+                  )}
+                </div>
+              ) : null}
+
+              {saveError ? <p className='text-sm text-destructive'>{saveError}</p> : null}
+
+              <div className='flex flex-wrap justify-end gap-2'>
+                <Button
+                  variant='outline'
+                  onClick={() => void validateProvider()}
+                  disabled={validating}
+                >
+                  {validating ? 'Validating...' : 'Validate'}
+                </Button>
+                <Button
+                  variant='outline'
+                  onClick={() => {
+                    setActionMessage(
+                      'Sync is initiated from Scanner query sets. Open Scanner to run provider discovery.'
+                    )
+                  }}
+                >
+                  Sync
+                </Button>
+                <Button variant='outline' onClick={closeIntegration} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void saveIntegration()} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Integration'}
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
