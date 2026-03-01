@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Telescope,
   Monitor,
   ListChecks,
   Heart,
@@ -48,6 +49,11 @@ export const sidebarData: SidebarData = {
           title: 'Wishlist',
           url: '/wishlist',
           icon: Heart,
+        },
+        {
+          title: 'Discoveries',
+          url: '/discoveries',
+          icon: Telescope,
         },
         {
           title: 'Integrations',
