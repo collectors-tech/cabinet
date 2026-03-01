@@ -1,0 +1,4 @@
+openspec/migration/auto-wave-13-summary.md
+openspec/migration/auto-wave-13-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-theme-selection/spec.cy.ts
