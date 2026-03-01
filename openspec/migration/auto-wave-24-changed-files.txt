@@ -1,0 +1,10 @@
+openspec/migration/auto-wave-24-summary.md
+openspec/migration/auto-wave-24-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts
+ui.web/src/components/layout/data/sidebar-data.ts
+ui.web/src/features/reports/index.tsx
+ui.web/src/routes/_authenticated/reports/index.tsx
+ui.web/src/routeTree.gen.ts
+internal/ui/static/index.html
+internal/ui/static/assets/*
