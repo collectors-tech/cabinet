@@ -1,0 +1,7 @@
+openspec/migration/auto-wave-25-summary.md
+openspec/migration/auto-wave-25-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/chats/chat-copilot/spec.cy.ts
+ui.web/src/components/layout/header.tsx
+internal/ui/static/index.html
+internal/ui/static/assets/*

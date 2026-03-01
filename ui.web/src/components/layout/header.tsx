@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
@@ -10,6 +12,7 @@ type HeaderProps = React.HTMLAttributes<HTMLElement> & {
 
 export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
+  const [chatRailOpen, setChatRailOpen] = useState(false)
 
   useEffect(() => {
     const onScroll = () => {
@@ -44,7 +47,33 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
         <SidebarTrigger variant='outline' className='max-md:scale-125' />
         <Separator orientation='vertical' className='h-6' />
         {children}
+        <Button
+          data-testid='shell-chat-toggle'
+          type='button'
+          variant='outline'
+          size='sm'
+          onClick={() => setChatRailOpen((open) => !open)}
+          className='shrink-0'
+        >
+          <MessageSquare className='me-1 h-4 w-4' />
+          {chatRailOpen ? 'Close Chat' : 'Open Chat'}
+        </Button>
       </div>
+      {chatRailOpen ? (
+        <aside
+          data-testid='shell-chat-rail'
+          className='fixed top-20 right-4 z-50 w-full max-w-md rounded-lg border bg-background p-4 shadow-lg'
+        >
+          <h2 className='font-semibold'>Chat Copilot</h2>
+          <p className='mt-2 text-sm text-muted-foreground'>
+            Keep route context while opening quick chat access from the
+            workspace header.
+          </p>
+          <p className='mt-2 text-sm text-muted-foreground'>
+            Open the dedicated Chats page for full thread management.
+          </p>
+        </aside>
+      ) : null}
     </header>
   )
 }
