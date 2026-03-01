@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Telescope,
+  ScanSearch,
   Monitor,
   ListChecks,
   Heart,
@@ -54,6 +55,11 @@ export const sidebarData: SidebarData = {
           title: 'Discoveries',
           url: '/discoveries',
           icon: Telescope,
+        },
+        {
+          title: 'Scanner',
+          url: '/scanner',
+          icon: ScanSearch,
         },
         {
           title: 'Integrations',

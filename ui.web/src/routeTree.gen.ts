@@ -28,6 +28,7 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedWishlistIndexRouteImport } from './routes/_authenticated/wishlist/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedScannerIndexRouteImport } from './routes/_authenticated/scanner/index'
 import { Route as AuthenticatedReportsIndexRouteImport } from './routes/_authenticated/reports/index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedIntegrationsIndexRouteImport } from './routes/_authenticated/integrations/index'
@@ -138,6 +139,12 @@ const AuthenticatedSettingsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedScannerIndexRoute =
+  AuthenticatedScannerIndexRouteImport.update({
+    id: '/scanner/',
+    path: '/scanner/',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedReportsIndexRoute =
   AuthenticatedReportsIndexRouteImport.update({
@@ -256,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/integrations/': typeof AuthenticatedIntegrationsIndexRoute
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/reports/': typeof AuthenticatedReportsIndexRoute
+  '/scanner/': typeof AuthenticatedScannerIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/wishlist/': typeof AuthenticatedWishlistIndexRoute
@@ -288,6 +296,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof AuthenticatedIntegrationsIndexRoute
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/reports': typeof AuthenticatedReportsIndexRoute
+  '/scanner': typeof AuthenticatedScannerIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/wishlist': typeof AuthenticatedWishlistIndexRoute
@@ -325,6 +334,7 @@ export interface FileRoutesById {
   '/_authenticated/integrations/': typeof AuthenticatedIntegrationsIndexRoute
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/reports/': typeof AuthenticatedReportsIndexRoute
+  '/_authenticated/scanner/': typeof AuthenticatedScannerIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/wishlist/': typeof AuthenticatedWishlistIndexRoute
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/integrations/'
     | '/inventory/'
     | '/reports/'
+    | '/scanner/'
     | '/settings/'
     | '/users/'
     | '/wishlist/'
@@ -392,6 +403,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/inventory'
     | '/reports'
+    | '/scanner'
     | '/settings'
     | '/users'
     | '/wishlist'
@@ -428,6 +440,7 @@ export interface FileRouteTypes {
     | '/_authenticated/integrations/'
     | '/_authenticated/inventory/'
     | '/_authenticated/reports/'
+    | '/_authenticated/scanner/'
     | '/_authenticated/settings/'
     | '/_authenticated/users/'
     | '/_authenticated/wishlist/'
@@ -583,6 +596,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/scanner/': {
+      id: '/_authenticated/scanner/'
+      path: '/scanner'
+      fullPath: '/scanner/'
+      preLoaderRoute: typeof AuthenticatedScannerIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/reports/': {
       id: '/_authenticated/reports/'
       path: '/reports'
@@ -726,6 +746,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIntegrationsIndexRoute: typeof AuthenticatedIntegrationsIndexRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedReportsIndexRoute: typeof AuthenticatedReportsIndexRoute
+  AuthenticatedScannerIndexRoute: typeof AuthenticatedScannerIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWishlistIndexRoute: typeof AuthenticatedWishlistIndexRoute
 }
@@ -740,6 +761,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIntegrationsIndexRoute: AuthenticatedIntegrationsIndexRoute,
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedReportsIndexRoute: AuthenticatedReportsIndexRoute,
+  AuthenticatedScannerIndexRoute: AuthenticatedScannerIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWishlistIndexRoute: AuthenticatedWishlistIndexRoute,
 }
