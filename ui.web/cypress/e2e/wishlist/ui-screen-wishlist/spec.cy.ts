@@ -38,4 +38,18 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Export tasks"]').should("be.visible");
     cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
   });
+
+  it("UI-SCREEN-WISHLIST-002 opens create drawer and import dialog workflows", () => {
+    signInToWishlist();
+
+    cy.contains("button", "Create").click();
+    cy.contains("Create Task").should("be.visible");
+    cy.contains("button", "Close").click();
+    cy.contains("Create Task").should("not.exist");
+
+    cy.contains("button", "Import").click();
+    cy.contains("Import Tasks").should("be.visible");
+    cy.contains("button", "Close").click();
+    cy.contains("Import Tasks").should("not.exist");
+  });
 });
