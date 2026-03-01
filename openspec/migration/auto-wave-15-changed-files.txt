@@ -1,0 +1,9 @@
+openspec/migration/auto-wave-15-summary.md
+openspec/migration/auto-wave-15-changed-files.txt
+openspec/specs/inventory/ui-screen-inventory-items/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts
+ui.web/src/features/collection/index.tsx
+internal/app/ui_template_contract_test.go
+internal/ui/static/index.html
+internal/ui/static/assets

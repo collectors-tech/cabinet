@@ -267,9 +267,11 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 	})
 	checkContains("../../ui.web/src/features/collection/index.tsx", []string{
 		"Collection",
-		"Command Row",
-		"Summary Strip",
+		"Add Item",
+		"Add Folder",
 		"Folders",
+		"Active Brand",
+		"Active Category",
 		"Collection Browser",
 	})
 }

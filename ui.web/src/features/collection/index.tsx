@@ -7,7 +7,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -112,48 +111,16 @@ export function Collection({
       </Header>
 
       <Main className='space-y-4'>
-        <div className='space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
-          <p className='text-muted-foreground'>{description}</p>
-        </div>
-
-        <Card>
-          <CardHeader className='pb-3'>
-            <CardTitle className='text-base'>Command Row</CardTitle>
-            <CardDescription>
-              Search, quick actions, and create flows for collection operations.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='flex flex-wrap gap-2'>
-            <Input
-              className='w-full max-w-sm'
-              placeholder='Search product code, title, grading...'
-            />
+        <div className='flex flex-wrap items-end justify-between gap-3'>
+          <div className='space-y-2'>
+            <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
+            <p className='text-muted-foreground'>{description}</p>
+          </div>
+          <div className='flex gap-2'>
             <Button>Add Item</Button>
             <Button variant='outline'>Add Folder</Button>
-            <Button variant='outline'>Bulk Edit</Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='pb-2'>
-            <CardTitle className='text-base'>Summary Strip</CardTitle>
-          </CardHeader>
-          <CardContent className='flex flex-wrap items-center gap-4 text-sm'>
-            <span>
-              Folders: <strong>{summary.folders}</strong>
-            </span>
-            <span>
-              Items: <strong>{summary.items}</strong>
-            </span>
-            <span>
-              Active Brand: <strong>{summary.activeBrand}</strong>
-            </span>
-            <span>
-              Active Category: <strong>{summary.activeCategory}</strong>
-            </span>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
           <Card className='lg:col-span-3'>
@@ -179,11 +146,16 @@ export function Collection({
           <Card className='lg:col-span-9'>
             <CardHeader>
               <CardTitle>Collection Browser</CardTitle>
-              <CardDescription>
-                Rows and cards share the same filters, sort, and pagination.
-              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
+              <p className='text-sm text-muted-foreground'>
+                Folders: <strong>{summary.folders}</strong>{' '}
+                <span className='mx-2'>Items: <strong>{summary.items}</strong></span>
+                Active Brand: <strong>{summary.activeBrand}</strong>{' '}
+                <span className='mx-2'>
+                  Active Category: <strong>{summary.activeCategory}</strong>
+                </span>
+              </p>
               {loading ? (
                 <div className='rounded-md border p-6 text-sm text-muted-foreground'>
                   Loading inventory...

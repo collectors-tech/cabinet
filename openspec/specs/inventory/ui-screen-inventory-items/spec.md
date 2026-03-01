@@ -31,6 +31,16 @@ The screen SHALL remain usable with both starter and stress datasets.
 - **WHEN** user filters/sorts large item lists
 - **THEN** interactions SHALL remain responsive and deterministic
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-004: Inventory Collection layout SHALL keep controls compact and non-duplicated
+Inventory Collection layout SHALL avoid duplicate control strips and keep summary context inside the Collection Browser header area.
+
+#### Scenario: Compact summary in browser header and no duplicate command/summary blocks
+- **GIVEN** an authenticated user opens `/inventory` with a resolved collection dataset
+- **WHEN** the Inventory workspace renders the Collection Browser region
+- **THEN** the standalone `Command Row` section MUST NOT render
+- **AND** the standalone `Summary Strip` card MUST NOT render
+- **AND** the Collection Browser header MUST render a one-line summary with `Folders`, `Items`, `Active Brand`, and `Active Category` directly above the filter bar
+
 ## Acceptance Criteria
 - UC IDs cover browse, edit, selection, and state transitions.
 - E2E mapping includes non-500 regression behavior.

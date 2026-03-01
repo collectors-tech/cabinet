@@ -106,4 +106,48 @@ describe("inventory-management", () => {
     cy.contains("button", "Rows").click();
     cy.get("table").should("be.visible");
   });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-004 keeps summary compact in Collection Browser header and removes duplicate strips", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-compact-1",
+            part_number: "PN-COMPACT-1",
+            title: "Compact Layout Item",
+            status: "todo",
+            category: "feature",
+          },
+        ],
+      },
+    }).as("itemsCompact");
+
+    signIn();
+    cy.wait("@itemsCompact");
+
+    cy.contains("Command Row").should("not.exist");
+    cy.contains("Summary Strip").should("not.exist");
+
+    cy.contains("Collection Browser")
+      .closest('[data-slot="card"]')
+      .within(() => {
+        cy.contains(/Folders:\s*\d+/).should("be.visible");
+        cy.contains(/Items:\s*\d+/).should("be.visible");
+        cy.contains(/Active Brand:\s*\w+/).should("be.visible");
+        cy.contains(/Active Category:\s*\w+/).should("be.visible");
+
+        cy.contains(/Active Category:/)
+          .should("be.visible")
+          .then(($summary) => {
+            const summaryTop = $summary[0].getBoundingClientRect().top;
+            cy.get('input[placeholder="Filter by title or ID..."]')
+              .should("be.visible")
+              .then(($input) => {
+                const inputTop = $input[0].getBoundingClientRect().top;
+                expect(summaryTop).to.be.lessThan(inputTop);
+              });
+          });
+      });
+  });
 });
