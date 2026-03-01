@@ -1,0 +1,4 @@
+openspec/migration/auto-wave-9-summary.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts
+ui.web/src/components/layout/team-switcher.tsx
