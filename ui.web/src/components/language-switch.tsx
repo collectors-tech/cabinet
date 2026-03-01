@@ -23,7 +23,12 @@ export function LanguageSwitch() {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant='ghost' size='sm' className='rounded-full px-3'>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='rounded-full px-3'
+          data-testid='header-language-switch-trigger'
+        >
           <Languages className='me-2 size-4' />
           <span>{current.label}</span>
           <span className='sr-only'>{t('language.label')}</span>
@@ -31,7 +36,11 @@ export function LanguageSwitch() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end'>
         {languages.map((lang) => (
-          <DropdownMenuItem key={lang.code} onClick={() => void i18n.changeLanguage(lang.code)}>
+          <DropdownMenuItem
+            key={lang.code}
+            data-testid={`header-language-option-${lang.code}`}
+            onClick={() => void i18n.changeLanguage(lang.code)}
+          >
             {lang.label}
             <Check
               size={14}
@@ -43,4 +52,3 @@ export function LanguageSwitch() {
     </DropdownMenu>
   )
 }
-

@@ -1,0 +1,7 @@
+ui.web/src/components/language-switch.tsx
+ui.web/cypress/e2e/general/ui-foundation-theme-rtl-i18n/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-37-summary.md
+openspec/migration/auto-wave-37-changed-files.txt
+internal/ui/static/index.html
+internal/ui/static/assets/*
