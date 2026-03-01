@@ -34,6 +34,12 @@ type DashboardSummary = {
   cards: DashboardCard[]
 }
 
+const onboardingSteps = ['Welcome', 'Identity', 'Starter Data', 'First Item', 'Preferences']
+
+function onboardingStorageKey(profileID: string): string {
+  return `cabinet.onboarding.step.${profileID}`
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -46,6 +52,8 @@ export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [onboardingScope, setOnboardingScope] = useState('default')
+  const [onboardingStepIndex, setOnboardingStepIndex] = useState(0)
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -69,6 +77,71 @@ export function Dashboard() {
   useEffect(() => {
     void loadDashboard()
   }, [loadDashboard])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadOnboardingScope() {
+      try {
+        const response = await fetch('/api/profiles/active')
+        if (!response.ok) {
+          return
+        }
+        const payload = (await response.json()) as { id?: string }
+        const profileID = payload.id?.trim()
+        if (!cancelled && profileID) {
+          setOnboardingScope(profileID)
+        }
+      } catch {
+        // Keep default onboarding scope when profile endpoint is unavailable.
+      }
+    }
+    void loadOnboardingScope()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const scopeKey = onboardingStorageKey(onboardingScope)
+      const raw = window.localStorage.getItem(scopeKey)
+      if (!raw) {
+        const fallbackRaw =
+          onboardingScope !== 'default'
+            ? window.localStorage.getItem(onboardingStorageKey('default'))
+            : null
+        if (fallbackRaw) {
+          const fallbackParsed = Number(fallbackRaw)
+          if (
+            !Number.isNaN(fallbackParsed) &&
+            fallbackParsed >= 0 &&
+            fallbackParsed < onboardingSteps.length
+          ) {
+            window.localStorage.setItem(scopeKey, fallbackRaw)
+            setOnboardingStepIndex(fallbackParsed)
+            return
+          }
+        }
+        setOnboardingStepIndex(0)
+        return
+      }
+      const parsed = Number(raw)
+      if (Number.isNaN(parsed) || parsed < 0 || parsed >= onboardingSteps.length) {
+        setOnboardingStepIndex(0)
+        return
+      }
+      setOnboardingStepIndex(parsed)
+    } catch {
+      setOnboardingStepIndex(0)
+    }
+  }, [onboardingScope])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      onboardingStorageKey(onboardingScope),
+      onboardingStepIndex.toString()
+    )
+  }, [onboardingScope, onboardingStepIndex])
 
   const metricCards = useMemo(() => {
     if (!summary) {
@@ -106,6 +179,44 @@ export function Dashboard() {
             {loading ? 'Refreshing...' : 'Refresh Dashboard'}
           </Button>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Starter Onboarding</CardTitle>
+            <CardDescription>
+              Continue setup progress for this profile.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            <p className='text-sm' data-testid='onboarding-step-label'>
+              Current step: {onboardingSteps[onboardingStepIndex]}
+            </p>
+            <div className='flex gap-2'>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() =>
+                  setOnboardingStepIndex((current) =>
+                    current > 0 ? current - 1 : current
+                  )
+                }
+              >
+                Back Step
+              </Button>
+              <Button
+                size='sm'
+                data-testid='onboarding-next-step'
+                onClick={() =>
+                  setOnboardingStepIndex((current) =>
+                    current < onboardingSteps.length - 1 ? current + 1 : current
+                  )
+                }
+              >
+                Next Step
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {error ? (
           <Card>
