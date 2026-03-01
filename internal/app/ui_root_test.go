@@ -25,8 +25,11 @@ func TestRootServesAppShell(t *testing.T) {
 	if !strings.Contains(body, "<script type=\"module\"") {
 		t.Fatalf("expected SPA entry script in root page")
 	}
-	if !strings.Contains(body, "<title>Cabinet Admin</title>") {
-		t.Fatalf("expected admin template title in root page")
+	if !strings.Contains(body, "<title>Cabinet</title>") {
+		t.Fatalf("expected Cabinet title in root page")
+	}
+	if strings.Contains(body, "UI template") {
+		t.Fatalf("expected template placeholder copy to be removed from root page metadata")
 	}
 }
 

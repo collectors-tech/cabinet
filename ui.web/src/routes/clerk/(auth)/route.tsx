@@ -18,7 +18,7 @@ function ClerkAuthLayout() {
           className='relative z-20 flex items-center text-lg font-medium'
         >
           <Logo className='me-2' />
-          Shadcn Admin
+          Cabinet
         </Link>
 
         <ClerkFullLogo className='relative m-auto size-96' />
@@ -26,10 +26,9 @@ function ClerkAuthLayout() {
         <div className='relative z-20 mt-auto'>
           <blockquote className='space-y-2'>
             <p className='text-lg'>
-              &ldquo; Lorem ipsum dolor sit amet consectetur adipisicing elit.
-              Sint, magni debitis inventore asperiores velit! &rdquo;
+              &ldquo; Cabinet keeps your collection, watchlists, and pricing context in one secure workspace. &rdquo;
             </p>
-            <footer className='text-sm'>John Doe</footer>
+            <footer className='text-sm'>Cabinet Team</footer>
           </blockquote>
         </div>
       </div>
@@ -42,7 +41,7 @@ function ClerkAuthLayout() {
             }}
             contentProps={{ side: 'top', align: 'end', className: 'w-auto' }}
           >
-            Welcome to the example Clerk auth page. <br />
+            Use cloud sign-in to access Cabinet account and billing controls. <br />
             Back to{' '}
             <Link
               to='/'
@@ -58,3 +57,4 @@ function ClerkAuthLayout() {
     </div>
   )
 }
+

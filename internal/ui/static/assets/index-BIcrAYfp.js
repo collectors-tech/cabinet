@@ -1,0 +1,1 @@
+import{r,a6 as s}from"./index-DP_b-S-Q.js";import{a as o}from"./index-C-WYSW16.js";var c=s[" useId ".trim().toString()]||(()=>{}),n=0;function d(t){const[e,a]=r.useState(c());return o(()=>{a(u=>u??String(n++))},[t]),t||(e?`radix-${e}`:"")}function m(t){const e=r.useRef(t);return r.useEffect(()=>{e.current=t}),r.useMemo(()=>(...a)=>e.current?.(...a),[])}export{m as a,d as u};

@@ -1,0 +1,14 @@
+openspec/migration/auto-wave-21-summary.md
+openspec/migration/auto-wave-21-changed-files.txt
+ui.web/index.html
+ui.web/src/components/layout/app-title.tsx
+ui.web/src/features/auth/auth-layout.tsx
+ui.web/src/features/auth/sign-in/sign-in-2.tsx
+ui.web/src/routes/clerk/(auth)/route.tsx
+ui.web/src/assets/logo.tsx
+ui.web/src/features/settings/profile/profile-form.tsx
+ui.web/public/images/cabinet-ui.png
+internal/app/ui_root_test.go
+tests/ui_placeholder_copy_contract_test.go
+internal/ui/static/index.html
+internal/ui/static/assets/*
