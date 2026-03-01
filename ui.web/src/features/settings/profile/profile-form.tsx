@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useProfileSettings } from '../use-profile-settings'
 
 const profileFormSchema = z.object({
   username: z
@@ -47,16 +47,18 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>
 
-// This can come from your database or API.
 const defaultValues: Partial<ProfileFormValues> = {
+  username: '',
+  email: '',
   bio: 'I own a computer.',
-  urls: [
-    { value: 'https://shadcn.com' },
-    { value: 'http://twitter.com/shadcn' },
-  ],
+  urls: [],
 }
 
 export function ProfileForm() {
+  const { settings, loading, error, saving, saveSettings, reload } =
+    useProfileSettings()
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues,
@@ -68,12 +70,77 @@ export function ProfileForm() {
     control: form.control,
   })
 
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+    const storedURLs = settings['profile.urls']
+    let urls: Array<{ value: string }> = []
+    if (storedURLs) {
+      try {
+        const parsed = JSON.parse(storedURLs) as Array<{ value?: string }>
+        urls = parsed
+          .map((entry) => ({ value: entry.value?.trim() ?? '' }))
+          .filter((entry) => entry.value !== '')
+      } catch {
+        urls = []
+      }
+    }
+    form.reset({
+      username: settings['profile.username'] ?? '',
+      email: settings['profile.email'] ?? 'm@example.com',
+      bio: settings['profile.bio'] ?? 'I own a computer.',
+      urls,
+    })
+  }, [form, loading, settings])
+
+  const handleSubmit = async (data: ProfileFormValues) => {
+    setSaveMessage(null)
+    setSaveError(null)
+    try {
+      await saveSettings({
+        'profile.username': data.username.trim(),
+        'profile.email': data.email.trim(),
+        'profile.bio': data.bio.trim(),
+        'profile.urls': JSON.stringify(data.urls ?? []),
+      })
+      setSaveMessage('Profile settings saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'failed_to_save_profile')
+    }
+  }
+
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit((data) => showSubmittedData(data))}
+        onSubmit={form.handleSubmit(handleSubmit)}
         className='space-y-8'
       >
+        {error ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+            <p className='font-medium'>Failed to load profile settings.</p>
+            <p className='mt-1 text-muted-foreground'>{error}</p>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='mt-3'
+              onClick={() => void reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {saveError ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+            {saveError}
+          </div>
+        ) : null}
+        {saveMessage ? (
+          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+            {saveMessage}
+          </div>
+        ) : null}
         <FormField
           control={form.control}
           name='username'
@@ -97,10 +164,12 @@ export function ProfileForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder='Select a verified email to display' />
+                  <SelectTrigger data-testid='settings-profile-email-trigger'>
+                    <SelectValue
+                      placeholder='Select a verified email to display'
+                    />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -110,8 +179,7 @@ export function ProfileForm() {
                 </SelectContent>
               </Select>
               <FormDescription>
-                You can manage verified email addresses in your{' '}
-                <Link to='/'>email settings</Link>.
+                This email is shown in your profile and account surfaces.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -170,7 +238,9 @@ export function ProfileForm() {
             Add URL
           </Button>
         </div>
-        <Button type='submit'>Update profile</Button>
+        <Button type='submit' disabled={saving || loading}>
+          Update profile
+        </Button>
       </form>
     </Form>
   )

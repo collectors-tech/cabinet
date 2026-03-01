@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
+import { useProfileSettings } from '../use-profile-settings'
 
 const notificationsFormSchema = z.object({
   type: z.enum(['all', 'mentions', 'none'], {
@@ -33,8 +34,9 @@ const notificationsFormSchema = z.object({
 
 type NotificationsFormValues = z.infer<typeof notificationsFormSchema>
 
-// This can come from your database or API.
 const defaultValues: Partial<NotificationsFormValues> = {
+  type: 'mentions',
+  mobile: false,
   communication_emails: false,
   marketing_emails: false,
   social_emails: true,
@@ -42,17 +44,87 @@ const defaultValues: Partial<NotificationsFormValues> = {
 }
 
 export function NotificationsForm() {
+  const { settings, loading, error, saving, saveSettings, reload } =
+    useProfileSettings()
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<NotificationsFormValues>({
     resolver: zodResolver(notificationsFormSchema),
     defaultValues,
   })
 
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+    const storedType = settings['notifications.type']
+    form.reset({
+      type:
+        storedType === 'all' || storedType === 'mentions' || storedType === 'none'
+          ? storedType
+          : 'mentions',
+      mobile: settings['notifications.mobile'] === 'true',
+      communication_emails:
+        settings['notifications.communication_emails'] === 'true',
+      social_emails: settings['notifications.social_emails'] === 'true',
+      marketing_emails: settings['notifications.marketing_emails'] === 'true',
+      security_emails: settings['notifications.security_emails'] !== 'false',
+    })
+  }, [form, loading, settings])
+
+  const handleSubmit = async (data: NotificationsFormValues) => {
+    setSaveMessage(null)
+    setSaveError(null)
+    try {
+      await saveSettings({
+        'notifications.type': data.type,
+        'notifications.mobile': String(data.mobile ?? false),
+        'notifications.communication_emails': String(
+          data.communication_emails ?? false
+        ),
+        'notifications.social_emails': String(data.social_emails ?? false),
+        'notifications.marketing_emails': String(data.marketing_emails ?? false),
+        'notifications.security_emails': String(data.security_emails),
+      })
+      setSaveMessage('Notification settings saved.')
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : 'failed_to_save_notifications'
+      )
+    }
+  }
+
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit((data) => showSubmittedData(data))}
+        onSubmit={form.handleSubmit(handleSubmit)}
         className='space-y-8'
       >
+        {error ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+            <p className='font-medium'>Failed to load notification settings.</p>
+            <p className='mt-1 text-muted-foreground'>{error}</p>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='mt-3'
+              onClick={() => void reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {saveError ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+            {saveError}
+          </div>
+        ) : null}
+        {saveMessage ? (
+          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+            {saveMessage}
+          </div>
+        ) : null}
         <FormField
           control={form.control}
           name='type'
@@ -62,7 +134,7 @@ export function NotificationsForm() {
               <FormControl>
                 <RadioGroup
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value}
                   className='flex flex-col gap-2'
                 >
                   <FormItem className='flex items-center'>
@@ -111,6 +183,7 @@ export function NotificationsForm() {
                   </div>
                   <FormControl>
                     <Switch
+                      data-testid='settings-notifications-communication'
                       checked={field.value}
                       onCheckedChange={field.onChange}
                     />
@@ -133,6 +206,7 @@ export function NotificationsForm() {
                   </div>
                   <FormControl>
                     <Switch
+                      data-testid='settings-notifications-marketing'
                       checked={field.value}
                       onCheckedChange={field.onChange}
                     />
@@ -153,6 +227,7 @@ export function NotificationsForm() {
                   </div>
                   <FormControl>
                     <Switch
+                      data-testid='settings-notifications-social'
                       checked={field.value}
                       onCheckedChange={field.onChange}
                     />
@@ -173,6 +248,7 @@ export function NotificationsForm() {
                   </div>
                   <FormControl>
                     <Switch
+                      data-testid='settings-notifications-security'
                       checked={field.value}
                       onCheckedChange={field.onChange}
                       disabled
@@ -213,7 +289,9 @@ export function NotificationsForm() {
             </FormItem>
           )}
         />
-        <Button type='submit'>Update notifications</Button>
+        <Button type='submit' disabled={saving || loading}>
+          Update notifications
+        </Button>
       </form>
     </Form>
   )

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -13,6 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { useProfileSettings } from '../use-profile-settings'
 
 const items = [
   {
@@ -49,23 +50,93 @@ const displayFormSchema = z.object({
 
 type DisplayFormValues = z.infer<typeof displayFormSchema>
 
-// This can come from your database or API.
 const defaultValues: Partial<DisplayFormValues> = {
   items: ['recents', 'home'],
 }
 
 export function DisplayForm() {
+  const { settings, loading, error, saving, saveSettings, reload } =
+    useProfileSettings()
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<DisplayFormValues>({
     resolver: zodResolver(displayFormSchema),
     defaultValues,
   })
 
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+    const savedItems = settings['display.items']
+    if (!savedItems) {
+      form.reset(defaultValues)
+      return
+    }
+    const parsed = savedItems
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    form.reset({
+      items: parsed.length > 0 ? parsed : defaultValues.items,
+    })
+  }, [form, loading, settings])
+
+  const handleSubmit = async (data: DisplayFormValues) => {
+    setSaveMessage(null)
+    setSaveError(null)
+    try {
+      await saveSettings({
+        'display.items': data.items.join(','),
+      })
+      setSaveMessage('Display settings saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'failed_to_save_display')
+    }
+  }
+
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit((data) => showSubmittedData(data))}
+        onSubmit={(event) => {
+          const selectedItems = form.getValues('items') ?? []
+          if (selectedItems.length === 0) {
+            event.preventDefault()
+            form.setError('items', {
+              type: 'manual',
+              message: 'You have to select at least one item.',
+            })
+            return
+          }
+          void form.handleSubmit(handleSubmit)(event)
+        }}
         className='space-y-8'
       >
+        {error ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+            <p className='font-medium'>Failed to load display settings.</p>
+            <p className='mt-1 text-muted-foreground'>{error}</p>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='mt-3'
+              onClick={() => void reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {saveError ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+            {saveError}
+          </div>
+        ) : null}
+        {saveMessage ? (
+          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+            {saveMessage}
+          </div>
+        ) : null}
         <FormField
           control={form.control}
           name='items'
@@ -90,6 +161,7 @@ export function DisplayForm() {
                       >
                         <FormControl>
                           <Checkbox
+                            data-testid={`settings-display-${item.id}`}
                             checked={field.value?.includes(item.id)}
                             onCheckedChange={(checked) => {
                               return checked
@@ -110,11 +182,20 @@ export function DisplayForm() {
                   }}
                 />
               ))}
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => form.reset({ items: [] })}
+              >
+                Clear selection
+              </Button>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type='submit'>Update display</Button>
+        <Button type='submit' disabled={saving || loading}>Update display</Button>
       </form>
     </Form>
   )

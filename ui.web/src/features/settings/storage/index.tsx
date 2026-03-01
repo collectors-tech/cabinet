@@ -97,8 +97,12 @@ export function SettingsStorage() {
           </div>
         </div>
         <div className='flex gap-2'>
-          <Button variant='outline' size='sm'>Reindex Search</Button>
-          <Button variant='outline' size='sm'>Rebuild Thumbnails</Button>
+          <Button variant='outline' size='sm' disabled>
+            Reindex Search (Diagnostics only)
+          </Button>
+          <Button variant='outline' size='sm' disabled>
+            Rebuild Thumbnails (Diagnostics only)
+          </Button>
         </div>
       </div>
     </ContentSection>

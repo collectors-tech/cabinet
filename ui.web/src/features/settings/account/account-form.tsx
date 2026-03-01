@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { CaretSortIcon, CheckIcon } from '@radix-ui/react-icons'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +29,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { DatePicker } from '@/components/date-picker'
+import { useProfileSettings } from '../use-profile-settings'
 
 const languages = [
   { label: 'English', value: 'en' },
@@ -54,24 +55,77 @@ const accountFormSchema = z.object({
 
 type AccountFormValues = z.infer<typeof accountFormSchema>
 
-// This can come from your database or API.
 const defaultValues: Partial<AccountFormValues> = {
   name: '',
+  language: 'en',
 }
 
 export function AccountForm() {
+  const { settings, loading, error, saving, saveSettings, reload } =
+    useProfileSettings()
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
     defaultValues,
   })
 
-  function onSubmit(data: AccountFormValues) {
-    showSubmittedData(data)
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+    form.reset({
+      name: settings['account.name'] ?? '',
+      language: settings['account.language'] ?? 'en',
+      dob: settings['account.dob']
+        ? new Date(settings['account.dob'])
+        : new Date('2000-01-01T00:00:00.000Z'),
+    })
+  }, [form, loading, settings])
+
+  async function onSubmit(data: AccountFormValues) {
+    setSaveMessage(null)
+    setSaveError(null)
+    try {
+      await saveSettings({
+        'account.name': data.name.trim(),
+        'account.language': data.language,
+        'account.dob': data.dob.toISOString(),
+      })
+      setSaveMessage('Account settings saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'failed_to_save_account')
+    }
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+        {error ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+            <p className='font-medium'>Failed to load account settings.</p>
+            <p className='mt-1 text-muted-foreground'>{error}</p>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='mt-3'
+              onClick={() => void reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {saveError ? (
+          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
+            {saveError}
+          </div>
+        ) : null}
+        {saveMessage ? (
+          <div className='rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300'>
+            {saveMessage}
+          </div>
+        ) : null}
         <FormField
           control={form.control}
           name='name'
@@ -113,6 +167,7 @@ export function AccountForm() {
                 <PopoverTrigger asChild>
                   <FormControl>
                     <Button
+                      data-testid='settings-account-language-trigger'
                       variant='outline'
                       role='combobox'
                       className={cn(
@@ -166,7 +221,7 @@ export function AccountForm() {
             </FormItem>
           )}
         />
-        <Button type='submit'>Update account</Button>
+        <Button type='submit' disabled={saving || loading}>Update account</Button>
       </form>
     </Form>
   )
