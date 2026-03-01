@@ -33,6 +33,11 @@ func TestWave4ProvidersRegistryContract(t *testing.T) {
 		if p["provider_id"] == "amazon" {
 			amazon = p
 		}
+		for _, field := range []string{"integration_mode", "api_available", "auth_requirement"} {
+			if _, ok := p[field]; !ok {
+				t.Fatalf("provider %v missing %q: %+v", p["provider_id"], field, p)
+			}
+		}
 		if d, ok := p["base_domain"].(string); ok {
 			domains[d] = true
 		}
@@ -45,6 +50,29 @@ func TestWave4ProvidersRegistryContract(t *testing.T) {
 			t.Fatalf("amazon provider missing %q: %+v", field, amazon)
 		}
 	}
+	for _, field := range []string{"has_token", "setup_instructions", "health", "last_run"} {
+		if _, ok := amazon[field]; !ok {
+			t.Fatalf("amazon provider missing %q: %+v", field, amazon)
+		}
+	}
+	health, ok := amazon["health"].(map[string]any)
+	if !ok {
+		t.Fatalf("amazon provider health must be object: %+v", amazon)
+	}
+	for _, field := range []string{"status", "last_checked_at", "message"} {
+		if _, ok := health[field]; !ok {
+			t.Fatalf("amazon provider health missing %q: %+v", field, health)
+		}
+	}
+	lastRun, ok := amazon["last_run"].(map[string]any)
+	if !ok {
+		t.Fatalf("amazon provider last_run must be object: %+v", amazon)
+	}
+	for _, field := range []string{"status", "finished_at"} {
+		if _, ok := lastRun[field]; !ok {
+			t.Fatalf("amazon provider last_run missing %q: %+v", field, lastRun)
+		}
+	}
 	for _, d := range []string{
 		"bonzaslotcars.com.au",
 		"frontlinehobbies.com.au",
@@ -53,6 +81,8 @@ func TestWave4ProvidersRegistryContract(t *testing.T) {
 		"voglers.com.au",
 		"acercmodels.com",
 		"mrtoys.com.au",
+		"hobbyco.com.au",
+		"metrohobbies.com.au",
 	} {
 		if !domains[d] {
 			t.Fatalf("registry missing AU webshop domain %q", d)

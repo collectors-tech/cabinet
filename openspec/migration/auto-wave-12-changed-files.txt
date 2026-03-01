@@ -1,0 +1,6 @@
+openspec/migration/auto-wave-12-summary.md
+openspec/migration/auto-wave-12-changed-files.txt
+openspec/traceability.md
+internal/app/app.go
+internal/app/traceability_wave4_provider_scanner_test.go
+ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts

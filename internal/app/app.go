@@ -104,6 +104,9 @@ func New(cfg config.Config) (*App, error) {
 	cloudEntitlements := newCloudEntitlementStore()
 
 	mux := http.NewServeMux()
+	if isE2EHooksEnabled(cfg) {
+		registerE2ETestHooks(mux, conn, cfg)
+	}
 	var previousClean string
 	_ = conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'clean_shutdown'`).Scan(&previousClean)
 	if previousClean == "0" {
@@ -931,8 +934,14 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		amazonMode := amazonIntegrationMode(r.Context(), conn)
+		settings := map[string]string{}
+		if active, err := profiles.GetActiveProfile(r.Context()); err == nil {
+			if profileSettings, settingsErr := profiles.GetSettings(r.Context(), strings.TrimSpace(active.ID)); settingsErr == nil {
+				settings = profileSettings
+			}
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"providers": providerRegistryPayload(amazonMode),
+			"providers": providerRegistryPayload(r.Context(), scannerSvc, amazonMode, settings),
 		})
 	})
 	mux.HandleFunc("/api/providers/amazon/run", func(w http.ResponseWriter, r *http.Request) {
@@ -3149,37 +3158,43 @@ func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
 	return "disabled"
 }
 
-func providerRegistryPayload(amazonMode string) []map[string]any {
+func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, amazonMode string, settings map[string]string) []map[string]any {
 	base := []map[string]any{
 		{
-			"provider_id": "ebay",
-			"display_name": "eBay",
-			"base_domain": "ebay.com",
+			"provider_id":      "ebay",
+			"display_name":     "eBay",
+			"base_domain":      "ebay.com",
 			"integration_mode": "official_api",
-			"auth_mode": "api_key",
+			"api_available":    true,
+			"auth_requirement": "api_key",
+			"auth_mode":        "api_key",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": false,
 				"pricing":           true,
 				"health":            true,
 			},
-			"state": "ready",
+			"state":              "ready",
+			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
 		},
 		{
-			"provider_id": "amazon",
-			"display_name": "Amazon",
-			"base_domain": "amazon.com",
-			"integration_mode": amazonMode,
-			"auth_mode": "hybrid",
+			"provider_id":          "amazon",
+			"display_name":         "Amazon",
+			"base_domain":          "amazon.com",
+			"integration_mode":     amazonMode,
+			"api_available":        amazonMode == "program_api",
+			"auth_requirement":     "oauth",
+			"auth_mode":            "hybrid",
 			"eligibility_required": true,
-			"policy_scope_note": "Program API access eligibility controls availability.",
+			"policy_scope_note":    "Program API access eligibility controls availability.",
 			"capabilities": map[string]bool{
 				"search":            amazonMode == "program_api",
 				"stock_observation": false,
 				"pricing":           amazonMode == "program_api",
 				"health":            true,
 			},
-			"state": map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"],
+			"state":              map[bool]string{true: "ready", false: "disabled"}[amazonMode == "program_api"],
+			"setup_instructions": "Configure Amazon credentials and eligibility mode before running provider scans.",
 		},
 	}
 
@@ -3191,24 +3206,104 @@ func providerRegistryPayload(amazonMode string) []map[string]any {
 		"voglers.com.au",
 		"acercmodels.com",
 		"mrtoys.com.au",
+		"hobbyco.com.au",
+		"metrohobbies.com.au",
 	}
 	for _, d := range auDomains {
 		base = append(base, map[string]any{
-			"provider_id": "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
-			"display_name": d,
-			"base_domain": d,
+			"provider_id":      "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
+			"display_name":     d,
+			"base_domain":      d,
 			"integration_mode": "web_ingestion",
-			"auth_mode": "none",
+			"api_available":    false,
+			"auth_requirement": "none",
+			"auth_mode":        "none",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": true,
 				"pricing":           true,
 				"health":            true,
 			},
-			"state": "ready",
+			"state":              "ready",
+			"setup_instructions": "Webshop ingestion uses crawl parsing and does not require API credentials.",
 		})
 	}
+
+	for _, provider := range base {
+		providerID := strings.TrimSpace(fmt.Sprintf("%v", provider["provider_id"]))
+		if providerID == "" {
+			continue
+		}
+		keys := providerSettingsKeys(providerID)
+		hasToken := strings.TrimSpace(settings[keys.TokenKey]) != ""
+		provider["has_token"] = hasToken
+
+		healthStatus := "unknown"
+		healthMessage := ""
+		lastChecked := any(nil)
+		lastRunStatus := "never"
+		lastRunFinished := any(nil)
+		if scannerSvc != nil {
+			if health, err := scannerSvc.ProviderHealth(ctx, providerID); err == nil {
+				if v := strings.TrimSpace(health["status"]); v != "" {
+					healthStatus = v
+					switch v {
+					case "ok", "ready":
+						lastRunStatus = "success"
+					case "unknown":
+						lastRunStatus = "never"
+					default:
+						lastRunStatus = "failed"
+					}
+				}
+				if v := strings.TrimSpace(health["message"]); v != "" {
+					healthMessage = v
+				}
+				if v := strings.TrimSpace(health["updated_at"]); v != "" {
+					lastChecked = v
+					lastRunFinished = v
+				}
+			}
+		}
+		provider["health"] = map[string]any{
+			"status":          healthStatus,
+			"message":         healthMessage,
+			"last_checked_at": lastChecked,
+		}
+		provider["last_run"] = map[string]any{
+			"status":      lastRunStatus,
+			"finished_at": lastRunFinished,
+		}
+	}
+
 	return base
+}
+
+type providerSettingKeySet struct {
+	BaseURLKey     string
+	TokenKey       string
+	MarketplaceKey string
+	EnabledKey     string
+}
+
+func providerSettingsKeys(providerID string) providerSettingKeySet {
+	if strings.TrimSpace(strings.ToLower(providerID)) == "ebay" {
+		return providerSettingKeySet{
+			BaseURLKey:     "ebay_base_url",
+			TokenKey:       "ebay_bearer_token",
+			MarketplaceKey: "ebay_marketplace",
+			EnabledKey:     "integration.ebay.enabled",
+		}
+	}
+	slug := strings.TrimSpace(strings.ToLower(providerID))
+	slug = strings.ReplaceAll(slug, "-", "_")
+	slug = strings.ReplaceAll(slug, ".", "_")
+	return providerSettingKeySet{
+		BaseURLKey:     "integration." + slug + ".base_url",
+		TokenKey:       "integration." + slug + ".token",
+		MarketplaceKey: "integration." + slug + ".marketplace",
+		EnabledKey:     "integration." + slug + ".enabled",
+	}
 }
 
 func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
