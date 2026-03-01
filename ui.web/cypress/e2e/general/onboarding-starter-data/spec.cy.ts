@@ -15,7 +15,7 @@ describe('ONBOARDING-STARTER-DATA', () => {
 
     cy.contains('Starter Onboarding').should('be.visible');
     cy.contains('button', 'Start Setup').should('be.visible');
-    cy.contains('button', 'Import Existing Collection').should('be.visible');
+    cy.contains('Import Existing Collection').should('be.visible');
     cy.contains('button', 'Use Sample Data').should('be.visible');
     cy.contains(/Brand|Part Number|Acquisition price/i).should('not.exist');
   });
@@ -40,5 +40,18 @@ describe('ONBOARDING-STARTER-DATA', () => {
       .and('contain', 'Folders: 3')
       .and('contain', 'Items: 6')
       .and('contain', 'Media: 0');
+  });
+
+  it('ONBOARDING-STARTER-DATA-003 routes to import flow without auto-seeding sample data', () => {
+    cy.intercept('POST', '/api/onboarding/sample-data').as('seedSample');
+
+    signIn();
+    cy.contains('Import Existing Collection').click();
+
+    cy.location('pathname', { timeout: 10000 }).should(
+      'match',
+      /^\/settings\/storage\/?$/
+    );
+    cy.get('@seedSample.all').should('have.length', 0);
   });
 });

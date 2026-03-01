@@ -1,0 +1,7 @@
+openspec/migration/auto-wave-30-summary.md
+openspec/migration/auto-wave-30-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/general/onboarding-starter-data/spec.cy.ts
+ui.web/src/features/dashboard/index.tsx
+internal/ui/static/index.html
+internal/ui/static/assets/*

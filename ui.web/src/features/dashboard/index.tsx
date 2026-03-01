@@ -232,8 +232,8 @@ export function Dashboard() {
               <Button size='sm' variant='outline'>
                 Start Setup
               </Button>
-              <Button size='sm' variant='outline'>
-                Import Existing Collection
+              <Button size='sm' variant='outline' asChild>
+                <a href='/settings/storage'>Import Existing Collection</a>
               </Button>
               <Button size='sm' onClick={() => void handleSeedSampleData()} disabled={seedLoading}>
                 {seedLoading ? 'Seeding Sample Data...' : 'Use Sample Data'}
