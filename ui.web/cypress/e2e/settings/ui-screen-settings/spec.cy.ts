@@ -47,4 +47,21 @@ describe('ui-screen-settings', () => {
         .and('have.attr', 'href', href)
     })
   })
+
+  it('UI-SCREEN-SETTINGS-003 keeps settings route active and shows actionable section error state when section data fails', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 500,
+      body: { error: 'failed_to_get_active_profile' },
+    }).as('activeProfileFailure')
+
+    cy.visit('/settings/storage')
+    cy.wait('@activeProfileFailure')
+
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.contains('h3', 'Storage').should('be.visible')
+    cy.contains('Storage information is unavailable right now.').should(
+      'be.visible'
+    )
+    cy.contains('button', 'Retry').should('be.visible')
+  })
 })
