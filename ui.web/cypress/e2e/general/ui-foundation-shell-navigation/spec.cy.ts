@@ -112,4 +112,28 @@ describe('ui-foundation-shell-navigation', () => {
         ])
     })
   })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-003 updates collection context label when folder selection changes', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    cy.get('[data-testid="collection-context-label"]').should(
+      'contain',
+      'All Items'
+    )
+    cy.get('[data-testid="collection-active-context"]').should(
+      'have.text',
+      'All Items'
+    )
+
+    cy.get('[data-testid="collection-folder-store-1"]').click()
+    cy.get('[data-testid="collection-context-label"]').should(
+      'contain',
+      'Store 1'
+    )
+    cy.get('[data-testid="collection-active-context"]').should(
+      'have.text',
+      'Store 1'
+    )
+  })
 })

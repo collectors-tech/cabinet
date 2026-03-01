@@ -1,0 +1,7 @@
+openspec/migration/auto-wave-27-summary.md
+openspec/migration/auto-wave-27-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts
+ui.web/src/features/collection/index.tsx
+internal/ui/static/index.html
+internal/ui/static/assets/*

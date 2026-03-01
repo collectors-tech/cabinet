@@ -41,6 +41,7 @@ export function Collection({
   routePath,
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [activeFolder, setActiveFolder] = useState(folderNames[0])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -94,8 +95,9 @@ export function Collection({
       items: tableData.length,
       activeBrand: 'All',
       activeCategory: 'All',
+      activeContext: activeFolder,
     }),
-    [tableData.length]
+    [activeFolder, tableData.length]
   )
 
   return (
@@ -115,6 +117,12 @@ export function Collection({
           <div className='space-y-2'>
             <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
             <p className='text-muted-foreground'>{description}</p>
+            <p
+              className='text-xs text-muted-foreground'
+              data-testid='collection-context-label'
+            >
+              Collection context: {activeFolder}
+            </p>
           </div>
           <div className='flex gap-2'>
             <Button>Add Item</Button>
@@ -134,8 +142,13 @@ export function Collection({
               {folderNames.map((folder) => (
                 <Button
                   key={folder}
+                  data-testid={`collection-folder-${folder
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, '-')}`}
                   className='w-full justify-start'
-                  variant={folder === 'All Items' ? 'default' : 'outline'}
+                  variant={folder === activeFolder ? 'default' : 'outline'}
+                  onClick={() => setActiveFolder(folder)}
                 >
                   {folder}
                 </Button>
@@ -154,6 +167,12 @@ export function Collection({
                 Active Brand: <strong>{summary.activeBrand}</strong>{' '}
                 <span className='mx-2'>
                   Active Category: <strong>{summary.activeCategory}</strong>
+                </span>
+                <span className='mx-2'>
+                  Active Context:{' '}
+                  <strong data-testid='collection-active-context'>
+                    {summary.activeContext}
+                  </strong>
                 </span>
               </p>
               {loading ? (
