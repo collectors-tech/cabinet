@@ -1,0 +1,4 @@
+openspec/migration/auto-wave-34-summary.md
+openspec/migration/auto-wave-34-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-global-search-command/spec.cy.ts

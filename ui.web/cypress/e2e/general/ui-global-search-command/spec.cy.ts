@@ -10,14 +10,7 @@ describe('ui-global-search-command', () => {
   }
 
   function openCommandPaletteWithShortcut() {
-    cy.get('body').trigger('keydown', {
-      key: 'k',
-      code: 'KeyK',
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      eventConstructor: 'KeyboardEvent',
-    })
+    cy.get('body').click(0, 0).type('{ctrl}k')
   }
 
   function openCommandPaletteFromSearchButton() {
@@ -30,7 +23,7 @@ describe('ui-global-search-command', () => {
     signInToHome()
   })
 
-  it.skip('UI-GLOBAL-SEARCH-COMMAND-001 opens command palette with Ctrl/Cmd+K and focuses input', () => {
+  it('UI-GLOBAL-SEARCH-COMMAND-001 opens command palette with Ctrl/Cmd+K and focuses input', () => {
     openCommandPaletteWithShortcut()
     cy.get(commandInputSelector).should('be.visible').and('be.focused')
   })
