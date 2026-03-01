@@ -1,0 +1,8 @@
+ui.web/cypress/e2e/general/ui-keyboard-shortcuts/spec.cy.ts
+ui.web/src/components/layout/nav-user.tsx
+ui.web/src/components/profile-dropdown.tsx
+openspec/traceability.md
+openspec/migration/auto-wave-35-summary.md
+openspec/migration/auto-wave-35-changed-files.txt
+internal/ui/static/index.html
+internal/ui/static/assets/*

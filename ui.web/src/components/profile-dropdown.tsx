@@ -33,7 +33,11 @@ export function ProfileDropdown() {
     <>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button variant='ghost' className='relative h-8 w-8 rounded-full'>
+          <Button
+            variant='ghost'
+            className='relative h-8 w-8 rounded-full'
+            data-testid='profile-dropdown-trigger'
+          >
               <Avatar className='h-8 w-8'>
                 <AvatarImage src='/avatars/01.png' alt='@shadcn' />
                 <AvatarFallback>CA</AvatarFallback>
@@ -54,20 +58,27 @@ export function ProfileDropdown() {
             <DropdownMenuItem asChild>
               <Link to='/settings'>
                 Profile
-                <DropdownMenuShortcut>{shortcuts.profile}</DropdownMenuShortcut>
+                <DropdownMenuShortcut data-testid='profile-shortcut-profile'>
+                  {shortcuts.profile}
+                </DropdownMenuShortcut>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to='/settings'>
                 Settings
-                <DropdownMenuShortcut>{shortcuts.settings}</DropdownMenuShortcut>
+                <DropdownMenuShortcut data-testid='profile-shortcut-settings'>
+                  {shortcuts.settings}
+                </DropdownMenuShortcut>
               </Link>
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant='destructive' onClick={() => setOpen(true)}>
             Sign out
-            <DropdownMenuShortcut className='text-current'>
+            <DropdownMenuShortcut
+              className='text-current'
+              data-testid='profile-shortcut-signout'
+            >
               {shortcuts.signOut}
             </DropdownMenuShortcut>
           </DropdownMenuItem>

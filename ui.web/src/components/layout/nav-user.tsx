@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -35,6 +36,14 @@ type NavUserProps = {
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
+  const shortcuts = {
+    account: isMac ? '⇧⌘P' : 'Ctrl+Shift+P',
+    notifications: isMac ? '⌘,' : 'Ctrl+,',
+    signOut: isMac ? '⇧⌘Q' : 'Ctrl+Shift+Q',
+  }
 
   return (
     <>
@@ -45,6 +54,7 @@ export function NavUser({ user }: NavUserProps) {
               <SidebarMenuButton
                 size='lg'
                 className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+                data-testid='profile-dropdown-trigger'
               >
                 <Avatar className='h-8 w-8 rounded-lg'>
                   <AvatarImage src={user.avatar} alt={user.name} />
@@ -80,12 +90,18 @@ export function NavUser({ user }: NavUserProps) {
                   <Link to='/settings/account'>
                     <BadgeCheck />
                     Account
+                    <DropdownMenuShortcut data-testid='profile-shortcut-profile'>
+                      {shortcuts.account}
+                    </DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to='/settings/notifications'>
                     <Bell />
                     Notifications
+                    <DropdownMenuShortcut data-testid='profile-shortcut-settings'>
+                      {shortcuts.notifications}
+                    </DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -96,6 +112,9 @@ export function NavUser({ user }: NavUserProps) {
               >
                 <LogOut />
                 Sign out
+                <DropdownMenuShortcut data-testid='profile-shortcut-signout'>
+                  {shortcuts.signOut}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
