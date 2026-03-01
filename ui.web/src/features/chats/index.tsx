@@ -29,6 +29,34 @@ type ChatMessage = {
   created_at: string
 }
 
+type ChatAttachment = {
+  id: string
+  profile_id: string
+  thread_id: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  path: string
+  created_at: string
+}
+
+type ChatActionPreview = {
+  id: string
+  profile_id: string
+  thread_id: string
+  action: string
+  status: string
+  created_at: string
+  applied_at?: string
+}
+
+type ChatApplyResult = {
+  applied: boolean
+  action: string
+  item_id?: string
+  preview_id: string
+}
+
 function prettyRole(role: ChatMessage['role']) {
   if (role === 'assistant') {
     return 'Assistant'
@@ -50,6 +78,12 @@ export function Chats() {
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [pendingAttachment, setPendingAttachment] = useState<File | null>(null)
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [actionPartNumber, setActionPartNumber] = useState('CHAT-001')
+  const [actionTitle, setActionTitle] = useState('Chat Created Item')
+  const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(null)
+  const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
@@ -177,6 +211,81 @@ export function Chats() {
     }
     setDraft('')
     await loadThreads(activeProfileId)
+  }
+
+  const uploadAttachment = async () => {
+    if (!activeProfileId || !selectedThreadId || !pendingAttachment) {
+      return
+    }
+    setSendError(null)
+    const form = new FormData()
+    form.set('profile_id', activeProfileId)
+    form.set('thread_id', selectedThreadId)
+    form.set('file', pendingAttachment)
+
+    const response = await fetch('/api/chat/attachments', {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) {
+      setSendError(`chat_attachment_upload_${response.status}`)
+      return
+    }
+    const attachment = (await response.json()) as ChatAttachment
+    setAttachments((current) => [attachment, ...current])
+    setPendingAttachment(null)
+  }
+
+  const previewCreateItemAction = async () => {
+    if (!activeProfileId || !selectedThreadId) {
+      return
+    }
+    setSendError(null)
+    setApplyResult(null)
+    const response = await fetch('/api/chat/actions/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        thread_id: selectedThreadId,
+        action: 'create_item_stub',
+        payload: {
+          part_number: actionPartNumber.trim(),
+          title: actionTitle.trim(),
+          brand: 'AFX',
+          category: 'General',
+        },
+      }),
+    })
+    if (!response.ok) {
+      setSendError(`chat_action_preview_${response.status}`)
+      return
+    }
+    const preview = (await response.json()) as ChatActionPreview
+    setActionPreview(preview)
+  }
+
+  const applyPreviewAction = async () => {
+    if (!activeProfileId || !selectedThreadId || !actionPreview?.id) {
+      return
+    }
+    setSendError(null)
+    const response = await fetch('/api/chat/actions/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        thread_id: selectedThreadId,
+        preview_id: actionPreview.id,
+        confirm: true,
+      }),
+    })
+    if (!response.ok) {
+      setSendError(`chat_action_apply_${response.status}`)
+      return
+    }
+    const result = (await response.json()) as ChatApplyResult
+    setApplyResult(result)
   }
 
   return (
@@ -310,6 +419,86 @@ export function Chats() {
                 <Send className='mr-1 h-4 w-4' />
                 Send
               </Button>
+            </div>
+
+            <div className='mt-4 space-y-3 rounded-md border p-3'>
+              <p className='text-sm font-medium'>Attachments</p>
+              <div className='flex items-center gap-2'>
+                <Input
+                  type='file'
+                  data-testid='chat-attachment-input'
+                  disabled={!selectedThreadId}
+                  onChange={(event) =>
+                    setPendingAttachment(event.target.files?.[0] ?? null)
+                  }
+                />
+                <Button
+                  type='button'
+                  data-testid='chat-upload-attachment-button'
+                  disabled={!selectedThreadId || !pendingAttachment}
+                  onClick={() => void uploadAttachment()}
+                >
+                  Upload
+                </Button>
+              </div>
+              <div data-testid='chat-attachment-list' className='space-y-1 text-sm'>
+                {attachments.length === 0 ? (
+                  <p className='text-muted-foreground'>No attachments uploaded.</p>
+                ) : (
+                  attachments.map((attachment) => (
+                    <p key={attachment.id}>{attachment.filename}</p>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className='mt-4 space-y-3 rounded-md border p-3'>
+              <p className='text-sm font-medium'>Action Preview</p>
+              <div className='grid gap-2 sm:grid-cols-2'>
+                <Input
+                  data-testid='chat-preview-part-number'
+                  value={actionPartNumber}
+                  onChange={(event) => setActionPartNumber(event.target.value)}
+                  placeholder='Part number'
+                  disabled={!selectedThreadId}
+                />
+                <Input
+                  data-testid='chat-preview-title'
+                  value={actionTitle}
+                  onChange={(event) => setActionTitle(event.target.value)}
+                  placeholder='Item title'
+                  disabled={!selectedThreadId}
+                />
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  data-testid='chat-preview-action-button'
+                  onClick={() => void previewCreateItemAction()}
+                  disabled={!selectedThreadId || !actionPartNumber.trim() || !actionTitle.trim()}
+                >
+                  Preview Action
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='chat-apply-action-button'
+                  onClick={() => void applyPreviewAction()}
+                  disabled={!selectedThreadId || !actionPreview?.id}
+                >
+                  Apply Action
+                </Button>
+              </div>
+              {actionPreview ? (
+                <p data-testid='chat-action-preview' className='text-sm text-muted-foreground'>
+                  Preview {actionPreview.id}: {actionPreview.status}
+                </p>
+              ) : null}
+              {applyResult ? (
+                <p data-testid='chat-action-apply-result' className='text-sm'>
+                  Applied {applyResult.action} to item {applyResult.item_id ?? 'n/a'}
+                </p>
+              ) : null}
             </div>
           </div>
         </section>
