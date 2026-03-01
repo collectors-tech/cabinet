@@ -1,0 +1,4 @@
+openspec/migration/auto-wave-23-summary.md
+openspec/migration/auto-wave-23-changed-files.txt
+openspec/traceability.md
+ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts
