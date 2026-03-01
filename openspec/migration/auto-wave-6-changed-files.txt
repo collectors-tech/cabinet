@@ -1,0 +1,8 @@
+ui.web/src/features/settings/index.tsx
+ui.web/src/features/settings/storage/index.tsx
+ui.web/src/routes/_authenticated/settings/storage.tsx
+ui.web/src/routeTree.gen.ts
+ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-6-summary.md
+openspec/migration/auto-wave-6-changed-files.txt
