@@ -1,0 +1,3 @@
+openspec/migration/auto-wave-22-summary.md
+openspec/migration/auto-wave-22-changed-files.txt
+openspec/traceability.md
