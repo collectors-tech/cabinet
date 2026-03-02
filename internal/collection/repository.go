@@ -16,6 +16,7 @@ type Item struct {
 	Category    string   `json:"category"`
 	PartNumber  string   `json:"part_number"`
 	Title       string   `json:"title"`
+	Status      string   `json:"status"`
 	Make        string   `json:"make"`
 	Model       string   `json:"model"`
 	Year        string   `json:"year"`
@@ -57,6 +58,12 @@ var allowedStatuses = map[string]struct{}{
 	"on_track": {},
 }
 
+var allowedItemLifecycleStatuses = map[string]struct{}{
+	"active":  {},
+	"deleted": {},
+	"recycle": {},
+}
+
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -79,9 +86,9 @@ func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string,
 	in.ID = uuid.NewString()
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO canonical_items (
-			id, profile_id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
+			id, profile_id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Status, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
 		return Item{}, fmt.Errorf("create item: %w", err)
 	}
 
@@ -99,6 +106,7 @@ func normalizeItemForCreate(in Item) Item {
 	}
 	in.PartNumber = strings.TrimSpace(in.PartNumber)
 	in.Title = strings.TrimSpace(in.Title)
+	in.Status = normalizeItemLifecycleStatus(in.Status)
 	in.Make = strings.TrimSpace(in.Make)
 	in.Model = strings.TrimSpace(in.Model)
 	in.Year = strings.TrimSpace(in.Year)
@@ -106,6 +114,17 @@ func normalizeItemForCreate(in Item) Item {
 	in.Series = strings.TrimSpace(in.Series)
 	in.Description = strings.TrimSpace(in.Description)
 	return in
+}
+
+func normalizeItemLifecycleStatus(raw string) string {
+	status := strings.ToLower(strings.TrimSpace(raw))
+	if status == "" {
+		return "active"
+	}
+	if _, ok := allowedItemLifecycleStatuses[status]; !ok {
+		return "active"
+	}
+	return status
 }
 
 func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (Item, error) {
@@ -125,6 +144,10 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	}
 	if v := strings.TrimSpace(changes.Title); v != "" {
 		next.Title = v
+	}
+	if v := strings.TrimSpace(changes.Status); v != "" {
+		status := normalizeItemLifecycleStatus(v)
+		next.Status = status
 	}
 	if v := strings.TrimSpace(changes.Make); v != "" {
 		next.Make = v
@@ -157,9 +180,9 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	}
 	if _, err := r.db.ExecContext(ctx, `
 		UPDATE canonical_items
-		SET brand = ?, category = ?, part_number = ?, title = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
+		SET brand = ?, category = ?, part_number = ?, title = ?, status = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), id); err != nil {
+	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Status, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), id); err != nil {
 		return Item{}, fmt.Errorf("update item: %w", err)
 	}
 	return r.GetItemByID(ctx, id)
@@ -187,10 +210,10 @@ func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 	var item Item
 	var tagsRaw string
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items WHERE id = ?
 	`, id).Scan(
-		&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Make, &item.Model, &item.Year,
+		&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Make, &item.Model, &item.Year,
 		&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -207,14 +230,14 @@ func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items ORDER BY created_at ASC
 	`)
 }
 
 func (r *Repository) ListItemsByProfile(ctx context.Context, profileID string) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items WHERE profile_id = ? ORDER BY created_at ASC
 	`, strings.TrimSpace(profileID))
 }
@@ -232,7 +255,7 @@ func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ..
 		var item Item
 		var tagsRaw string
 		if err := rows.Scan(
-			&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Make, &item.Model, &item.Year,
+			&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Make, &item.Model, &item.Year,
 			&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan item: %w", err)
@@ -246,6 +269,51 @@ func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ..
 		return nil, fmt.Errorf("iterate items: %w", err)
 	}
 	return out, nil
+}
+
+func (r *Repository) SetItemLifecycleStatus(ctx context.Context, id, status string) (Item, error) {
+	next := normalizeItemLifecycleStatus(status)
+	if _, ok := allowedItemLifecycleStatuses[next]; !ok {
+		return Item{}, fmt.Errorf("invalid lifecycle status %q", status)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET status = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, next, strings.TrimSpace(id)); err != nil {
+		return Item{}, fmt.Errorf("set item lifecycle status: %w", err)
+	}
+	return r.GetItemByID(ctx, strings.TrimSpace(id))
+}
+
+func (r *Repository) DeleteItemPermanent(ctx context.Context, id string) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM canonical_items WHERE id = ?`, strings.TrimSpace(id)); err != nil {
+		return fmt.Errorf("delete item permanently: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ListItemDependencyCounts(ctx context.Context, id string) (map[string]int, error) {
+	itemID := strings.TrimSpace(id)
+	counts := map[string]int{}
+	queries := map[string]string{
+		"barcodes":   `SELECT COUNT(1) FROM item_barcodes WHERE item_id = ?`,
+		"instances":  `SELECT COUNT(1) FROM instances WHERE item_id = ?`,
+		"photos":     `SELECT COUNT(1) FROM item_photos WHERE item_id = ?`,
+		"wishlist":   `SELECT COUNT(1) FROM wishlist_entries WHERE item_id = ?`,
+		"tracked":    `SELECT COUNT(1) FROM tracked_items WHERE item_id = ?`,
+		"price_data": `SELECT COUNT(1) FROM price_snapshots WHERE item_id = ?`,
+	}
+	for dependencyType, query := range queries {
+		var c int
+		if err := r.db.QueryRowContext(ctx, query, itemID).Scan(&c); err != nil {
+			return nil, fmt.Errorf("count %s dependencies: %w", dependencyType, err)
+		}
+		if c > 0 {
+			counts[dependencyType] = c
+		}
+	}
+	return counts, nil
 }
 
 func (r *Repository) CreateInstance(ctx context.Context, in Instance) (Instance, error) {

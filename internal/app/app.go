@@ -601,6 +601,11 @@ func New(cfg config.Config) (*App, error) {
 			if items == nil {
 				items = make([]collection.Item, 0)
 			}
+			requestedStatus := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("status")))
+			if requestedStatus == "" {
+				requestedStatus = "active"
+			}
+			items = filterItemsByLifecycleStatus(items, requestedStatus)
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 		case http.MethodPost:
 			if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
@@ -2004,6 +2009,63 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if len(parts) == 1 {
+			if r.Method == http.MethodDelete {
+				item, err := collectionRepo.GetItemByID(r.Context(), itemID)
+				if err != nil {
+					http.Error(w, `{"error":"item_not_found"}`, http.StatusNotFound)
+					return
+				}
+				switch strings.ToLower(strings.TrimSpace(item.Status)) {
+				case "", "active":
+					updated, setErr := collectionRepo.SetItemLifecycleStatus(r.Context(), itemID, "deleted")
+					if setErr != nil {
+						http.Error(w, `{"error":"failed_to_update_item_status"}`, http.StatusBadRequest)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"ok":             true,
+						"lifecycle_step": "soft_deleted",
+						"item":           updated,
+					})
+					return
+				case "deleted":
+					updated, setErr := collectionRepo.SetItemLifecycleStatus(r.Context(), itemID, "recycle")
+					if setErr != nil {
+						http.Error(w, `{"error":"failed_to_update_item_status"}`, http.StatusBadRequest)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"ok":             true,
+						"lifecycle_step": "moved_to_recycle",
+						"item":           updated,
+					})
+					return
+				case "recycle":
+					dependencies, depErr := collectionRepo.ListItemDependencyCounts(r.Context(), itemID)
+					if depErr != nil {
+						http.Error(w, `{"error":"failed_to_check_dependencies"}`, http.StatusInternalServerError)
+						return
+					}
+					if len(dependencies) > 0 {
+						w.WriteHeader(http.StatusConflict)
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"error":        "item_has_dependencies",
+							"message":      "item cannot be permanently deleted while dependencies exist",
+							"dependencies": dependencies,
+						})
+						return
+					}
+					if delErr := collectionRepo.DeleteItemPermanent(r.Context(), itemID); delErr != nil {
+						http.Error(w, `{"error":"failed_to_delete_item"}`, http.StatusInternalServerError)
+						return
+					}
+					w.WriteHeader(http.StatusNoContent)
+					return
+				default:
+					http.Error(w, `{"error":"invalid_item_status"}`, http.StatusBadRequest)
+					return
+				}
+			}
 			if r.Method != http.MethodPut {
 				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 				return
@@ -2022,6 +2084,32 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		switch parts[1] {
+		case "restore":
+			if r.Method != http.MethodPost {
+				http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			item, err := collectionRepo.GetItemByID(r.Context(), itemID)
+			if err != nil {
+				http.Error(w, `{"error":"item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			status := strings.ToLower(strings.TrimSpace(item.Status))
+			if status != "deleted" && status != "recycle" {
+				http.Error(w, `{"error":"item_not_restorable"}`, http.StatusConflict)
+				return
+			}
+			restored, err := collectionRepo.SetItemLifecycleStatus(r.Context(), itemID, "active")
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_restore_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":             true,
+				"lifecycle_step": "restored",
+				"item":           restored,
+			})
+			return
 		case "barcodes":
 			switch r.Method {
 			case http.MethodGet:
@@ -3073,6 +3161,24 @@ func writeUpdateInstallError(w http.ResponseWriter, status int, code, message st
 		"error_code": strings.TrimSpace(code),
 		"message":    strings.TrimSpace(message),
 	})
+}
+
+func filterItemsByLifecycleStatus(items []collection.Item, status string) []collection.Item {
+	target := strings.TrimSpace(strings.ToLower(status))
+	if target == "" {
+		target = "active"
+	}
+	filtered := make([]collection.Item, 0, len(items))
+	for _, item := range items {
+		current := strings.TrimSpace(strings.ToLower(item.Status))
+		if current == "" {
+			current = "active"
+		}
+		if current == target {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {

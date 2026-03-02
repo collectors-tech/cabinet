@@ -89,6 +89,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			category TEXT NOT NULL,
 			part_number TEXT NOT NULL,
 			title TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'active',
 			make TEXT NOT NULL DEFAULT '',
 			model TEXT NOT NULL DEFAULT '',
 			year TEXT NOT NULL DEFAULT '',
@@ -337,6 +338,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "canonical_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "status", "TEXT NOT NULL DEFAULT 'active'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.status: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()
