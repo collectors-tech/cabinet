@@ -9,6 +9,11 @@ describe("ui-foundation-theme-rtl-i18n", () => {
     cy.location("pathname", { timeout: 15000 }).should("eq", "/");
   }
 
+  function switchLanguage(code: "en" | "ar") {
+    cy.get('[data-testid="header-language-switch-trigger"]').click();
+    cy.get(`[data-testid="header-language-option-${code}"]`).click();
+  }
+
   it("UI-FOUNDATION-THEME-RTL-I18N-001 persists selected theme across reload", () => {
     signInToHome();
 
@@ -39,5 +44,18 @@ describe("ui-foundation-theme-rtl-i18n", () => {
       .click();
     cy.get('[data-testid="header-language-option-en"]').should("be.visible").click();
     cy.contains("button", "Dashboard").should("be.visible");
+  });
+
+  it("UI-FOUNDATION-THEME-RTL-I18N-002 keeps shell labels safe when active locale lacks specific keys", () => {
+    signInToHome();
+    switchLanguage("ar");
+    cy.contains("button", "Dashboard").should("be.visible");
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should("be.visible");
+  });
+
+  it("UI-FOUNDATION-THEME-RTL-I18N-003 mirrors layout direction when RTL locale is selected", () => {
+    signInToHome();
+    switchLanguage("ar");
+    cy.get("html").should("have.attr", "dir", "rtl");
   });
 });

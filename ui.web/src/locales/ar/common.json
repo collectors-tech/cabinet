@@ -1,0 +1,25 @@
+{
+  "app": {
+    "name": "Cabinet"
+  },
+  "actions": {
+    "refresh": "تحديث",
+    "retry": "إعادة المحاولة",
+    "open": "فتح",
+    "rows": "صفوف",
+    "cards": "بطاقات"
+  },
+  "status": {
+    "loading": "جار التحميل..."
+  },
+  "search": {
+    "placeholder": "بحث"
+  },
+  "workspace": {
+    "label": "قاعدة بيانات مساحة العمل",
+    "add": "إضافة مساحة عمل"
+  },
+  "language": {
+    "label": "اللغة"
+  }
+}

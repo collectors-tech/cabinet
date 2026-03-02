@@ -14,11 +14,15 @@ type LanguageOption = {
   label: string
 }
 
-const languages: LanguageOption[] = [{ code: 'en', label: 'EN' }]
+const languages: LanguageOption[] = [
+  { code: 'en', label: 'EN' },
+  { code: 'ar', label: 'AR' },
+]
 
 export function LanguageSwitch() {
   const { i18n, t } = useTranslation('common')
-  const current = languages.find((lang) => lang.code === i18n.language) ?? languages[0]
+  const current =
+    languages.find((lang) => i18n.language.startsWith(lang.code)) ?? languages[0]
 
   return (
     <DropdownMenu modal={false}>
