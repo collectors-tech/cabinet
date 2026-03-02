@@ -4,7 +4,10 @@ ui.web/coverage/
 ui.web/playwright-report/
 ui.web/test-results/
 ui.web/cypress/artifacts/
+bin/
+dist/
+cabinet.exe
 *.tmp
 .agentbus/
-internal/
 .logs/
+.env

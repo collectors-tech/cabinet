@@ -14,13 +14,19 @@ Desktop-first collector intelligence app.
 ## Run Locally
 1. Install Go 1.24+.
 2. Optional: copy `.env.example` to `.env` and adjust runtime URL/port.
-3. Run:
+3. Build local binary:
 
 ```powershell
-go run ./cmd/cabinet
+./scripts/build-cabinet.ps1
 ```
 
-4. Open:
+4. Run:
+
+```powershell
+./bin/cabinet.exe
+```
+
+5. Open:
 - `http://127.0.0.1:17880/`
 - `http://127.0.0.1:17880/healthz`
 - `http://127.0.0.1:17880/api/runtime`
@@ -41,7 +47,8 @@ npm run e2e:foundation
 Then run Cabinet again:
 
 ```powershell
-go run ./cmd/cabinet
+./scripts/build-cabinet.ps1
+./bin/cabinet.exe
 ```
 
 ## API Documentation
