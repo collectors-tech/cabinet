@@ -52,6 +52,16 @@ Cabinet SHALL store maximal practical analysis metadata for each analyzed asset 
 - **WHEN** user opens media card, inventory assignment, wishlist assignment, or follow-up chat
 - **THEN** runtime/UI MUST retrieve and use stored metadata without requiring re-analysis unless explicitly requested
 
+### Requirement UI-SCREEN-CHAT-COPILOT-006: Header chat trigger SHALL render as icon-only control
+Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (no inline text label in header row).
+
+#### Scenario: Header chat action visual contract
+- **GIVEN** authenticated shell header is visible on desktop
+- **WHEN** chat trigger renders
+- **THEN** trigger MUST render as icon-only control
+- **AND** visible text label next to the icon MUST NOT render in header row
+- **AND** control MUST retain accessible name via `aria-label` and/or tooltip
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.

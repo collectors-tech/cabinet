@@ -18,3 +18,11 @@ Cabinet SHALL provide explicit labels, landmark roles, and non-color-only status
 - **WHEN** user executes a core workflow by keyboard
 - **THEN** controls SHALL remain reachable and actionable
 
+### Requirement UI-FOUNDATION-ACCESSIBILITY-003: Action controls SHALL provide accessible names
+All action buttons, including icon-only controls, SHALL expose accessible names (`aria-label` or equivalent accessible text).
+
+#### Scenario: Action button accessible naming
+- **GIVEN** user-facing screen renders action controls (row actions, header actions, drawer/modal actions)
+- **WHEN** accessibility inspection runs
+- **THEN** each actionable control MUST have a non-empty accessible name and keyboard focus visibility
+

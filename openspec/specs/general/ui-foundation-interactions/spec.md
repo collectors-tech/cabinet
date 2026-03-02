@@ -35,4 +35,5 @@ Cabinet SHALL use split interaction behavior across inventory and integrations w
 - **GIVEN** row details are available for current record
 - **WHEN** user double-clicks row
 - **THEN** edit modal SHALL open with previous/next navigation over current filtered result set
+- **AND** double-click MUST NOT trigger unrelated launch/publish/delete actions or error-toasts
 

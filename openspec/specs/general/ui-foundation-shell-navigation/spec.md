@@ -33,3 +33,28 @@ Cabinet SHALL display app version and build date metadata in sidebar footer regi
 - **GIVEN** runtime metadata endpoint returns `app_version` and `build_date`
 - **WHEN** shell renders
 - **THEN** version/build metadata SHALL be visible in footer
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-005: Local Workspace area SHALL be collection-centric
+Local Workspace entry/region SHALL represent Collections domain explicitly.
+
+#### Scenario: Local Workspace shows collections list
+- **GIVEN** user opens Local Workspace area from shell/navigation context
+- **WHEN** workspace panel renders
+- **THEN** UI MUST show `Collections` heading and list available collections
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-006: Local Workspace SHALL expose Add Collection action
+Local Workspace SHALL allow creating a new collection directly from the collections list area.
+
+#### Scenario: Add new collection from Local Workspace
+- **GIVEN** user is viewing Local Workspace collections list
+- **WHEN** user clicks `Add Collection` and submits valid name/details
+- **THEN** new collection MUST be created and appear in collection list without full reload
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
+When user moves menu items up/down in nav edit mode, edit dialog list order MUST update immediately to match resulting navigation order.
+
+#### Scenario: Move menu item and verify edit list order
+- **GIVEN** navigation edit dialog is open with reorder controls
+- **WHEN** user moves an item up or down
+- **THEN** edit dialog list MUST re-render in new order immediately
+- **AND** resulting saved order MUST match what was shown in edit dialog before save

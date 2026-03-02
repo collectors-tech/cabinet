@@ -8,6 +8,7 @@ Contains collection, item/media metadata, search, and inventory-focused UI behav
 - `collection-domain` -> `openspec/specs/inventory/collection-domain/spec.md`
 - `inventory-delete-lifecycle` -> `openspec/specs/inventory/inventory-delete-lifecycle/spec.md`
 - `inventory-grading` -> `openspec/specs/inventory/inventory-grading/spec.md`
+- `folder-tree-control` -> `openspec/specs/inventory/folder-tree-control/spec.md`
 - `lookup` -> `openspec/specs/inventory/lookup/spec.md`
 - `matching` -> `openspec/specs/inventory/matching/spec.md`
 - `media-ai-assignment` -> `openspec/specs/inventory/media-ai-assignment/spec.md`
@@ -31,3 +32,4 @@ Contains collection, item/media metadata, search, and inventory-focused UI behav
 - `PHOTOS-MEDIA-*`
 - `SEARCH-*`
 - `UI-SCREEN-INVENTORY-*`
+- `UI-SCREEN-INVENTORY-FOLDER-TREE-*`
