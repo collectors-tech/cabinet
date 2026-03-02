@@ -26,6 +26,32 @@ Chat SHALL support loading, empty, error, and ready states for threads/messages.
 - **WHEN** thread/message API fails
 - **THEN** chat SHALL show actionable error state with retry
 
+### Requirement UI-SCREEN-CHAT-COPILOT-004: Chat Copilot SHALL support AI-enabled photo analysis conversations
+When AI is enabled, chat SHALL support photo-driven analysis prompts and return structured suggestions linked to media assets.
+
+#### Scenario: Analyze attached photo in chat
+- **GIVEN** AI is enabled for active profile and user attaches one or more media assets in chat
+- **WHEN** user asks assistant to analyze the photos
+- **THEN** runtime MUST return analysis output with confidence and suggested actions/assignments, and preserve linkage to referenced `asset_id` values
+
+#### Scenario: AI disabled guard for photo analysis
+- **GIVEN** AI is disabled for active profile
+- **WHEN** user requests photo analysis in chat
+- **THEN** UI MUST return deterministic disabled-state guidance and SHALL NOT run provider inference
+
+### Requirement UI-SCREEN-CHAT-COPILOT-005: Photo analysis in Cabinet SHALL persist rich metadata for cataloging and assignment
+Cabinet SHALL store maximal practical analysis metadata for each analyzed asset to support search, dedupe, assignment, and audit workflows.
+
+#### Scenario: Persist rich metadata after photo analysis
+- **GIVEN** chat photo analysis completes for an asset
+- **WHEN** metadata is persisted
+- **THEN** record MUST include at minimum `asset_id`, `thread_id`, `provider`, `model`, `prompt_template_id`, `analysis_version`, `confidence`, `title`, `description`, `tags[]`, `brand`, `model_name`, `part_number`, `year`, `condition_hint`, `detected_text`, `ocr_text`, `possible_duplicates[]`, `suggested_inventory_links[]`, `suggested_wishlist_links[]`, `timestamp`, and raw/normalized payload references
+
+#### Scenario: Reuse rich metadata in subsequent workflows
+- **GIVEN** rich metadata exists for asset
+- **WHEN** user opens media card, inventory assignment, wishlist assignment, or follow-up chat
+- **THEN** runtime/UI MUST retrieve and use stored metadata without requiring re-analysis unless explicitly requested
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
