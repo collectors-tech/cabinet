@@ -1,0 +1,6 @@
+M internal/app/app.go
+M internal/app/logging_recovery_api_test.go
+M internal/config/config.go
+M internal/config/config_test.go
+M openspec/traceability.md
+?? openspec/migration/auto-wave-41-summary.md

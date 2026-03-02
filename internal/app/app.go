@@ -60,6 +60,9 @@ type App struct {
 }
 
 func New(cfg config.Config) (*App, error) {
+	if strings.TrimSpace(cfg.ValidationError) != "" {
+		return nil, fmt.Errorf("invalid runtime config: %s", strings.TrimSpace(cfg.ValidationError))
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -183,12 +186,22 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/runtime", func(w http.ResponseWriter, _ *http.Request) {
 		appVersion, buildDate := runtimeBuildMetadata()
+		host := strings.TrimSpace(cfg.Host)
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		port := cfg.Port
+		if port <= 0 {
+			port = 17880
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"update_channel":               cfg.UpdateChannel,
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 			"app_version":                  appVersion,
 			"build_date":                   buildDate,
+			"runtime_host":                 host,
+			"runtime_port":                 port,
 		})
 	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {

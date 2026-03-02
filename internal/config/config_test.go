@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,4 +59,44 @@ func TestLoadFromDotEnvWhenProcessEnvUnset(t *testing.T) {
 	if cfg.WebAuthnOrigin != "http://127.0.0.1:19090" {
 		t.Fatalf("expected WebAuthn origin from .env, got %q", cfg.WebAuthnOrigin)
 	}
+}
+
+func TestLoadHostAndPortFromEnvironment(t *testing.T) {
+	t.Setenv("CABINET_ADDR", "")
+	t.Setenv("CABINET_HOST", "0.0.0.0")
+	t.Setenv("CABINET_PORT", "18888")
+
+	cfg := Load()
+	if cfg.Addr != "0.0.0.0:18888" {
+		t.Fatalf("expected address from CABINET_HOST/CABINET_PORT, got %q", cfg.Addr)
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("expected host from CABINET_HOST, got %q", cfg.Host)
+	}
+	if cfg.Port != 18888 {
+		t.Fatalf("expected port 18888 from CABINET_PORT, got %d", cfg.Port)
+	}
+}
+
+func TestLoadInvalidPortReturnsValidationError(t *testing.T) {
+	t.Setenv("CABINET_ADDR", "")
+	t.Setenv("CABINET_HOST", "127.0.0.1")
+	t.Setenv("CABINET_PORT", "abc")
+
+	cfg := Load()
+	if cfg.ValidationError == "" {
+		t.Fatalf("expected validation error for invalid CABINET_PORT")
+	}
+	if got := cfg.ValidationError; got == "" || !containsAll(got, []string{"CABINET_PORT", "invalid"}) {
+		t.Fatalf("expected CABINET_PORT validation error, got %q", got)
+	}
+}
+
+func containsAll(in string, parts []string) bool {
+	for _, part := range parts {
+		if !strings.Contains(strings.ToLower(in), strings.ToLower(part)) {
+			return false
+		}
+	}
+	return true
 }

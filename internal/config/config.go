@@ -2,6 +2,8 @@ package config
 
 import (
 	"bufio"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +15,8 @@ import (
 
 type Config struct {
 	Addr            string
+	Host            string
+	Port            int
 	DataDir         string
 	DBPath          string
 	EnableE2EHooks  bool
@@ -22,12 +26,13 @@ type Config struct {
 	WebAuthnOrigin  string
 	WebAuthnName    string
 	BackupInterval  int
+	ValidationError string
 }
 
 func Load() Config {
 	loadDotEnv(".env")
 
-	addr := valueOrDefault("CABINET_ADDR", "127.0.0.1:17880")
+	host, port, addr, validationErr := resolveRuntimeAddress()
 	dataDir := valueOrDefault("CABINET_DATA_DIR", defaultDataDir())
 	dbPath := valueOrDefault("CABINET_DB_PATH", filepath.Join(dataDir, "cabinet.db"))
 	updateChannel := update.ParseChannel(valueOrDefault("CABINET_UPDATE_CHANNEL", "stable"))
@@ -42,6 +47,8 @@ func Load() Config {
 	}
 	return Config{
 		Addr:            addr,
+		Host:            host,
+		Port:            port,
 		DataDir:         dataDir,
 		DBPath:          dbPath,
 		EnableE2EHooks:  enableE2EHooks,
@@ -51,7 +58,52 @@ func Load() Config {
 		WebAuthnOrigin:  waOrigin,
 		WebAuthnName:    waName,
 		BackupInterval:  backupInterval,
+		ValidationError: validationErr,
 	}
+}
+
+func resolveRuntimeAddress() (string, int, string, string) {
+	const (
+		defaultHost = "127.0.0.1"
+		defaultPort = 17880
+	)
+
+	hostRaw := strings.TrimSpace(os.Getenv("CABINET_HOST"))
+	portRaw := strings.TrimSpace(os.Getenv("CABINET_PORT"))
+	addrRaw := strings.TrimSpace(os.Getenv("CABINET_ADDR"))
+
+	if hostRaw != "" || portRaw != "" {
+		host := hostRaw
+		if host == "" {
+			host = defaultHost
+		}
+		port := defaultPort
+		if portRaw != "" {
+			parsedPort, err := strconv.Atoi(portRaw)
+			if err != nil || parsedPort < 1 || parsedPort > 65535 {
+				return host, defaultPort, net.JoinHostPort(host, strconv.Itoa(defaultPort)), fmt.Sprintf("invalid CABINET_PORT: %q (expected integer between 1 and 65535)", portRaw)
+			}
+			port = parsedPort
+		}
+		return host, port, net.JoinHostPort(host, strconv.Itoa(port)), ""
+	}
+
+	if addrRaw == "" {
+		return defaultHost, defaultPort, net.JoinHostPort(defaultHost, strconv.Itoa(defaultPort)), ""
+	}
+
+	host, portString, err := net.SplitHostPort(addrRaw)
+	if err != nil {
+		return defaultHost, defaultPort, net.JoinHostPort(defaultHost, strconv.Itoa(defaultPort)), fmt.Sprintf("invalid CABINET_ADDR: %q (expected host:port)", addrRaw)
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(portString))
+	if err != nil || port < 1 || port > 65535 {
+		return host, defaultPort, net.JoinHostPort(host, strconv.Itoa(defaultPort)), fmt.Sprintf("invalid CABINET_ADDR port in %q", addrRaw)
+	}
+	if strings.TrimSpace(host) == "" {
+		host = defaultHost
+	}
+	return host, port, addrRaw, ""
 }
 
 func loadDotEnv(path string) {

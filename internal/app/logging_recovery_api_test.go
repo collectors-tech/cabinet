@@ -85,4 +85,10 @@ func TestRuntimeEndpointIncludesBuildMetadata(t *testing.T) {
 	if !strings.Contains(resp.Body.String(), `"build_date"`) {
 		t.Fatalf("expected build_date in runtime payload, got %s", resp.Body.String())
 	}
+	if !strings.Contains(resp.Body.String(), `"runtime_host"`) {
+		t.Fatalf("expected runtime_host in runtime payload, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"runtime_port"`) {
+		t.Fatalf("expected runtime_port in runtime payload, got %s", resp.Body.String())
+	}
 }
