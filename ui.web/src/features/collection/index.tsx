@@ -14,6 +14,12 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
@@ -35,6 +41,24 @@ const folderNames = [
   'Warehouse 1',
 ]
 
+const inventoryPhotos = [
+  {
+    id: 'inventory-photo-1',
+    title: 'AFX Camaro Wildfire',
+    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%23152a4a"/><stop offset="1" stop-color="%23305d8a"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">AFX Camaro Wildfire</text></svg>',
+  },
+  {
+    id: 'inventory-photo-2',
+    title: 'Mega-G Plus Porsche 962',
+    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%23212b44"/><stop offset="1" stop-color="%234f46e5"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">Mega-G Plus Porsche 962</text></svg>',
+  },
+  {
+    id: 'inventory-photo-3',
+    title: 'Ford GT40 Gulf Livery',
+    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%230f172a"/><stop offset="1" stop-color="%230ea5e9"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">Ford GT40 Gulf Livery</text></svg>',
+  },
+]
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -44,6 +68,9 @@ export function Collection({
   const [activeFolder, setActiveFolder] = useState(folderNames[0])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
+    null
+  )
 
   const loadInventoryItems = useCallback(async () => {
     if (routePath !== '/_authenticated/inventory/') {
@@ -99,6 +126,9 @@ export function Collection({
     }),
     [activeFolder, tableData.length]
   )
+  const selectedPhoto =
+    selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
+  const isInventoryRoute = routePath === '/_authenticated/inventory/'
 
   return (
     <TasksProvider>
@@ -198,9 +228,104 @@ export function Collection({
                 </div>
               ) : null}
               <TasksTable data={tableData} routePath={routePath} />
+              {isInventoryRoute ? (
+                <section
+                  className='space-y-3 rounded-md border p-4'
+                  data-testid='inventory-photos-section'
+                >
+                  <div>
+                    <h3 className='text-base font-semibold'>Photos</h3>
+                    <p className='text-sm text-muted-foreground'>
+                      Review item media and inspect photos in fullscreen mode.
+                    </p>
+                  </div>
+                  <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
+                    {inventoryPhotos.map((photo, index) => (
+                      <button
+                        key={photo.id}
+                        type='button'
+                        className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
+                        data-testid='inventory-photo-thumb'
+                        onClick={() => setSelectedPhotoIndex(index)}
+                      >
+                        <img
+                          src={photo.src}
+                          alt={photo.title}
+                          className='h-32 w-full object-cover'
+                        />
+                        <div className='p-2 text-sm'>{photo.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
             </CardContent>
           </Card>
         </div>
+        <Dialog
+          open={selectedPhotoIndex !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedPhotoIndex(null)
+            }
+          }}
+        >
+          <DialogContent
+            className='max-w-4xl'
+            data-testid='inventory-photo-fullscreen'
+          >
+            <DialogHeader>
+              <DialogTitle>{selectedPhoto?.title ?? 'Photo Viewer'}</DialogTitle>
+            </DialogHeader>
+            {selectedPhoto ? (
+              <img
+                src={selectedPhoto.src}
+                alt={selectedPhoto.title}
+                className='max-h-[70vh] w-full rounded-md object-contain'
+              />
+            ) : null}
+            <div className='flex justify-end gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='inventory-photo-prev'
+                onClick={() => {
+                  if (selectedPhotoIndex === null) {
+                    return
+                  }
+                  const nextIndex =
+                    (selectedPhotoIndex - 1 + inventoryPhotos.length) %
+                    inventoryPhotos.length
+                  setSelectedPhotoIndex(nextIndex)
+                }}
+              >
+                Previous
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='inventory-photo-next'
+                onClick={() => {
+                  if (selectedPhotoIndex === null) {
+                    return
+                  }
+                  const nextIndex =
+                    (selectedPhotoIndex + 1) % inventoryPhotos.length
+                  setSelectedPhotoIndex(nextIndex)
+                }}
+              >
+                Next
+              </Button>
+              <Button
+                type='button'
+                data-testid='inventory-photo-fullscreen-close'
+                onClick={() => setSelectedPhotoIndex(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </Main>
       <TasksDialogs />
     </TasksProvider>

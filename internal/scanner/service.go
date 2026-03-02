@@ -16,6 +16,7 @@ type QuerySet struct {
 	Name          string   `json:"name"`
 	Keywords      []string `json:"keywords"`
 	Exclusions    []string `json:"exclusions"`
+	ProviderScope []string `json:"provider_scope"`
 	MaxPrice      float64  `json:"max_price"`
 	Region        string   `json:"region"`
 	Condition     string   `json:"condition"`
@@ -83,6 +84,10 @@ func (s *Service) CreateQuerySetForProfile(ctx context.Context, profileID string
 	if strings.TrimSpace(in.Name) == "" || len(in.Keywords) == 0 {
 		return QuerySet{}, fmt.Errorf("name and keywords are required")
 	}
+	if len(in.ProviderScope) == 0 {
+		in.ProviderScope = defaultProviderScope(in.Region)
+	}
+	in.ProviderScope = normalizeProviderScope(in.ProviderScope)
 	in.ID = uuid.NewString()
 	if in.RateLimitRPS <= 0 {
 		in.RateLimitRPS = 2
@@ -92,14 +97,15 @@ func (s *Service) CreateQuerySetForProfile(ctx context.Context, profileID string
 	}
 	k, _ := json.Marshal(in.Keywords)
 	e, _ := json.Marshal(in.Exclusions)
+	p, _ := json.Marshal(in.ProviderScope)
 	enabled := 0
 	if in.Enabled {
 		enabled = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.Name, string(k), string(e), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Name, string(k), string(e), string(p), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
 	if err != nil {
 		return QuerySet{}, fmt.Errorf("insert query set: %w", err)
 	}
@@ -121,6 +127,10 @@ func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id st
 	if strings.TrimSpace(in.Name) == "" || len(in.Keywords) == 0 {
 		return QuerySet{}, fmt.Errorf("name and keywords are required")
 	}
+	if len(in.ProviderScope) == 0 {
+		in.ProviderScope = defaultProviderScope(in.Region)
+	}
+	in.ProviderScope = normalizeProviderScope(in.ProviderScope)
 	if in.RateLimitRPS <= 0 {
 		in.RateLimitRPS = 2
 	}
@@ -129,15 +139,16 @@ func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id st
 	}
 	k, _ := json.Marshal(in.Keywords)
 	e, _ := json.Marshal(in.Exclusions)
+	p, _ := json.Marshal(in.ProviderScope)
 	enabled := 0
 	if in.Enabled {
 		enabled = 1
 	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE scanner_query_sets
-		SET name = ?, keywords_json = ?, exclusions_json = ?, max_price = ?, region = ?, condition_filter = ?, schedule_cron = ?, enabled = ?, rate_limit_rps = ?, max_retry_count = ?, updated_at = CURRENT_TIMESTAMP
+		SET name = ?, keywords_json = ?, exclusions_json = ?, provider_scope_json = ?, max_price = ?, region = ?, condition_filter = ?, schedule_cron = ?, enabled = ?, rate_limit_rps = ?, max_retry_count = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.Name, string(k), string(e), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	`, in.Name, string(k), string(e), string(p), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return QuerySet{}, fmt.Errorf("update query set: %w", err)
 	}
@@ -172,12 +183,12 @@ func (s *Service) DeleteQuerySetForProfile(ctx context.Context, profileID, id st
 
 func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id string) (QuerySet, error) {
 	var q QuerySet
-	var keywordsJSON, exclusionsJSON string
+	var keywordsJSON, exclusionsJSON, providerScopeJSON string
 	var enabled int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at
+		SELECT id, name, keywords_json, exclusions_json, provider_scope_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at
 		FROM scanner_query_sets WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &providerScopeJSON, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return QuerySet{}, fmt.Errorf("query set not found")
@@ -186,8 +197,49 @@ func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id strin
 	}
 	_ = json.Unmarshal([]byte(keywordsJSON), &q.Keywords)
 	_ = json.Unmarshal([]byte(exclusionsJSON), &q.Exclusions)
+	_ = json.Unmarshal([]byte(providerScopeJSON), &q.ProviderScope)
+	if len(q.ProviderScope) == 0 {
+		q.ProviderScope = defaultProviderScope(q.Region)
+	}
+	q.ProviderScope = normalizeProviderScope(q.ProviderScope)
 	q.Enabled = enabled == 1
 	return q, nil
+}
+
+func defaultProviderScope(region string) []string {
+	base := []string{"ebay", "amazon"}
+	if strings.EqualFold(strings.TrimSpace(region), "AU") {
+		return append(base,
+			"bonzaslotcars",
+			"frontlinehobbies",
+			"hobbytechtoys",
+			"andrewshobbies",
+			"voglers",
+			"acercmodels",
+			"mrtoys",
+		)
+	}
+	return base
+}
+
+func normalizeProviderScope(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		normalized := strings.TrimSpace(strings.ToLower(raw))
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return []string{"ebay", "amazon"}
+	}
+	return out
 }
 
 func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
