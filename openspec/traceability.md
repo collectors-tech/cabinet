@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | `AI-ASSIST-001` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AI-ASSIST-002` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
-| `AI-ASSIST-003` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); planned: TODO runtime mutation apply endpoint with deterministic `409 AI_CONFIRM_REQUIRED` contract not yet implemented | partial |
+| `AI-ASSIST-003` | `openspec/specs/chats/ai-assist/spec.md` | `internal/app/ai_api_test.go` (`TestAIAssistApplyRequiresExplicitConfirmation`) | implemented |
 | `AI-ASSIST-004` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AUTH-001` | `openspec/specs/general/auth/spec.md` | `openspec/specs/general/auth/spec.md` | TestWave1AuthRequirementsReflectCredentialState (internal/app/traceability_wave1_auth_security_test.go) | implemented |
 | `AUTH-002` | `openspec/specs/general/auth/spec.md` | `openspec/specs/general/auth/spec.md` | TestProtectedWriteBlockedWhenRegisteredProfileIsLocked (internal/app/auth_lock_runtime_api_test.go), TestProtectedWriteAllowedWhenRegisteredProfileHasUnlockedSession (internal/app/auth_lock_runtime_api_test.go) | implemented |

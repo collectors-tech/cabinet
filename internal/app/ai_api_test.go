@@ -83,3 +83,40 @@ func TestAIAssistEndpoints(t *testing.T) {
 		t.Fatalf("ai suggest status=%d body=%s", aiSuggest.Code, aiSuggest.Body.String())
 	}
 }
+
+func TestAIAssistApplyRequiresExplicitConfirmation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	withoutConfirm := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/ai/suggestions/apply",
+		strings.NewReader(`{"profile_id":"p1","suggestion_id":"sug_123","draft_id":"draft_42"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if withoutConfirm.Code != http.StatusConflict {
+		t.Fatalf("expected 409 without confirm token, got %d body=%s", withoutConfirm.Code, withoutConfirm.Body.String())
+	}
+	var blocked map[string]any
+	if err := json.Unmarshal(withoutConfirm.Body.Bytes(), &blocked); err != nil {
+		t.Fatalf("decode blocked payload: %v", err)
+	}
+	if blocked["error_code"] != "AI_CONFIRM_REQUIRED" {
+		t.Fatalf("expected AI_CONFIRM_REQUIRED, got %v", blocked["error_code"])
+	}
+
+	withConfirm := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/ai/suggestions/apply",
+		strings.NewReader(`{"profile_id":"p1","suggestion_id":"sug_123","draft_id":"draft_42","confirm_token":"confirm_abc"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if withConfirm.Code != http.StatusOK {
+		t.Fatalf("expected 200 with confirm token, got %d body=%s", withConfirm.Code, withConfirm.Body.String())
+	}
+}

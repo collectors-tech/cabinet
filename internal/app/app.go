@@ -1769,6 +1769,44 @@ func New(cfg config.Config) (*App, error) {
 		logSvc.Log(r.Context(), "info", "ai_suggest_photo_ok", map[string]any{"profile_id": req.ProfileID, "confidence": suggestion.Confidence})
 		_ = json.NewEncoder(w).Encode(suggestion)
 	})
+	mux.HandleFunc("/api/ai/suggestions/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID    string `json:"profile_id"`
+			SuggestionID string `json:"suggestion_id"`
+			DraftID      string `json:"draft_id"`
+			ConfirmToken string `json:"confirm_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" || strings.TrimSpace(req.SuggestionID) == "" || strings.TrimSpace(req.DraftID) == "" {
+			http.Error(w, `{"error":"invalid_apply_request"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ConfirmToken) == "" {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":         "ai_confirm_required",
+				"error_code":    "AI_CONFIRM_REQUIRED",
+				"suggestion_id": strings.TrimSpace(req.SuggestionID),
+				"draft_id":      strings.TrimSpace(req.DraftID),
+				"next_action":   "confirm_before_apply",
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":            true,
+			"applied":       true,
+			"suggestion_id": strings.TrimSpace(req.SuggestionID),
+			"draft_id":      strings.TrimSpace(req.DraftID),
+		})
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
