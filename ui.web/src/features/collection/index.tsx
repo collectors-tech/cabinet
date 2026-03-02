@@ -32,6 +32,12 @@ type CollectionWorkspaceProps = {
   routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 }
 
+type InventoryPhoto = {
+  id: string
+  filename: string
+  is_primary?: boolean
+}
+
 const folderNames = [
   'All Items',
   'Watch List',
@@ -39,24 +45,6 @@ const folderNames = [
   'Store 1',
   'Store 2',
   'Warehouse 1',
-]
-
-const inventoryPhotos = [
-  {
-    id: 'inventory-photo-1',
-    title: 'AFX Camaro Wildfire',
-    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%23152a4a"/><stop offset="1" stop-color="%23305d8a"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">AFX Camaro Wildfire</text></svg>',
-  },
-  {
-    id: 'inventory-photo-2',
-    title: 'Mega-G Plus Porsche 962',
-    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%23212b44"/><stop offset="1" stop-color="%234f46e5"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">Mega-G Plus Porsche 962</text></svg>',
-  },
-  {
-    id: 'inventory-photo-3',
-    title: 'Ford GT40 Gulf Livery',
-    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="%230f172a"/><stop offset="1" stop-color="%230ea5e9"/></linearGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/><text x="50%" y="50%" fill="%23f8fafc" font-size="52" text-anchor="middle" font-family="Arial">Ford GT40 Gulf Livery</text></svg>',
-  },
 ]
 
 export function Collection({
@@ -68,6 +56,10 @@ export function Collection({
   const [activeFolder, setActiveFolder] = useState(folderNames[0])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  const [photosError, setPhotosError] = useState<string | null>(null)
+  const [photosBusy, setPhotosBusy] = useState(false)
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
@@ -126,9 +118,154 @@ export function Collection({
     }),
     [activeFolder, tableData.length]
   )
+  const isInventoryRoute = routePath === '/_authenticated/inventory/'
+  const selectedItemID = isInventoryRoute ? tableData[0]?.id?.trim() ?? '' : ''
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
-  const isInventoryRoute = routePath === '/_authenticated/inventory/'
+
+  const loadInventoryPhotos = useCallback(async () => {
+    if (!isInventoryRoute) {
+      setInventoryPhotos([])
+      setPhotosError(null)
+      setPhotosLoading(false)
+      return
+    }
+    if (!selectedItemID) {
+      setInventoryPhotos([])
+      setPhotosError(null)
+      setPhotosLoading(false)
+      return
+    }
+    setPhotosLoading(true)
+    setPhotosError(null)
+    try {
+      const response = await fetch(
+        `/api/items/${encodeURIComponent(selectedItemID)}/photos`
+      )
+      if (!response.ok) {
+        throw new Error(`list_photos_${response.status}`)
+      }
+      const payload = (await response.json()) as {
+        photos?: Array<{
+          id?: string
+          filename?: string
+          is_primary?: boolean
+        }>
+      }
+      const mapped = (payload.photos ?? []).map((photo) => ({
+        id: photo.id?.trim() ?? '',
+        filename: photo.filename?.trim() || 'photo.jpg',
+        is_primary: photo.is_primary ?? false,
+      }))
+      setInventoryPhotos(mapped.filter((photo) => photo.id !== ''))
+    } catch {
+      setInventoryPhotos([])
+      setPhotosError('Photos could not be loaded for this item. Retry to continue.')
+    } finally {
+      setPhotosLoading(false)
+    }
+  }, [isInventoryRoute, selectedItemID])
+
+  useEffect(() => {
+    void loadInventoryPhotos()
+  }, [loadInventoryPhotos])
+
+  useEffect(() => {
+    if (
+      selectedPhotoIndex !== null &&
+      (selectedPhotoIndex < 0 || selectedPhotoIndex >= inventoryPhotos.length)
+    ) {
+      setSelectedPhotoIndex(null)
+    }
+  }, [inventoryPhotos.length, selectedPhotoIndex])
+
+  const handlePhotoUpload = useCallback(
+    async (file: File | null) => {
+      if (!file || !selectedItemID) {
+        return
+      }
+      setPhotosBusy(true)
+      setPhotosError(null)
+      try {
+        const body = new FormData()
+        body.append('file', file)
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(selectedItemID)}/photos`,
+          {
+            method: 'POST',
+            body,
+          }
+        )
+        if (!response.ok) {
+          throw new Error(`upload_photo_${response.status}`)
+        }
+        await loadInventoryPhotos()
+      } catch {
+        setPhotosError('Photo upload failed. Retry with a supported image file.')
+      } finally {
+        setPhotosBusy(false)
+      }
+    },
+    [loadInventoryPhotos, selectedItemID]
+  )
+
+  const handleSetPrimaryPhoto = useCallback(
+    async (photoID: string) => {
+      if (!selectedItemID || !photoID) {
+        return
+      }
+      setPhotosBusy(true)
+      setPhotosError(null)
+      try {
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(
+            selectedItemID
+          )}/photos/${encodeURIComponent(photoID)}/primary`,
+          {
+            method: 'PUT',
+          }
+        )
+        if (!response.ok) {
+          throw new Error(`set_primary_${response.status}`)
+        }
+        await loadInventoryPhotos()
+      } catch {
+        setPhotosError('Unable to set primary photo right now. Retry this action.')
+      } finally {
+        setPhotosBusy(false)
+      }
+    },
+    [loadInventoryPhotos, selectedItemID]
+  )
+
+  const handleDeletePhoto = useCallback(
+    async (photoID: string) => {
+      if (!selectedItemID || !photoID) {
+        return
+      }
+      setPhotosBusy(true)
+      setPhotosError(null)
+      try {
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(
+            selectedItemID
+          )}/photos/${encodeURIComponent(photoID)}`,
+          {
+            method: 'DELETE',
+          }
+        )
+        if (!response.ok) {
+          throw new Error(`delete_photo_${response.status}`)
+        }
+        await loadInventoryPhotos()
+      } catch {
+        setPhotosError('Unable to delete this photo. Retry this action.')
+      } finally {
+        setPhotosBusy(false)
+      }
+    },
+    [loadInventoryPhotos, selectedItemID]
+  )
 
   return (
     <TasksProvider>
@@ -239,31 +376,124 @@ export function Collection({
                       Review item media and inspect photos in fullscreen mode.
                     </p>
                   </div>
-                  <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
-                    {inventoryPhotos.map((photo, index) => (
-                      <button
-                        key={photo.id}
-                        type='button'
-                        className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
-                        data-testid='inventory-photo-thumb'
-                        onClick={() => setSelectedPhotoIndex(index)}
-                      >
-                        <img
-                          src={photo.src}
-                          alt={photo.title}
-                          className='h-32 w-full object-cover'
-                        />
-                        <div className='p-2 text-sm'>{photo.title}</div>
-                      </button>
-                    ))}
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <input
+                      type='file'
+                      accept='image/*'
+                      data-testid='inventory-photo-upload-input'
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        void handlePhotoUpload(file)
+                        event.currentTarget.value = ''
+                      }}
+                    />
+                    {photosBusy ? (
+                      <span className='text-xs text-muted-foreground'>Working...</span>
+                    ) : null}
                   </div>
+                  {photosLoading ? (
+                    <div
+                      className='rounded-md border p-3 text-sm text-muted-foreground'
+                      data-testid='inventory-photos-loading'
+                    >
+                      Loading photos...
+                    </div>
+                  ) : null}
+                  {photosError ? (
+                    <div
+                      className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                      data-testid='inventory-photos-error'
+                    >
+                      <p className='font-medium'>Photos are unavailable.</p>
+                      <p className='mt-1 text-muted-foreground'>{photosError}</p>
+                      <Button
+                        className='mt-3'
+                        size='sm'
+                        variant='outline'
+                        onClick={() => void loadInventoryPhotos()}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : null}
+                  {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
+                    <div
+                      className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                      data-testid='inventory-photos-empty'
+                    >
+                      No photos yet for the selected item. Upload an image to begin.
+                    </div>
+                  ) : null}
+                  {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
+                    <>
+                      <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
+                        {inventoryPhotos.map((photo, index) => (
+                          <button
+                            key={photo.id}
+                            type='button'
+                            className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
+                            data-testid='inventory-photo-thumb'
+                            onClick={() => setSelectedPhotoIndex(index)}
+                          >
+                            <img
+                              src={`/api/items/${encodeURIComponent(
+                                selectedItemID
+                              )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
+                              alt={photo.filename}
+                              className='h-32 w-full object-cover'
+                            />
+                            <div className='p-2 text-sm'>{photo.filename}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className='space-y-2'>
+                        {inventoryPhotos.map((photo) => (
+                          <div
+                            key={`row-${photo.id}`}
+                            className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
+                            data-testid='inventory-photo-row'
+                          >
+                            <div className='flex items-center gap-2 text-sm'>
+                              <span>{photo.filename}</span>
+                              {photo.is_primary ? (
+                                <span
+                                  className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
+                                  data-testid='inventory-photo-primary-badge'
+                                >
+                                  Primary
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className='flex gap-2'>
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                data-testid='inventory-photo-set-primary'
+                                onClick={() => void handleSetPrimaryPhoto(photo.id)}
+                              >
+                                Set Primary
+                              </Button>
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                data-testid='inventory-photo-delete'
+                                onClick={() => void handleDeletePhoto(photo.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
                 </section>
               ) : null}
             </CardContent>
           </Card>
         </div>
         <Dialog
-          open={selectedPhotoIndex !== null}
+          open={selectedPhotoIndex !== null && inventoryPhotos.length > 0}
           onOpenChange={(open) => {
             if (!open) {
               setSelectedPhotoIndex(null)
@@ -275,12 +505,14 @@ export function Collection({
             data-testid='inventory-photo-fullscreen'
           >
             <DialogHeader>
-              <DialogTitle>{selectedPhoto?.title ?? 'Photo Viewer'}</DialogTitle>
+              <DialogTitle>{selectedPhoto?.filename ?? 'Photo Viewer'}</DialogTitle>
             </DialogHeader>
             {selectedPhoto ? (
               <img
-                src={selectedPhoto.src}
-                alt={selectedPhoto.title}
+                src={`/api/items/${encodeURIComponent(
+                  selectedItemID
+                )}/photos/${encodeURIComponent(selectedPhoto.id)}/file?variant=original`}
+                alt={selectedPhoto.filename}
                 className='max-h-[70vh] w-full rounded-md object-contain'
               />
             ) : null}
