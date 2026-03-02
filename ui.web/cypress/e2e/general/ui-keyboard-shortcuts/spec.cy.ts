@@ -9,6 +9,25 @@ describe("ui-keyboard-shortcuts", () => {
     cy.location("pathname", { timeout: 15000 }).should("eq", "/");
   }
 
+  function signInToHomeWithShortcutOverrides(
+    overrides: Record<string, string>
+  ) {
+    cy.clearCookies();
+    cy.clearLocalStorage();
+    cy.visit("/sign-in?redirect=%2F", {
+      onBeforeLoad(win) {
+        win.localStorage.setItem(
+          "cabinet.shortcuts.overrides",
+          JSON.stringify(overrides)
+        );
+      },
+    });
+    cy.get('input[name="email"]').clear().type("e2e-shortcuts@example.com");
+    cy.get('input[name="password"]').clear().type("password123");
+    cy.contains("button", "Sign in").click();
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+  }
+
   it("UI-KEYBOARD-SHORTCUTS-001 renders platform-aware shortcut labels in profile menu", () => {
     signInToHome();
 
@@ -45,5 +64,19 @@ describe("ui-keyboard-shortcuts", () => {
     cy.get('[data-slot="sidebar"]').first().should("have.attr", "data-state", "collapsed");
     cy.get("body").click(0, 0).type("{ctrl}b");
     cy.get('[data-slot="sidebar"]').first().should("have.attr", "data-state", "expanded");
+  });
+
+  it("UI-KEYBOARD-SHORTCUTS-003 rejects duplicate/reserved shortcut registrations and applies fallback policy", () => {
+    signInToHomeWithShortcutOverrides({
+      "command-palette": "k",
+      "sidebar-toggle": "k",
+    });
+
+    cy.get('[data-slot="sidebar"]').first().should("have.attr", "data-state", "expanded");
+    cy.get("body").click(0, 0).type("{ctrl}b");
+    cy.get('[data-slot="sidebar"]').first().should("have.attr", "data-state", "collapsed");
+    cy.get("body").click(0, 0).type("{ctrl}k");
+    cy.get('input[placeholder="Type a command or search..."]').should("be.visible");
+    cy.get('[data-slot="sidebar"]').first().should("have.attr", "data-state", "collapsed");
   });
 });

@@ -83,12 +83,10 @@ try {
     }
     else {
       Write-Step "Starting Cabinet server..."
-      $serverProc = Start-Process -FilePath "pwsh" -ArgumentList @(
-        "-NoLogo",
-        "-NoProfile",
-        "-Command",
-        "$env:CABINET_E2E_MODE='1'; go run ./cmd/cabinet"
-      ) -WorkingDirectory $repoRoot -PassThru
+      $serverProc = Start-Process -FilePath "go" -ArgumentList @(
+        "run",
+        "./cmd/cabinet"
+      ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
       $startedServer = $true
 
       $deadline = (Get-Date).AddSeconds($StartupTimeoutSec)

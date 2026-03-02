@@ -1,0 +1,7 @@
+cypress.ps1
+ui.web/src/lib/keyboard-shortcuts.ts
+ui.web/cypress/e2e/general/ui-keyboard-shortcuts/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-39-summary.md
+internal/ui/static/index.html
+internal/ui/static/assets/*
