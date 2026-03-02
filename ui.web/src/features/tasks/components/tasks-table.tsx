@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import {
   type SortingState,
@@ -25,6 +25,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
@@ -60,6 +68,10 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     const saved = window.localStorage.getItem(storageKey)
     return saved === 'cards' ? 'cards' : 'rows'
   })
+  const [selectedRecordID, setSelectedRecordID] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const clickTimerRef = useRef<number | null>(null)
 
   const {
     globalFilter,
@@ -124,6 +136,94 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     }
     window.localStorage.setItem(storageKey, viewMode)
   }, [storageKey, viewMode])
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+    }
+  }, [])
+
+  const selectedRecord = useMemo(
+    () => data.find((item) => item.id === selectedRecordID) ?? null,
+    [data, selectedRecordID]
+  )
+
+  const visibleRecordIDs = useMemo(
+    () => table.getRowModel().rows.map((row) => row.original.id),
+    [table, data, rowSelection, columnFilters, globalFilter, pagination, sorting]
+  )
+
+  const selectedVisibleIndex = selectedRecordID
+    ? visibleRecordIDs.findIndex((id) => id === selectedRecordID)
+    : -1
+
+  const setSelectedRecordContext = (id: string) => {
+    setSelectedRecordID(id)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('selected', id)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    return Boolean(
+      target.closest('button, a, input, select, textarea, [role="checkbox"], [data-sidebar="menu-action"]')
+    )
+  }
+
+  const openDetails = (id: string) => {
+    setSelectedRecordContext(id)
+    setDetailsOpen(true)
+  }
+
+  const openEdit = (id: string) => {
+    setSelectedRecordContext(id)
+    setDetailsOpen(false)
+    setEditOpen(true)
+  }
+
+  const handleRowClick = (id: string, event: MouseEvent<HTMLElement>) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      openDetails(id)
+    }, 180)
+  }
+
+  const handleRowDoubleClick = (
+    id: string,
+    event: MouseEvent<HTMLElement>
+  ) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    openEdit(id)
+  }
+
+  const openAdjacentRecord = (offset: number) => {
+    if (selectedVisibleIndex < 0) {
+      return
+    }
+    const nextIndex = selectedVisibleIndex + offset
+    if (nextIndex < 0 || nextIndex >= visibleRecordIDs.length) {
+      return
+    }
+    setSelectedRecordContext(visibleRecordIDs[nextIndex] ?? selectedRecordID ?? '')
+  }
 
   return (
     <div
@@ -202,6 +302,10 @@ export function TasksTable({ data, routePath }: DataTableProps) {
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
+                    onClick={(event) => handleRowClick(row.original.id, event)}
+                    onDoubleClick={(event) =>
+                      handleRowDoubleClick(row.original.id, event)
+                    }
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
@@ -273,6 +377,65 @@ export function TasksTable({ data, routePath }: DataTableProps) {
 
       <DataTablePagination table={table} className='mt-auto' />
       <DataTableBulkActions table={table} />
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent data-testid='row-details-modal'>
+          <DialogHeader>
+            <DialogTitle>Row Details</DialogTitle>
+            <DialogDescription>
+              Inspect selected record context.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecord ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>ID:</strong> {selectedRecord.id}
+              </p>
+              <p>
+                <strong>Title:</strong> {selectedRecord.title}
+              </p>
+              <p>
+                <strong>Status:</strong> {selectedRecord.status}
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent data-testid='row-edit-modal'>
+          <DialogHeader>
+            <DialogTitle>Edit Row</DialogTitle>
+            <DialogDescription>
+              Update selected row and navigate adjacent rows.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecord ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>ID:</strong> {selectedRecord.id}
+              </p>
+              <p>
+                <strong>Title:</strong> {selectedRecord.title}
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => openAdjacentRecord(-1)}
+            >
+              Previous
+            </Button>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => openAdjacentRecord(1)}
+            >
+              Next
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,4 +1,12 @@
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  type ChangeEvent,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import { ArrowDownAZ, ArrowUpAZ, SlidersHorizontal, Store } from 'lucide-react'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -154,6 +162,11 @@ export function Apps({
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
+  const [rowDetailsProviderID, setRowDetailsProviderID] = useState<string | null>(null)
+  const [rowDetailsOpen, setRowDetailsOpen] = useState(false)
+  const [rowEditProviderID, setRowEditProviderID] = useState<string | null>(null)
+  const [rowEditOpen, setRowEditOpen] = useState(false)
+  const clickTimerRef = useRef<number | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
     token: '',
@@ -210,6 +223,10 @@ export function Apps({
   )
   const editingProvider =
     editingProviderID !== null ? providerByID.get(editingProviderID) ?? null : null
+  const rowDetailsProvider =
+    rowDetailsProviderID !== null ? providerByID.get(rowDetailsProviderID) ?? null : null
+  const rowEditProvider =
+    rowEditProviderID !== null ? providerByID.get(rowEditProviderID) ?? null : null
 
   const sortedProviders = useMemo(() => {
     const list = [...providers]
@@ -281,6 +298,66 @@ export function Apps({
       marketplace: settings[keys.marketplaceKey] ?? 'AU',
     })
     setReplaceToken(!provider.has_token)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+    }
+  }, [])
+
+  const updateSelectedProviderContext = (providerID: string) => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('selected', providerID)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    return Boolean(target.closest('button, a, input, select, textarea, [role="button"]'))
+  }
+
+  const handleRowClick = (
+    provider: ProviderRecord,
+    event: MouseEvent<HTMLElement>
+  ) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      setRowDetailsProviderID(provider.provider_id)
+      setRowEditProviderID(null)
+      setRowEditOpen(false)
+      setRowDetailsOpen(true)
+      updateSelectedProviderContext(provider.provider_id)
+    }, 180)
+  }
+
+  const handleRowDoubleClick = (
+    provider: ProviderRecord,
+    event: MouseEvent<HTMLElement>
+  ) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    setRowDetailsProviderID(null)
+    setRowDetailsOpen(false)
+    setRowEditProviderID(provider.provider_id)
+    setRowEditOpen(true)
+    updateSelectedProviderContext(provider.provider_id)
   }
 
   const closeIntegration = () => {
@@ -528,7 +605,11 @@ export function Apps({
               <TableBody>
                 {filteredProviders.length ? (
                   filteredProviders.map((provider) => (
-                    <TableRow key={provider.provider_id}>
+                    <TableRow
+                      key={provider.provider_id}
+                      onClick={(event) => handleRowClick(provider, event)}
+                      onDoubleClick={(event) => handleRowDoubleClick(provider, event)}
+                    >
                       <TableCell>
                         <div className='flex items-center gap-2'>
                           <div className='flex size-8 items-center justify-center rounded-md bg-muted p-1.5'>
@@ -707,6 +788,49 @@ export function Apps({
                   {saving ? 'Saving...' : 'Save Integration'}
                 </Button>
               </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={rowDetailsOpen} onOpenChange={setRowDetailsOpen}>
+        <DialogContent data-testid='integrations-row-details-modal'>
+          <DialogHeader>
+            <DialogTitle>Integration Details</DialogTitle>
+            <DialogDescription>
+              Opened from row single-click interaction.
+            </DialogDescription>
+          </DialogHeader>
+          {rowDetailsProvider ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>Provider:</strong> {rowDetailsProvider.display_name}
+              </p>
+              <p>
+                <strong>State:</strong> {rowDetailsProvider.state}
+              </p>
+              <p>
+                <strong>Health:</strong> {rowDetailsProvider.health?.status ?? 'unknown'}
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={rowEditOpen} onOpenChange={setRowEditOpen}>
+        <DialogContent data-testid='integrations-row-edit-modal'>
+          <DialogHeader>
+            <DialogTitle>Edit Integration</DialogTitle>
+            <DialogDescription>
+              Opened from row double-click interaction.
+            </DialogDescription>
+          </DialogHeader>
+          {rowEditProvider ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>Provider:</strong> {rowEditProvider.display_name}
+              </p>
+              <p>
+                <strong>Mode:</strong> {rowEditProvider.integration_mode}
+              </p>
             </div>
           ) : null}
         </DialogContent>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type SortingState,
   type VisibilityState,
@@ -22,6 +22,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
@@ -38,6 +45,10 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>([])
+  const [selectedUserID, setSelectedUserID] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const clickTimerRef = useRef<number | null>(null)
 
   // Local state management for table (uncomment to use local-only state, not synced with URL)
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
@@ -91,6 +102,61 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
   useEffect(() => {
     ensurePageInRange(table.getPageCount())
   }, [table, ensurePageInRange])
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+    }
+  }, [])
+
+  const selectedUser = useMemo(
+    () => data.find((user) => user.id === selectedUserID) ?? null,
+    [data, selectedUserID]
+  )
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    return Boolean(target.closest('button, a, input, select, textarea, [role="checkbox"]'))
+  }
+
+  const setSelectedContext = (id: string) => {
+    setSelectedUserID(id)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('selected', id)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
+  const handleRowClick = (id: string, event: MouseEvent<HTMLElement>) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      setSelectedContext(id)
+      setDetailsOpen(true)
+    }, 180)
+  }
+
+  const handleRowDoubleClick = (id: string, event: MouseEvent<HTMLElement>) => {
+    if (isInteractiveTarget(event.target)) {
+      return
+    }
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    setSelectedContext(id)
+    setDetailsOpen(false)
+    setEditOpen(true)
+  }
 
   return (
     <div
@@ -156,6 +222,10 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   className='group/row'
+                  onClick={(event) => handleRowClick(row.original.id, event)}
+                  onDoubleClick={(event) =>
+                    handleRowDoubleClick(row.original.id, event)
+                  }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
@@ -189,6 +259,49 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
       </div>
       <DataTablePagination table={table} className='mt-auto' />
       <DataTableBulkActions table={table} />
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent data-testid='users-row-details-modal'>
+          <DialogHeader>
+            <DialogTitle>User Details</DialogTitle>
+            <DialogDescription>
+              Review selected user record context.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>Username:</strong> {selectedUser.username}
+              </p>
+              <p>
+                <strong>Email:</strong> {selectedUser.email}
+              </p>
+              <p>
+                <strong>Status:</strong> {selectedUser.status}
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent data-testid='users-row-edit-modal'>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Opened from row double-click interaction.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser ? (
+            <div className='space-y-1 text-sm'>
+              <p>
+                <strong>Username:</strong> {selectedUser.username}
+              </p>
+              <p>
+                <strong>Role:</strong> {selectedUser.role}
+              </p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
