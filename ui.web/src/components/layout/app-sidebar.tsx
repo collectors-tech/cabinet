@@ -42,6 +42,7 @@ export function AppSidebar() {
 
   const normalizeNavKey = (title: string) => navKeyForTitle(title)
   const [navEditMode, setNavEditMode] = useState(false)
+  const [navEditOrder, setNavEditOrder] = useState<string[]>([])
   const [navPreferences, setNavPreferences] = useState<Record<string, NavPreference>>(() => {
     try {
       const raw = window.localStorage.getItem(GLOBAL_NAV_PREFERENCES_KEY)
@@ -114,38 +115,29 @@ export function AppSidebar() {
   }, [authUser?.accountNo, authUser?.email, navPreferences])
 
   const primaryItems = sidebarData.navGroups[0]?.items ?? []
+  const orderForPrimaryItem = (item: NavItem) => {
+    const key = navKeyForTitle(item.title)
+    const defaultOrder = primaryItems.findIndex((candidate) => candidate.title === item.title)
+    return navPreferences[key]?.order ?? defaultOrder
+  }
 
   const movePrimaryItem = (key: string, direction: 'up' | 'down') => {
-    const ordered = [...primaryItems].sort((left, right) => {
-      const leftKey = navKeyForTitle(left.title)
-      const rightKey = navKeyForTitle(right.title)
-      const leftOrder =
-        navPreferences[leftKey]?.order ?? primaryItems.findIndex((i) => i.title === left.title)
-      const rightOrder =
-        navPreferences[rightKey]?.order ?? primaryItems.findIndex((i) => i.title === right.title)
-      return leftOrder - rightOrder
-    })
-    const fromIndex = ordered.findIndex((item) => navKeyForTitle(item.title) === key)
-    if (fromIndex < 0) {
-      return
-    }
-    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1
-    if (toIndex < 0 || toIndex >= ordered.length) {
-      return
-    }
-    const swapped = [...ordered]
-    const [moved] = swapped.splice(fromIndex, 1)
-    swapped.splice(toIndex, 0, moved)
-
-    const nextPreferences: Record<string, NavPreference> = {}
-    swapped.forEach((item, index) => {
-      const itemKey = navKeyForTitle(item.title)
-      nextPreferences[itemKey] = {
-        order: index,
-        hidden: navPreferences[itemKey]?.hidden ?? false,
+    setNavEditOrder((current) => {
+      const fromIndex = current.findIndex((itemKey) => itemKey === key)
+      if (fromIndex < 0) {
+        return current
       }
+
+      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1
+      if (toIndex < 0 || toIndex >= current.length) {
+        return current
+      }
+
+      const swapped = [...current]
+      const [moved] = swapped.splice(fromIndex, 1)
+      swapped.splice(toIndex, 0, moved)
+      return swapped
     })
-    setNavPreferences((current) => ({ ...current, ...nextPreferences }))
   }
 
   const togglePrimaryVisibility = (key: string) => {
@@ -160,16 +152,15 @@ export function AppSidebar() {
     }))
   }
 
-  const configuredPrimaryItems = [...primaryItems]
-    .sort((left, right) => {
-      const leftKey = navKeyForTitle(left.title)
-      const rightKey = navKeyForTitle(right.title)
-      const leftOrder =
-        navPreferences[leftKey]?.order ?? primaryItems.findIndex((i) => i.title === left.title)
-      const rightOrder =
-        navPreferences[rightKey]?.order ?? primaryItems.findIndex((i) => i.title === right.title)
-      return leftOrder - rightOrder
-    })
+  const orderedPrimaryItems = [...primaryItems].sort(
+    (left, right) => orderForPrimaryItem(left) - orderForPrimaryItem(right)
+  )
+  const orderedPrimaryKeys = orderedPrimaryItems.map((item) => navKeyForTitle(item.title))
+  const primaryItemsByKey = new Map(
+    primaryItems.map((item) => [navKeyForTitle(item.title), item] as const)
+  )
+
+  const configuredPrimaryItems = orderedPrimaryItems
     .filter((item) => {
       const key = navKeyForTitle(item.title)
       return !navPreferences[key]?.hidden
@@ -231,7 +222,26 @@ export function AppSidebar() {
             type='button'
             className='inline-flex h-8 w-8 items-center justify-center rounded-full border text-muted-foreground hover:bg-muted'
             data-testid='sidebar-nav-edit-toggle'
-            onClick={() => setNavEditMode((open) => !open)}
+            onClick={() => {
+              setNavEditMode((open) => {
+                const nextOpen = !open
+                if (nextOpen) {
+                  setNavEditOrder(orderedPrimaryKeys)
+                } else {
+                  setNavPreferences((current) => {
+                    const nextPreferences = { ...current }
+                    navEditOrder.forEach((itemKey, index) => {
+                      nextPreferences[itemKey] = {
+                        order: index,
+                        hidden: current[itemKey]?.hidden ?? false,
+                      }
+                    })
+                    return nextPreferences
+                  })
+                }
+                return nextOpen
+              })
+            }}
           >
             {navEditMode ? <X className='h-4 w-4' /> : <Pencil className='h-4 w-4' />}
           </button>
@@ -240,8 +250,11 @@ export function AppSidebar() {
               className='mt-2 space-y-1 rounded-md border p-2 text-xs'
               data-testid='sidebar-nav-edit-panel'
             >
-              {primaryItems.map((item) => {
-                const key = navKeyForTitle(item.title)
+              {navEditOrder.map((key) => {
+                const item = primaryItemsByKey.get(key)
+                if (!item) {
+                  return null
+                }
                 const hidden = navPreferences[key]?.hidden ?? false
                 return (
                   <div

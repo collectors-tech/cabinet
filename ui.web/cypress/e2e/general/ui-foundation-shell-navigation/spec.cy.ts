@@ -1,4 +1,8 @@
 describe('ui-foundation-shell-navigation', () => {
+  function visibleByTestId(testId: string) {
+    return cy.get(`[data-testid="${testId}"]`).filter(':visible').first()
+  }
+
   function signInTo(path: string) {
     cy.visit(`/sign-in?redirect=${encodeURIComponent(path)}`)
     cy.get('input[name="email"]').clear().type('e2e-shell-nav@example.com')
@@ -59,7 +63,7 @@ describe('ui-foundation-shell-navigation', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+    visibleByTestId('sidebar-nav-group-general').within(() => {
       cy.get('[data-testid^="sidebar-nav-link-"]')
         .then(($links) =>
           [...$links].map((link) => link.getAttribute('data-testid') || '')
@@ -68,6 +72,8 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
           'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-discoveries',
+          'sidebar-nav-link-scanner',
           'sidebar-nav-link-integrations',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
@@ -75,13 +81,33 @@ describe('ui-foundation-shell-navigation', () => {
         ])
     })
 
-    cy.get('[data-testid="sidebar-nav-edit-toggle"]').click()
-    cy.get('[data-testid="sidebar-nav-edit-panel"]').should('be.visible')
-    cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
-    cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
-    cy.get('[data-testid="sidebar-nav-edit-toggle"]').click()
+    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+    visibleByTestId('sidebar-nav-edit-panel').within(() => {
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+      cy.get('[data-testid^="sidebar-nav-edit-item-"]')
+        .filter(':visible')
+        .should(($items) => {
+          const ids = [...$items].map(
+            (item) => item.getAttribute('data-testid') || ''
+          )
+          expect(ids).to.deep.equal([
+            'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-discoveries',
+            'sidebar-nav-edit-item-scanner',
+            'sidebar-nav-edit-item-integrations',
+            'sidebar-nav-edit-item-chats',
+            'sidebar-nav-edit-item-users',
+            'sidebar-nav-edit-item-reports',
+          ])
+        })
+      cy.get('[data-testid="sidebar-nav-visibility-integrations"]').click()
+    })
+    visibleByTestId('sidebar-nav-edit-toggle').click()
 
-    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+    visibleByTestId('sidebar-nav-group-general').within(() => {
       cy.get('[data-testid^="sidebar-nav-link-"]')
         .then(($links) =>
           [...$links].map((link) => link.getAttribute('data-testid') || '')
@@ -90,6 +116,8 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-discoveries',
+          'sidebar-nav-link-scanner',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
@@ -97,7 +125,7 @@ describe('ui-foundation-shell-navigation', () => {
     })
 
     cy.reload()
-    cy.get('[data-testid="sidebar-nav-group-general"]').within(() => {
+    visibleByTestId('sidebar-nav-group-general').within(() => {
       cy.get('[data-testid^="sidebar-nav-link-"]')
         .then(($links) =>
           [...$links].map((link) => link.getAttribute('data-testid') || '')
@@ -106,11 +134,79 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-discoveries',
+          'sidebar-nav-link-scanner',
           'sidebar-nav-link-chats',
           'sidebar-nav-link-users',
           'sidebar-nav-link-reports',
         ])
     })
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-007 reflects live nav edit order and saves the exact shown order', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+
+    visibleByTestId('sidebar-nav-edit-panel').within(() => {
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+      cy.get('[data-testid^="sidebar-nav-edit-item-"]')
+        .filter(':visible')
+        .should(($items) => {
+          const ids = [...$items].map(
+            (item) => item.getAttribute('data-testid') || ''
+          )
+          expect(ids).to.deep.equal([
+            'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-discoveries',
+            'sidebar-nav-edit-item-scanner',
+            'sidebar-nav-edit-item-integrations',
+            'sidebar-nav-edit-item-chats',
+            'sidebar-nav-edit-item-users',
+            'sidebar-nav-edit-item-reports',
+          ])
+        })
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+
+      cy.get('[data-testid^="sidebar-nav-edit-item-"]')
+        .filter(':visible')
+        .should(($items) => {
+          const ids = [...$items].map(
+            (item) => item.getAttribute('data-testid') || ''
+          )
+          expect(ids).to.deep.equal([
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-discoveries',
+            'sidebar-nav-edit-item-scanner',
+            'sidebar-nav-edit-item-integrations',
+            'sidebar-nav-edit-item-chats',
+            'sidebar-nav-edit-item-users',
+            'sidebar-nav-edit-item-reports',
+          ])
+        })
+    })
+
+    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-group-general')
+      .find('[data-testid^="sidebar-nav-link-"]')
+      .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
+      .should('deep.equal', [
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-dashboard',
+        'sidebar-nav-link-inventory',
+        'sidebar-nav-link-discoveries',
+        'sidebar-nav-link-scanner',
+        'sidebar-nav-link-integrations',
+        'sidebar-nav-link-chats',
+        'sidebar-nav-link-users',
+        'sidebar-nav-link-reports',
+      ])
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-003 updates collection context label when folder selection changes', () => {

@@ -248,5 +248,4 @@
 | UI-FOUNDATION-SHELL-NAVIGATION-005 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Local Workspace collections list contract | planned: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (Local Workspace shows Collections list) | partial |
 | UI-FOUNDATION-SHELL-NAVIGATION-006 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Local Workspace add collection action | planned: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (Add Collection creates and renders in list) | partial |
 
-| UI-FOUNDATION-SHELL-NAVIGATION-007 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | nav edit dialog live reorder UI contract | planned: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (
-av edit up/down updates dialog order immediately) | partial |
+| UI-FOUNDATION-SHELL-NAVIGATION-007 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | nav edit dialog live reorder UI contract | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-007 reflects live nav edit order and saves the exact shown order`) | implemented |
