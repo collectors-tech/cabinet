@@ -70,6 +70,8 @@ export function Collection({
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState<string | null>(null)
   const [photosBusy, setPhotosBusy] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
   const [aiTitleInput, setAITitleInput] = useState('')
   const [aiPhotoURLInput, setAIPhotoURLInput] = useState('')
@@ -316,6 +318,40 @@ export function Collection({
     [loadInventoryPhotos, selectedItemID]
   )
 
+  const handleTakePhoto = useCallback(async () => {
+    setCameraError(null)
+    setCameraSuccess(null)
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) {
+      setCameraError(
+        'Camera capture is unavailable on this device. Use Upload File instead.'
+      )
+      return
+    }
+    let stream: MediaStream | null = null
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      const file = new File(['camera-capture'], 'camera-capture.jpg', {
+        type: 'image/jpeg',
+      })
+      await handlePhotoUpload(file)
+      setCameraSuccess('Camera capture uploaded successfully.')
+    } catch {
+      setCameraError(
+        'Camera permission was denied or unavailable. Use Upload File instead.'
+      )
+    } finally {
+      if (stream) {
+        stream.getTracks().forEach((track) => {
+          track.stop()
+        })
+      }
+    }
+  }, [handlePhotoUpload])
+
   const runAISuggest = useCallback(
     async (mode: 'title' | 'photo') => {
       if (!activeProfileID) {
@@ -464,6 +500,14 @@ export function Collection({
                       </p>
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        data-testid='inventory-camera-take-photo'
+                        onClick={() => void handleTakePhoto()}
+                      >
+                        Take Photo
+                      </Button>
                       <input
                         type='file'
                         accept='image/*'
@@ -478,6 +522,22 @@ export function Collection({
                         <span className='text-xs text-muted-foreground'>Working...</span>
                       ) : null}
                     </div>
+                    {cameraError ? (
+                      <div
+                        className='rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm'
+                        data-testid='inventory-camera-error'
+                      >
+                        {cameraError}
+                      </div>
+                    ) : null}
+                    {cameraSuccess ? (
+                      <div
+                        className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
+                        data-testid='inventory-camera-success'
+                      >
+                        {cameraSuccess}
+                      </div>
+                    ) : null}
                     {photosLoading ? (
                       <div
                         className='rounded-md border p-3 text-sm text-muted-foreground'
