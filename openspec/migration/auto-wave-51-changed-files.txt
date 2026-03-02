@@ -1,0 +1,3 @@
+openspec/traceability.md
+?? internal/app/traceability_collection_domain_004_test.go
+?? openspec/migration/auto-wave-51-summary.md
