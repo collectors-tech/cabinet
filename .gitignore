@@ -8,6 +8,7 @@ bin/
 dist/
 cabinet.exe
 *.tmp
+.tmp_*
 .agentbus/
 .logs/
 .env
