@@ -1,4 +1,11 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import {
   type SortingState,
@@ -214,6 +221,17 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     openEdit(id)
   }
 
+  const handleViewModeKeyDown = (
+    mode: ViewMode,
+    event: KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+    event.preventDefault()
+    setViewMode(mode)
+  }
+
   const openAdjacentRecord = (offset: number) => {
     if (selectedVisibleIndex < 0) {
       return
@@ -254,6 +272,7 @@ export function TasksTable({ data, routePath }: DataTableProps) {
           size='sm'
           variant={viewMode === 'rows' ? 'default' : 'outline'}
           onClick={() => setViewMode('rows')}
+          onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
           aria-pressed={viewMode === 'rows'}
           aria-label='Switch to rows view'
         >
@@ -263,6 +282,7 @@ export function TasksTable({ data, routePath }: DataTableProps) {
           size='sm'
           variant={viewMode === 'cards' ? 'default' : 'outline'}
           onClick={() => setViewMode('cards')}
+          onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
           aria-pressed={viewMode === 'cards'}
           aria-label='Switch to cards view'
         >

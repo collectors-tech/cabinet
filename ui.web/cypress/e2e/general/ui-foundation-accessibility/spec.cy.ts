@@ -1,4 +1,12 @@
 describe('ui-foundation-accessibility', () => {
+  function signInToInventory() {
+    cy.visit('/sign-in?redirect=%2Finventory%2F')
+    cy.get('input[name="email"]').clear().type('e2e-a11y-inventory@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+  }
+
   function assertVisibleIconButtonsHaveAccessibleName() {
     cy.get('button:visible').each(($button) => {
       const hasSvgIcon = $button.find('svg').length > 0
@@ -31,5 +39,81 @@ describe('ui-foundation-accessibility', () => {
     cy.contains('button', 'Sign in').click()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     assertVisibleIconButtonsHaveAccessibleName()
+  })
+
+  it('UI-FOUNDATION-ACCESSIBILITY-001 closes modal on Escape and restores focus to trigger', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-a11y-1',
+            part_number: 'PN-A11Y-1',
+            title: 'Accessibility Item',
+            status: 'todo',
+            category: 'feature',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-a11y' },
+    }).as('profile')
+    cy.intercept('POST', '/api/ai/suggest/title', {
+      statusCode: 200,
+      body: {
+        part_number: 'PN-A11Y-NEW',
+        title: 'AI Suggested Item',
+        confidence: 0.91,
+      },
+    }).as('aiSuggest')
+
+    signInToInventory()
+    cy.wait('@items')
+    cy.wait('@profile')
+
+    cy.get('[data-testid="inventory-ai-title-input"]').type('A11Y title input')
+    cy.get('[data-testid="inventory-ai-suggest-title"]').click()
+    cy.wait('@aiSuggest')
+
+    cy.get('[data-testid="inventory-ai-apply"]').focus().click()
+    cy.get('[data-testid="inventory-ai-confirm-dialog"]').should('be.visible')
+    cy.get('[data-testid="inventory-ai-confirm-dialog"]').within(() => {
+      cy.focused().should('exist')
+    })
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="inventory-ai-confirm-dialog"]').should('not.exist')
+    cy.get('[data-testid="inventory-ai-apply"]').should('be.focused')
+  })
+
+  it('UI-FOUNDATION-ACCESSIBILITY-002 supports keyboard-only execution for inventory workflow controls', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-a11y-kbd',
+            part_number: 'PN-A11Y-KBD',
+            title: 'Keyboard Flow Item',
+            status: 'todo',
+            category: 'feature',
+          },
+        ],
+      },
+    }).as('itemsKeyboard')
+
+    signInToInventory()
+    cy.wait('@itemsKeyboard')
+
+    cy.get('main').should('be.visible')
+    cy.get('button[aria-label="Switch to cards view"]').focus().type('{enter}')
+    cy.contains('Status:').should('be.visible')
+    cy.get('button[aria-label="Switch to rows view"]').focus().type('{enter}')
+    cy.get('table').should('be.visible')
+    cy.get('input[placeholder="Filter by title or ID..."]')
+      .focus()
+      .type('missing-a11y-item{enter}')
+    cy.contains('No results.').should('be.visible')
   })
 })

@@ -138,6 +138,7 @@ export function Collection({
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
+  const aiApplyTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const loadInventoryItems = useCallback(async () => {
     if (routePath !== '/_authenticated/inventory/') {
@@ -918,6 +919,7 @@ export function Collection({
                         <Button
                           className='mt-3'
                           data-testid='inventory-ai-apply'
+                          ref={aiApplyTriggerRef}
                           onClick={() => setAIConfirmOpen(true)}
                         >
                           Apply Suggestion
@@ -1004,7 +1006,17 @@ export function Collection({
             </div>
           </DialogContent>
         </Dialog>
-        <Dialog open={aiConfirmOpen} onOpenChange={setAIConfirmOpen}>
+        <Dialog
+          open={aiConfirmOpen}
+          onOpenChange={(open) => {
+            setAIConfirmOpen(open)
+            if (!open) {
+              requestAnimationFrame(() => {
+                aiApplyTriggerRef.current?.focus()
+              })
+            }
+          }}
+        >
           <DialogContent data-testid='inventory-ai-confirm-dialog'>
             <DialogHeader>
               <DialogTitle>Confirm AI Apply</DialogTitle>
