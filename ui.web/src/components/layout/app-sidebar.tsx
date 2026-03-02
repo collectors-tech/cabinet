@@ -62,6 +62,17 @@ export function AppSidebar() {
     appVersion: 'unknown',
     buildDate: 'unknown',
   })
+  const [workspaceCollections, setWorkspaceCollections] = useState<string[]>([
+    'All Items',
+    'Watch List',
+    'Wishlist Focus',
+    'Store 1',
+    'Store 2',
+    'Warehouse 1',
+  ])
+  const [activeWorkspaceCollection, setActiveWorkspaceCollection] = useState('All Items')
+  const [newCollectionName, setNewCollectionName] = useState('')
+  const [collectionInputOpen, setCollectionInputOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -109,10 +120,44 @@ export function AppSidebar() {
 
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
+    const listKey = `cabinet.workspace.collections.${profileScope}`
+    const activeKey = `cabinet.workspace.collections.active.${profileScope}`
+    try {
+      const raw = window.localStorage.getItem(listKey)
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const sanitized = parsed
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== '')
+          if (sanitized.length > 0) {
+            setWorkspaceCollections(sanitized)
+          }
+        }
+      }
+      const active = window.localStorage.getItem(activeKey)?.trim()
+      if (active) {
+        setActiveWorkspaceCollection(active)
+      }
+    } catch {
+      // Fallback to in-memory defaults.
+    }
+  }, [authUser?.accountNo, authUser?.email])
+
+  useEffect(() => {
+    const profileScope = authUser?.email || authUser?.accountNo || 'local'
     const storageKey = `cabinet.nav.preferences.${profileScope}`
     window.localStorage.setItem(GLOBAL_NAV_PREFERENCES_KEY, JSON.stringify(navPreferences))
     window.localStorage.setItem(storageKey, JSON.stringify(navPreferences))
   }, [authUser?.accountNo, authUser?.email, navPreferences])
+
+  useEffect(() => {
+    const profileScope = authUser?.email || authUser?.accountNo || 'local'
+    const listKey = `cabinet.workspace.collections.${profileScope}`
+    const activeKey = `cabinet.workspace.collections.active.${profileScope}`
+    window.localStorage.setItem(listKey, JSON.stringify(workspaceCollections))
+    window.localStorage.setItem(activeKey, activeWorkspaceCollection)
+  }, [authUser?.accountNo, authUser?.email, workspaceCollections, activeWorkspaceCollection])
 
   const primaryItems = sidebarData.navGroups[0]?.items ?? []
   const orderForPrimaryItem = (item: NavItem) => {
@@ -202,6 +247,21 @@ export function AppSidebar() {
     items: group.items.map(translateItem),
   }))
 
+  const saveNewCollection = () => {
+    const trimmed = newCollectionName.trim()
+    if (!trimmed) {
+      return
+    }
+    const exists = workspaceCollections.some(
+      (collection) => collection.toLowerCase() === trimmed.toLowerCase()
+    )
+    if (!exists) {
+      setWorkspaceCollections((current) => [...current, trimmed])
+    }
+    setCollectionInputOpen(false)
+    setNewCollectionName('')
+  }
+
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
@@ -212,6 +272,64 @@ export function AppSidebar() {
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
+        <div
+          className='mx-2 mt-1 space-y-2 rounded-md border p-2'
+          data-testid='workspace-collections-panel'
+        >
+          <div className='flex items-center justify-between gap-2'>
+            <h3
+              className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+              data-testid='workspace-collections-heading'
+            >
+              Collections
+            </h3>
+            <button
+              type='button'
+              className='inline-flex h-7 items-center rounded-md border px-2 text-xs hover:bg-muted'
+              data-testid='workspace-add-collection'
+              onClick={() => setCollectionInputOpen((open) => !open)}
+            >
+              Add Collection
+            </button>
+          </div>
+          {collectionInputOpen ? (
+            <div className='flex items-center gap-2'>
+              <input
+                className='h-7 w-full rounded-md border bg-background px-2 text-xs'
+                data-testid='workspace-new-collection-name'
+                value={newCollectionName}
+                onChange={(event) => setNewCollectionName(event.target.value)}
+                placeholder='Collection name'
+              />
+              <button
+                type='button'
+                className='inline-flex h-7 items-center rounded-md border px-2 text-xs hover:bg-muted'
+                data-testid='workspace-save-collection'
+                onClick={saveNewCollection}
+              >
+                Save
+              </button>
+            </div>
+          ) : null}
+          <div className='space-y-1'>
+            {workspaceCollections.map((collection) => {
+              const key = collection.trim().toLowerCase().replace(/\s+/g, '-')
+              const isActive = activeWorkspaceCollection === collection
+              return (
+                <button
+                  key={collection}
+                  type='button'
+                  className='flex w-full items-center justify-start rounded-md border px-2 py-1 text-xs hover:bg-muted'
+                  data-testid={`workspace-collection-item-${key}`}
+                  data-state={isActive ? 'active' : 'inactive'}
+                  onClick={() => setActiveWorkspaceCollection(collection)}
+                >
+                  {collection}
+                </button>
+              )
+            })}
+          </div>
+        </div>
         {translatedNavGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}

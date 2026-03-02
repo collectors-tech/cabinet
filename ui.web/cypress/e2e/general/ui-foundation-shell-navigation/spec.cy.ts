@@ -1,6 +1,6 @@
 describe('ui-foundation-shell-navigation', () => {
   function visibleByTestId(testId: string) {
-    return cy.get(`[data-testid="${testId}"]`).filter(':visible').first()
+    return cy.get(`[data-testid="${testId}"]`).first()
   }
 
   function signInTo(path: string) {
@@ -230,6 +230,42 @@ describe('ui-foundation-shell-navigation', () => {
     cy.get('[data-testid="collection-active-context"]').should(
       'have.text',
       'Store 1'
+    )
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-005 shows Local Workspace collections list', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    visibleByTestId('workspace-collections-panel').should('be.visible')
+    visibleByTestId('workspace-collections-heading').should('have.text', 'Collections')
+    visibleByTestId('workspace-collection-item-all-items').should('be.visible')
+    visibleByTestId('workspace-collection-item-watch-list').should('be.visible')
+    visibleByTestId('workspace-collection-item-store-1').should('be.visible')
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-006 adds a collection and keeps current selection stable', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    visibleByTestId('workspace-collection-item-watch-list').click()
+    visibleByTestId('workspace-collection-item-watch-list').should(
+      'have.attr',
+      'data-state',
+      'active'
+    )
+
+    visibleByTestId('workspace-add-collection').scrollIntoView().click()
+    visibleByTestId('workspace-new-collection-name').type('New Collector Shelf')
+    visibleByTestId('workspace-save-collection').click()
+
+    visibleByTestId('workspace-collection-item-new-collector-shelf').should(
+      'be.visible'
+    )
+    visibleByTestId('workspace-collection-item-watch-list').should(
+      'have.attr',
+      'data-state',
+      'active'
     )
   })
 })
