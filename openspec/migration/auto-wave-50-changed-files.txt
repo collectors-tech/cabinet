@@ -1,0 +1,190 @@
+internal/ui/static/assets/401-fmApihmQ.js
+internal/ui/static/assets/403-DBsJiVvm.js
+internal/ui/static/assets/404-DpQ7CkhA.js
+internal/ui/static/assets/500-ChYMSovK.js
+internal/ui/static/assets/503-lJ4SJMHC.js
+internal/ui/static/assets/_error-Lahv7jZh.js
+internal/ui/static/assets/account-CNXejQRA.js
+internal/ui/static/assets/alert-C2S_UPEY.js
+internal/ui/static/assets/appearance-CDDmN8L3.js
+internal/ui/static/assets/auth-layout-C8Isu2S0.js
+internal/ui/static/assets/authenticated-layout-JadMGsX-.js
+internal/ui/static/assets/badge-Bz7qYwM5.js
+internal/ui/static/assets/bulk-actions-Ct7FYzkT.js
+internal/ui/static/assets/card-DxqAhlIH.js
+internal/ui/static/assets/check-DLhS9d8N.js
+internal/ui/static/assets/checkbox-Du2JrqsT.js
+internal/ui/static/assets/chevron-down-CeEZY8fz.js
+internal/ui/static/assets/command-CRb2Kiwe.js
+internal/ui/static/assets/config-drawer-GO3JIidd.js
+internal/ui/static/assets/confirm-dialog-BEYEI7S4.js
+internal/ui/static/assets/content-section-CnvHim0f.js
+internal/ui/static/assets/display-5n53F2Iq.js
+internal/ui/static/assets/external-link-DencR7-L.js
+internal/ui/static/assets/eye-off-C2TzM4VX.js
+internal/ui/static/assets/forbidden-CFOxpUDU.js
+internal/ui/static/assets/forgot-password-B2z6UaMn.js
+internal/ui/static/assets/form-BWM6jR4A.js
+internal/ui/static/assets/icon-github-C9RLr6mB.js
+internal/ui/static/assets/index-AintL-Oh.js
+internal/ui/static/assets/index-BDha4IG9.js
+internal/ui/static/assets/index-BIWHCXYW.js
+internal/ui/static/assets/index-BJzTvwuX.js
+internal/ui/static/assets/index-BV6aGJWm.js
+internal/ui/static/assets/index-CDxd46Pd.js
+internal/ui/static/assets/index-CJWAD3a0.js
+internal/ui/static/assets/index-CQKa0v0f.js
+internal/ui/static/assets/index-CXVNiZsV.js
+internal/ui/static/assets/index-CYF9hq7o.js
+internal/ui/static/assets/index-CmQNnhMU.js
+internal/ui/static/assets/index-CnsEb2At.js
+internal/ui/static/assets/index-CxFsmWpj.js
+internal/ui/static/assets/index-D6m0uL75.js
+internal/ui/static/assets/index-DEoBOyxN.js
+internal/ui/static/assets/index-DQlNdLDK.js
+internal/ui/static/assets/index-DRfscQoa.js
+internal/ui/static/assets/index-DSCRXKCG.js
+internal/ui/static/assets/index-DvmjENQ3.js
+internal/ui/static/assets/index-InTKJbsW.js
+internal/ui/static/assets/index-nVWZo-BD.js
+internal/ui/static/assets/index-pa-JlgoP.js
+internal/ui/static/assets/input-CQwqJ_Kv.js
+internal/ui/static/assets/learn-more-EXYMKAzm.js
+internal/ui/static/assets/loader-circle-BCWMogVk.js
+internal/ui/static/assets/logo-B3-62sDv.js
+internal/ui/static/assets/main-CHDxVYTe.js
+internal/ui/static/assets/maintenance-error-BbTj4Tew.js
+internal/ui/static/assets/notifications-sHvArUX5.js
+internal/ui/static/assets/otp-Cz3sXLYY.js
+internal/ui/static/assets/password-input-Bgl3r4cl.js
+internal/ui/static/assets/plus-D4k0MDwZ.js
+internal/ui/static/assets/popover-Djiz2k-R.js
+internal/ui/static/assets/profile-dropdown-CQnZOpy4.js
+internal/ui/static/assets/radio-group-Ij8mecuT.js
+internal/ui/static/assets/react-icons.esm-WKPd5RNL.js
+internal/ui/static/assets/route-BIXLAFtE.js
+internal/ui/static/assets/route-BfQe40nk.js
+internal/ui/static/assets/route-CNOx-3p7.js
+internal/ui/static/assets/route-D9GE8W-v.js
+internal/ui/static/assets/route-DbC4G7br.js
+internal/ui/static/assets/search-83WXfnXA.js
+internal/ui/static/assets/select-CGPw3qwd.js
+internal/ui/static/assets/send-x_2h5u6b.js
+internal/ui/static/assets/separator-ChTXo2sk.js
+internal/ui/static/assets/show-submitted-data-DAoxyOlv.js
+internal/ui/static/assets/sign-in-2-DxAFTuVl.js
+internal/ui/static/assets/sign-in-C0fF2H9M.js
+internal/ui/static/assets/sign-in-CAFUQ9UJ.js
+internal/ui/static/assets/sign-out-dialog-CY-XHgX0.js
+internal/ui/static/assets/sign-up-DxrN4p-t.js
+internal/ui/static/assets/sign-up-WVh2Bd9F.js
+internal/ui/static/assets/skeleton-BKa8r2XJ.js
+internal/ui/static/assets/storage-BhUYgTvO.js
+internal/ui/static/assets/table-BNQ5JcBc.js
+internal/ui/static/assets/tasks-rtZfZGeV.js
+internal/ui/static/assets/textarea-_jWX_Lyl.js
+internal/ui/static/assets/theme-switch-C4hpgxP7.js
+internal/ui/static/assets/triangle-alert-CXwny-0w.js
+internal/ui/static/assets/unauthorized-error-CFxgHKbV.js
+internal/ui/static/assets/use-profile-settings-99IEbkZq.js
+internal/ui/static/assets/user-auth-form-GpaZgqXj.js
+internal/ui/static/assets/user-management-Dmr5z_ng.js
+internal/ui/static/assets/users-table-BsOxTA9Y.js
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/src/features/collection/index.tsx
+?? internal/ui/static/assets/401-CwcV57Rb.js
+?? internal/ui/static/assets/403-DLKaEiXM.js
+?? internal/ui/static/assets/404-j1GaRG7N.js
+?? internal/ui/static/assets/500-knI31_YW.js
+?? internal/ui/static/assets/503-DoMomQs5.js
+?? internal/ui/static/assets/_error-WmUXtsn0.js
+?? internal/ui/static/assets/account-Cxnma18c.js
+?? internal/ui/static/assets/alert-Cpo7BrLG.js
+?? internal/ui/static/assets/appearance-DHWRAfps.js
+?? internal/ui/static/assets/auth-layout-DEh5xmGy.js
+?? internal/ui/static/assets/authenticated-layout-BT0chwf5.js
+?? internal/ui/static/assets/badge-BmDjaNt0.js
+?? internal/ui/static/assets/bulk-actions-BpgZTCMO.js
+?? internal/ui/static/assets/card-C0r7LHSl.js
+?? internal/ui/static/assets/check-CThWyATB.js
+?? internal/ui/static/assets/checkbox-BTi6icCA.js
+?? internal/ui/static/assets/chevron-down-iO_870iF.js
+?? internal/ui/static/assets/command-KwGUm8ON.js
+?? internal/ui/static/assets/config-drawer-BWJhqgBu.js
+?? internal/ui/static/assets/confirm-dialog-Iis5dKbf.js
+?? internal/ui/static/assets/content-section-Dkd3j41v.js
+?? internal/ui/static/assets/display-Du0LQmnw.js
+?? internal/ui/static/assets/external-link-Dydpwr5j.js
+?? internal/ui/static/assets/eye-off-BiRgLwm0.js
+?? internal/ui/static/assets/forbidden-BDAMMgGX.js
+?? internal/ui/static/assets/forgot-password-CjN1mDF2.js
+?? internal/ui/static/assets/form-Dz_D31Q5.js
+?? internal/ui/static/assets/icon-github-Bun5qaof.js
+?? internal/ui/static/assets/index-BF_DPeXp.js
+?? internal/ui/static/assets/index-BOv8PLCX.js
+?? internal/ui/static/assets/index-BRkmMphQ.js
+?? internal/ui/static/assets/index-BYwluzB6.js
+?? internal/ui/static/assets/index-Ba_Ms1-e.js
+?? internal/ui/static/assets/index-Bd6udIFP.js
+?? internal/ui/static/assets/index-BiwCD0Su.js
+?? internal/ui/static/assets/index-BvZ2JwMT.js
+?? internal/ui/static/assets/index-Bv_Te0An.js
+?? internal/ui/static/assets/index-BwMxXYML.js
+?? internal/ui/static/assets/index-C2MQxMBZ.js
+?? internal/ui/static/assets/index-CA3ePDrK.js
+?? internal/ui/static/assets/index-CM3Q39aM.js
+?? internal/ui/static/assets/index-CixzE7oE.js
+?? internal/ui/static/assets/index-D8Kb1Ixk.js
+?? internal/ui/static/assets/index-DBwMCinl.js
+?? internal/ui/static/assets/index-Dh4GSCLz.js
+?? internal/ui/static/assets/index-DtpVWuvo.js
+?? internal/ui/static/assets/index-H_I7Ghdk.js
+?? internal/ui/static/assets/index-RzCLbslB.js
+?? internal/ui/static/assets/index-XXq005rm.js
+?? internal/ui/static/assets/index-yhhCkvMT.js
+?? internal/ui/static/assets/input-B4YKLrQu.js
+?? internal/ui/static/assets/learn-more-CWboWPBb.js
+?? internal/ui/static/assets/loader-circle-Bw5NNhvO.js
+?? internal/ui/static/assets/logo-CFZ-eAyO.js
+?? internal/ui/static/assets/main-7HWTmsSp.js
+?? internal/ui/static/assets/maintenance-error-5mRAFbMj.js
+?? internal/ui/static/assets/notifications-Bx-uRR1N.js
+?? internal/ui/static/assets/otp-DrbLQbuS.js
+?? internal/ui/static/assets/password-input-B4WPYclB.js
+?? internal/ui/static/assets/plus-BdyHuFLK.js
+?? internal/ui/static/assets/popover-RMnqONAd.js
+?? internal/ui/static/assets/profile-dropdown-DcUhrGWN.js
+?? internal/ui/static/assets/radio-group-IBlQcf38.js
+?? internal/ui/static/assets/react-icons.esm-DC2I49oM.js
+?? internal/ui/static/assets/route-B2wpJHWF.js
+?? internal/ui/static/assets/route-CgB2hB3o.js
+?? internal/ui/static/assets/route-CxHt-snL.js
+?? internal/ui/static/assets/route-CxqijhRj.js
+?? internal/ui/static/assets/route-DwJQLp37.js
+?? internal/ui/static/assets/search-D-H4o8_j.js
+?? internal/ui/static/assets/select-CT2uX_r1.js
+?? internal/ui/static/assets/send-BPNUG14k.js
+?? internal/ui/static/assets/separator-9OUfS4sq.js
+?? internal/ui/static/assets/show-submitted-data-DtlLRogy.js
+?? internal/ui/static/assets/sign-in-2-BYLJfKGv.js
+?? internal/ui/static/assets/sign-in-43THocIq.js
+?? internal/ui/static/assets/sign-in-C41jCyzl.js
+?? internal/ui/static/assets/sign-out-dialog-DFKReqsT.js
+?? internal/ui/static/assets/sign-up-BRkulGpy.js
+?? internal/ui/static/assets/sign-up-hR9JzZ--.js
+?? internal/ui/static/assets/skeleton-CPFwfpu_.js
+?? internal/ui/static/assets/storage-DVK2cQru.js
+?? internal/ui/static/assets/table-CC3-QG72.js
+?? internal/ui/static/assets/tasks-BU0oNGFn.js
+?? internal/ui/static/assets/textarea-NeuNDESF.js
+?? internal/ui/static/assets/theme-switch-CZaqgTaa.js
+?? internal/ui/static/assets/triangle-alert-uA8RynDH.js
+?? internal/ui/static/assets/unauthorized-error-CL580R67.js
+?? internal/ui/static/assets/use-profile-settings-DWCKN7Um.js
+?? internal/ui/static/assets/user-auth-form-C7kF_MUj.js
+?? internal/ui/static/assets/user-management-qtuhOO4N.js
+?? internal/ui/static/assets/users-table-DDmBsflq.js
+?? openspec/migration/auto-wave-50-changed-files.txt
+?? openspec/migration/auto-wave-50-summary.md
+?? ui.web/cypress/e2e/inventory/ui-screen-inventory-barcodes/

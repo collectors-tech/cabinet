@@ -47,6 +47,13 @@ type InventoryPhoto = {
   is_primary?: boolean
 }
 
+type BarcodeMatch = {
+  id: string
+  item_id: string
+  barcode: string
+  created_at?: string
+}
+
 type AISuggestion = {
   part_number?: string
   brand?: string
@@ -125,6 +132,18 @@ export function Collection({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
+  const [selectedItemID, setSelectedItemID] = useState('')
+  const [selectedItemLabel, setSelectedItemLabel] = useState('')
+  const [barcodeAddInput, setBarcodeAddInput] = useState('')
+  const [barcodeLookupInput, setBarcodeLookupInput] = useState('')
+  const [barcodeAddBusy, setBarcodeAddBusy] = useState(false)
+  const [barcodeLookupBusy, setBarcodeLookupBusy] = useState(false)
+  const [barcodeAddError, setBarcodeAddError] = useState<string | null>(null)
+  const [barcodeAddSuccess, setBarcodeAddSuccess] = useState<string | null>(null)
+  const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null)
+  const [barcodeMatches, setBarcodeMatches] = useState<BarcodeMatch[]>([])
+  const [barcodeLookupCompleted, setBarcodeLookupCompleted] = useState(false)
+  const [lastLookupBarcode, setLastLookupBarcode] = useState('')
   const [aiTitleInput, setAITitleInput] = useState('')
   const [aiPhotoURLInput, setAIPhotoURLInput] = useState('')
   const [aiSuggestion, setAISuggestion] = useState<AISuggestion | null>(null)
@@ -144,6 +163,8 @@ export function Collection({
     if (routePath !== '/_authenticated/inventory/') {
       setTableData(tasks)
       setLoadError(null)
+      setSelectedItemID('')
+      setSelectedItemLabel('')
       return
     }
     setLoading(true)
@@ -169,12 +190,23 @@ export function Collection({
         label: item.category?.trim() || 'feature',
         priority: 'medium',
       }))
+      const firstItem = (payload.items ?? []).find((item) =>
+        Boolean(item.id?.trim())
+      )
       setTableData(mapped)
+      setSelectedItemID(firstItem?.id?.trim() ?? '')
+      setSelectedItemLabel(
+        firstItem
+          ? firstItem.part_number?.trim() || firstItem.id?.trim() || ''
+          : ''
+      )
     } catch {
       setLoadError(
         'Inventory failed to load. Retry and confirm runtime API availability.'
       )
       setTableData([])
+      setSelectedItemID('')
+      setSelectedItemLabel('')
     } finally {
       setLoading(false)
     }
@@ -338,7 +370,7 @@ export function Collection({
     [activeFolder, tableData.length]
   )
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
-  const selectedItemID = isInventoryRoute ? tableData[0]?.id?.trim() ?? '' : ''
+  const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
 
@@ -548,6 +580,99 @@ export function Collection({
     }
   }, [handlePhotoUpload])
 
+  const lookupBarcode = useCallback(async (rawBarcode: string) => {
+    const barcode = rawBarcode.trim()
+    if (barcode === '') {
+      setBarcodeLookupError('Enter a barcode before lookup.')
+      setBarcodeLookupCompleted(false)
+      setBarcodeMatches([])
+      return
+    }
+    setBarcodeLookupBusy(true)
+    setBarcodeLookupError(null)
+    setBarcodeLookupCompleted(false)
+    setBarcodeMatches([])
+    setLastLookupBarcode(barcode)
+    try {
+      const response = await fetch(`/api/barcodes/${encodeURIComponent(barcode)}`)
+      if (!response.ok) {
+        throw new Error(`lookup_barcode_${response.status}`)
+      }
+      const payload = (await response.json()) as {
+        matches?: Array<{
+          id?: string
+          item_id?: string
+          barcode?: string
+          created_at?: string
+        }>
+      }
+      const matches = (payload.matches ?? [])
+        .map((match) => ({
+          id: match.id?.trim() ?? '',
+          item_id: match.item_id?.trim() ?? '',
+          barcode: match.barcode?.trim() ?? '',
+          created_at: match.created_at,
+        }))
+        .filter((match) => match.id !== '')
+      setBarcodeMatches(matches)
+      setBarcodeLookupCompleted(true)
+    } catch {
+      setBarcodeLookupError(
+        'Barcode lookup failed. Retry or use external search for this code.'
+      )
+      setBarcodeLookupCompleted(false)
+      setBarcodeMatches([])
+    } finally {
+      setBarcodeLookupBusy(false)
+    }
+  }, [])
+
+  const handleAddBarcode = useCallback(async () => {
+    const barcode = barcodeAddInput.trim()
+    if (!selectedItemID) {
+      setBarcodeAddError('No inventory item is selected for barcode attach.')
+      return
+    }
+    if (barcode === '') {
+      setBarcodeAddError('Enter a barcode before add.')
+      return
+    }
+    setBarcodeAddBusy(true)
+    setBarcodeAddError(null)
+    setBarcodeAddSuccess(null)
+    try {
+      const response = await fetch(
+        `/api/items/${encodeURIComponent(selectedItemID)}/barcodes`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode }),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`add_barcode_${response.status}`)
+      }
+      setBarcodeAddSuccess(`Barcode ${barcode} added.`)
+      setBarcodeAddInput('')
+      if (lastLookupBarcode === barcode) {
+        await lookupBarcode(barcode)
+      }
+    } catch {
+      setBarcodeAddError('Unable to add barcode right now. Retry this action.')
+    } finally {
+      setBarcodeAddBusy(false)
+    }
+  }, [barcodeAddInput, lastLookupBarcode, lookupBarcode, selectedItemID])
+
+  const externalSearchHref = useMemo(() => {
+    if (!lastLookupBarcode) {
+      return ''
+    }
+    return `/api/barcodes/${encodeURIComponent(
+      lastLookupBarcode
+    )}/external-search?source=ebay&region=AU`
+  }, [lastLookupBarcode])
+
   const runAISuggest = useCallback(
     async (mode: 'title' | 'photo') => {
       if (!activeProfileID) {
@@ -652,6 +777,12 @@ export function Collection({
                   Active Context:{' '}
                   <strong data-testid='collection-active-context'>
                     {summary.activeContext}
+                  </strong>
+                </span>
+                <span className='mx-2'>
+                  Selected Item:{' '}
+                  <strong data-testid='collection-selected-item'>
+                    {selectedItemContext}
                   </strong>
                 </span>
               </p>
@@ -824,6 +955,143 @@ export function Collection({
                           ))}
                         </div>
                       </>
+                    ) : null}
+                  </section>
+                  <section
+                    className='space-y-3 rounded-md border p-4'
+                    data-testid='inventory-barcodes-section'
+                  >
+                    <div>
+                      <h3 className='text-base font-semibold'>Barcodes</h3>
+                      <p className='text-sm text-muted-foreground'>
+                        Add barcodes to the selected item, run local lookup, and
+                        continue with external fallback when there is no local
+                        match.
+                      </p>
+                    </div>
+                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                      <div className='space-y-2'>
+                        <Input
+                          placeholder='Enter barcode to attach'
+                          data-testid='inventory-barcodes-add-input'
+                          value={barcodeAddInput}
+                          onChange={(event) =>
+                            setBarcodeAddInput(event.target.value)
+                          }
+                        />
+                        <Button
+                          data-testid='inventory-barcodes-add-button'
+                          onClick={() => void handleAddBarcode()}
+                          disabled={barcodeAddBusy || selectedItemID === ''}
+                        >
+                          Add Barcode
+                        </Button>
+                        {barcodeAddError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm'
+                            data-testid='inventory-barcodes-add-error'
+                          >
+                            {barcodeAddError}
+                          </div>
+                        ) : null}
+                        {barcodeAddSuccess ? (
+                          <div
+                            className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
+                            data-testid='inventory-barcodes-add-success'
+                          >
+                            {barcodeAddSuccess}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className='space-y-2'>
+                        <Input
+                          placeholder='Lookup barcode'
+                          data-testid='inventory-barcodes-lookup-input'
+                          value={barcodeLookupInput}
+                          onChange={(event) =>
+                            setBarcodeLookupInput(event.target.value)
+                          }
+                        />
+                        <Button
+                          data-testid='inventory-barcodes-lookup-button'
+                          variant='outline'
+                          onClick={() => void lookupBarcode(barcodeLookupInput)}
+                          disabled={barcodeLookupBusy}
+                        >
+                          Lookup Barcode
+                        </Button>
+                      </div>
+                    </div>
+                    {barcodeLookupBusy ? (
+                      <div
+                        className='rounded-md border p-3 text-sm text-muted-foreground'
+                        data-testid='inventory-barcodes-lookup-loading'
+                      >
+                        Looking up barcode...
+                      </div>
+                    ) : null}
+                    {barcodeLookupError ? (
+                      <div
+                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                        data-testid='inventory-barcodes-lookup-error'
+                      >
+                        <p className='font-medium'>Barcode lookup failed.</p>
+                        <p className='mt-1 text-muted-foreground'>
+                          {barcodeLookupError}
+                        </p>
+                        <Button
+                          className='mt-3'
+                          size='sm'
+                          variant='outline'
+                          data-testid='inventory-barcodes-lookup-retry'
+                          onClick={() => void lookupBarcode(lastLookupBarcode)}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : null}
+                    {barcodeLookupCompleted &&
+                    !barcodeLookupBusy &&
+                    !barcodeLookupError &&
+                    barcodeMatches.length === 0 ? (
+                      <div
+                        className='rounded-md border border-dashed p-3 text-sm'
+                        data-testid='inventory-barcodes-lookup-empty'
+                      >
+                        <p className='font-medium'>No local barcode match.</p>
+                        <p className='mt-1 text-muted-foreground'>
+                          Continue with an external provider search.
+                        </p>
+                        {externalSearchHref ? (
+                          <a
+                            className='mt-2 inline-flex text-sm text-primary underline'
+                            href={externalSearchHref}
+                            target='_blank'
+                            rel='noreferrer'
+                            data-testid='inventory-barcodes-external-search-link'
+                          >
+                            Search eBay
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {barcodeMatches.length > 0 ? (
+                      <div className='space-y-2'>
+                        {barcodeMatches.map((match) => (
+                          <div
+                            key={match.id}
+                            className='rounded-md border p-2 text-sm'
+                            data-testid='inventory-barcodes-match-row'
+                          >
+                            <p>
+                              <strong>Barcode:</strong> {match.barcode}
+                            </p>
+                            <p>
+                              <strong>Item:</strong> {match.item_id}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                   </section>
                   <section
