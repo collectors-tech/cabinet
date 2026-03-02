@@ -10,6 +10,7 @@ Contains collection, item/media metadata, search, and inventory-focused UI behav
 - `inventory-grading` -> `openspec/specs/inventory/inventory-grading/spec.md`
 - `lookup` -> `openspec/specs/inventory/lookup/spec.md`
 - `matching` -> `openspec/specs/inventory/matching/spec.md`
+- `media-ai-assignment` -> `openspec/specs/inventory/media-ai-assignment/spec.md`
 - `mobile-camera-capture` -> `openspec/specs/inventory/mobile-camera-capture/spec.md`
 - `photos-media` -> `openspec/specs/inventory/photos-media/spec.md`
 - `search` -> `openspec/specs/inventory/search/spec.md`
@@ -25,6 +26,7 @@ Contains collection, item/media metadata, search, and inventory-focused UI behav
 - `INVENTORY-GRADING-*`
 - `LOOKUP-*`
 - `MATCHING-*`
+- `MEDIA-AI-ASSIGNMENT-*`
 - `MOBILE-CAMERA-*`
 - `PHOTOS-MEDIA-*`
 - `SEARCH-*`
