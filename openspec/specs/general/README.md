@@ -30,6 +30,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `ui-foundation-theme-rtl-i18n` -> `openspec/specs/general/ui-foundation-theme-rtl-i18n/spec.md`
 - `ui-global-search-command` -> `openspec/specs/general/ui-global-search-command/spec.md`
 - `ui-governance-gates` -> `openspec/specs/general/ui-governance-gates/spec.md`
+- `ui-route-coverage` -> `openspec/specs/general/ui-route-coverage/spec.md`
 - `ui-keyboard-shortcuts` -> `openspec/specs/general/ui-keyboard-shortcuts/spec.md`
 - `ui-login-session` -> `openspec/specs/general/ui-login-session/spec.md`
 - `ui-performance` -> `openspec/specs/general/ui-performance/spec.md`
@@ -60,6 +61,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `UI-FOUNDATION-*`
 - `UI-GLOBAL-SEARCH-COMMAND-*`
 - `UI-GOVERNANCE-GATES-*`
+- `UI-ROUTE-COVERAGE-*`
 - `UI-KEYBOARD-SHORTCUTS-*`
 - `UI-LOGIN-SESSION-*`
 - `UI-PERFORMANCE-*`

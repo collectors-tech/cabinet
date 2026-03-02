@@ -8,6 +8,7 @@ This directory is organized by UI section hierarchy.
 - `inventory`
 - `wishlist`
 - `integrations`
+- `media`
 - `chats`
 - `users`
 - `settings`
@@ -16,7 +17,8 @@ This directory is organized by UI section hierarchy.
 Each section includes:
 - `README.md` with purpose and sub-spec listing
 - sub-spec folders containing `spec.md`
-- section-root `spec.md` only where already existing (`integrations`, `settings`)
+- screen-level specs split per route/screen (one spec per screen)
+- section-root `spec.md` only for cross-screen/domain contracts
 
 ## Notes
 - Requirement IDs remain unchanged (append-only discipline).
