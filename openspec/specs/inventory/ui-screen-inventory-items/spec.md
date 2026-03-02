@@ -57,7 +57,7 @@ Inventory Collection layout SHALL avoid duplicate control strips and keep summar
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-INV-01 | Open inventory ready state | List/table data renders | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-ready` |
-| UC-INV-02 | Empty filtered results | Empty state appears | existing/planned: `cypress/e2e/regression/inventory-empty-non500.cy.ts` `inventory-empty-non500` |
-| UC-INV-03 | API failure on load | Error state + retry, no 500 route | existing/planned: `cypress/e2e/regression/inventory-non500.cy.ts` `inventory-load-error-non500` |
+| UC-INV-02 | Empty filtered results | Empty state appears | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `renders empty inventory state without global 500 fallback` |
+| UC-INV-03 | API failure on load | Error state + retry, no 500 route | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry` |
 | UC-INV-04 | Row click open details | Details drawer opens selected item | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-row-opens-details` |
 | UC-INV-05 | Checkbox bulk select | Selection mode appears, no row-open side effect | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-bulk-checkbox-mode` |

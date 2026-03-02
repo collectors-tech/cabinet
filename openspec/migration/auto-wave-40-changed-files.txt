@@ -1,0 +1,14 @@
+openspec/migration/auto-wave-40-summary.md
+openspec/specs/inventory/ui-screen-inventory-items/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts
+ui.web/cypress/e2e/inventory-management.cy.ts
+ui.web/cypress/e2e/inventory-non500.cy.ts
+ui.web/cypress/e2e/journeys/baseline-foundation.cy.ts
+ui.web/cypress/e2e/profile-onboarding.cy.ts
+ui.web/cypress/e2e/shell-layout.cy.ts
+ui.web/cypress/e2e/smoke.cy.ts
+ui.web/cypress/e2e/starter-onboarding.cy.ts
+ui.web/cypress/e2e/ui-matrix.cy.ts
+ui.web/src/components/ui/sidebar.tsx
+ui.web/src/context/search-provider.tsx

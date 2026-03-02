@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { CommandMenu } from '@/components/command-menu'
+import { getShortcutKey } from '@/lib/keyboard-shortcuts'
 
 type SearchContextType = {
   open: boolean
@@ -16,9 +17,17 @@ export function SearchProvider({ children }: SearchProviderProps) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    const commandShortcut = getShortcutKey('command-palette')
     const down = (e: KeyboardEvent) => {
       const key = e.key?.toLowerCase()
-      if ((key === 'k' || e.code === 'KeyK') && (e.metaKey || e.ctrlKey)) {
+      const shortcutCode =
+        commandShortcut.length === 1
+          ? `Key${commandShortcut.toUpperCase()}`
+          : commandShortcut
+      if (
+        (key === commandShortcut || e.code === shortcutCode) &&
+        (e.metaKey || e.ctrlKey)
+      ) {
         e.preventDefault()
         setOpen((open) => !open)
       }
