@@ -51,12 +51,13 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
           data-testid='shell-chat-toggle'
           type='button'
           variant='outline'
-          size='sm'
+          size='icon'
+          aria-label={chatRailOpen ? 'Close chat rail' : 'Open chat rail'}
+          title={chatRailOpen ? 'Close chat rail' : 'Open chat rail'}
           onClick={() => setChatRailOpen((open) => !open)}
           className='shrink-0'
         >
-          <MessageSquare className='me-1 h-4 w-4' />
-          {chatRailOpen ? 'Close Chat' : 'Open Chat'}
+          <MessageSquare className='h-4 w-4' />
         </Button>
       </div>
       {chatRailOpen ? (
