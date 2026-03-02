@@ -14,9 +14,11 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -36,6 +38,14 @@ type InventoryPhoto = {
   id: string
   filename: string
   is_primary?: boolean
+}
+
+type AISuggestion = {
+  part_number?: string
+  brand?: string
+  title?: string
+  confidence?: number
+  requires_confirmation?: boolean
 }
 
 const folderNames = [
@@ -60,6 +70,17 @@ export function Collection({
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState<string | null>(null)
   const [photosBusy, setPhotosBusy] = useState(false)
+  const [activeProfileID, setActiveProfileID] = useState('')
+  const [aiTitleInput, setAITitleInput] = useState('')
+  const [aiPhotoURLInput, setAIPhotoURLInput] = useState('')
+  const [aiSuggestion, setAISuggestion] = useState<AISuggestion | null>(null)
+  const [aiLoading, setAILoading] = useState(false)
+  const [aiError, setAIError] = useState<string | null>(null)
+  const [aiApplied, setAIApplied] = useState(false)
+  const [aiConfirmOpen, setAIConfirmOpen] = useState(false)
+  const [lastAISuggestAction, setLastAISuggestAction] = useState<
+    'title' | 'photo' | null
+  >(null)
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
@@ -179,6 +200,34 @@ export function Collection({
     }
   }, [inventoryPhotos.length, selectedPhotoIndex])
 
+  useEffect(() => {
+    if (!isInventoryRoute) {
+      setActiveProfileID('')
+      return
+    }
+    let cancelled = false
+    const loadActiveProfile = async () => {
+      try {
+        const response = await fetch('/api/profiles/active')
+        if (!response.ok) {
+          return
+        }
+        const payload = (await response.json()) as { id?: string }
+        if (!cancelled) {
+          setActiveProfileID(payload.id?.trim() ?? '')
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveProfileID('')
+        }
+      }
+    }
+    void loadActiveProfile()
+    return () => {
+      cancelled = true
+    }
+  }, [isInventoryRoute])
+
   const handlePhotoUpload = useCallback(
     async (file: File | null) => {
       if (!file || !selectedItemID) {
@@ -265,6 +314,43 @@ export function Collection({
       }
     },
     [loadInventoryPhotos, selectedItemID]
+  )
+
+  const runAISuggest = useCallback(
+    async (mode: 'title' | 'photo') => {
+      if (!activeProfileID) {
+        setAIError('Active profile is required before AI requests can run.')
+        return
+      }
+      setAILoading(true)
+      setAIError(null)
+      setLastAISuggestAction(mode)
+      setAIApplied(false)
+      try {
+        const endpoint =
+          mode === 'title' ? '/api/ai/suggest/title' : '/api/ai/suggest/photo'
+        const payload =
+          mode === 'title'
+            ? { profile_id: activeProfileID, title: aiTitleInput }
+            : { profile_id: activeProfileID, image_url: aiPhotoURLInput }
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (!response.ok) {
+          throw new Error(`ai_suggest_${mode}_${response.status}`)
+        }
+        const suggestion = (await response.json()) as AISuggestion
+        setAISuggestion(suggestion)
+      } catch {
+        setAISuggestion(null)
+        setAIError('AI suggestion failed. Retry the request.')
+      } finally {
+        setAILoading(false)
+      }
+    },
+    [activeProfileID, aiPhotoURLInput, aiTitleInput]
   )
 
   return (
@@ -366,128 +452,238 @@ export function Collection({
               ) : null}
               <TasksTable data={tableData} routePath={routePath} />
               {isInventoryRoute ? (
-                <section
-                  className='space-y-3 rounded-md border p-4'
-                  data-testid='inventory-photos-section'
-                >
-                  <div>
-                    <h3 className='text-base font-semibold'>Photos</h3>
-                    <p className='text-sm text-muted-foreground'>
-                      Review item media and inspect photos in fullscreen mode.
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <input
-                      type='file'
-                      accept='image/*'
-                      data-testid='inventory-photo-upload-input'
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null
-                        void handlePhotoUpload(file)
-                        event.currentTarget.value = ''
-                      }}
-                    />
-                    {photosBusy ? (
-                      <span className='text-xs text-muted-foreground'>Working...</span>
-                    ) : null}
-                  </div>
-                  {photosLoading ? (
-                    <div
-                      className='rounded-md border p-3 text-sm text-muted-foreground'
-                      data-testid='inventory-photos-loading'
-                    >
-                      Loading photos...
+                <>
+                  <section
+                    className='space-y-3 rounded-md border p-4'
+                    data-testid='inventory-photos-section'
+                  >
+                    <div>
+                      <h3 className='text-base font-semibold'>Photos</h3>
+                      <p className='text-sm text-muted-foreground'>
+                        Review item media and inspect photos in fullscreen mode.
+                      </p>
                     </div>
-                  ) : null}
-                  {photosError ? (
-                    <div
-                      className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                      data-testid='inventory-photos-error'
-                    >
-                      <p className='font-medium'>Photos are unavailable.</p>
-                      <p className='mt-1 text-muted-foreground'>{photosError}</p>
-                      <Button
-                        className='mt-3'
-                        size='sm'
-                        variant='outline'
-                        onClick={() => void loadInventoryPhotos()}
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <input
+                        type='file'
+                        accept='image/*'
+                        data-testid='inventory-photo-upload-input'
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null
+                          void handlePhotoUpload(file)
+                          event.currentTarget.value = ''
+                        }}
+                      />
+                      {photosBusy ? (
+                        <span className='text-xs text-muted-foreground'>Working...</span>
+                      ) : null}
+                    </div>
+                    {photosLoading ? (
+                      <div
+                        className='rounded-md border p-3 text-sm text-muted-foreground'
+                        data-testid='inventory-photos-loading'
                       >
-                        Retry
-                      </Button>
+                        Loading photos...
+                      </div>
+                    ) : null}
+                    {photosError ? (
+                      <div
+                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                        data-testid='inventory-photos-error'
+                      >
+                        <p className='font-medium'>Photos are unavailable.</p>
+                        <p className='mt-1 text-muted-foreground'>{photosError}</p>
+                        <Button
+                          className='mt-3'
+                          size='sm'
+                          variant='outline'
+                          onClick={() => void loadInventoryPhotos()}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : null}
+                    {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
+                      <div
+                        className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                        data-testid='inventory-photos-empty'
+                      >
+                        No photos yet for the selected item. Upload an image to begin.
+                      </div>
+                    ) : null}
+                    {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
+                      <>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
+                          {inventoryPhotos.map((photo, index) => (
+                            <button
+                              key={photo.id}
+                              type='button'
+                              className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
+                              data-testid='inventory-photo-thumb'
+                              onClick={() => setSelectedPhotoIndex(index)}
+                            >
+                              <img
+                                src={`/api/items/${encodeURIComponent(
+                                  selectedItemID
+                                )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
+                                alt={photo.filename}
+                                className='h-32 w-full object-cover'
+                              />
+                              <div className='p-2 text-sm'>{photo.filename}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className='space-y-2'>
+                          {inventoryPhotos.map((photo) => (
+                            <div
+                              key={`row-${photo.id}`}
+                              className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
+                              data-testid='inventory-photo-row'
+                            >
+                              <div className='flex items-center gap-2 text-sm'>
+                                <span>{photo.filename}</span>
+                                {photo.is_primary ? (
+                                  <span
+                                    className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
+                                    data-testid='inventory-photo-primary-badge'
+                                  >
+                                    Primary
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className='flex gap-2'>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='inventory-photo-set-primary'
+                                  onClick={() => void handleSetPrimaryPhoto(photo.id)}
+                                >
+                                  Set Primary
+                                </Button>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='inventory-photo-delete'
+                                  onClick={() => void handleDeletePhoto(photo.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </section>
+                  <section
+                    className='space-y-3 rounded-md border p-4'
+                    data-testid='inventory-ai-assist-section'
+                  >
+                    <div>
+                      <h3 className='text-base font-semibold'>AI Assist</h3>
+                      <p className='text-sm text-muted-foreground'>
+                        Generate title and photo suggestions with explicit confirm-before-apply.
+                      </p>
                     </div>
-                  ) : null}
-                  {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
-                    <div
-                      className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
-                      data-testid='inventory-photos-empty'
-                    >
-                      No photos yet for the selected item. Upload an image to begin.
-                    </div>
-                  ) : null}
-                  {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
-                    <>
-                      <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
-                        {inventoryPhotos.map((photo, index) => (
-                          <button
-                            key={photo.id}
-                            type='button'
-                            className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
-                            data-testid='inventory-photo-thumb'
-                            onClick={() => setSelectedPhotoIndex(index)}
-                          >
-                            <img
-                              src={`/api/items/${encodeURIComponent(
-                                selectedItemID
-                              )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
-                              alt={photo.filename}
-                              className='h-32 w-full object-cover'
-                            />
-                            <div className='p-2 text-sm'>{photo.filename}</div>
-                          </button>
-                        ))}
+                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                      <div className='space-y-2'>
+                        <Input
+                          placeholder='Paste listing title'
+                          data-testid='inventory-ai-title-input'
+                          value={aiTitleInput}
+                          onChange={(event) => setAITitleInput(event.target.value)}
+                        />
+                        <Button
+                          data-testid='inventory-ai-suggest-title'
+                          onClick={() => void runAISuggest('title')}
+                          disabled={aiLoading || aiTitleInput.trim() === ''}
+                        >
+                          Suggest from Title
+                        </Button>
                       </div>
                       <div className='space-y-2'>
-                        {inventoryPhotos.map((photo) => (
-                          <div
-                            key={`row-${photo.id}`}
-                            className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
-                            data-testid='inventory-photo-row'
-                          >
-                            <div className='flex items-center gap-2 text-sm'>
-                              <span>{photo.filename}</span>
-                              {photo.is_primary ? (
-                                <span
-                                  className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
-                                  data-testid='inventory-photo-primary-badge'
-                                >
-                                  Primary
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className='flex gap-2'>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                data-testid='inventory-photo-set-primary'
-                                onClick={() => void handleSetPrimaryPhoto(photo.id)}
-                              >
-                                Set Primary
-                              </Button>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                data-testid='inventory-photo-delete'
-                                onClick={() => void handleDeletePhoto(photo.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                        <Input
+                          placeholder='Paste photo URL'
+                          data-testid='inventory-ai-photo-url-input'
+                          value={aiPhotoURLInput}
+                          onChange={(event) => setAIPhotoURLInput(event.target.value)}
+                        />
+                        <Button
+                          data-testid='inventory-ai-suggest-photo'
+                          onClick={() => void runAISuggest('photo')}
+                          disabled={aiLoading || aiPhotoURLInput.trim() === ''}
+                        >
+                          Suggest from Photo
+                        </Button>
                       </div>
-                    </>
-                  ) : null}
-                </section>
+                    </div>
+                    {aiLoading ? (
+                      <div
+                        className='rounded-md border p-3 text-sm text-muted-foreground'
+                        data-testid='inventory-ai-loading'
+                      >
+                        Running AI suggestion...
+                      </div>
+                    ) : null}
+                    {aiError ? (
+                      <div
+                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                        data-testid='inventory-ai-error'
+                      >
+                        <p className='font-medium'>AI suggestion failed.</p>
+                        <p className='mt-1 text-muted-foreground'>{aiError}</p>
+                        <Button
+                          className='mt-3'
+                          variant='outline'
+                          size='sm'
+                          data-testid='inventory-ai-retry'
+                          onClick={() => {
+                            if (lastAISuggestAction) {
+                              void runAISuggest(lastAISuggestAction)
+                            }
+                          }}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : null}
+                    {aiSuggestion ? (
+                      <div
+                        className='rounded-md border p-3 text-sm'
+                        data-testid='inventory-ai-suggestion'
+                      >
+                        <p>
+                          <strong>Part:</strong> {aiSuggestion.part_number || 'n/a'}
+                        </p>
+                        <p>
+                          <strong>Brand:</strong> {aiSuggestion.brand || 'n/a'}
+                        </p>
+                        <p>
+                          <strong>Title:</strong> {aiSuggestion.title || 'n/a'}
+                        </p>
+                        <p>
+                          <strong>Confidence:</strong>{' '}
+                          {(aiSuggestion.confidence ?? 0).toFixed(2)}
+                        </p>
+                        <Button
+                          className='mt-3'
+                          data-testid='inventory-ai-apply'
+                          onClick={() => setAIConfirmOpen(true)}
+                        >
+                          Apply Suggestion
+                        </Button>
+                      </div>
+                    ) : null}
+                    {aiApplied ? (
+                      <div
+                        className='rounded-md border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm'
+                        data-testid='inventory-ai-applied-banner'
+                      >
+                        Suggestion applied to draft item fields.
+                      </div>
+                    ) : null}
+                  </section>
+                </>
               ) : null}
             </CardContent>
           </Card>
@@ -556,6 +752,29 @@ export function Collection({
                 Close
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={aiConfirmOpen} onOpenChange={setAIConfirmOpen}>
+          <DialogContent data-testid='inventory-ai-confirm-dialog'>
+            <DialogHeader>
+              <DialogTitle>Confirm AI Apply</DialogTitle>
+            </DialogHeader>
+            <p className='text-sm text-muted-foreground'>
+              AI suggestions require explicit confirmation before apply.
+            </p>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setAIConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setAIApplied(true)
+                  setAIConfirmOpen(false)
+                }}
+              >
+                Confirm Apply
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </Main>
