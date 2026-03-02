@@ -17,6 +17,7 @@ type Config struct {
 	Addr            string
 	Host            string
 	Port            int
+	BindMode        string
 	DataDir         string
 	DBPath          string
 	EnableE2EHooks  bool
@@ -32,7 +33,8 @@ type Config struct {
 func Load() Config {
 	loadDotEnv(".env")
 
-	host, port, addr, validationErr := resolveRuntimeAddress()
+	bindMode, bindModeErr := resolveBindMode()
+	host, port, addr, addrValidationErr := resolveRuntimeAddress(bindMode)
 	dataDir := valueOrDefault("CABINET_DATA_DIR", defaultDataDir())
 	dbPath := valueOrDefault("CABINET_DB_PATH", filepath.Join(dataDir, "cabinet.db"))
 	updateChannel := update.ParseChannel(valueOrDefault("CABINET_UPDATE_CHANNEL", "stable"))
@@ -45,10 +47,18 @@ func Load() Config {
 	if backupInterval <= 0 {
 		backupInterval = 60
 	}
+	validationErr := ""
+	if strings.TrimSpace(bindModeErr) != "" {
+		validationErr = strings.TrimSpace(bindModeErr)
+	} else if strings.TrimSpace(addrValidationErr) != "" {
+		validationErr = strings.TrimSpace(addrValidationErr)
+	}
+
 	return Config{
 		Addr:            addr,
 		Host:            host,
 		Port:            port,
+		BindMode:        bindMode,
 		DataDir:         dataDir,
 		DBPath:          dbPath,
 		EnableE2EHooks:  enableE2EHooks,
@@ -62,7 +72,17 @@ func Load() Config {
 	}
 }
 
-func resolveRuntimeAddress() (string, int, string, string) {
+func resolveBindMode() (string, string) {
+	raw := strings.ToLower(strings.TrimSpace(valueOrDefault("CABINET_BIND_MODE", "local")))
+	switch raw {
+	case "local", "lan":
+		return raw, ""
+	default:
+		return "local", fmt.Sprintf("invalid CABINET_BIND_MODE: %q (expected local or lan)", raw)
+	}
+}
+
+func resolveRuntimeAddress(bindMode string) (string, int, string, string) {
 	const (
 		defaultHost = "127.0.0.1"
 		defaultPort = 17880
@@ -75,7 +95,11 @@ func resolveRuntimeAddress() (string, int, string, string) {
 	if hostRaw != "" || portRaw != "" {
 		host := hostRaw
 		if host == "" {
-			host = defaultHost
+			if strings.EqualFold(bindMode, "lan") {
+				host = "0.0.0.0"
+			} else {
+				host = defaultHost
+			}
 		}
 		port := defaultPort
 		if portRaw != "" {
@@ -89,6 +113,9 @@ func resolveRuntimeAddress() (string, int, string, string) {
 	}
 
 	if addrRaw == "" {
+		if strings.EqualFold(bindMode, "lan") {
+			return "0.0.0.0", defaultPort, net.JoinHostPort("0.0.0.0", strconv.Itoa(defaultPort)), ""
+		}
 		return defaultHost, defaultPort, net.JoinHostPort(defaultHost, strconv.Itoa(defaultPort)), ""
 	}
 

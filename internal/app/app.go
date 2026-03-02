@@ -200,6 +200,7 @@ func New(cfg config.Config) (*App, error) {
 			"update_public_key_configured": cfg.UpdatePublicKey != "",
 			"app_version":                  appVersion,
 			"build_date":                   buildDate,
+			"bind_mode":                    strings.TrimSpace(strings.ToLower(cfg.BindMode)),
 			"runtime_host":                 host,
 			"runtime_port":                 port,
 		})

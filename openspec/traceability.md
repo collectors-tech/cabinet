@@ -107,8 +107,8 @@
 | `RUNTIME-CORE-003` | `openspec/specs/general/runtime-core/spec.md` | `openspec/specs/general/runtime-core/spec.md` | TestRuntimeEndpointIncludesBuildMetadata (internal/app/logging_recovery_api_test.go), TestWave1RuntimeHealthAndRecoveryContracts (internal/app/traceability_wave1_auth_security_test.go) | implemented |
 | `RUNTIME-CONFIG-ENV-001` | `openspec/specs/general/runtime-config-env/spec.md` | `internal/config/config_test.go`; `internal/app/logging_recovery_api_test.go` | implemented |
 | `RUNTIME-CONFIG-ENV-002` | `openspec/specs/general/runtime-config-env/spec.md` | `internal/config/config_test.go` | implemented |
-| `RUNTIME-NETWORK-LAN-001` | `openspec/specs/general/runtime-network-lan/spec.md` | `openspec/specs/general/runtime-network-lan/spec.md` | planned: TODO add runtime integration test for LAN bind mode and health accessibility | partial |
-| `RUNTIME-NETWORK-LAN-002` | `openspec/specs/general/runtime-network-lan/spec.md` | `openspec/specs/general/runtime-network-lan/spec.md` | planned: TODO add auth contract test for unauthorized LAN protected endpoint access | partial |
+| `RUNTIME-NETWORK-LAN-001` | `openspec/specs/general/runtime-network-lan/spec.md` | `internal/config/config_test.go`; `internal/app/runtime_network_lan_api_test.go` | implemented |
+| `RUNTIME-NETWORK-LAN-002` | `openspec/specs/general/runtime-network-lan/spec.md` | `internal/app/runtime_network_lan_api_test.go` | implemented |
 | `SCANNER-001` | `openspec/specs/integrations/scanner/spec.md` | `openspec/specs/integrations/scanner/spec.md` | TestWave6ScannerQuerySetCreateAndFailureRetry (internal/app/traceability_wave6_ops_contracts_test.go) | implemented |
 | `SCANNER-002` | `openspec/specs/integrations/scanner/spec.md` | `openspec/specs/integrations/scanner/spec.md` | TestWave4ScannerScheduledSummaryAndCandidateDedup (internal/app/traceability_wave4_provider_scanner_test.go) | implemented |
 | `SCANNER-003` | `openspec/specs/integrations/scanner/spec.md` | `openspec/specs/integrations/scanner/spec.md` | TestWave6ScannerQuerySetCreateAndFailureRetry (internal/app/traceability_wave6_ops_contracts_test.go) | implemented |

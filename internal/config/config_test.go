@@ -92,6 +92,24 @@ func TestLoadInvalidPortReturnsValidationError(t *testing.T) {
 	}
 }
 
+func TestLoadLANBindModeUsesWildcardHostByDefault(t *testing.T) {
+	t.Setenv("CABINET_ADDR", "")
+	t.Setenv("CABINET_BIND_MODE", "lan")
+	t.Setenv("CABINET_HOST", "")
+	t.Setenv("CABINET_PORT", "17880")
+
+	cfg := Load()
+	if cfg.BindMode != "lan" {
+		t.Fatalf("expected bind mode lan, got %q", cfg.BindMode)
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("expected LAN host 0.0.0.0, got %q", cfg.Host)
+	}
+	if cfg.Addr != "0.0.0.0:17880" {
+		t.Fatalf("expected LAN addr 0.0.0.0:17880, got %q", cfg.Addr)
+	}
+}
+
 func containsAll(in string, parts []string) bool {
 	for _, part := range parts {
 		if !strings.Contains(strings.ToLower(in), strings.ToLower(part)) {

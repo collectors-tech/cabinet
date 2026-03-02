@@ -1,0 +1,6 @@
+M internal/app/app.go
+M internal/config/config.go
+M internal/config/config_test.go
+M openspec/traceability.md
+?? internal/app/runtime_network_lan_api_test.go
+?? openspec/migration/auto-wave-42-summary.md
