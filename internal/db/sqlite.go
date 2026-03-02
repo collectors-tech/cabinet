@@ -90,6 +90,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			part_number TEXT NOT NULL,
 			title TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
+			priority TEXT NOT NULL DEFAULT 'medium',
+			grading_status TEXT NOT NULL DEFAULT 'ungraded',
+			grader TEXT NOT NULL DEFAULT '',
+			grade_numeric REAL NOT NULL DEFAULT 0,
+			slabbed INTEGER NOT NULL DEFAULT 0,
+			collector_classification TEXT NOT NULL DEFAULT '',
+			car_grade_type TEXT NOT NULL DEFAULT '',
+			packaging_grade_type TEXT NOT NULL DEFAULT '',
 			make TEXT NOT NULL DEFAULT '',
 			model TEXT NOT NULL DEFAULT '',
 			year TEXT NOT NULL DEFAULT '',
@@ -342,6 +350,38 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "canonical_items", "status", "TEXT NOT NULL DEFAULT 'active'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.status: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "priority", "TEXT NOT NULL DEFAULT 'medium'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.priority: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "grading_status", "TEXT NOT NULL DEFAULT 'ungraded'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.grading_status: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "grader", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.grader: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "grade_numeric", "REAL NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.grade_numeric: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "slabbed", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.slabbed: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "collector_classification", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.collector_classification: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "car_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.car_grade_type: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "packaging_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.packaging_grade_type: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()

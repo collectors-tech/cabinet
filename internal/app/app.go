@@ -586,6 +586,112 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
 		}
 	})
+	mux.HandleFunc("/api/inventory/grading/enums", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			settings, getErr := profiles.GetSettings(r.Context(), active.ID)
+			if getErr != nil {
+				http.Error(w, `{"error":"failed_to_get_grading_enums"}`, http.StatusBadRequest)
+				return
+			}
+			condition := parseStringArraySetting(settings["grading.enums.condition"], defaultConditionGrades())
+			packaging := parseStringArraySetting(settings["grading.enums.packaging"], defaultPackagingGrades())
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"condition_grades": condition,
+				"packaging_grades": packaging,
+			})
+		case http.MethodPut:
+			var req struct {
+				ConditionGrades []string `json:"condition_grades"`
+				PackagingGrades []string `json:"packaging_grades"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			condition := normalizeStringList(req.ConditionGrades, defaultConditionGrades())
+			packaging := normalizeStringList(req.PackagingGrades, defaultPackagingGrades())
+			conditionRaw, _ := json.Marshal(condition)
+			packagingRaw, _ := json.Marshal(packaging)
+			if putErr := profiles.PutSettings(r.Context(), active.ID, map[string]string{
+				"grading.enums.condition": string(conditionRaw),
+				"grading.enums.packaging": string(packagingRaw),
+			}); putErr != nil {
+				http.Error(w, `{"error":"failed_to_save_grading_enums"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"condition_grades": condition,
+				"packaging_grades": packaging,
+			})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/inventory/grading/defaults", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			settings, getErr := profiles.GetSettings(r.Context(), active.ID)
+			if getErr != nil {
+				http.Error(w, `{"error":"failed_to_get_grading_defaults"}`, http.StatusBadRequest)
+				return
+			}
+			gradingStatus := strings.TrimSpace(settings["grading.defaults.grading_status"])
+			if gradingStatus == "" {
+				gradingStatus = "ungraded"
+			}
+			priority := strings.TrimSpace(settings["grading.defaults.priority"])
+			if priority == "" {
+				priority = "medium"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"grading_status": strings.ToLower(gradingStatus),
+				"priority":       strings.ToLower(priority),
+			})
+		case http.MethodPut:
+			var req struct {
+				GradingStatus string `json:"grading_status"`
+				Priority      string `json:"priority"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			gradingStatus := strings.ToLower(strings.TrimSpace(req.GradingStatus))
+			if gradingStatus == "" {
+				gradingStatus = "ungraded"
+			}
+			priority := strings.ToLower(strings.TrimSpace(req.Priority))
+			if priority == "" {
+				priority = "medium"
+			}
+			if putErr := profiles.PutSettings(r.Context(), active.ID, map[string]string{
+				"grading.defaults.grading_status": gradingStatus,
+				"grading.defaults.priority":       priority,
+			}); putErr != nil {
+				http.Error(w, `{"error":"failed_to_save_grading_defaults"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"grading_status": gradingStatus,
+				"priority":       priority,
+			})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -626,6 +732,19 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			active, _ := profiles.GetActiveProfile(r.Context())
+			if strings.TrimSpace(active.ID) != "" {
+				settings, _ := profiles.GetSettings(r.Context(), active.ID)
+				if strings.TrimSpace(req.GradingStatus) == "" {
+					if v := strings.TrimSpace(settings["grading.defaults.grading_status"]); v != "" {
+						req.GradingStatus = strings.ToLower(v)
+					}
+				}
+				if strings.TrimSpace(req.Priority) == "" {
+					if v := strings.TrimSpace(settings["grading.defaults.priority"]); v != "" {
+						req.Priority = strings.ToLower(v)
+					}
+				}
+			}
 			created, err := collectionRepo.CreateItemForProfile(r.Context(), active.ID, req)
 			if err != nil {
 				http.Error(w, `{"error":"invalid_item"}`, http.StatusBadRequest)
@@ -3179,6 +3298,46 @@ func filterItemsByLifecycleStatus(items []collection.Item, status string) []coll
 		}
 	}
 	return filtered
+}
+
+func defaultConditionGrades() []string {
+	return []string{"M", "NM", "EX", "VG", "G", "F", "P"}
+}
+
+func defaultPackagingGrades() []string {
+	return []string{"sealed_mint", "sealed_good", "opened_complete", "loose"}
+}
+
+func parseStringArraySetting(raw string, fallback []string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return append([]string(nil), fallback...)
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
+		return append([]string(nil), fallback...)
+	}
+	return normalizeStringList(values, fallback)
+}
+
+func normalizeStringList(input []string, fallback []string) []string {
+	out := make([]string, 0, len(input))
+	seen := map[string]struct{}{}
+	for _, item := range input {
+		clean := strings.TrimSpace(strings.ToLower(item))
+		if clean == "" {
+			continue
+		}
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		out = append(out, clean)
+	}
+	if len(out) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return out
 }
 
 func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {

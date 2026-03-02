@@ -11,21 +11,29 @@ import (
 )
 
 type Item struct {
-	ID          string   `json:"id"`
-	Brand       string   `json:"brand"`
-	Category    string   `json:"category"`
-	PartNumber  string   `json:"part_number"`
-	Title       string   `json:"title"`
-	Status      string   `json:"status"`
-	Make        string   `json:"make"`
-	Model       string   `json:"model"`
-	Year        string   `json:"year"`
-	Scale       string   `json:"scale"`
-	Series      string   `json:"series"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
+	ID                      string   `json:"id"`
+	Brand                   string   `json:"brand"`
+	Category                string   `json:"category"`
+	PartNumber              string   `json:"part_number"`
+	Title                   string   `json:"title"`
+	Status                  string   `json:"status"`
+	Priority                string   `json:"priority"`
+	GradingStatus           string   `json:"grading_status"`
+	Grader                  string   `json:"grader"`
+	GradeNumeric            float64  `json:"grade_numeric"`
+	Slabbed                 bool     `json:"slabbed"`
+	CollectorClassification string   `json:"collector_classification"`
+	CarGradeType            string   `json:"car_grade_type"`
+	PackagingGradeType      string   `json:"packaging_grade_type"`
+	Make                    string   `json:"make"`
+	Model                   string   `json:"model"`
+	Year                    string   `json:"year"`
+	Scale                   string   `json:"scale"`
+	Series                  string   `json:"series"`
+	Description             string   `json:"description"`
+	Tags                    []string `json:"tags"`
+	CreatedAt               string   `json:"created_at"`
+	UpdatedAt               string   `json:"updated_at"`
 }
 
 type Instance struct {
@@ -86,9 +94,9 @@ func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string,
 	in.ID = uuid.NewString()
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO canonical_items (
-			id, profile_id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Status, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
+			id, profile_id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Status, in.Priority, in.GradingStatus, in.Grader, in.GradeNumeric, boolToInt(in.Slabbed), in.CollectorClassification, in.CarGradeType, in.PackagingGradeType, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON)); err != nil {
 		return Item{}, fmt.Errorf("create item: %w", err)
 	}
 
@@ -107,6 +115,12 @@ func normalizeItemForCreate(in Item) Item {
 	in.PartNumber = strings.TrimSpace(in.PartNumber)
 	in.Title = strings.TrimSpace(in.Title)
 	in.Status = normalizeItemLifecycleStatus(in.Status)
+	in.Priority = normalizeItemPriority(in.Priority)
+	in.GradingStatus = normalizeItemGradingStatus(in.GradingStatus)
+	in.Grader = strings.TrimSpace(in.Grader)
+	in.CollectorClassification = strings.TrimSpace(in.CollectorClassification)
+	in.CarGradeType = strings.TrimSpace(in.CarGradeType)
+	in.PackagingGradeType = strings.TrimSpace(in.PackagingGradeType)
 	in.Make = strings.TrimSpace(in.Make)
 	in.Model = strings.TrimSpace(in.Model)
 	in.Year = strings.TrimSpace(in.Year)
@@ -123,6 +137,22 @@ func normalizeItemLifecycleStatus(raw string) string {
 	}
 	if _, ok := allowedItemLifecycleStatuses[status]; !ok {
 		return "active"
+	}
+	return status
+}
+
+func normalizeItemPriority(raw string) string {
+	priority := strings.ToLower(strings.TrimSpace(raw))
+	if priority == "" {
+		return "medium"
+	}
+	return priority
+}
+
+func normalizeItemGradingStatus(raw string) string {
+	status := strings.ToLower(strings.TrimSpace(raw))
+	if status == "" {
+		return "ungraded"
 	}
 	return status
 }
@@ -148,6 +178,30 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	if v := strings.TrimSpace(changes.Status); v != "" {
 		status := normalizeItemLifecycleStatus(v)
 		next.Status = status
+	}
+	if v := strings.TrimSpace(changes.Priority); v != "" {
+		next.Priority = normalizeItemPriority(v)
+	}
+	if v := strings.TrimSpace(changes.GradingStatus); v != "" {
+		next.GradingStatus = normalizeItemGradingStatus(v)
+	}
+	if v := strings.TrimSpace(changes.Grader); v != "" {
+		next.Grader = v
+	}
+	if changes.GradeNumeric > 0 {
+		next.GradeNumeric = changes.GradeNumeric
+	}
+	if changes.Slabbed {
+		next.Slabbed = true
+	}
+	if v := strings.TrimSpace(changes.CollectorClassification); v != "" {
+		next.CollectorClassification = v
+	}
+	if v := strings.TrimSpace(changes.CarGradeType); v != "" {
+		next.CarGradeType = v
+	}
+	if v := strings.TrimSpace(changes.PackagingGradeType); v != "" {
+		next.PackagingGradeType = v
 	}
 	if v := strings.TrimSpace(changes.Make); v != "" {
 		next.Make = v
@@ -180,9 +234,9 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	}
 	if _, err := r.db.ExecContext(ctx, `
 		UPDATE canonical_items
-		SET brand = ?, category = ?, part_number = ?, title = ?, status = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
+		SET brand = ?, category = ?, part_number = ?, title = ?, status = ?, priority = ?, grading_status = ?, grader = ?, grade_numeric = ?, slabbed = ?, collector_classification = ?, car_grade_type = ?, packaging_grade_type = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Status, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), id); err != nil {
+	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Status, next.Priority, next.GradingStatus, next.Grader, next.GradeNumeric, boolToInt(next.Slabbed), next.CollectorClassification, next.CarGradeType, next.PackagingGradeType, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), id); err != nil {
 		return Item{}, fmt.Errorf("update item: %w", err)
 	}
 	return r.GetItemByID(ctx, id)
@@ -209,11 +263,12 @@ func (r *Repository) BulkEditItems(ctx context.Context, ids []string, changes It
 func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 	var item Item
 	var tagsRaw string
+	var slabbed int
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items WHERE id = ?
 	`, id).Scan(
-		&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Make, &item.Model, &item.Year,
+		&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
 		&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -225,19 +280,20 @@ func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 	if err := json.Unmarshal([]byte(tagsRaw), &item.Tags); err != nil {
 		return Item{}, fmt.Errorf("unmarshal tags: %w", err)
 	}
+	item.Slabbed = slabbed == 1
 	return item, nil
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items ORDER BY created_at ASC
 	`)
 }
 
 func (r *Repository) ListItemsByProfile(ctx context.Context, profileID string) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, status, make, model, year, scale, series, description, tags_json, created_at, updated_at
+		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, updated_at
 		FROM canonical_items WHERE profile_id = ? ORDER BY created_at ASC
 	`, strings.TrimSpace(profileID))
 }
@@ -254,8 +310,9 @@ func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ..
 	for rows.Next() {
 		var item Item
 		var tagsRaw string
+		var slabbed int
 		if err := rows.Scan(
-			&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Make, &item.Model, &item.Year,
+			&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
 			&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan item: %w", err)
@@ -263,6 +320,7 @@ func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ..
 		if err := json.Unmarshal([]byte(tagsRaw), &item.Tags); err != nil {
 			return nil, fmt.Errorf("unmarshal item tags: %w", err)
 		}
+		item.Slabbed = slabbed == 1
 		out = append(out, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -314,6 +372,13 @@ func (r *Repository) ListItemDependencyCounts(ctx context.Context, id string) (m
 		}
 	}
 	return counts, nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (r *Repository) CreateInstance(ctx context.Context, in Instance) (Instance, error) {

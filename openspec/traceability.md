@@ -77,9 +77,9 @@
 | `INVENTORY-DELETE-LIFECYCLE-001` | `openspec/specs/inventory/inventory-delete-lifecycle/spec.md` | `internal/app/inventory_delete_lifecycle_api_test.go`; `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` | implemented |
 | `INVENTORY-DELETE-LIFECYCLE-002` | `openspec/specs/inventory/inventory-delete-lifecycle/spec.md` | `internal/app/inventory_delete_lifecycle_api_test.go`; `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` | implemented |
 | `INVENTORY-DELETE-LIFECYCLE-003` | `openspec/specs/inventory/inventory-delete-lifecycle/spec.md` | `internal/app/inventory_delete_lifecycle_api_test.go` | implemented |
-| `INVENTORY-GRADING-001` | `openspec/specs/inventory/inventory-grading/spec.md` | `openspec/specs/inventory/inventory-grading/spec.md` | planned: TODO add API/E2E proof for grading enum configuration management | partial |
-| `INVENTORY-GRADING-002` | `openspec/specs/inventory/inventory-grading/spec.md` | `openspec/specs/inventory/inventory-grading/spec.md` | planned: TODO add API/E2E proof for grading field persistence on item records | partial |
-| `INVENTORY-GRADING-003` | `openspec/specs/inventory/inventory-grading/spec.md` | `openspec/specs/inventory/inventory-grading/spec.md` | planned: TODO add runtime/API proof for default grading and priority values on new records | partial |
+| `INVENTORY-GRADING-001` | `openspec/specs/inventory/inventory-grading/spec.md` | `internal/app/inventory_grading_api_test.go` | implemented |
+| `INVENTORY-GRADING-002` | `openspec/specs/inventory/inventory-grading/spec.md` | `internal/app/inventory_grading_api_test.go` | implemented |
+| `INVENTORY-GRADING-003` | `openspec/specs/inventory/inventory-grading/spec.md` | `internal/app/inventory_grading_api_test.go` | implemented |
 | `LICENSING-001` | `openspec/specs/general/licensing/spec.md` | `openspec/specs/general/licensing/spec.md` | TestLicenseStatusAndFreeTierCap (internal/app/license_api_test.go) | implemented |
 | `LICENSING-002` | `openspec/specs/general/licensing/spec.md` | `openspec/specs/general/licensing/spec.md` | TestLicenseStatusAndFreeTierCap (internal/app/license_api_test.go) | implemented |
 | `LOGGING-001` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); planned: TODO runtime/API/E2E proof for this requirement ID | partial |
