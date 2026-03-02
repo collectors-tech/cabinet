@@ -1,1 +1,0 @@
-import{j as x,a as l}from"./index-PFTiXVeE.js";function r({fixed:t,className:o,fluid:a,...n}){return x.jsx("main",{"data-layout":t?"fixed":"auto",className:l("px-4 py-6",t&&"flex grow flex-col overflow-hidden",!a&&"@7xl/content:mx-auto @7xl/content:w-full @7xl/content:max-w-7xl",o),...n})}export{r as M};

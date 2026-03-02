@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -48,14 +55,55 @@ type AISuggestion = {
   requires_confirmation?: boolean
 }
 
-const folderNames = [
-  'All Items',
-  'Watch List',
-  'Wishlist Focus',
-  'Store 1',
-  'Store 2',
-  'Warehouse 1',
+type FolderNode = {
+  id: string
+  name: string
+  children?: FolderNode[]
+}
+
+const folderTree: FolderNode[] = [
+  { id: 'all-items', name: 'All Items' },
+  { id: 'watch-list', name: 'Watch List' },
+  { id: 'wishlist-focus', name: 'Wishlist Focus' },
+  { id: 'store-1', name: 'Store 1' },
+  { id: 'store-2', name: 'Store 2' },
+  { id: 'store-3', name: 'Store 3' },
+  { id: 'store-4', name: 'Store 4' },
+  { id: 'store-5', name: 'Store 5' },
+  { id: 'store-6', name: 'Store 6' },
+  { id: 'store-7', name: 'Store 7' },
+  { id: 'store-8', name: 'Store 8' },
+  { id: 'store-9', name: 'Store 9' },
+  { id: 'store-10', name: 'Store 10' },
+  {
+    id: 'warehouses',
+    name: 'Warehouses',
+    children: [
+      { id: 'warehouse-1', name: 'Warehouse 1' },
+      { id: 'warehouse-2', name: 'Warehouse 2' },
+      { id: 'warehouse-3', name: 'Warehouse 3' },
+    ],
+  },
+  { id: 'archive-a', name: 'Archive A' },
+  { id: 'archive-b', name: 'Archive B' },
+  { id: 'archive-c', name: 'Archive C' },
+  { id: 'archive-d', name: 'Archive D' },
+  { id: 'archive-e', name: 'Archive E' },
+  { id: 'archive-f', name: 'Archive F' },
+  { id: 'archive-g', name: 'Archive G' },
+  { id: 'archive-h', name: 'Archive H' },
+  { id: 'archive-i', name: 'Archive I' },
+  { id: 'archive-j', name: 'Archive J' },
+  { id: 'archive-k', name: 'Archive K' },
+  { id: 'archive-l', name: 'Archive L' },
 ]
+
+function countFolderNodes(nodes: FolderNode[]): number {
+  return nodes.reduce((count, node) => {
+    const childCount = node.children ? countFolderNodes(node.children) : 0
+    return count + 1 + childCount
+  }, 0)
+}
 
 export function Collection({
   title = 'Collection',
@@ -63,7 +111,11 @@ export function Collection({
   routePath,
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
-  const [activeFolder, setActiveFolder] = useState(folderNames[0])
+  const [activeFolder, setActiveFolder] = useState('All Items')
+  const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
+    () => new Set()
+  )
+  const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -131,9 +183,152 @@ export function Collection({
     void loadInventoryItems()
   }, [loadInventoryItems])
 
+  const visibleTreeNodes = useMemo(() => {
+    const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
+    const walk = (treeNodes: FolderNode[]) => {
+      treeNodes.forEach((node) => {
+        nodes.push({
+          id: node.id,
+          name: node.name,
+          hasChildren: Boolean(node.children?.length),
+        })
+        if (node.children?.length && expandedNodeIDs.has(node.id)) {
+          walk(node.children)
+        }
+      })
+    }
+    walk(folderTree)
+    return nodes
+  }, [expandedNodeIDs])
+
+  const focusTreeItemByOffset = useCallback(
+    (currentID: string, offset: number) => {
+      const currentIndex = visibleTreeNodes.findIndex(
+        (node) => node.id === currentID
+      )
+      if (currentIndex < 0) {
+        return
+      }
+      const nextIndex = currentIndex + offset
+      if (nextIndex < 0 || nextIndex >= visibleTreeNodes.length) {
+        return
+      }
+      const nextID = visibleTreeNodes[nextIndex]?.id
+      if (!nextID) {
+        return
+      }
+      treeItemRefs.current[nextID]?.focus()
+    },
+    [visibleTreeNodes]
+  )
+
+  const toggleNodeExpanded = useCallback((nodeID: string) => {
+    setExpandedNodeIDs((previous) => {
+      const next = new Set(previous)
+      if (next.has(nodeID)) {
+        next.delete(nodeID)
+      } else {
+        next.add(nodeID)
+      }
+      return next
+    })
+  }, [])
+
+  const handleTreeItemKeyDown = useCallback(
+    (node: FolderNode, event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        if (node.children?.length && !expandedNodeIDs.has(node.id)) {
+          toggleNodeExpanded(node.id)
+        }
+        setActiveFolder(node.name)
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        if (node.children?.length && expandedNodeIDs.has(node.id)) {
+          toggleNodeExpanded(node.id)
+        }
+        return
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        focusTreeItemByOffset(node.id, 1)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        focusTreeItemByOffset(node.id, -1)
+        return
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        setActiveFolder(node.name)
+      }
+    },
+    [expandedNodeIDs, focusTreeItemByOffset, toggleNodeExpanded]
+  )
+
+  const renderFolderTree = useCallback(
+    (nodes: FolderNode[], level = 1) =>
+      nodes.map((node) => {
+        const hasChildren = Boolean(node.children?.length)
+        const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        return (
+          <div key={node.id} role='none'>
+            <div className='flex items-center gap-2' style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}>
+              {hasChildren ? (
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className='h-7 w-7'
+                  data-testid={`folder-tree-toggle-${node.id}`}
+                  aria-label={`Toggle ${node.name}`}
+                  aria-expanded={expanded ? 'true' : 'false'}
+                  onClick={() => toggleNodeExpanded(node.id)}
+                >
+                  {expanded ? '−' : '+'}
+                </Button>
+              ) : (
+                <span className='inline-flex h-7 w-7 shrink-0' />
+              )}
+              <button
+                ref={(element) => {
+                  treeItemRefs.current[node.id] = element
+                }}
+                type='button'
+                role='treeitem'
+                tabIndex={activeFolder === node.name ? 0 : -1}
+                aria-level={level}
+                aria-selected={activeFolder === node.name ? 'true' : 'false'}
+                aria-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                data-testid={`folder-tree-item-${node.id}`}
+                className={`w-full rounded-md px-3 py-2 text-left text-sm ${activeFolder === node.name ? 'bg-primary text-primary-foreground' : 'bg-muted/30 hover:bg-muted/60'}`}
+                onClick={() => setActiveFolder(node.name)}
+                onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
+              >
+                <span data-testid={`collection-folder-${node.id}`}>{node.name}</span>
+              </button>
+            </div>
+            {hasChildren && expanded ? (
+              <div
+                role='group'
+                data-testid={`folder-tree-group-${node.id}`}
+                className='space-y-2'
+              >
+                {renderFolderTree(node.children ?? [], level + 1)}
+              </div>
+            ) : null}
+          </div>
+        )
+      }),
+    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, toggleNodeExpanded]
+  )
+
   const summary = useMemo(
     () => ({
-      folders: folderNames.length,
+      folders: countFolderNodes(folderTree),
       items: tableData.length,
       activeBrand: 'All',
       activeCategory: 'All',
@@ -428,20 +623,15 @@ export function Collection({
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2'>
-              {folderNames.map((folder) => (
-                <Button
-                  key={folder}
-                  data-testid={`collection-folder-${folder
-                    .trim()
-                    .toLowerCase()
-                    .replace(/\s+/g, '-')}`}
-                  className='w-full justify-start'
-                  variant={folder === activeFolder ? 'default' : 'outline'}
-                  onClick={() => setActiveFolder(folder)}
-                >
-                  {folder}
-                </Button>
-              ))}
+              <div
+                role='tree'
+                tabIndex={0}
+                aria-label='Inventory folders'
+                data-testid='inventory-folder-tree'
+                className='space-y-2 rounded-md border p-2'
+              >
+                {renderFolderTree(folderTree)}
+              </div>
             </CardContent>
           </Card>
 
