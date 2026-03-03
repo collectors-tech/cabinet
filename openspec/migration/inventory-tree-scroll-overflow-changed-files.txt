@@ -1,0 +1,5 @@
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts
+ui.web/src/features/collection/index.tsx
+openspec/migration/inventory-tree-scroll-overflow-summary.md

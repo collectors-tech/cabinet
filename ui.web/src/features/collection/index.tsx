@@ -791,22 +791,27 @@ export function Collection({
         </div>
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-3'>
+          <Card className='lg:col-span-3 min-h-0'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
                 Browse folders before drilling into results.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2'>
+            <CardContent className='space-y-2 min-h-0'>
               <div
                 role='tree'
                 tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
-                className='space-y-2 rounded-md border p-2'
+                className='h-[26rem] max-h-[26rem] overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
-                {renderFolderTree(folderTree)}
+                <div
+                  className='min-w-full w-max space-y-2'
+                  data-testid='inventory-folder-tree-scroll-region'
+                >
+                  {renderFolderTree(folderTree)}
+                </div>
               </div>
             </CardContent>
           </Card>

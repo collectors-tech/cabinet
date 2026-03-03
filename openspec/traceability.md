@@ -290,8 +290,8 @@
 
 | UI-SCREEN-ONBOARDING-AUTH-008 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | passkey/WebAuthn login flow | ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (`UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt`, `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable`) | implemented |
 
-| UI-SCREEN-INVENTORY-FOLDER-TREE-005 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (vertical) | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (	ree expansion does not grow page; internal vertical scroll works) | partial |
-| UI-SCREEN-INVENTORY-FOLDER-TREE-006 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (horizontal) | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (deep tree supports horizontal overflow access) | partial |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-005 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (vertical) | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-005 keeps tree scrolling inside pane without growing full page`) | implemented |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-006 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (horizontal) | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-006 provides horizontal overflow access for deep indentation`) | implemented |
 
 | UI-SCREEN-INVENTORY-FOLDER-TREE-007 | openspec/specs/inventory/folder-tree-control/spec.md | node-level add-child affordance | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (
 ode + creates child folder) | partial |

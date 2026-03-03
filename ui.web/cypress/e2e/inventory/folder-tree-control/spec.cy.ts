@@ -66,4 +66,39 @@ describe('inventory-folder-tree-control', () => {
     cy.contains('[role="treeitem"]', 'Warehouse 2').click()
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-005 keeps tree scrolling inside pane without growing full page', () => {
+    cy.get('[data-testid="inventory-folder-tree"]').as('treeScrollRegion')
+
+    cy.document().then((doc) => {
+      const baseline = doc.documentElement.scrollHeight
+      cy.wrap(baseline).as('baselineHeight')
+    })
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+
+    cy.get('@treeScrollRegion').then(($region) => {
+      const node = $region[0]
+      const styles = getComputedStyle(node)
+      expect(['auto', 'scroll']).to.include(styles.overflowY)
+      expect(node.scrollHeight).to.be.greaterThan(node.clientHeight)
+    })
+
+    cy.get('@baselineHeight').then((baselineHeight) => {
+      cy.document().then((doc) => {
+        const current = doc.documentElement.scrollHeight
+        expect(current).to.be.lessThan(Number(baselineHeight) + 120)
+      })
+    })
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-006 provides horizontal overflow access for deep indentation', () => {
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="inventory-folder-tree"]').then(($region) => {
+      const node = $region[0]
+      const styles = getComputedStyle(node)
+      expect(['auto', 'scroll']).to.include(styles.overflowX)
+    })
+  })
 })
