@@ -74,6 +74,10 @@ func New(cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := syncRuntimeSetupCurrentURL(cfg); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("sync runtime setup metadata: %w", err)
+	}
 
 	sub, err := fs.Sub(ui.Static, "static")
 	if err != nil {
@@ -3055,10 +3059,15 @@ type runtimeSetupMetaConfig struct {
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 	WizardVersion string `json:"wizardVersion"`
+	CurrentURL    string `json:"currentUrl"`
 }
 
 func runtimeSetupConfigPath(cfg config.Config) string {
 	return filepath.Join(cfg.DataDir, "cabinet.json")
+}
+
+func runtimePIDPath(cfg config.Config) string {
+	return filepath.Join(cfg.DataDir, "cabinet.pid")
 }
 
 func runtimeSetupRequired(cfg config.Config) bool {
@@ -3076,6 +3085,64 @@ func writeRuntimeSetupConfig(cfg config.Config, payload runtimeSetupConfigFile) 
 	}
 	data = append(data, '\n')
 	return os.WriteFile(runtimeSetupConfigPath(cfg), data, 0o644)
+}
+
+func writeRuntimePIDFile(cfg config.Config, pid int) error {
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return err
+	}
+	content := []byte(strconv.Itoa(pid) + "\n")
+	return os.WriteFile(runtimePIDPath(cfg), content, 0o644)
+}
+
+func removeRuntimePIDFile(cfg config.Config) error {
+	err := os.Remove(runtimePIDPath(cfg))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func runtimeResolvedURLFromConfig(cfg config.Config) string {
+	host := strings.TrimSpace(cfg.Host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := cfg.Port
+	if port <= 0 {
+		port = 17880
+	}
+	return fmt.Sprintf("http://%s:%d", host, port)
+}
+
+func syncRuntimeSetupCurrentURL(cfg config.Config) error {
+	configPath := runtimeSetupConfigPath(cfg)
+	raw, err := os.ReadFile(configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var payload runtimeSetupConfigFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	resolved := strings.TrimSpace(payload.Runtime.ResolvedURL)
+	if resolved == "" {
+		resolved = runtimeResolvedURLFromConfig(cfg)
+		payload.Runtime.ResolvedURL = resolved
+	}
+	changed := false
+	if strings.TrimSpace(payload.Meta.CurrentURL) != resolved {
+		payload.Meta.CurrentURL = resolved
+		payload.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return writeRuntimeSetupConfig(cfg, payload)
 }
 
 func portFromResolvedURL(raw string) int {
@@ -3215,6 +3282,7 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			CreatedAt:     now,
 			UpdatedAt:     now,
 			WizardVersion: "1",
+			CurrentURL:    fmt.Sprintf("http://%s:%d", host, port),
 		},
 	}, nil
 }
@@ -4011,6 +4079,12 @@ func (a *App) Run(ctx context.Context) error {
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
 	}
+	if err := writeRuntimePIDFile(a.cfg, os.Getpid()); err != nil {
+		return fmt.Errorf("write runtime pid file: %w", err)
+	}
+	defer func() {
+		_ = removeRuntimePIDFile(a.cfg)
+	}()
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- a.srv.ListenAndServe()

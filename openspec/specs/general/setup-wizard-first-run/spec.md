@@ -72,6 +72,24 @@ Setup Wizard MUST produce a deterministic initial config object containing requi
 - **THEN** wizard MUST write `cabinet.json` with required sections: `instance`, `storage`, `runtime`, `auth`, `bootstrap`, and `meta`
 - **AND** missing required fields MUST block completion with inline validation
 
+### Requirement SETUP-WIZ-008: Startup MUST synchronize current runtime URL into config metadata
+When `cabinet.json` exists, runtime startup MUST reconcile and persist the resolved runtime URL into metadata for deterministic post-launch introspection.
+
+#### Scenario: Startup metadata sync
+- **GIVEN** `cabinet.json` exists and runtime starts with resolved URL `http://<host>:<port>`
+- **WHEN** startup initialization runs before serving requests
+- **THEN** config metadata `meta.currentUrl` MUST match the resolved runtime URL
+- **AND** metadata update MUST preserve existing config sections and schema validity
+
+### Requirement SETUP-WIZ-009: PID lifecycle MUST use a PID-only runtime file
+Runtime process lifecycle MUST maintain a PID-only file separate from `cabinet.json` configuration metadata.
+
+#### Scenario: Runtime PID file contract
+- **GIVEN** runtime startup succeeds
+- **WHEN** PID file is written
+- **THEN** PID file content MUST contain only the numeric PID value (no JSON/config payload)
+- **AND** PID file lifecycle MUST remain independent from `cabinet.json`
+
 #### Scenario: Clerk mode config requirements
 - **GIVEN** user selects auth mode `clerk`
 - **WHEN** completion is attempted
@@ -135,3 +153,5 @@ Setup Wizard MUST produce a deterministic initial config object containing requi
 | UC-SW-07 | Final complete transition | `Complete` transitions to `Config complete` + `Start App` action | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action` |
 | UC-SW-08 | Initial config schema write | `cabinet.json` contains deterministic required sections/fields after completion | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-08 setup-wizard-config-schema-write persists deterministic cabinet.json payload`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
 | UC-SW-09 | Clerk config validation | Clerk mode blocks completion when required keys/settings refs are missing | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteRequiresClerkPublishableKey` |
+| UC-SW-10 | Startup runtime URL sync | Existing config receives `meta.currentUrl` matching resolved runtime URL on startup | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata` |
+| UC-SW-11 | PID-only runtime lifecycle file | Runtime writes PID-only file and cleanup keeps PID lifecycle separate from config | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimePIDFileContainsPIDOnly` |

@@ -1,0 +1,5 @@
+internal/app/app.go
+internal/app/runtime_setup_api_test.go
+openspec/specs/general/setup-wizard-first-run/spec.md
+openspec/traceability.md
+openspec/migration/setup-wizard-runtime-url-pid-summary.md

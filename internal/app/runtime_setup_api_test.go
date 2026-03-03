@@ -94,6 +94,17 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	if strings.TrimSpace(authPayload["mode"].(string)) != "local" {
 		t.Fatalf("expected local auth mode in setup config")
 	}
+	metaPayload, ok := configPayload["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta object in setup config")
+	}
+	currentURL := strings.TrimSpace(asString(metaPayload["currentUrl"]))
+	if currentURL == "" {
+		t.Fatalf("expected meta.currentUrl in setup config")
+	}
+	if currentURL != runtimeURL {
+		t.Fatalf("expected meta.currentUrl=%s, got %s", runtimeURL, currentURL)
+	}
 
 	statusPresent := doRequest(t, a, http.MethodGet, "/api/runtime/setup-status", nil, nil)
 	if statusPresent.Code != http.StatusOK {
@@ -105,6 +116,94 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	}
 	if presentPayload["setup_required"] != false {
 		t.Fatalf("expected setup_required=false when config exists, got %v", presentPayload["setup_required"])
+	}
+}
+
+func TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	payload := runtimeSetupConfigFile{
+		Version: 1,
+		Instance: runtimeSetupInstanceConfig{
+			Name:    "Primary",
+			Profile: "primary",
+		},
+		Storage: runtimeSetupStorageConfig{
+			DataDir:  filepath.Join(a.cfg.DataDir, "profiles", "primary"),
+			MediaDir: filepath.Join(a.cfg.DataDir, "profiles", "primary", "media"),
+		},
+		Runtime: runtimeSetupRuntimeConfig{
+			PortMode:    "auto",
+			ResolvedURL: "http://127.0.0.1:17880",
+		},
+		Auth: runtimeSetupAuthConfig{
+			Mode: "local",
+			Clerk: runtimeSetupClerkAuthConfig{
+				PublishableKey: "",
+				Enabled:        false,
+			},
+		},
+		Bootstrap: runtimeSetupBootstrapConfig{
+			Workspace:       "Local Workspace",
+			DatabaseProfile: "Primary DB",
+		},
+		Features: runtimeSetupFeaturesConfig{
+			Chat:      true,
+			Providers: true,
+			Scanner:   true,
+		},
+		Meta: runtimeSetupMetaConfig{
+			CreatedAt:     "2026-01-01T00:00:00Z",
+			UpdatedAt:     "2026-01-01T00:00:00Z",
+			WizardVersion: "1",
+			CurrentURL:    "http://old-host:1000",
+		},
+	}
+	if err := writeRuntimeSetupConfig(a.cfg, payload); err != nil {
+		t.Fatalf("writeRuntimeSetupConfig() error = %v", err)
+	}
+	if err := syncRuntimeSetupCurrentURL(a.cfg); err != nil {
+		t.Fatalf("syncRuntimeSetupCurrentURL() error = %v", err)
+	}
+	raw, err := os.ReadFile(runtimeSetupConfigPath(a.cfg))
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var updated runtimeSetupConfigFile
+	if err := json.Unmarshal(raw, &updated); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	expected := payload.Runtime.ResolvedURL
+	if strings.TrimSpace(updated.Meta.CurrentURL) != expected {
+		t.Fatalf("expected meta.currentUrl=%s, got %s", expected, strings.TrimSpace(updated.Meta.CurrentURL))
+	}
+}
+
+func TestRuntimePIDFileContainsPIDOnly(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	pidPath := runtimePIDPath(a.cfg)
+	if err := writeRuntimePIDFile(a.cfg, 4242); err != nil {
+		t.Fatalf("writeRuntimePIDFile() error = %v", err)
+	}
+	raw, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("read pid file: %v", err)
+	}
+	content := strings.TrimSpace(string(raw))
+	if content != "4242" {
+		t.Fatalf("expected pid-only file content 4242, got %q", content)
+	}
+	if strings.Contains(content, "{") || strings.Contains(content, ":") {
+		t.Fatalf("pid file should contain pid only, got %q", content)
+	}
+	if err := removeRuntimePIDFile(a.cfg); err != nil {
+		t.Fatalf("removeRuntimePIDFile() error = %v", err)
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("expected pid file removed, stat err=%v", err)
 	}
 }
 
