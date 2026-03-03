@@ -63,6 +63,61 @@ Wizard completion MUST display and persist resolved config/runtime metadata.
 ### Requirement SETUP-WIZ-005: Home dashboard MUST NOT embed setup-starter card
 Setup onboarding controls MUST NOT appear as dashboard card in authenticated app shell.
 
+### Requirement SETUP-WIZ-007: Initial config payload MUST follow deterministic `cabinet.json` schema
+Setup Wizard MUST produce a deterministic initial config object containing required runtime/bootstrap fields before app launch.
+
+#### Scenario: Build initial config payload
+- **GIVEN** wizard required fields are completed
+- **WHEN** user clicks `Complete`
+- **THEN** wizard MUST write `cabinet.json` with required sections: `instance`, `storage`, `runtime`, `auth`, `bootstrap`, and `meta`
+- **AND** missing required fields MUST block completion with inline validation
+
+#### Scenario: Clerk mode config requirements
+- **GIVEN** user selects auth mode `clerk`
+- **WHEN** completion is attempted
+- **THEN** required Clerk keys/settings refs MUST be present in config payload or completion MUST fail with actionable validation message
+
+#### Initial `cabinet.json` schema (v1)
+```json
+{
+  "version": 1,
+  "instance": {
+    "name": "Primary",
+    "profile": "primary"
+  },
+  "storage": {
+    "dataDir": "./data",
+    "mediaDir": "./data/media"
+  },
+  "runtime": {
+    "portMode": "auto",
+    "port": null,
+    "resolvedUrl": "http://127.0.0.1:17880"
+  },
+  "auth": {
+    "mode": "local",
+    "clerk": {
+      "publishableKey": "",
+      "enabled": false
+    }
+  },
+  "bootstrap": {
+    "workspace": "Local Workspace",
+    "databaseProfile": "Primary DB"
+  },
+  "features": {
+    "chat": true,
+    "providers": true,
+    "scanner": true
+  },
+  "meta": {
+    "createdAt": "<ISO-8601>",
+    "updatedAt": "<ISO-8601>",
+    "wizardVersion": "1"
+  }
+}
+```
+
 #### Scenario: Authenticated home
 - **GIVEN** user is authenticated and app shell is loaded
 - **WHEN** home/dashboard renders
@@ -78,3 +133,5 @@ Setup onboarding controls MUST NOT appear as dashboard card in authenticated app
 | UC-SW-05 | Dashboard guard | Home contains no embedded setup starter card | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-not-in-home-shell` |
 | UC-SW-06 | Progress template parity | Step header shows `STEP X OF N` + progress %, footer actions match step state | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-progress-template` |
 | UC-SW-07 | Final complete transition | `Complete` transitions to `Config complete` + `Start App` action | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-complete-to-launch` |
+| UC-SW-08 | Initial config schema write | `cabinet.json` contains deterministic required sections/fields after completion | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-config-schema-write` |
+| UC-SW-09 | Clerk config validation | Clerk mode blocks completion when required keys/settings refs are missing | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-clerk-required-fields` |
