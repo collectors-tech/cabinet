@@ -27,6 +27,32 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-prev"]').should('not.be.disabled');
   });
 
+  it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
+    cy.get('[data-testid="setup-profile-key"]').clear().type('wave3-profile');
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_wave3');
+    cy.get('[data-testid="setup-prev"]').click();
+
+    cy.get('[data-testid="setup-instance-name"]').should(
+      'have.value',
+      'Wave3 Instance'
+    );
+    cy.get('[data-testid="setup-profile-key"]').should(
+      'have.value',
+      'wave3-profile'
+    );
+
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should(
+      'have.value',
+      'pk_test_wave3'
+    );
+  });
+
   it('UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();

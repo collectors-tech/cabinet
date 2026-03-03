@@ -128,7 +128,7 @@ Setup Wizard MUST produce a deterministic initial config object containing requi
 | --- | --- | --- | --- |
 | UC-SW-01 | Missing config startup | Full-screen setup wizard appears pre-auth | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-missing-config` |
 | UC-SW-02 | Existing config startup | Wizard skipped; normal auth/shell loads | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-existing-config-skip` |
-| UC-SW-03 | Step navigation | Progress + prev/next/save controls behave deterministically | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-step-controls` |
+| UC-SW-03 | Step navigation | Progress + prev/next/save controls behave deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next` |
 | UC-SW-04 | Completion state | Config-complete screen shows start action and no registration template copy | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-04 setup-wizard-completion-state shows runtime and storage details with start action` |
 | UC-SW-05 | Dashboard guard | Home contains no embedded setup starter card | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home` |
 | UC-SW-06 | Progress template parity | Step header shows `STEP X OF N` + progress %, footer actions match step state | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions` |
