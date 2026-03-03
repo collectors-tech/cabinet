@@ -32,14 +32,15 @@ Cabinet SHALL parse stock/availability from webshop listing pages where availabl
 ### Requirement OPS-001: AU webshop providers MUST enforce robots/terms policy and throttling
 Cabinet MUST store per-domain crawling policy metadata including robots/terms review status, crawl delay/rate limit, and failure backoff behavior.
 
-### Requirement INTEGRATION-013: Bonza search ingestion MUST paginate using 36-items-per-page contract
-Bonza provider ingestion SHALL iterate all available search-result pages using Bonza listing page size contract (36 items per page) and aggregate normalized candidate records.
+### Requirement INTEGRATION-013: Bonza search ingestion MUST support 36-target paging with dynamic fallback
+Bonza provider ingestion SHALL attempt configured page-size target (36 where supported) and MUST fall back to detected site pagination while still traversing all result pages and aggregating normalized candidates.
 
 #### Scenario: Bonza paginated search ingestion
 - **GIVEN** Market Watch executes provider-scoped query against Bonza
-- **WHEN** listing results span multiple pages at 36 items per page
-- **THEN** ingestion MUST navigate all result pages until terminal page
+- **WHEN** listing results span multiple pages
+- **THEN** ingestion MUST navigate all result pages until terminal page regardless of effective per-page count
 - **AND** candidates from all pages MUST be included exactly once in normalized output
+- **AND** run output MUST report effective observed page size and page count
 
 ### Requirement INTEGRATION-014: Bonza detail-page enrichment MUST fetch watched-car stock level
 For watched Bonza cars, ingestion SHALL fetch detail page data to capture stock level signals not present on listing cards.
