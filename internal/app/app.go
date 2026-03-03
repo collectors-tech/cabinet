@@ -256,6 +256,10 @@ func New(cfg config.Config) (*App, error) {
 			"setup_required": false,
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"auth_mode":      payload.Auth.Mode,
+			"data_dir":       payload.Storage.DataDir,
+			"media_dir":      payload.Storage.MediaDir,
+			"runtime_url":    payload.Runtime.ResolvedURL,
+			"runtime_port":   portFromResolvedURL(payload.Runtime.ResolvedURL),
 		})
 	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
@@ -3064,6 +3068,18 @@ func writeRuntimeSetupConfig(cfg config.Config, payload runtimeSetupConfigFile) 
 	}
 	data = append(data, '\n')
 	return os.WriteFile(runtimeSetupConfigPath(cfg), data, 0o644)
+}
+
+func portFromResolvedURL(raw string) int {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil {
+		return 0
+	}
+	return port
 }
 
 func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidationError {

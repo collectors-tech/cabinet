@@ -44,6 +44,32 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	if complete.Code != http.StatusOK {
 		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
 	}
+	var completePayload map[string]any
+	if err := json.Unmarshal(complete.Body.Bytes(), &completePayload); err != nil {
+		t.Fatalf("decode complete payload: %v", err)
+	}
+	if completePayload["ok"] != true {
+		t.Fatalf("expected ok=true in setup-complete payload")
+	}
+	if strings.TrimSpace(asString(completePayload["config_path"])) == "" {
+		t.Fatalf("expected config_path in setup-complete payload")
+	}
+	if strings.TrimSpace(asString(completePayload["data_dir"])) == "" {
+		t.Fatalf("expected data_dir in setup-complete payload")
+	}
+	if strings.TrimSpace(asString(completePayload["media_dir"])) == "" {
+		t.Fatalf("expected media_dir in setup-complete payload")
+	}
+	runtimeURL := strings.TrimSpace(asString(completePayload["runtime_url"]))
+	if runtimeURL == "" {
+		t.Fatalf("expected runtime_url in setup-complete payload")
+	}
+	if !strings.HasPrefix(runtimeURL, "http://") {
+		t.Fatalf("expected runtime_url to start with http://, got %s", runtimeURL)
+	}
+	if asFloat64(completePayload["runtime_port"]) <= 0 {
+		t.Fatalf("expected runtime_port > 0 in setup-complete payload, got %v", completePayload["runtime_port"])
+	}
 	if _, err := os.Stat(setupPath); err != nil {
 		t.Fatalf("expected setup config at %s: %v", setupPath, err)
 	}
@@ -79,6 +105,31 @@ func TestRuntimeSetupStatusAndCompleteContract(t *testing.T) {
 	}
 	if presentPayload["setup_required"] != false {
 		t.Fatalf("expected setup_required=false when config exists, got %v", presentPayload["setup_required"])
+	}
+}
+
+func asString(value any) string {
+	if value == nil {
+		return ""
+	}
+	if v, ok := value.(string); ok {
+		return v
+	}
+	return ""
+}
+
+func asFloat64(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	default:
+		return 0
 	}
 }
 

@@ -20,6 +20,10 @@ type RuntimeSetupStatus = {
 type RuntimeSetupCompletePayload = {
   ok?: boolean
   config_path?: string
+  data_dir?: string
+  media_dir?: string
+  runtime_url?: string
+  runtime_port?: number
 }
 
 type SetupFormState = {
@@ -173,8 +177,32 @@ export function SignIn() {
             <CardContent className='space-y-3'>
               <p className='text-sm text-muted-foreground'>
                 Config path:{' '}
-                <span className='font-medium'>
+                <span className='font-medium' data-testid='setup-complete-config-path'>
                   {setupCompleteState.config_path ?? 'unknown'}
+                </span>
+              </p>
+              <p className='text-sm text-muted-foreground'>
+                Data directory:{' '}
+                <span className='font-medium' data-testid='setup-complete-data-dir'>
+                  {setupCompleteState.data_dir ?? 'unknown'}
+                </span>
+              </p>
+              <p className='text-sm text-muted-foreground'>
+                Media directory:{' '}
+                <span className='font-medium' data-testid='setup-complete-media-dir'>
+                  {setupCompleteState.media_dir ?? 'unknown'}
+                </span>
+              </p>
+              <p className='text-sm text-muted-foreground'>
+                Runtime URL:{' '}
+                <span className='font-medium' data-testid='setup-complete-runtime-url'>
+                  {setupCompleteState.runtime_url ?? 'unknown'}
+                </span>
+              </p>
+              <p className='text-sm text-muted-foreground'>
+                Runtime port:{' '}
+                <span className='font-medium' data-testid='setup-complete-runtime-port'>
+                  {setupCompleteState.runtime_port ?? 0}
                 </span>
               </p>
               <Button data-testid='setup-start-app' onClick={startAppFromSetup}>

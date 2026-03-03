@@ -38,6 +38,24 @@ describe('SETUP-WIZ', () => {
     cy.contains(/registration-success|email activation/i).should('not.exist');
   });
 
+  it('UC-SW-04 setup-wizard-completion-state shows runtime and storage details with start action', () => {
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.contains('Config complete').should('be.visible');
+    cy.contains('Start App').should('be.visible');
+    cy.get('[data-testid="setup-complete-config-path"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-data-dir"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-media-dir"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-runtime-url"]').should('contain.text', 'http://');
+    cy.get('[data-testid="setup-complete-runtime-port"]').should(($el) => {
+      const numeric = Number($el.text().trim());
+      expect(Number.isFinite(numeric)).to.eq(true);
+      expect(numeric).to.be.greaterThan(0);
+    });
+  });
+
   it('UC-SW-08 setup-wizard-config-schema-write persists deterministic cabinet.json payload', () => {
     cy.get('[data-testid="setup-instance-name"]').clear().type('Primary');
     cy.get('[data-testid="setup-profile-key"]').clear().type('primary');
