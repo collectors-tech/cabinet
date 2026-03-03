@@ -63,6 +63,42 @@ describe('SETUP-WIZ', () => {
     cy.request('GET', '/api/runtime/setup-status').its('body.setup_required').should('eq', false);
   });
 
+  it('UC-SW-14 setup-wizard-identity-path-preview shows config destination path', () => {
+    cy.request('GET', '/api/runtime/setup-status').then((statusResponse) => {
+      const expectedPath = statusResponse.body.config_path as string;
+      enterSetupFormMode();
+      cy.get('[data-testid="setup-config-path-preview"]')
+        .should('be.visible')
+        .and('contain.text', expectedPath);
+    });
+  });
+
+  it('UC-SW-15 setup-wizard-optional-profile-key auto-derives profile key from instance name', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('My Fancy Instance');
+    cy.get('[data-testid="setup-profile-key"]').clear();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.instance.profile).to.eq('my-fancy-instance');
+      });
+  });
+
+  it('UC-SW-16 setup-wizard-identity-inline-validation blocks next on missing instance name', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-wizard-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Instance name is required.');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 3');
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');

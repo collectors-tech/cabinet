@@ -121,6 +121,27 @@ Wizard Step 1 MUST provide an import path entry flow that copies a valid existin
 - **THEN** runtime MUST return status `400` with deterministic `error_code` and `message`
 - **AND** setup-required state MUST remain `true`
 
+### Requirement SETUP-WIZ-012: Identity step MUST support optional profile key with inline validation and config path preview
+Identity form step MUST capture instance name, accept optional profile key, and show deterministic config-path preview while preserving entered state.
+
+#### Scenario: Identity step path preview
+- **GIVEN** setup wizard is in identity form mode
+- **WHEN** identity step renders
+- **THEN** UI MUST show current config destination path preview
+- **AND** path preview MUST match `/api/runtime/setup-status` `config_path`
+
+#### Scenario: Optional profile key auto-derivation
+- **GIVEN** instance name is provided and profile key is blank
+- **WHEN** setup completion is submitted
+- **THEN** runtime MUST derive deterministic profile key from instance name
+- **AND** persisted config `instance.profile` MUST be non-empty and normalized
+
+#### Scenario: Inline identity validation
+- **GIVEN** identity step is active
+- **WHEN** user clicks `Next` with blank instance name
+- **THEN** UI MUST render inline validation error without leaving identity step
+- **AND** previously entered identity fields MUST remain intact
+
 #### Scenario: Clerk mode config requirements
 - **GIVEN** user selects auth mode `clerk`
 - **WHEN** completion is attempted
@@ -186,5 +207,8 @@ Wizard Step 1 MUST provide an import path entry flow that copies a valid existin
 | UC-SW-09 | Clerk config validation | Clerk mode blocks completion when required keys/settings refs are missing | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteRequiresClerkPublishableKey` |
 | UC-SW-10 | Startup runtime URL sync | Existing config receives `meta.currentUrl` matching resolved runtime URL on startup | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata` |
 | UC-SW-11 | PID-only runtime lifecycle file | Runtime writes PID-only file and cleanup keeps PID lifecycle separate from config | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimePIDFileContainsPIDOnly` |
-| UC-SW-12 | Welcome actions before form | Step 1 shows `Start Setup` + `Import Existing Config` and hides editors until start | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields` |
-| UC-SW-13 | Import existing config action | Importing valid existing config clears setup-required state and returns sign-in form | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-13 setup-wizard-import-existing-config loads external config and exits setup mode`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupImportExistingConfigContract` |
+| UC-SW-12 | Welcome actions before form | Step 1 shows `Start Setup` + `Import Existing Config` and hides editors until start | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields` |
+| UC-SW-13 | Import existing config action | Importing valid existing config clears setup-required state and returns sign-in form | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-13 setup-wizard-import-existing-config loads external config and exits setup mode`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupImportExistingConfigContract` |
+| UC-SW-14 | Identity path preview | Identity step shows deterministic config path preview from setup status payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-14 setup-wizard-identity-path-preview shows config destination path` |
+| UC-SW-15 | Optional profile key derivation | Blank profile key auto-derives normalized profile during completion | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-15 setup-wizard-optional-profile-key auto-derives profile key from instance name`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteDerivesProfileKeyWhenBlank` |
+| UC-SW-16 | Inline identity validation | Blank instance name shows inline validation and stays on identity step | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-16 setup-wizard-identity-inline-validation blocks next on missing instance name` |

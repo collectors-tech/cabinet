@@ -3231,13 +3231,6 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 			Field:   "instance_name",
 		}
 	}
-	if strings.TrimSpace(req.ProfileKey) == "" {
-		return &runtimeSetupValidationError{
-			Code:    "SETUP_PROFILE_KEY_REQUIRED",
-			Message: "Profile key is required.",
-			Field:   "profile_key",
-		}
-	}
 	authMode := strings.TrimSpace(strings.ToLower(req.AuthMode))
 	if authMode == "" {
 		authMode = "local"
@@ -3290,7 +3283,7 @@ func validateRuntimeSetupImportRequest(req runtimeSetupImportRequest) *runtimeSe
 
 func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtimeSetupConfigFile, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	profileKey := strings.TrimSpace(req.ProfileKey)
+	profileKey := deriveProfileKey(req.ProfileKey, req.InstanceName)
 	instanceName := strings.TrimSpace(req.InstanceName)
 	authMode := strings.TrimSpace(strings.ToLower(req.AuthMode))
 	if authMode == "" {
@@ -3362,6 +3355,23 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			CurrentURL:    fmt.Sprintf("http://%s:%d", host, port),
 		},
 	}, nil
+}
+
+func deriveProfileKey(rawProfileKey, instanceName string) string {
+	candidate := strings.TrimSpace(rawProfileKey)
+	if candidate == "" {
+		candidate = strings.TrimSpace(instanceName)
+	}
+	if candidate == "" {
+		return "primary"
+	}
+	normalized := strings.ToLower(candidate)
+	normalized = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(normalized, "-")
+	normalized = strings.Trim(normalized, "-")
+	if normalized == "" {
+		return "primary"
+	}
+	return normalized
 }
 
 func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {

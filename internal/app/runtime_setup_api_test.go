@@ -359,3 +359,43 @@ func TestRuntimeSetupImportExistingConfigContract(t *testing.T) {
 		t.Fatalf("unexpected setup-import error code: %v", invalidPayload["error_code"])
 	}
 }
+
+func TestRuntimeSetupCompleteDerivesProfileKeyWhenBlank(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	completeReq := map[string]any{
+		"instance_name":          "My Fancy Instance",
+		"profile_key":            "",
+		"auth_mode":              "local",
+		"runtime_port_mode":      "auto",
+		"bootstrap_workspace":    "Local Workspace",
+		"bootstrap_database_ref": "Primary DB",
+	}
+	completeReqJSON, err := json.Marshal(completeReq)
+	if err != nil {
+		t.Fatalf("marshal complete request: %v", err)
+	}
+	complete := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
+	if complete.Code != http.StatusOK {
+		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
+	}
+	rawConfig, err := os.ReadFile(setupPath)
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var configPayload map[string]any
+	if err := json.Unmarshal(rawConfig, &configPayload); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	instance, ok := configPayload["instance"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected instance object in setup config")
+	}
+	if strings.TrimSpace(asString(instance["profile"])) != "my-fancy-instance" {
+		t.Fatalf("expected derived profile key my-fancy-instance, got %v", instance["profile"])
+	}
+}

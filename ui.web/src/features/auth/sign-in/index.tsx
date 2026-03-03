@@ -15,6 +15,7 @@ import { UserAuthForm } from './components/user-auth-form'
 
 type RuntimeSetupStatus = {
   setup_required?: boolean
+  config_path?: string
 }
 
 type RuntimeSetupCompletePayload = {
@@ -40,6 +41,7 @@ export function SignIn() {
   const [setupLoading, setSetupLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
+  const [setupConfigPath, setSetupConfigPath] = useState('')
   const [completingSetup, setCompletingSetup] = useState(false)
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
@@ -69,6 +71,7 @@ export function SignIn() {
         const payload = (await response.json()) as RuntimeSetupStatus
         if (!cancelled) {
           setSetupRequired(Boolean(payload.setup_required))
+          setSetupConfigPath(payload.config_path ?? '')
         }
       } catch (error) {
         if (!cancelled) {
@@ -99,6 +102,10 @@ export function SignIn() {
   }, [setupRequired])
 
   function goToNextStep() {
+    if (setupStep === 0 && setupForm.instanceName.trim() === '') {
+      setSetupError('Instance name is required.')
+      return
+    }
     setSetupError(null)
     setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
   }
@@ -396,6 +403,12 @@ export function SignIn() {
                     data-testid='setup-profile-key'
                   />
                 </label>
+                <p className='text-xs text-muted-foreground'>
+                  Config path preview:{' '}
+                  <span className='font-medium' data-testid='setup-config-path-preview'>
+                    {setupConfigPath || 'unknown'}
+                  </span>
+                </p>
               </div>
             ) : null}
             {setupEntryMode === 'form' && setupStep === 1 ? (
