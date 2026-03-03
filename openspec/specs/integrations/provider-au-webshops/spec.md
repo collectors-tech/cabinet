@@ -48,14 +48,20 @@ Bonza provider ingestion SHALL attempt configured page-size target (36 where sup
 - **THEN** ingestion SHOULD request 36-target listing pages using cookie/session hint
 - **AND** runtime MUST fall back to detected effective page size if server response differs
 
-### Requirement INTEGRATION-014: Bonza detail-page enrichment MUST fetch watched-car stock level
-For watched Bonza cars, ingestion SHALL fetch detail page data to capture stock level signals not present on listing cards.
+### Requirement INTEGRATION-014: Bonza watched-car stock enrichment MUST be API-first with detail-page fallback
+For watched Bonza cars, ingestion SHALL prefer WooCommerce Store API stock fields and use detail-page parsing only when API stock data is missing/insufficient.
 
-#### Scenario: Watched car stock-level enrichment
+#### Scenario: Watched car stock-level enrichment (API-first)
 - **GIVEN** watched car candidate exists for Bonza source
-- **WHEN** listing-level stock signal is missing/insufficient
-- **THEN** runtime MUST request Bonza detail page for that candidate
-- **AND** extracted stock level MUST update integration stock observation for purchase prompting logic
+- **WHEN** product data is fetched from `wp-json/wc/store/v1/products`
+- **THEN** runtime MUST extract stock signal from API fields first (e.g., `is_in_stock`, `low_stock_remaining`, `add_to_cart` availability)
+- **AND** normalized stock state MUST update integration stock observation for purchase prompting logic
+
+#### Scenario: Detail-page fallback enrichment
+- **GIVEN** API stock signal is missing/insufficient for watched car candidate
+- **WHEN** enrichment fallback runs
+- **THEN** runtime MUST request Bonza product detail page for that candidate
+- **AND** extracted fallback stock signal MUST be merged with source attribution (`api|detail_page`)
 
 #### Scenario: Domain throttle applied
 - **GIVEN** domain policy declares `crawl_delay_ms` and `max_requests_per_minute`
