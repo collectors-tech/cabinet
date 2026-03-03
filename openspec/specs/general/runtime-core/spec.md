@@ -37,3 +37,20 @@ After successful listener bind, Cabinet MUST print a machine-parseable startup l
 - **THEN** console output MUST include `url=<resolved-url>` matching actual bound endpoint
 - **AND** output MUST include `instance`, `profile`, and `data_dir` context values
 - **AND** when requested port and resolved port differ, output MUST include both `requested_port` and `resolved_port`
+
+### Requirement RUNTIME-CORE-005: Startup console output SHALL include human banner and structured JSON line
+After successful listener bind, Cabinet MUST emit human-readable startup lines and a structured JSON line while preserving existing key-value machine output.
+
+#### Scenario: Human startup banner lines
+- **GIVEN** runtime starts and listener bind succeeds with resolved address known
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include human-readable lines containing `Cabinet Started`, `URL`, `Instance`, `Profile`, `Data Dir`, `Port`, and `Bind`
+- **AND** when stdout is TTY, banner title MAY include emoji decoration
+- **AND** when stdout is non-TTY, banner title MUST fall back to plain text without emoji requirement
+
+#### Scenario: Structured startup JSON line
+- **GIVEN** runtime starts and listener bind succeeds
+- **WHEN** startup console output is emitted
+- **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
+- **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
+- **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility

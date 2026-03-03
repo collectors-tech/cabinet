@@ -60,6 +60,7 @@ type App struct {
 	authService   *auth.Service
 	openapiSpec   []byte
 	startupNotice func(string)
+	startupIsTTY  func() bool
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -3099,6 +3100,7 @@ func New(cfg config.Config) (*App, error) {
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
+		startupIsTTY: isRuntimeTTY,
 	}
 
 	return a, nil
@@ -4391,7 +4393,9 @@ func (a *App) Run(ctx context.Context) error {
 	resolvedURL := startupURLFromResolvedAddr(resolvedAddr)
 	_ = syncRuntimeSetupCurrentURLWithURL(a.cfg, resolvedURL)
 	if a.startupNotice != nil {
-		a.startupNotice(buildStartupConsoleLine(a.cfg, resolvedAddr))
+		for _, line := range buildStartupConsoleLines(a.cfg, resolvedAddr, a.isTTYRuntimeOutput()) {
+			a.startupNotice(line)
+		}
 	}
 
 	errCh := make(chan error, 1)
@@ -4471,6 +4475,73 @@ func buildStartupConsoleLine(cfg config.Config, resolvedAddr string) string {
 		requestedPort,
 		resolvedPort,
 	)
+}
+
+func buildStartupConsoleJSONLine(cfg config.Config, resolvedAddr string) string {
+	instanceName, profileKey := readRuntimeSetupIdentity(cfg)
+	if instanceName == "" {
+		instanceName = "unknown"
+	}
+	if profileKey == "" {
+		profileKey = "unknown"
+	}
+	payload := map[string]any{
+		"url":            startupURLFromResolvedAddr(resolvedAddr),
+		"requested_addr": strings.TrimSpace(cfg.Addr),
+		"resolved_addr":  strings.TrimSpace(resolvedAddr),
+		"instance":       instanceName,
+		"profile":        profileKey,
+		"data_dir":       strings.TrimSpace(cfg.DataDir),
+		"requested_port": splitPortFromAddr(cfg.Addr),
+		"resolved_port":  splitPortFromAddr(resolvedAddr),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "CABINET_STARTUP_JSON {}"
+	}
+	return "CABINET_STARTUP_JSON " + string(raw)
+}
+
+func buildStartupConsoleLines(cfg config.Config, resolvedAddr string, isTTY bool) []string {
+	instanceName, profileKey := readRuntimeSetupIdentity(cfg)
+	if instanceName == "" {
+		instanceName = "unknown"
+	}
+	if profileKey == "" {
+		profileKey = "unknown"
+	}
+	requestedPort := splitPortFromAddr(cfg.Addr)
+	resolvedPort := splitPortFromAddr(resolvedAddr)
+	bannerTitle := "Cabinet Started"
+	if isTTY {
+		bannerTitle = "🚀 Cabinet Started"
+	}
+	return []string{
+		bannerTitle,
+		fmt.Sprintf("URL: %s", startupURLFromResolvedAddr(resolvedAddr)),
+		fmt.Sprintf("Instance: %s", instanceName),
+		fmt.Sprintf("Profile: %s", profileKey),
+		fmt.Sprintf("Data Dir: %s", strings.TrimSpace(cfg.DataDir)),
+		fmt.Sprintf("Port: %d (requested %d)", resolvedPort, requestedPort),
+		fmt.Sprintf("Bind: %s (requested %s)", strings.TrimSpace(resolvedAddr), strings.TrimSpace(cfg.Addr)),
+		buildStartupConsoleLine(cfg, resolvedAddr),
+		buildStartupConsoleJSONLine(cfg, resolvedAddr),
+	}
+}
+
+func isRuntimeTTY() bool {
+	info, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func (a *App) isTTYRuntimeOutput() bool {
+	if a.startupIsTTY == nil {
+		return false
+	}
+	return a.startupIsTTY()
 }
 
 func (a *App) close() error {
