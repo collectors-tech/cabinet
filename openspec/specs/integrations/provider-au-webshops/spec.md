@@ -42,6 +42,12 @@ Bonza provider ingestion SHALL attempt configured page-size target (36 where sup
 - **AND** candidates from all pages MUST be included exactly once in normalized output
 - **AND** run output MUST report effective observed page size and page count
 
+#### Scenario: WooCommerce per-page cookie hint
+- **GIVEN** Bonza search endpoint is called via `/?post_type=product&s=<query>`
+- **WHEN** provider runtime sets/receives `woocommerce_products_per_page=36`
+- **THEN** ingestion SHOULD request 36-target listing pages using cookie/session hint
+- **AND** runtime MUST fall back to detected effective page size if server response differs
+
 ### Requirement INTEGRATION-014: Bonza detail-page enrichment MUST fetch watched-car stock level
 For watched Bonza cars, ingestion SHALL fetch detail page data to capture stock level signals not present on listing cards.
 
