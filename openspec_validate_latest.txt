@@ -1,0 +1,13 @@
+﻿node.exe : - Validating...
+At C:\nvm4w\nodejs\openspec.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/@fission-ai/openspe ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (- Validating...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Γ£ô change/complete-screen-api-parity-audits
+Γ£ô change/finalize-onboarding-and-collector-ux
+Γ£ô spec/integrations
+Γ£ô spec/settings
+Γ£ô change/stabilize-inventory-runtime-regressions
+Totals: 5 passed, 0 failed (5 items)

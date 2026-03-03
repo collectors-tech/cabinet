@@ -1,5 +1,6 @@
 param(
-  [Parameter(Mandatory = $true)][string]$Version
+  [Parameter(Mandatory = $true)][string]$Version,
+  [switch]$InstallUIDeps
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +8,12 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+Write-Host "[package-installers] Building ui.web static bundle first"
+& (Join-Path $root "scripts\build-ui-static.ps1") -InstallDeps:$InstallUIDeps
+if ($LASTEXITCODE -ne 0) {
+  throw "ui.web build failed with exit code $LASTEXITCODE"
+}
 
 $targets = @(
   @{ GOOS = "windows"; GOARCH = "amd64"; EXE = "cabinet.exe"; PACKAGE = "cabinet-$Version-windows-amd64.zip" },

@@ -14,7 +14,7 @@ Desktop-first collector intelligence app.
 ## Run Locally
 1. Install Go 1.24+.
 2. Optional: copy `.env.example` to `.env` and adjust runtime URL/port.
-3. Build local binary:
+3. Build local binary (includes `ui.web` build -> `internal/ui/static`):
 
 ```powershell
 ./scripts/build-cabinet.ps1
@@ -49,6 +49,10 @@ Then run Cabinet again:
 ```powershell
 ./scripts/build-cabinet.ps1
 ./bin/cabinet.exe
+
+Notes:
+- `./scripts/build-cabinet.ps1` builds frontend assets first by default.
+- Use `-SkipUIBuild` only if `internal/ui/static` was freshly generated already.
 ```
 
 ## API Documentation

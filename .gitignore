@@ -12,3 +12,4 @@ cabinet.exe
 .agentbus/
 .logs/
 .env
+internal/ui/static/assets/

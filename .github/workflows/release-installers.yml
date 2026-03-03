@@ -15,6 +15,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: ui.web/package-lock.json
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -27,7 +32,7 @@ jobs:
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $version = "${{ github.event.inputs.version }}"
           }
-          ./scripts/package-installers.ps1 -Version $version
+          ./scripts/package-installers.ps1 -Version $version -InstallUIDeps
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
