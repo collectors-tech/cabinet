@@ -257,6 +257,25 @@ Review step MUST present full resolved configuration summary and expose determin
 - **WHEN** review action is rendered
 - **THEN** action control MUST be disabled and indicate in-progress state
 
+### Requirement SETUP-WIZ-018: Completion step MUST expose launch confirmation summary and finish actions
+Completion step MUST show resolved runtime/location summary and explicit post-setup actions for app launch and completion.
+
+#### Scenario: Completion summary details
+- **GIVEN** setup completion succeeds
+- **WHEN** completion state renders
+- **THEN** summary MUST include runtime URL, instance identity, and data directory context
+- **AND** completion UI MUST include deterministic action controls for opening app, config location context, and finish flow
+
+#### Scenario: Open Cabinet action
+- **GIVEN** completion state is visible
+- **WHEN** user activates open-cabinet action
+- **THEN** setup wizard state MUST exit and sign-in flow MUST become available
+
+#### Scenario: Config-folder action feedback
+- **GIVEN** completion state is visible
+- **WHEN** user activates open-config-folder action
+- **THEN** UI MUST show deterministic success feedback tied to config path context
+
 #### Initial `cabinet.json` schema (v1)
 ```json
 {
@@ -337,3 +356,6 @@ Review step MUST present full resolved configuration summary and expose determin
 | UC-SW-29 | Review summary completeness | Review step renders resolved identity/storage/runtime/auth/features summary and create action label | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-29 setup-wizard-review-summary shows resolved full summary and create label` |
 | UC-SW-30 | Deterministic create action | Create action writes deterministic config and completion metadata | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-30 setup-wizard-review-create-action writes config and completion metadata`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
 | UC-SW-31 | In-flight create action state | Create action disables and shows progress text while request is in-flight | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-31 setup-wizard-review-create-action shows in-flight disabled state` |
+| UC-SW-32 | Completion summary and actions | Completion screen shows runtime URL + instance/data-dir summary and launch action set | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-32 setup-wizard-completion-summary shows launch confirmation actions` |
+| UC-SW-33 | Open cabinet action | Open Cabinet action exits setup completion back to sign-in flow | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-33 setup-wizard-open-cabinet exits completion state` |
+| UC-SW-34 | Open config folder feedback | Open Config Folder action shows deterministic feedback with config path context | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-34 setup-wizard-open-config-folder shows feedback` |

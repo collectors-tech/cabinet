@@ -25,6 +25,8 @@ type RuntimeSetupStatus = {
 
 type RuntimeSetupCompletePayload = {
   ok?: boolean
+  instance_name?: string
+  profile_key?: string
   config_path?: string
   data_dir?: string
   media_dir?: string
@@ -62,6 +64,7 @@ export function SignIn() {
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
     useState<RuntimeSetupCompletePayload | null>(null)
+  const [setupCompleteFeedback, setSetupCompleteFeedback] = useState('')
   const [setupEntryMode, setSetupEntryMode] = useState<SetupEntryMode>('welcome')
   const [setupImportSourcePath, setSetupImportSourcePath] = useState('')
   const [setupForm, setSetupForm] = useState<SetupFormState>({
@@ -264,6 +267,7 @@ export function SignIn() {
       }
       const payload = (await response.json()) as RuntimeSetupCompletePayload
       setSetupCompleteState(payload)
+      setSetupCompleteFeedback('')
     } catch (error) {
       setSetupError(
         error instanceof Error ? error.message : 'setup_complete_failed'
@@ -327,8 +331,14 @@ export function SignIn() {
 
   function startAppFromSetup() {
     setSetupCompleteState(null)
+    setSetupCompleteFeedback('')
     setSetupRequired(false)
     setSetupStep(0)
+  }
+
+  function openConfigFolderFromSetup() {
+    const targetPath = setupCompleteState?.config_path ?? 'unknown path'
+    setSetupCompleteFeedback(`Config folder action requested for ${targetPath}.`)
   }
 
   if (setupLoading) {
@@ -356,6 +366,12 @@ export function SignIn() {
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-3'>
+              <p className='text-sm text-muted-foreground'>
+                Instance:{' '}
+                <span className='font-medium' data-testid='setup-complete-instance-name'>
+                  {setupCompleteState.instance_name ?? 'unknown'}
+                </span>
+              </p>
               <p className='text-sm text-muted-foreground'>
                 Config path:{' '}
                 <span className='font-medium' data-testid='setup-complete-config-path'>
@@ -386,9 +402,33 @@ export function SignIn() {
                   {setupCompleteState.runtime_port ?? 0}
                 </span>
               </p>
-              <Button data-testid='setup-start-app' onClick={startAppFromSetup}>
-                Start App
-              </Button>
+              {setupCompleteFeedback ? (
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='setup-complete-feedback'
+                >
+                  {setupCompleteFeedback}
+                </p>
+              ) : null}
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button data-testid='setup-open-cabinet' onClick={startAppFromSetup}>
+                  Open Cabinet
+                </Button>
+                <Button
+                  variant='outline'
+                  data-testid='setup-open-config-folder'
+                  onClick={openConfigFolderFromSetup}
+                >
+                  Open Config Folder
+                </Button>
+                <Button
+                  variant='outline'
+                  data-testid='setup-finish'
+                  onClick={startAppFromSetup}
+                >
+                  Finish
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </AuthLayout>

@@ -287,6 +287,8 @@ func New(cfg config.Config) (*App, error) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":             true,
 			"setup_required": false,
+			"instance_name":  payload.Instance.Name,
+			"profile_key":    payload.Instance.Profile,
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"auth_mode":      payload.Auth.Mode,
 			"data_dir":       payload.Storage.DataDir,
@@ -336,6 +338,8 @@ func New(cfg config.Config) (*App, error) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":             true,
 			"setup_required": false,
+			"instance_name":  importedPayload.Instance.Name,
+			"profile_key":    importedPayload.Instance.Profile,
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"runtime_url":    importedPayload.Runtime.ResolvedURL,
 			"runtime_port":   portFromResolvedURL(importedPayload.Runtime.ResolvedURL),

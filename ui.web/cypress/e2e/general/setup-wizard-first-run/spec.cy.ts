@@ -384,6 +384,56 @@ describe('SETUP-WIZ', () => {
     cy.contains('Config complete').should('be.visible');
   });
 
+  it('UC-SW-32 setup-wizard-completion-summary shows launch confirmation actions', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Launch Summary');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.contains('Config complete').should('be.visible');
+    cy.get('[data-testid="setup-complete-runtime-url"]').should('contain.text', 'http://');
+    cy.get('[data-testid="setup-complete-instance-name"]').should('contain.text', 'Launch Summary');
+    cy.get('[data-testid="setup-complete-data-dir"]').should('be.visible');
+    cy.get('[data-testid="setup-open-cabinet"]').should('be.visible');
+    cy.get('[data-testid="setup-open-config-folder"]').should('be.visible');
+    cy.get('[data-testid="setup-finish"]').should('be.visible');
+  });
+
+  it('UC-SW-33 setup-wizard-open-cabinet exits completion state', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.contains('Config complete').should('be.visible');
+    cy.get('[data-testid="setup-open-cabinet"]').click();
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+    cy.contains('Sign in').should('be.visible');
+  });
+
+  it('UC-SW-34 setup-wizard-open-config-folder shows feedback', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.contains('Config complete').should('be.visible');
+    cy.get('[data-testid="setup-open-config-folder"]').click();
+    cy.get('[data-testid="setup-complete-feedback"]')
+      .should('be.visible')
+      .and('contain.text', 'Config folder');
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
@@ -442,7 +492,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-complete"]').click();
 
     cy.contains('Config complete').should('be.visible');
-    cy.contains('Start App').should('be.visible');
+    cy.contains('Open Cabinet').should('be.visible');
     cy.get('[data-testid="setup-complete-config-path"]').should('be.visible');
     cy.get('[data-testid="setup-complete-data-dir"]').should('be.visible');
     cy.get('[data-testid="setup-complete-media-dir"]').should('be.visible');
