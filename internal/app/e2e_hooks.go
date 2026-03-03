@@ -81,7 +81,16 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 				return
 			}
 		case "present":
-			if err := writeRuntimeSetupConfig(cfg); err != nil {
+			payload, err := buildRuntimeSetupConfig(cfg, runtimeSetupRequest{
+				InstanceName: "E2E Primary",
+				ProfileKey:   "e2e-primary",
+				AuthMode:     "local",
+			})
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_build_setup_config"}`, http.StatusInternalServerError)
+				return
+			}
+			if err := writeRuntimeSetupConfig(cfg, payload); err != nil {
 				http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
 				return
 			}
@@ -93,6 +102,25 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 			"ok":             true,
 			"setup_required": runtimeSetupRequired(cfg),
 		})
+	})
+
+	mux.HandleFunc("/api/test/runtime/setup-config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		raw, err := os.ReadFile(runtimeSetupConfigPath(cfg))
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, `{"error":"setup_config_not_found"}`, http.StatusNotFound)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_read_setup_config"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(raw)
 	})
 }
 

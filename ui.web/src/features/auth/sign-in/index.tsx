@@ -17,12 +17,25 @@ type RuntimeSetupStatus = {
   setup_required?: boolean
 }
 
+type SetupFormState = {
+  instanceName: string
+  profileKey: string
+  authMode: 'local' | 'clerk'
+  clerkPublishableKey: string
+}
+
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
   const [setupLoading, setSetupLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [completingSetup, setCompletingSetup] = useState(false)
+  const [setupForm, setSetupForm] = useState<SetupFormState>({
+    instanceName: 'Primary',
+    profileKey: 'primary',
+    authMode: 'local',
+    clerkPublishableKey: '',
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -58,14 +71,42 @@ export function SignIn() {
   }, [])
 
   async function completeSetup() {
+    if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
+      setSetupError('Clerk publishable key is required.')
+      return
+    }
     setCompletingSetup(true)
     setSetupError(null)
     try {
       const response = await fetch('/api/runtime/setup-complete', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_name: setupForm.instanceName.trim(),
+          profile_key: setupForm.profileKey.trim(),
+          auth_mode: setupForm.authMode,
+          clerk_publishable_key:
+            setupForm.authMode === 'clerk'
+              ? setupForm.clerkPublishableKey.trim()
+              : '',
+          runtime_port_mode: 'auto',
+          bootstrap_workspace: 'Local Workspace',
+          bootstrap_database_ref: 'Primary DB',
+        }),
       })
       if (!response.ok) {
-        throw new Error(`setup_complete_failed_${response.status}`)
+        let message = `setup_complete_failed_${response.status}`
+        try {
+          const payload = (await response.json()) as { message?: string }
+          if (payload?.message) {
+            message = payload.message
+          }
+        } catch {
+          // Ignore parse failures and keep fallback.
+        }
+        throw new Error(message)
       }
       setSetupRequired(false)
     } catch (error) {
@@ -105,6 +146,69 @@ export function SignIn() {
               Cabinet detected missing startup configuration. Create the setup file
               to unlock login.
             </p>
+            <div className='grid gap-3'>
+              <label className='grid gap-1 text-sm'>
+                <span>Instance Name</span>
+                <input
+                  className='h-9 rounded-md border bg-background px-3'
+                  value={setupForm.instanceName}
+                  onChange={(event) =>
+                    setSetupForm((previous) => ({
+                      ...previous,
+                      instanceName: event.target.value,
+                    }))
+                  }
+                  data-testid='setup-instance-name'
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>Profile Key</span>
+                <input
+                  className='h-9 rounded-md border bg-background px-3'
+                  value={setupForm.profileKey}
+                  onChange={(event) =>
+                    setSetupForm((previous) => ({
+                      ...previous,
+                      profileKey: event.target.value,
+                    }))
+                  }
+                  data-testid='setup-profile-key'
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>Auth Mode</span>
+                <select
+                  className='h-9 rounded-md border bg-background px-3'
+                  value={setupForm.authMode}
+                  onChange={(event) =>
+                    setSetupForm((previous) => ({
+                      ...previous,
+                      authMode: event.target.value === 'clerk' ? 'clerk' : 'local',
+                    }))
+                  }
+                  data-testid='setup-auth-mode'
+                >
+                  <option value='local'>local</option>
+                  <option value='clerk'>clerk</option>
+                </select>
+              </label>
+              {setupForm.authMode === 'clerk' ? (
+                <label className='grid gap-1 text-sm'>
+                  <span>Clerk Publishable Key</span>
+                  <input
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupForm.clerkPublishableKey}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        clerkPublishableKey: event.target.value,
+                      }))
+                    }
+                    data-testid='setup-clerk-publishable-key'
+                  />
+                </label>
+              ) : null}
+            </div>
             {setupError ? (
               <p className='text-sm text-destructive' data-testid='setup-wizard-error'>
                 {setupError}

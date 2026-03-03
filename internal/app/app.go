@@ -223,7 +223,31 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		if err := writeRuntimeSetupConfig(cfg); err != nil {
+		var req runtimeSetupRequest
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		if validationErr := validateRuntimeSetupRequest(req); validationErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "invalid_setup_payload",
+				"error_code":     validationErr.Code,
+				"message":        validationErr.Message,
+				"field":          validationErr.Field,
+				"setup_required": true,
+			})
+			return
+		}
+		payload, buildErr := buildRuntimeSetupConfig(cfg, req)
+		if buildErr != nil {
+			http.Error(w, `{"error":"failed_to_build_setup_config"}`, http.StatusInternalServerError)
+			return
+		}
+		if err := writeRuntimeSetupConfig(cfg, payload); err != nil {
 			http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
 			return
 		}
@@ -231,6 +255,7 @@ func New(cfg config.Config) (*App, error) {
 			"ok":             true,
 			"setup_required": false,
 			"config_path":    runtimeSetupConfigPath(cfg),
+			"auth_mode":      payload.Auth.Mode,
 		})
 	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
@@ -2949,8 +2974,75 @@ func New(cfg config.Config) (*App, error) {
 	return a, nil
 }
 
+type runtimeSetupRequest struct {
+	InstanceName         string `json:"instance_name"`
+	ProfileKey           string `json:"profile_key"`
+	AuthMode             string `json:"auth_mode"`
+	ClerkPublishableKey  string `json:"clerk_publishable_key"`
+	RuntimePortMode      string `json:"runtime_port_mode"`
+	RuntimeFixedPort     int    `json:"runtime_fixed_port"`
+	BootstrapWorkspace   string `json:"bootstrap_workspace"`
+	BootstrapDatabaseRef string `json:"bootstrap_database_ref"`
+}
+
+type runtimeSetupValidationError struct {
+	Code    string
+	Message string
+	Field   string
+}
+
 type runtimeSetupConfigFile struct {
-	CreatedAtUTC string `json:"created_at_utc"`
+	Version   int                         `json:"version"`
+	Instance  runtimeSetupInstanceConfig  `json:"instance"`
+	Storage   runtimeSetupStorageConfig   `json:"storage"`
+	Runtime   runtimeSetupRuntimeConfig   `json:"runtime"`
+	Auth      runtimeSetupAuthConfig      `json:"auth"`
+	Bootstrap runtimeSetupBootstrapConfig `json:"bootstrap"`
+	Features  runtimeSetupFeaturesConfig  `json:"features"`
+	Meta      runtimeSetupMetaConfig      `json:"meta"`
+}
+
+type runtimeSetupInstanceConfig struct {
+	Name    string `json:"name"`
+	Profile string `json:"profile"`
+}
+
+type runtimeSetupStorageConfig struct {
+	DataDir  string `json:"dataDir"`
+	MediaDir string `json:"mediaDir"`
+}
+
+type runtimeSetupRuntimeConfig struct {
+	PortMode    string `json:"portMode"`
+	Port        *int   `json:"port"`
+	ResolvedURL string `json:"resolvedUrl"`
+}
+
+type runtimeSetupAuthConfig struct {
+	Mode  string                      `json:"mode"`
+	Clerk runtimeSetupClerkAuthConfig `json:"clerk"`
+}
+
+type runtimeSetupClerkAuthConfig struct {
+	PublishableKey string `json:"publishableKey"`
+	Enabled        bool   `json:"enabled"`
+}
+
+type runtimeSetupBootstrapConfig struct {
+	Workspace       string `json:"workspace"`
+	DatabaseProfile string `json:"databaseProfile"`
+}
+
+type runtimeSetupFeaturesConfig struct {
+	Chat      bool `json:"chat"`
+	Providers bool `json:"providers"`
+	Scanner   bool `json:"scanner"`
+}
+
+type runtimeSetupMetaConfig struct {
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+	WizardVersion string `json:"wizardVersion"`
 }
 
 func runtimeSetupConfigPath(cfg config.Config) string {
@@ -2962,12 +3054,9 @@ func runtimeSetupRequired(cfg config.Config) bool {
 	return errors.Is(err, os.ErrNotExist)
 }
 
-func writeRuntimeSetupConfig(cfg config.Config) error {
+func writeRuntimeSetupConfig(cfg config.Config, payload runtimeSetupConfigFile) error {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return err
-	}
-	payload := runtimeSetupConfigFile{
-		CreatedAtUTC: time.Now().UTC().Format(time.RFC3339),
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -2975,6 +3064,135 @@ func writeRuntimeSetupConfig(cfg config.Config) error {
 	}
 	data = append(data, '\n')
 	return os.WriteFile(runtimeSetupConfigPath(cfg), data, 0o644)
+}
+
+func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidationError {
+	if strings.TrimSpace(req.InstanceName) == "" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_INSTANCE_NAME_REQUIRED",
+			Message: "Instance name is required.",
+			Field:   "instance_name",
+		}
+	}
+	if strings.TrimSpace(req.ProfileKey) == "" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_PROFILE_KEY_REQUIRED",
+			Message: "Profile key is required.",
+			Field:   "profile_key",
+		}
+	}
+	authMode := strings.TrimSpace(strings.ToLower(req.AuthMode))
+	if authMode == "" {
+		authMode = "local"
+	}
+	if authMode != "local" && authMode != "clerk" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_AUTH_MODE_INVALID",
+			Message: "Auth mode must be local or clerk.",
+			Field:   "auth_mode",
+		}
+	}
+	if authMode == "clerk" && strings.TrimSpace(req.ClerkPublishableKey) == "" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_CLERK_PUBLISHABLE_KEY_REQUIRED",
+			Message: "Clerk publishable key is required.",
+			Field:   "clerk_publishable_key",
+		}
+	}
+	portMode := strings.TrimSpace(strings.ToLower(req.RuntimePortMode))
+	if portMode == "" {
+		portMode = "auto"
+	}
+	if portMode != "auto" && portMode != "fixed" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_RUNTIME_PORT_MODE_INVALID",
+			Message: "Runtime port mode must be auto or fixed.",
+			Field:   "runtime_port_mode",
+		}
+	}
+	if portMode == "fixed" && req.RuntimeFixedPort <= 0 {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_RUNTIME_FIXED_PORT_REQUIRED",
+			Message: "Fixed port value is required when runtime port mode is fixed.",
+			Field:   "runtime_fixed_port",
+		}
+	}
+	return nil
+}
+
+func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtimeSetupConfigFile, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	profileKey := strings.TrimSpace(req.ProfileKey)
+	instanceName := strings.TrimSpace(req.InstanceName)
+	authMode := strings.TrimSpace(strings.ToLower(req.AuthMode))
+	if authMode == "" {
+		authMode = "local"
+	}
+	portMode := strings.TrimSpace(strings.ToLower(req.RuntimePortMode))
+	if portMode == "" {
+		portMode = "auto"
+	}
+	host := strings.TrimSpace(cfg.Host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := cfg.Port
+	if port <= 0 {
+		port = 17880
+	}
+	var runtimePort *int
+	if portMode == "fixed" {
+		runtimePort = &req.RuntimeFixedPort
+		port = req.RuntimeFixedPort
+	}
+
+	workspace := strings.TrimSpace(req.BootstrapWorkspace)
+	if workspace == "" {
+		workspace = "Local Workspace"
+	}
+	databaseRef := strings.TrimSpace(req.BootstrapDatabaseRef)
+	if databaseRef == "" {
+		databaseRef = "Primary DB"
+	}
+
+	profileDataDir := filepath.Join(cfg.DataDir, "profiles", profileKey)
+	return runtimeSetupConfigFile{
+		Version: 1,
+		Instance: runtimeSetupInstanceConfig{
+			Name:    instanceName,
+			Profile: profileKey,
+		},
+		Storage: runtimeSetupStorageConfig{
+			DataDir:  profileDataDir,
+			MediaDir: filepath.Join(profileDataDir, "media"),
+		},
+		Runtime: runtimeSetupRuntimeConfig{
+			PortMode:    portMode,
+			Port:        runtimePort,
+			ResolvedURL: fmt.Sprintf("http://%s:%d", host, port),
+		},
+		Auth: runtimeSetupAuthConfig{
+			Mode: authMode,
+			Clerk: runtimeSetupClerkAuthConfig{
+				PublishableKey: strings.TrimSpace(req.ClerkPublishableKey),
+				Enabled:        authMode == "clerk",
+			},
+		},
+		Bootstrap: runtimeSetupBootstrapConfig{
+			Workspace:       workspace,
+			DatabaseProfile: databaseRef,
+		},
+		Features: runtimeSetupFeaturesConfig{
+			Chat:      true,
+			Providers: true,
+			Scanner:   true,
+		},
+		Meta: runtimeSetupMetaConfig{
+			CreatedAt:     now,
+			UpdatedAt:     now,
+			WizardVersion: "1",
+		},
+	}, nil
 }
 
 const apiDocsHTML = `<!doctype html>

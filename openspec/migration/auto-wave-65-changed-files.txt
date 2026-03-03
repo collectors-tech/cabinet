@@ -1,0 +1,9 @@
+internal/app/app.go
+internal/app/e2e_hooks.go
+internal/app/runtime_setup_api_test.go
+internal/ui/static/index.html
+openspec/specs/general/setup-wizard-first-run/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts
+ui.web/src/features/auth/sign-in/index.tsx
+openspec/migration/auto-wave-65-summary.md
