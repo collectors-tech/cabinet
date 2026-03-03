@@ -1,0 +1,3 @@
+tests/help_center_docs_contract_test.go
+openspec/migration/auto-wave-71-summary.md
+openspec/migration/auto-wave-71-changed-files.txt
