@@ -17,6 +17,11 @@ type RuntimeSetupStatus = {
   setup_required?: boolean
 }
 
+type RuntimeSetupCompletePayload = {
+  ok?: boolean
+  config_path?: string
+}
+
 type SetupFormState = {
   instanceName: string
   profileKey: string
@@ -30,12 +35,18 @@ export function SignIn() {
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [completingSetup, setCompletingSetup] = useState(false)
+  const [setupStep, setSetupStep] = useState(0)
+  const [setupCompleteState, setSetupCompleteState] =
+    useState<RuntimeSetupCompletePayload | null>(null)
   const [setupForm, setSetupForm] = useState<SetupFormState>({
     instanceName: 'Primary',
     profileKey: 'primary',
     authMode: 'local',
     clerkPublishableKey: '',
   })
+
+  const totalSteps = 3
+  const progressPercent = Math.round(((setupStep + 1) / totalSteps) * 100)
 
   useEffect(() => {
     let cancelled = false
@@ -69,6 +80,16 @@ export function SignIn() {
       cancelled = true
     }
   }, [])
+
+  function goToNextStep() {
+    setSetupError(null)
+    setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
+  }
+
+  function goToPreviousStep() {
+    setSetupError(null)
+    setSetupStep((previous) => Math.max(previous - 1, 0))
+  }
 
   async function completeSetup() {
     if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
@@ -104,11 +125,12 @@ export function SignIn() {
             message = payload.message
           }
         } catch {
-          // Ignore parse failures and keep fallback.
+          // no-op
         }
         throw new Error(message)
       }
-      setSetupRequired(false)
+      const payload = (await response.json()) as RuntimeSetupCompletePayload
+      setSetupCompleteState(payload)
     } catch (error) {
       setSetupError(
         error instanceof Error ? error.message : 'setup_complete_failed'
@@ -116,6 +138,12 @@ export function SignIn() {
     } finally {
       setCompletingSetup(false)
     }
+  }
+
+  function startAppFromSetup() {
+    setSetupCompleteState(null)
+    setSetupRequired(false)
+    setSetupStep(0)
   }
 
   if (setupLoading) {
@@ -132,10 +160,61 @@ export function SignIn() {
   }
 
   if (setupRequired) {
+    if (setupCompleteState?.ok) {
+      return (
+        <AuthLayout>
+          <Card className='gap-4' data-testid='setup-wizard-complete-state'>
+            <CardHeader>
+              <CardTitle className='text-lg tracking-tight'>Config complete</CardTitle>
+              <CardDescription>
+                Setup is complete. Start Cabinet with your configuration.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3'>
+              <p className='text-sm text-muted-foreground'>
+                Config path:{' '}
+                <span className='font-medium'>
+                  {setupCompleteState.config_path ?? 'unknown'}
+                </span>
+              </p>
+              <Button data-testid='setup-start-app' onClick={startAppFromSetup}>
+                Start App
+              </Button>
+            </CardContent>
+          </Card>
+        </AuthLayout>
+      )
+    }
+
     return (
       <AuthLayout>
         <Card className='gap-4' data-testid='setup-wizard'>
           <CardHeader>
+            <p
+              className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+              data-testid='setup-step-indicator'
+            >
+              STEP {setupStep + 1} OF {totalSteps}
+            </p>
+            <div className='flex items-center justify-between gap-2'>
+              <p className='text-sm text-muted-foreground'>Setup Progress</p>
+              <p className='text-sm font-medium' data-testid='setup-step-percent'>
+                {progressPercent}%
+              </p>
+            </div>
+            <div
+              className='h-2 w-full overflow-hidden rounded-full bg-muted'
+              role='progressbar'
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPercent}
+              data-testid='setup-progress-bar'
+            >
+              <div
+                className='h-full bg-primary transition-all'
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
             <CardTitle className='text-lg tracking-tight'>Setup Wizard</CardTitle>
             <CardDescription>
               Complete initial runtime setup before continuing to sign in.
@@ -146,81 +225,126 @@ export function SignIn() {
               Cabinet detected missing startup configuration. Create the setup file
               to unlock login.
             </p>
-            <div className='grid gap-3'>
-              <label className='grid gap-1 text-sm'>
-                <span>Instance Name</span>
-                <input
-                  className='h-9 rounded-md border bg-background px-3'
-                  value={setupForm.instanceName}
-                  onChange={(event) =>
-                    setSetupForm((previous) => ({
-                      ...previous,
-                      instanceName: event.target.value,
-                    }))
-                  }
-                  data-testid='setup-instance-name'
-                />
-              </label>
-              <label className='grid gap-1 text-sm'>
-                <span>Profile Key</span>
-                <input
-                  className='h-9 rounded-md border bg-background px-3'
-                  value={setupForm.profileKey}
-                  onChange={(event) =>
-                    setSetupForm((previous) => ({
-                      ...previous,
-                      profileKey: event.target.value,
-                    }))
-                  }
-                  data-testid='setup-profile-key'
-                />
-              </label>
-              <label className='grid gap-1 text-sm'>
-                <span>Auth Mode</span>
-                <select
-                  className='h-9 rounded-md border bg-background px-3'
-                  value={setupForm.authMode}
-                  onChange={(event) =>
-                    setSetupForm((previous) => ({
-                      ...previous,
-                      authMode: event.target.value === 'clerk' ? 'clerk' : 'local',
-                    }))
-                  }
-                  data-testid='setup-auth-mode'
-                >
-                  <option value='local'>local</option>
-                  <option value='clerk'>clerk</option>
-                </select>
-              </label>
-              {setupForm.authMode === 'clerk' ? (
+            {setupStep === 0 ? (
+              <div className='grid gap-3'>
                 <label className='grid gap-1 text-sm'>
-                  <span>Clerk Publishable Key</span>
+                  <span>Instance Name</span>
                   <input
                     className='h-9 rounded-md border bg-background px-3'
-                    value={setupForm.clerkPublishableKey}
+                    value={setupForm.instanceName}
                     onChange={(event) =>
                       setSetupForm((previous) => ({
                         ...previous,
-                        clerkPublishableKey: event.target.value,
+                        instanceName: event.target.value,
                       }))
                     }
-                    data-testid='setup-clerk-publishable-key'
+                    data-testid='setup-instance-name'
                   />
                 </label>
-              ) : null}
-            </div>
+                <label className='grid gap-1 text-sm'>
+                  <span>Profile Key</span>
+                  <input
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupForm.profileKey}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        profileKey: event.target.value,
+                      }))
+                    }
+                    data-testid='setup-profile-key'
+                  />
+                </label>
+              </div>
+            ) : null}
+            {setupStep === 1 ? (
+              <div className='grid gap-3'>
+                <label className='grid gap-1 text-sm'>
+                  <span>Auth Mode</span>
+                  <select
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupForm.authMode}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        authMode: event.target.value === 'clerk' ? 'clerk' : 'local',
+                      }))
+                    }
+                    data-testid='setup-auth-mode'
+                  >
+                    <option value='local'>local</option>
+                    <option value='clerk'>clerk</option>
+                  </select>
+                </label>
+                {setupForm.authMode === 'clerk' ? (
+                  <label className='grid gap-1 text-sm'>
+                    <span>Clerk Publishable Key</span>
+                    <input
+                      className='h-9 rounded-md border bg-background px-3'
+                      value={setupForm.clerkPublishableKey}
+                      onChange={(event) =>
+                        setSetupForm((previous) => ({
+                          ...previous,
+                          clerkPublishableKey: event.target.value,
+                        }))
+                      }
+                      data-testid='setup-clerk-publishable-key'
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+            {setupStep === 2 ? (
+              <div className='rounded-md border bg-muted/40 p-3 text-sm'>
+                <p>
+                  <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
+                </p>
+                <p>
+                  <strong>Profile Key:</strong> {setupForm.profileKey || 'Not set'}
+                </p>
+                <p>
+                  <strong>Auth Mode:</strong> {setupForm.authMode}
+                </p>
+                {setupForm.authMode === 'clerk' ? (
+                  <p>
+                    <strong>Clerk Key:</strong>{' '}
+                    {setupForm.clerkPublishableKey ? 'Configured' : 'Missing'}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {setupError ? (
               <p className='text-sm text-destructive' data-testid='setup-wizard-error'>
                 {setupError}
               </p>
             ) : null}
-            <Button
-              onClick={() => void completeSetup()}
-              disabled={completingSetup}
-              data-testid='setup-wizard-complete'
-            >
-              {completingSetup ? 'Completing Setup...' : 'Complete Setup'}
-            </Button>
+            <div className='flex items-center gap-2 pt-2'>
+              <Button
+                variant='outline'
+                onClick={goToPreviousStep}
+                disabled={setupStep === 0 || completingSetup}
+                data-testid='setup-prev'
+              >
+                Previous
+              </Button>
+              {setupStep < totalSteps - 1 ? (
+                <Button
+                  onClick={goToNextStep}
+                  disabled={completingSetup}
+                  data-testid='setup-next'
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => void completeSetup()}
+                  disabled={completingSetup}
+                  data-testid='setup-complete'
+                >
+                  {completingSetup ? 'Completing Setup...' : 'Complete'}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       </AuthLayout>
