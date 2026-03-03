@@ -29,6 +29,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `ui-foundation-shell-navigation` -> `openspec/specs/general/ui-foundation-shell-navigation/spec.md`
 - `audit-metadata-history` -> `openspec/specs/general/audit-metadata-history/spec.md`
 - `auth-permissions-test-matrix` -> `openspec/specs/general/auth-permissions-test-matrix/spec.md`
+- `setup-wizard-first-run` -> `openspec/specs/general/setup-wizard-first-run/spec.md
 - `ui-foundation-theme-rtl-i18n` -> `openspec/specs/general/ui-foundation-theme-rtl-i18n/spec.md`
 - `ui-global-search-command` -> `openspec/specs/general/ui-global-search-command/spec.md`
 - `ui-governance-gates` -> `openspec/specs/general/ui-governance-gates/spec.md`
