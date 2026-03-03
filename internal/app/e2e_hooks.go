@@ -60,6 +60,40 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 		}
 		_ = json.NewEncoder(w).Encode(out)
 	})
+
+	mux.HandleFunc("/api/test/runtime/setup-status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			State string `json:"state"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		state := strings.TrimSpace(strings.ToLower(req.State))
+		switch state {
+		case "missing":
+			if err := os.Remove(runtimeSetupConfigPath(cfg)); err != nil && !os.IsNotExist(err) {
+				http.Error(w, `{"error":"failed_to_remove_setup_config"}`, http.StatusInternalServerError)
+				return
+			}
+		case "present":
+			if err := writeRuntimeSetupConfig(cfg); err != nil {
+				http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
+				return
+			}
+		default:
+			http.Error(w, `{"error":"invalid_setup_state"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"setup_required": runtimeSetupRequired(cfg),
+		})
+	})
 }
 
 func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {

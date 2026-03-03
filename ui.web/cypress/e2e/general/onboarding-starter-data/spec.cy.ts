@@ -1,57 +1,35 @@
 describe('ONBOARDING-STARTER-DATA', () => {
-  function signIn() {
-    cy.visit('/sign-in?redirect=%2F');
-    cy.get('input[name="email"]').clear().type('e2e-onboarding-starter@example.com');
-    cy.get('input[name="password"]').clear().type('password123');
-    cy.contains('button', 'Sign in').click();
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
-  }
-
-  it('ONBOARDING-STARTER-DATA-001 shows guided starter onboarding controls without advanced-form lock-in', () => {
-    signIn();
-
-    cy.contains('Starter Onboarding').should('be.visible');
-    cy.contains('button', 'Start Setup').should('be.visible');
-    cy.contains('Import Existing Collection').should('be.visible');
-    cy.contains('button', 'Use Sample Data').should('be.visible');
-    cy.contains(/Brand|Part Number|Acquisition price/i).should('not.exist');
+  beforeEach(() => {
+    cy.e2eReset();
+    cy.e2eBootstrap({ minimalProfile: true });
   });
 
-  it('ONBOARDING-STARTER-DATA-002 seeds sample data and displays deterministic summary counts', () => {
-    cy.intercept('POST', '/api/onboarding/sample-data', {
-      statusCode: 200,
-      body: {
-        already_seeded_for_profile: false,
-        folders_created: 3,
-        items_created: 6,
-        media_created: 0,
-      },
-    }).as('seedSample');
+  it('ONBOARDING-STARTER-DATA-001 gates sign-in behind setup wizard when runtime setup config is missing', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'missing' })
+      .its('status')
+      .should('eq', 200);
+    cy.visit('/sign-in');
 
-    signIn();
-    cy.contains('button', 'Use Sample Data').click();
-    cy.wait('@seedSample');
-
-    cy.get('[data-testid="onboarding-seed-summary"]')
-      .should('be.visible')
-      .and('contain', 'Folders: 3')
-      .and('contain', 'Items: 6')
-      .and('contain', 'Media: 0');
+    cy.contains('Setup Wizard').should('be.visible');
+    cy.contains('button', 'Complete Setup').should('be.visible');
+    cy.contains('Sign in').should('not.exist');
   });
 
-  it('ONBOARDING-STARTER-DATA-003 routes to import flow without auto-seeding sample data', () => {
-    cy.intercept('POST', '/api/onboarding/sample-data').as('seedSample');
+  it('ONBOARDING-STARTER-DATA-002 completes setup and restores sign-in controls deterministically', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'missing' })
+      .its('status')
+      .should('eq', 200);
+    cy.visit('/sign-in');
+    cy.contains('button', 'Complete Setup').click();
+    cy.contains('Sign in').should('be.visible');
+  });
 
-    signIn();
-    cy.contains('Import Existing Collection').click();
-
-    cy.location('pathname', { timeout: 10000 }).should(
-      'match',
-      /^\/settings\/storage\/?$/
-    );
-    cy.get('@seedSample.all').should('have.length', 0);
+  it('ONBOARDING-STARTER-DATA-003 bypasses setup wizard when runtime config is already present', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+    cy.visit('/sign-in');
+    cy.contains('Sign in').should('be.visible');
+    cy.contains('Setup Wizard').should('not.exist');
   });
 });

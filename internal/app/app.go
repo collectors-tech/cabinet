@@ -205,6 +205,34 @@ func New(cfg config.Config) (*App, error) {
 			"runtime_port":                 port,
 		})
 	})
+	mux.HandleFunc("/api/runtime/setup-status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		configPath := runtimeSetupConfigPath(cfg)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"setup_required": runtimeSetupRequired(cfg),
+			"config_path":    configPath,
+		})
+	})
+	mux.HandleFunc("/api/runtime/setup-complete", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if err := writeRuntimeSetupConfig(cfg); err != nil {
+			http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"setup_required": false,
+			"config_path":    runtimeSetupConfigPath(cfg),
+		})
+	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -2919,6 +2947,34 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	return a, nil
+}
+
+type runtimeSetupConfigFile struct {
+	CreatedAtUTC string `json:"created_at_utc"`
+}
+
+func runtimeSetupConfigPath(cfg config.Config) string {
+	return filepath.Join(cfg.DataDir, "cabinet.json")
+}
+
+func runtimeSetupRequired(cfg config.Config) bool {
+	_, err := os.Stat(runtimeSetupConfigPath(cfg))
+	return errors.Is(err, os.ErrNotExist)
+}
+
+func writeRuntimeSetupConfig(cfg config.Config) error {
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return err
+	}
+	payload := runtimeSetupConfigFile{
+		CreatedAtUTC: time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(runtimeSetupConfigPath(cfg), data, 0o644)
 }
 
 const apiDocsHTML = `<!doctype html>

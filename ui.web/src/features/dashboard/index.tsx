@@ -34,22 +34,6 @@ type DashboardSummary = {
   cards: DashboardCard[]
 }
 
-type OnboardingSeedSummary = {
-  folders_created?: number
-  items_created?: number
-  media_created?: number
-  created_items?: number
-  created_instances?: number
-  created_wishlist_entries?: number
-  already_seeded_for_profile?: boolean
-}
-
-const onboardingSteps = ['Welcome', 'Identity', 'Starter Data', 'First Item', 'Preferences']
-
-function onboardingStorageKey(profileID: string): string {
-  return `cabinet.onboarding.step.${profileID}`
-}
-
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -62,11 +46,6 @@ export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [onboardingScope, setOnboardingScope] = useState('default')
-  const [onboardingStepIndex, setOnboardingStepIndex] = useState(0)
-  const [seedLoading, setSeedLoading] = useState(false)
-  const [seedError, setSeedError] = useState<string | null>(null)
-  const [seedSummary, setSeedSummary] = useState<OnboardingSeedSummary | null>(null)
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -91,71 +70,6 @@ export function Dashboard() {
     void loadDashboard()
   }, [loadDashboard])
 
-  useEffect(() => {
-    let cancelled = false
-    async function loadOnboardingScope() {
-      try {
-        const response = await fetch('/api/profiles/active')
-        if (!response.ok) {
-          return
-        }
-        const payload = (await response.json()) as { id?: string }
-        const profileID = payload.id?.trim()
-        if (!cancelled && profileID) {
-          setOnboardingScope(profileID)
-        }
-      } catch {
-        // Keep default onboarding scope when profile endpoint is unavailable.
-      }
-    }
-    void loadOnboardingScope()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    try {
-      const scopeKey = onboardingStorageKey(onboardingScope)
-      const raw = window.localStorage.getItem(scopeKey)
-      if (!raw) {
-        const fallbackRaw =
-          onboardingScope !== 'default'
-            ? window.localStorage.getItem(onboardingStorageKey('default'))
-            : null
-        if (fallbackRaw) {
-          const fallbackParsed = Number(fallbackRaw)
-          if (
-            !Number.isNaN(fallbackParsed) &&
-            fallbackParsed >= 0 &&
-            fallbackParsed < onboardingSteps.length
-          ) {
-            window.localStorage.setItem(scopeKey, fallbackRaw)
-            setOnboardingStepIndex(fallbackParsed)
-            return
-          }
-        }
-        setOnboardingStepIndex(0)
-        return
-      }
-      const parsed = Number(raw)
-      if (Number.isNaN(parsed) || parsed < 0 || parsed >= onboardingSteps.length) {
-        setOnboardingStepIndex(0)
-        return
-      }
-      setOnboardingStepIndex(parsed)
-    } catch {
-      setOnboardingStepIndex(0)
-    }
-  }, [onboardingScope])
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      onboardingStorageKey(onboardingScope),
-      onboardingStepIndex.toString()
-    )
-  }, [onboardingScope, onboardingStepIndex])
-
   const metricCards = useMemo(() => {
     if (!summary) {
       return []
@@ -167,27 +81,6 @@ export function Dashboard() {
       { title: 'Estimated Value', value: formatCurrency(summary.estimated_value) },
     ]
   }, [summary])
-
-  const handleSeedSampleData = useCallback(async () => {
-    setSeedLoading(true)
-    setSeedError(null)
-    try {
-      const response = await fetch('/api/onboarding/sample-data', {
-        method: 'POST',
-      })
-      if (!response.ok) {
-        throw new Error(`seed_sample_data_failed_${response.status}`)
-      }
-      const payload = (await response.json()) as OnboardingSeedSummary
-      setSeedSummary(payload)
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'seed_sample_data_failed'
-      setSeedError(message)
-    } finally {
-      setSeedLoading(false)
-    }
-  }, [])
 
   return (
     <>
@@ -213,72 +106,6 @@ export function Dashboard() {
             {loading ? 'Refreshing...' : 'Refresh Dashboard'}
           </Button>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Starter Onboarding</CardTitle>
-            <CardDescription>
-              Continue setup progress for this profile.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='space-y-3'>
-            <p className='text-sm' data-testid='onboarding-step-label'>
-              Current step: {onboardingSteps[onboardingStepIndex]}
-            </p>
-            <p className='text-sm text-muted-foreground'>
-              Choose how you want to begin. Quick setup gets you collecting immediately.
-            </p>
-            <div className='flex flex-wrap gap-2'>
-              <Button size='sm' variant='outline'>
-                Start Setup
-              </Button>
-              <Button size='sm' variant='outline' asChild>
-                <a href='/settings/storage'>Import Existing Collection</a>
-              </Button>
-              <Button size='sm' onClick={() => void handleSeedSampleData()} disabled={seedLoading}>
-                {seedLoading ? 'Seeding Sample Data...' : 'Use Sample Data'}
-              </Button>
-            </div>
-            <div className='flex gap-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() =>
-                  setOnboardingStepIndex((current) =>
-                    current > 0 ? current - 1 : current
-                  )
-                }
-              >
-                Back Step
-              </Button>
-              <Button
-                size='sm'
-                data-testid='onboarding-next-step'
-                onClick={() =>
-                  setOnboardingStepIndex((current) =>
-                    current < onboardingSteps.length - 1 ? current + 1 : current
-                  )
-                }
-              >
-                Next Step
-              </Button>
-            </div>
-            {seedSummary ? (
-              <p className='text-sm' data-testid='onboarding-seed-summary'>
-                Folders: {seedSummary.folders_created ?? 0}
-                {'  '}
-                Items: {seedSummary.items_created ?? seedSummary.created_items ?? 0}
-                {'  '}
-                Media: {seedSummary.media_created ?? seedSummary.created_instances ?? 0}
-              </p>
-            ) : null}
-            {seedError ? (
-              <p className='text-sm text-destructive' data-testid='onboarding-seed-error'>
-                {seedError}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
 
         {error ? (
           <Card>

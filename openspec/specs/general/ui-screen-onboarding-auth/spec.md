@@ -55,6 +55,19 @@ Sign-in flow SHALL support passkey authentication compatible with platform authe
 - **WHEN** passkey auth attempt fails
 - **THEN** UI MUST provide deterministic fallback to other enabled methods (password/social) with actionable error message
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-009: Setup wizard SHALL gate sign-in when runtime setup config is missing
+Sign-in route SHALL present a full-screen setup wizard before auth controls when runtime setup config file is missing.
+
+#### Scenario: Setup required branch
+- **GIVEN** `GET /api/runtime/setup-status` returns `{"setup_required":true}`
+- **WHEN** user opens sign-in route
+- **THEN** UI MUST render setup wizard, MUST hide sign-in form, and MUST expose deterministic `Complete Setup` action
+
+#### Scenario: Setup completion branch
+- **GIVEN** setup wizard is visible and user triggers `Complete Setup`
+- **WHEN** `POST /api/runtime/setup-complete` returns 200 with `{"ok":true,"setup_required":false}`
+- **THEN** setup wizard MUST dismiss and sign-in form MUST render without route change
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -70,3 +83,4 @@ Sign-in flow SHALL support passkey authentication compatible with platform authe
 | UC-ONB-02 | Restart mid-onboarding | Flow resumes last incomplete step | planned: `cypress/e2e/auth/onboarding.cy.ts` `resume-onboarding` |
 | UC-ONB-03 | Onboarding data empty | Guided default state appears | planned: `cypress/e2e/auth/onboarding.cy.ts` `onboarding-empty-state` |
 | UC-ONB-04 | Auth requirement error | Error + retry shown, no crash | planned: `cypress/e2e/auth/onboarding.cy.ts` `auth-error-retry` |
+| UC-ONB-05 | Setup config missing | Full-screen setup wizard shown before auth | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-009 shows full-screen setup wizard before auth when setup config is missing` |
