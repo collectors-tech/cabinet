@@ -52,6 +52,16 @@ Wishlist detail collection picker MUST support `+ New Collection` inline create.
 - **WHEN** user creates a new collection from picker
 - **THEN** collection MUST be created and selected without leaving wishlist edit flow
 
+### Requirement UI-SCREEN-WISHLIST-007: Wishlist rows SHALL use collection semantics and MUST NOT leak task seed labels
+Wishlist rows/cards MUST be sourced from `/api/wishlist` + `/api/items` contracts and MUST NOT render generic task IDs or task taxonomy labels.
+
+#### Scenario: Wishlist semantics in rows view
+- **GIVEN** `/api/wishlist` returns profile entries and `/api/items` returns canonical item metadata
+- **WHEN** user opens wishlist rows view
+- **THEN** rendered IDs MUST align to wishlist `item_id` values
+- **AND** row titles MUST align to canonical item title/part number
+- **AND** UI MUST NOT render `TASK-*` seeded IDs or task workflow labels such as `Backlog`
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |

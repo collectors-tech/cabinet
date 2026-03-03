@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/specs/wishlist/ui-screen-wishlist/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts
+ui.web/src/features/tasks/index.tsx
+openspec/migration/auto-wave-57-summary.md
+openspec/migration/auto-wave-57-changed-files.txt

@@ -1,5 +1,45 @@
 describe("ui-screen-wishlist", () => {
+  function stubWishlistData() {
+    cy.intercept("GET", "/api/wishlist", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "wish-1",
+            item_id: "item-collector-1",
+            priority: "medium",
+            below_target_now: false,
+          },
+          {
+            id: "wish-2",
+            item_id: "item-collector-2",
+            priority: "high",
+            below_target_now: true,
+          },
+        ],
+      },
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-collector-1",
+            title: "AFX Mega-G+ Camaro Wildfire",
+            part_number: "22073",
+          },
+          {
+            id: "item-collector-2",
+            title: "F1 Silverline",
+            part_number: "F1002",
+          },
+        ],
+      },
+    }).as("catalogItems");
+  }
+
   function signInToWishlist() {
+    stubWishlistData();
     cy.visit("/sign-in?redirect=%2Fwishlist%2F");
     cy.get('input[name="email"]').clear().type("e2e-wishlist@example.com");
     cy.get('input[name="password"]').clear().type("password123");
@@ -8,6 +48,8 @@ describe("ui-screen-wishlist", () => {
       "match",
       /^\/wishlist\/?$/
     );
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
   }
 
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
@@ -68,5 +110,15 @@ describe("ui-screen-wishlist", () => {
       "contain",
       "Wishlist Inline Alpha"
     );
+  });
+
+  it("UI-SCREEN-WISHLIST-007 renders wishlist collection semantics instead of task seed rows", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+    cy.contains("item-collector-1").should("be.visible");
+    cy.contains(/TASK-\d+/).should("not.exist");
+    cy.contains("Backlog").should("not.exist");
   });
 });
