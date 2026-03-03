@@ -12,6 +12,28 @@ describe('integrations/ui-screen-scanner', () => {
     cy.clearLocalStorage()
   })
 
+  it('UI-SCREEN-SCANNER-005 uses Market Watch naming with scanner route compatibility', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: { query_sets: [] },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.location('pathname').should('match', /^\/scanner\/?$/)
+    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('contain', 'Market Watch')
+    cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('not.contain', 'Scanner')
+    cy.contains('h1', 'Market Watch').should('be.visible')
+  })
+
   it('UI-SCREEN-SCANNER-001 supports query set create/load and run controls', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,

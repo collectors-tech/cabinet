@@ -1,0 +1,12 @@
+internal/ui/static/index.html
+openspec/specs/integrations/ui-screen-scanner/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts
+ui.web/cypress/e2e/integrations/ui-screen-scanner/spec.cy.ts
+ui.web/src/components/layout/data/sidebar-data.ts
+ui.web/src/features/apps/index.tsx
+ui.web/src/features/auth/sign-in/index.tsx
+ui.web/src/features/scanner/index.tsx
+ui.web/src/features/settings/operations/index.tsx
+openspec/migration/auto-wave-88-summary.md
+openspec/migration/auto-wave-88-changed-files.txt

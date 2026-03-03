@@ -17,7 +17,7 @@ export function SettingsOperations() {
         <div className='rounded-md border p-3'>
           <p className='font-medium'>Queue Controls</p>
           <p className='text-muted-foreground'>
-            Pause and resume scanner and enrichment workers for active profile context.
+            Pause and resume Market Watch and enrichment workers for active profile context.
           </p>
         </div>
         <div className='flex gap-2'>

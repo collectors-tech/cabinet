@@ -61,14 +61,14 @@ function mapScannerActionError(operation: 'run' | 'retry', status: number, error
   }
   if (status === 401 || status === 403) {
     return {
-      summary: 'Scanner action was denied.',
+      summary: 'Market Watch action was denied.',
       actions: ['Sign in again and confirm profile access permissions.'],
       diagnosticCode: errorCode,
     }
   }
   if (status >= 500) {
     return {
-      summary: 'Scanner service is temporarily unavailable.',
+      summary: 'Market Watch service is temporarily unavailable.',
       actions: ['Retry shortly.', 'Check diagnostics for provider/runtime health.'],
       diagnosticCode: errorCode,
     }
@@ -231,9 +231,9 @@ export function Scanner() {
 
       <Main className='space-y-4'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Scanner</h1>
+          <h1 className='text-2xl font-bold tracking-tight'>Market Watch</h1>
           <p className='text-muted-foreground'>
-            Manage query sets, run scans, and recover from provider failures.
+            Manage provider query sets, run market watch searches, and recover from provider failures.
           </p>
         </div>
 
@@ -261,7 +261,7 @@ export function Scanner() {
 
         {loading ? (
           <div className='rounded-md border p-4 text-sm text-muted-foreground'>
-            Loading scanner workspace...
+            Loading Market Watch workspace...
           </div>
         ) : null}
 
@@ -270,7 +270,7 @@ export function Scanner() {
             className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
             data-testid='scanner-error-state'
           >
-            <p className='font-medium'>Scanner data is unavailable.</p>
+            <p className='font-medium'>Market Watch data is unavailable.</p>
             <p className='mt-1 text-muted-foreground'>{error}</p>
             <Button className='mt-3' variant='outline' size='sm' onClick={() => void loadScanner()}>
               Retry
@@ -283,7 +283,7 @@ export function Scanner() {
             className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
             data-testid='scanner-empty-state'
           >
-            No query sets found. Create your first query set to start scanner runs.
+            No query sets found. Create your first query set to start Market Watch runs.
           </div>
         ) : null}
 

@@ -62,7 +62,7 @@ export const sidebarData: SidebarData = {
           icon: Telescope,
         },
         {
-          title: 'Scanner',
+          title: 'Market Watch',
           url: '/scanner',
           icon: ScanSearch,
         },

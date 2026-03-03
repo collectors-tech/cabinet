@@ -739,7 +739,7 @@ export function SignIn() {
                     }
                     data-testid='setup-feature-scanner'
                   />
-                  Enable Scanner
+                  Enable Market Watch
                 </label>
                 <label className='flex items-center gap-2 text-sm'>
                   <input

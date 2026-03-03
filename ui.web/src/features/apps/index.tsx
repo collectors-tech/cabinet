@@ -775,7 +775,7 @@ export function Apps({
                   variant='outline'
                   onClick={() => {
                     setActionMessage(
-                      'Sync is initiated from Scanner query sets. Open Scanner to run provider discovery.'
+                      'Sync is initiated from Market Watch query sets. Open Market Watch to run provider discovery.'
                     )
                   }}
                 >
