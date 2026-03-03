@@ -218,6 +218,25 @@ Auth step MUST provide explicit mode selection and readiness state so users can 
 - **THEN** readiness status MUST render as configured
 - **AND** config payload MUST persist `auth.mode=clerk`, `auth.clerk.enabled=true`, and configured key value
 
+### Requirement SETUP-WIZ-016: Integrations baseline step MUST capture optional connector toggles with editable-later guidance
+Integrations baseline step MUST allow users to toggle scanner/chat/provider features during setup and clearly communicate settings can be changed later.
+
+#### Scenario: Integrations defaults and guidance
+- **GIVEN** setup wizard integrations step is active
+- **WHEN** step first renders
+- **THEN** scanner, chat, and provider toggles MUST default to enabled
+- **AND** guidance text MUST state settings are editable later in Settings
+
+#### Scenario: Integrations toggle persistence
+- **GIVEN** user changes one or more integration toggles
+- **WHEN** setup completion succeeds
+- **THEN** `features.scanner`, `features.chat`, and `features.providers` MUST match selected toggle states in persisted config payload
+
+#### Scenario: Optional step progression
+- **GIVEN** integrations step has no required fields
+- **WHEN** user proceeds without changing toggles
+- **THEN** wizard MUST allow forward transition without validation blockers
+
 #### Initial `cabinet.json` schema (v1)
 ```json
 {
@@ -292,3 +311,6 @@ Auth step MUST provide explicit mode selection and readiness state so users can 
 | UC-SW-23 | Auth mode switch | Auth step toggles Local/Clerk mode and mode-specific controls deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state` |
 | UC-SW-24 | Clerk readiness missing | Clerk mode without publishable key shows missing readiness and blocks next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message` |
 | UC-SW-25 | Clerk readiness configured persistence | Clerk mode with publishable key shows configured readiness and persists clerk auth payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsClerkAuthConfiguration` |
+| UC-SW-26 | Integrations defaults | Integrations step defaults scanner/chat/providers to enabled and shows editable-later guidance | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-26 setup-wizard-integrations-defaults shows enabled toggles and guidance` |
+| UC-SW-27 | Integrations toggle persistence | Integrations toggles persist into setup config `features` payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-27 setup-wizard-integrations-persistence writes feature toggles`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFeatureToggles` |
+| UC-SW-28 | Integrations optional progression | Integrations step allows Next without required-field validation | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-28 setup-wizard-integrations-optional-step-allows-next` |

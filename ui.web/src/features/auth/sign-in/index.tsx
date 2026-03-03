@@ -42,6 +42,9 @@ type SetupFormState = {
   runtimeFixedPort: number
   authMode: 'local' | 'clerk'
   clerkPublishableKey: string
+  featureChat: boolean
+  featureProviders: boolean
+  featureScanner: boolean
 }
 
 type SetupEntryMode = 'welcome' | 'form' | 'import'
@@ -71,9 +74,12 @@ export function SignIn() {
     runtimeFixedPort: 17880,
     authMode: 'local',
     clerkPublishableKey: '',
+    featureChat: true,
+    featureProviders: true,
+    featureScanner: true,
   })
 
-  const totalSteps = 5
+  const totalSteps = 6
   const progressPercent = Math.round(((setupStep + 1) / totalSteps) * 100)
 
   useEffect(() => {
@@ -237,6 +243,9 @@ export function SignIn() {
             setupForm.authMode === 'clerk'
               ? setupForm.clerkPublishableKey.trim()
               : '',
+          feature_chat: setupForm.featureChat,
+          feature_providers: setupForm.featureProviders,
+          feature_scanner: setupForm.featureScanner,
           bootstrap_workspace: 'Local Workspace',
           bootstrap_database_ref: 'Primary DB',
         }),
@@ -673,6 +682,56 @@ export function SignIn() {
               </div>
             ) : null}
             {setupEntryMode === 'form' && setupStep === 4 ? (
+              <div className='grid gap-3'>
+                <p className='text-xs text-muted-foreground' data-testid='setup-integrations-guidance'>
+                  Optional baseline toggles. You can edit integrations any time later in
+                  Settings.
+                </p>
+                <label className='flex items-center gap-2 text-sm'>
+                  <input
+                    type='checkbox'
+                    checked={setupForm.featureScanner}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        featureScanner: event.target.checked,
+                      }))
+                    }
+                    data-testid='setup-feature-scanner'
+                  />
+                  Enable Scanner
+                </label>
+                <label className='flex items-center gap-2 text-sm'>
+                  <input
+                    type='checkbox'
+                    checked={setupForm.featureChat}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        featureChat: event.target.checked,
+                      }))
+                    }
+                    data-testid='setup-feature-chat'
+                  />
+                  Enable Chat
+                </label>
+                <label className='flex items-center gap-2 text-sm'>
+                  <input
+                    type='checkbox'
+                    checked={setupForm.featureProviders}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        featureProviders: event.target.checked,
+                      }))
+                    }
+                    data-testid='setup-feature-providers'
+                  />
+                  Enable Providers
+                </label>
+              </div>
+            ) : null}
+            {setupEntryMode === 'form' && setupStep === 5 ? (
               <div className='rounded-md border bg-muted/40 p-3 text-sm'>
                 <p>
                   <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
@@ -707,6 +766,16 @@ export function SignIn() {
                     {setupForm.clerkPublishableKey ? 'Configured' : 'Missing'}
                   </p>
                 ) : null}
+                <p>
+                  <strong>Features:</strong>{' '}
+                  {[
+                    setupForm.featureScanner ? 'scanner' : null,
+                    setupForm.featureChat ? 'chat' : null,
+                    setupForm.featureProviders ? 'providers' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || 'none'}
+                </p>
               </div>
             ) : null}
             {setupError ? (

@@ -594,3 +594,53 @@ func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
 		t.Fatalf("expected auth.clerk.publishableKey=pk_test_wave25, got %v", clerkPayload["publishableKey"])
 	}
 }
+
+func TestRuntimeSetupCompletePersistsFeatureToggles(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	completeReq := map[string]any{
+		"instance_name":          "Feature Toggle Persist",
+		"profile_key":            "",
+		"storage_mode":           "exe_local",
+		"auth_mode":              "local",
+		"runtime_port_mode":      "auto",
+		"feature_chat":           false,
+		"feature_providers":      true,
+		"feature_scanner":        false,
+		"bootstrap_workspace":    "Local Workspace",
+		"bootstrap_database_ref": "Primary DB",
+	}
+	completeReqJSON, err := json.Marshal(completeReq)
+	if err != nil {
+		t.Fatalf("marshal complete request: %v", err)
+	}
+	complete := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
+	if complete.Code != http.StatusOK {
+		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
+	}
+	rawConfig, err := os.ReadFile(setupPath)
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var configPayload map[string]any
+	if err := json.Unmarshal(rawConfig, &configPayload); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	features, ok := configPayload["features"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected features object in setup config")
+	}
+	if features["chat"] != false {
+		t.Fatalf("expected features.chat=false, got %v", features["chat"])
+	}
+	if features["providers"] != true {
+		t.Fatalf("expected features.providers=true, got %v", features["providers"])
+	}
+	if features["scanner"] != false {
+		t.Fatalf("expected features.scanner=false, got %v", features["scanner"])
+	}
+}

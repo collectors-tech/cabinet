@@ -3110,6 +3110,9 @@ type runtimeSetupRequest struct {
 	ClerkPublishableKey  string `json:"clerk_publishable_key"`
 	RuntimePortMode      string `json:"runtime_port_mode"`
 	RuntimeFixedPort     int    `json:"runtime_fixed_port"`
+	FeatureChat          *bool  `json:"feature_chat"`
+	FeatureProviders     *bool  `json:"feature_providers"`
+	FeatureScanner       *bool  `json:"feature_scanner"`
 	BootstrapWorkspace   string `json:"bootstrap_workspace"`
 	BootstrapDatabaseRef string `json:"bootstrap_database_ref"`
 }
@@ -3399,6 +3402,18 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 
 	storageDataDir := resolveRuntimeSetupStorageDataDir(cfg, req, profileKey)
 	storageMediaDir := filepath.Join(storageDataDir, "media")
+	featureChat := true
+	if req.FeatureChat != nil {
+		featureChat = *req.FeatureChat
+	}
+	featureProviders := true
+	if req.FeatureProviders != nil {
+		featureProviders = *req.FeatureProviders
+	}
+	featureScanner := true
+	if req.FeatureScanner != nil {
+		featureScanner = *req.FeatureScanner
+	}
 	return runtimeSetupConfigFile{
 		Version: 1,
 		Instance: runtimeSetupInstanceConfig{
@@ -3427,9 +3442,9 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			DatabaseProfile: databaseRef,
 		},
 		Features: runtimeSetupFeaturesConfig{
-			Chat:      true,
-			Providers: true,
-			Scanner:   true,
+			Chat:      featureChat,
+			Providers: featureProviders,
+			Scanner:   featureScanner,
 		},
 		Meta: runtimeSetupMetaConfig{
 			CreatedAt:     now,
