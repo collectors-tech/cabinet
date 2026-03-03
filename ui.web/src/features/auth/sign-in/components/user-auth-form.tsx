@@ -51,6 +51,8 @@ export function UserAuthForm({
   ...props
 }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [passkeyError, setPasskeyError] = useState<string | null>(null)
   const [identityMode, setIdentityMode] = useState('local')
   const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([
     { id: 'google', label: 'Google', enabled: true },
@@ -96,6 +98,55 @@ export function UserAuthForm({
       },
       error: 'Error',
     })
+  }
+
+  async function signInWithPasskey() {
+    setPasskeyError(null)
+    setPasskeyLoading(true)
+    try {
+      const maybePublicKeyCredential = (
+        window as Window & { PublicKeyCredential?: unknown }
+      ).PublicKeyCredential
+      if (!maybePublicKeyCredential || !navigator.credentials?.get) {
+        throw new Error(
+          'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
+        )
+      }
+
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: new Uint8Array([1, 2, 3, 4]),
+          timeout: 60000,
+          userVerification: 'preferred',
+        } as PublicKeyCredentialRequestOptions,
+      })
+
+      if (!credential) {
+        throw new Error(
+          'Passkey sign-in failed. Use password or provider sign-in.'
+        )
+      }
+
+      const mockUser = {
+        accountNo: 'ACC001',
+        email: 'passkey@cabinet.local',
+        role: ['user'],
+        exp: Date.now() + 24 * 60 * 60 * 1000,
+      }
+
+      auth.setUser(mockUser)
+      auth.setAccessToken('mock-passkey-access-token')
+      const targetPath = redirectTo || '/'
+      navigate({ to: targetPath, replace: true })
+    } catch (error) {
+      setPasskeyError(
+        error instanceof Error
+          ? error.message
+          : 'Passkey sign-in failed. Use password or provider sign-in.'
+      )
+    } finally {
+      setPasskeyLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -175,6 +226,23 @@ export function UserAuthForm({
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
           Sign in
         </Button>
+
+        <Button
+          className='mt-1'
+          variant='outline'
+          type='button'
+          data-testid='passkey-signin'
+          disabled={passkeyLoading}
+          onClick={() => void signInWithPasskey()}
+        >
+          {passkeyLoading ? <Loader2 className='animate-spin' /> : null}
+          Sign in with Passkey
+        </Button>
+        {passkeyError ? (
+          <p className='text-sm text-destructive' data-testid='passkey-error'>
+            {passkeyError}
+          </p>
+        ) : null}
 
         <div className='relative my-2'>
           <div className='absolute inset-0 flex items-center'>

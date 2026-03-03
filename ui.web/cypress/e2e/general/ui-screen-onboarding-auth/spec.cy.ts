@@ -117,4 +117,58 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
     cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in', {
+      onBeforeLoad(win) {
+        // Minimal passkey-capable environment for deterministic E2E.
+        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
+          function PublicKeyCredential() {
+            return undefined;
+          };
+        Object.defineProperty(win.navigator, 'credentials', {
+          configurable: true,
+          value: {
+            get: () => Promise.resolve({ id: 'e2e-passkey-credential' }),
+          },
+        });
+      },
+    });
+
+    cy.get('[data-testid="passkey-signin"]').click();
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^(\/|\/_authenticated\/?)$/
+    );
+    cy.contains('Home').should('be.visible');
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in', {
+      onBeforeLoad(win) {
+        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
+          undefined;
+        Object.defineProperty(win.navigator, 'credentials', {
+          configurable: true,
+          value: undefined,
+        });
+      },
+    });
+    cy.get('[data-testid="passkey-signin"]').click();
+    cy.get('[data-testid="passkey-error"]')
+      .should('be.visible')
+      .and(
+        'contain.text',
+        'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
+      );
+    cy.contains('button', 'Sign in').should('be.visible');
+  });
 });

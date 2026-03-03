@@ -1,0 +1,7 @@
+ui.web/src/features/auth/sign-in/components/user-auth-form.tsx
+ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts
+openspec/specs/general/ui-screen-onboarding-auth/spec.md
+openspec/traceability.md
+internal/ui/static/index.html
+openspec/migration/auth-passkey-support-summary.md
+openspec/migration/auth-passkey-support-changed-files.txt
