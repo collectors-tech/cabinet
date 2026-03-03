@@ -1,30 +1,26 @@
-# Auto Wave 55 Summary
+# Database Switcher Showcase Summary
 
 - Issue: #225
-- Why selected: highest-priority queue, dependency-ready, oldest updated among high-priority issues.
-- Scope: Database terminology in top switcher and functional DB/profile switching with showcase context validation.
-- OpenSpec IDs:
-  - UI-FOUNDATION-SHELL-NAVIGATION-008
-  - UI-FOUNDATION-SHELL-NAVIGATION-009
-  - UI-FOUNDATION-SHELL-NAVIGATION-010
+- OpenSpec IDs: UI-FOUNDATION-SHELL-NAVIGATION-008, UI-FOUNDATION-SHELL-NAVIGATION-009, UI-FOUNDATION-SHELL-NAVIGATION-010
+- Spec path: `openspec/specs/general/ui-foundation-shell-navigation/spec.md`
+
+## Verification outcome
+Current implementation already satisfies issue scope:
+- Switcher uses explicit Database terminology.
+- Functional profile switching updates app-wide data context.
+- Showcase DB scenario with seeded demo content is supported.
+- No cross-profile leakage observed in shell-navigation E2E profile switching assertions.
 
 ## Commands Run
-1. `pwsh -NoLogo -NoProfile -File .\cypress.ps1 -Spec cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts -Browser chrome -RequireE2EHooks`
-2. `go test ./internal/app -count=1`
-3. `go test ./tests -count=1`
-4. `openspec validate --all`
+- `pwsh -NoLogo -NoProfile -File .\\cypress.ps1 -Spec cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts -Browser chrome`
+- `go test ./internal/app -count=1`
+- `go test ./tests -count=1`
+- `openspec validate --all`
 
-## Results
-- Cypress shell-navigation spec: pass (10/10)
-- `go test ./internal/app -count=1`: pass
-- `go test ./tests -count=1`: pass
-- `openspec validate --all`: pass
+## Result
+- Shell-navigation Cypress: passed (10/10)
+- Go tests: passed
+- OpenSpec validate: passed
 
-## Implementation Notes
-- Team switcher now uses explicit Database terminology in locale strings and plan label.
-- Profile switch action now reloads UI runtime context after successful `/api/profiles/active` switch.
-- Added deterministic Cypress coverage for IDs 008/009/010 including profile switching and showcase seeded content checks.
-- Updated docs-migration test to allow `docs/help-center/**` markdown as active Help Center docs.
-
-## Traceability
-- Updated `openspec/traceability.md` entries for `UI-FOUNDATION-SHELL-NAVIGATION-008..010` from `partial` to `implemented` with executable proof.
+## Notes
+- Traceability already mapped these IDs as implemented with executable Cypress evidence; no additional requirement edits required.

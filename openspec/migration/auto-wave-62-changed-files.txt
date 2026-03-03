@@ -1,0 +1,3 @@
+openspec/migration/database-switcher-showcase-summary.md
+openspec/migration/database-switcher-showcase-changed-files.txt
+openspec/migration/auto-wave-62-summary.md
