@@ -24,6 +24,15 @@ Settings SHALL support direct navigation to section routes.
 - **WHEN** section is active
 - **THEN** section SHALL show actionable error state without breaking entire settings route
 
+### Requirement UI-SCREEN-SETTINGS-004: Primary navigation rail SHALL expose Storage route
+The global left rail MUST expose a visible `Storage` entry as part of settings navigation affordances.
+
+#### Scenario: Open Storage from primary rail
+- **GIVEN** user is authenticated and primary left navigation is visible
+- **WHEN** user inspects settings-related entries in the rail
+- **THEN** rail MUST include visible `Storage` entry
+- **AND** selecting `Storage` MUST route to `/settings/storage`
+
 ## Notes
 Detailed interaction specs are split per section:
 - `settings/profile/spec.md`

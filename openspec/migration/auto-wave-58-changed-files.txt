@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/specs/settings/ui-screen-settings/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts
+ui.web/src/components/layout/data/sidebar-data.ts
+openspec/migration/auto-wave-58-summary.md
+openspec/migration/auto-wave-58-changed-files.txt

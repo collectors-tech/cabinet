@@ -121,7 +121,17 @@ export const sidebarData: SidebarData = {
               url: '/settings/display',
               icon: Monitor,
             },
+            {
+              title: 'Storage',
+              url: '/settings/storage',
+              icon: Database,
+            },
           ],
+        },
+        {
+          title: 'Storage',
+          url: '/settings/storage',
+          icon: Database,
         },
         {
           title: 'Help Center',

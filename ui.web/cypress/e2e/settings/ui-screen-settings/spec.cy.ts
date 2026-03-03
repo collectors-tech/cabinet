@@ -64,4 +64,15 @@ describe('ui-screen-settings', () => {
     )
     cy.contains('button', 'Retry').should('be.visible')
   })
+
+  it('UI-SCREEN-SETTINGS-004 exposes Storage route in primary navigation rail', () => {
+    cy.get('[data-testid="sidebar-nav-group-other"]')
+      .find('a[href="/settings/storage"]')
+      .contains('Storage')
+      .scrollIntoView()
+      .should('exist')
+      .click({ force: true })
+
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+  })
 })
