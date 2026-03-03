@@ -3,7 +3,9 @@ package collection
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/collectors-tech/cabinet/internal/db"
 )
@@ -69,6 +71,110 @@ func TestCreateAndListItemsAndInstances(t *testing.T) {
 		Status: "invalid_status",
 	}); err == nil {
 		t.Fatal("expected error for invalid status")
+	}
+}
+
+func TestAuditMetadataAndHistoryForItemLifecycle(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	repo := NewRepository(conn)
+	created, err := repo.CreateItem(context.Background(), Item{
+		PartNumber: "AUD-001",
+		Title:      "Audit Item",
+		Brand:      "AFX",
+		Category:   "Cars",
+	})
+	if err != nil {
+		t.Fatalf("CreateItem() error = %v", err)
+	}
+	if strings.TrimSpace(created.CreatedBy) == "" {
+		t.Fatal("expected created_by metadata to be populated")
+	}
+	if strings.TrimSpace(created.UpdatedBy) == "" {
+		t.Fatal("expected updated_by metadata to be populated")
+	}
+
+	updated, err := repo.UpdateItem(context.Background(), created.ID, Item{
+		Title: "Audit Item Updated",
+	})
+	if err != nil {
+		t.Fatalf("UpdateItem() error = %v", err)
+	}
+	if strings.TrimSpace(updated.UpdatedBy) == "" {
+		t.Fatal("expected updated_by metadata to remain populated")
+	}
+
+	deleted, err := repo.SetItemLifecycleStatus(context.Background(), created.ID, "deleted")
+	if err != nil {
+		t.Fatalf("SetItemLifecycleStatus(deleted) error = %v", err)
+	}
+	if strings.TrimSpace(deleted.DeletedAt) == "" {
+		t.Fatal("expected deleted_at metadata to be populated on soft delete")
+	}
+	if strings.TrimSpace(deleted.DeletedBy) == "" {
+		t.Fatal("expected deleted_by metadata to be populated on soft delete")
+	}
+
+	restored, err := repo.SetItemLifecycleStatus(context.Background(), created.ID, "active")
+	if err != nil {
+		t.Fatalf("SetItemLifecycleStatus(active) error = %v", err)
+	}
+	if strings.TrimSpace(restored.DeletedAt) != "" {
+		t.Fatal("expected deleted_at metadata cleared on restore")
+	}
+	if strings.TrimSpace(restored.DeletedBy) != "" {
+		t.Fatal("expected deleted_by metadata cleared on restore")
+	}
+
+	events, err := repo.ListAuditEventsByEntity(context.Background(), "canonical_item", created.ID)
+	if err != nil {
+		t.Fatalf("ListAuditEventsByEntity() error = %v", err)
+	}
+	if len(events) < 4 {
+		t.Fatalf("expected at least 4 audit events (create/update/delete/restore), got %d", len(events))
+	}
+	for i := range events {
+		if strings.TrimSpace(events[i].ID) == "" {
+			t.Fatalf("audit event at index %d missing id", i)
+		}
+		if strings.TrimSpace(events[i].Actor) == "" {
+			t.Fatalf("audit event at index %d missing actor", i)
+		}
+		if strings.TrimSpace(events[i].Action) == "" {
+			t.Fatalf("audit event at index %d missing action", i)
+		}
+		if strings.TrimSpace(events[i].CreatedAt) == "" {
+			t.Fatalf("audit event at index %d missing created_at", i)
+		}
+		if i > 0 {
+			prev, prevErr := time.Parse(time.RFC3339, events[i-1].CreatedAt)
+			cur, curErr := time.Parse(time.RFC3339, events[i].CreatedAt)
+			if prevErr == nil && curErr == nil && cur.Before(prev) {
+				t.Fatalf("expected timeline ordering ascending, got %s before %s", events[i].CreatedAt, events[i-1].CreatedAt)
+			}
+		}
+	}
+
+	var sawTrackedDiff bool
+	for _, event := range events {
+		if event.Action == "update" {
+			beforeTitle, _ := event.Before["title"].(string)
+			afterTitle, _ := event.After["title"].(string)
+			if beforeTitle != "" && afterTitle == "Audit Item Updated" {
+				sawTrackedDiff = true
+				break
+			}
+		}
+	}
+	if !sawTrackedDiff {
+		t.Fatal("expected update audit event to contain before/after tracked field diff for title")
 	}
 }
 

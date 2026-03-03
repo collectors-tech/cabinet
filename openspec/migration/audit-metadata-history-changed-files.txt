@@ -1,0 +1,5 @@
+internal/collection/repository.go
+internal/collection/repository_test.go
+internal/db/sqlite.go
+openspec/traceability.md
+openspec/migration/audit-metadata-history-summary.md

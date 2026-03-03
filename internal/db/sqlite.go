@@ -108,7 +108,11 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			for_sale INTEGER NOT NULL DEFAULT 0,
 			structured_offers_json TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_by TEXT NOT NULL DEFAULT 'system',
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			,updated_by TEXT NOT NULL DEFAULT 'system'
+			,deleted_at TEXT NOT NULL DEFAULT ''
+			,deleted_by TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_items_part_number ON canonical_items(part_number);`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS canonical_items_fts USING fts5(
@@ -334,6 +338,18 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_action_previews_profile_id ON chat_action_previews(profile_id);`,
+		`CREATE TABLE IF NOT EXISTS audit_events (
+			id TEXT PRIMARY KEY,
+			entity_type TEXT NOT NULL,
+			entity_id TEXT NOT NULL,
+			action TEXT NOT NULL,
+			actor TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT '',
+			before_json TEXT NOT NULL DEFAULT '{}',
+			after_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_entity_timeline ON audit_events(entity_type, entity_id, created_at);`,
 	}
 
 	for _, q := range queries {
@@ -382,6 +398,22 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "canonical_items", "packaging_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.packaging_grade_type: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "created_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.created_by: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "updated_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.updated_by: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "deleted_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.deleted_at: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "canonical_items", "deleted_by", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.deleted_by: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()
