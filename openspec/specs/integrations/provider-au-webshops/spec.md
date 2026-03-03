@@ -32,6 +32,21 @@ Cabinet SHALL parse stock/availability from webshop listing pages where availabl
 ### Requirement OPS-001: AU webshop providers MUST enforce robots/terms policy and throttling
 Cabinet MUST store per-domain crawling policy metadata including robots/terms review status, crawl delay/rate limit, and failure backoff behavior.
 
+### Requirement OPS-002: Provider ingestion MUST support configurable items-per-page with safe limits
+Provider query execution SHALL support per-provider `items_per_page` configuration to control request volume and avoid overscraping behavior.
+
+#### Scenario: Use configured items-per-page
+- **GIVEN** provider config defines `items_per_page`
+- **WHEN** ingestion query is executed
+- **THEN** request pagination MUST use configured value for API/listing fetches where supported
+- **AND** runtime MUST report effective observed page size in run summary
+
+#### Scenario: Safe cap enforcement
+- **GIVEN** configured `items_per_page` exceeds provider-safe cap
+- **WHEN** ingestion starts
+- **THEN** runtime MUST clamp to provider-safe cap and emit warning/telemetry note
+- **AND** default value MUST be conservative when unset
+
 ### Requirement INTEGRATION-013: Bonza search ingestion MUST support 36-target paging with dynamic fallback
 Bonza provider ingestion SHALL attempt configured page-size target (36 where supported) and MUST fall back to detected site pagination while still traversing all result pages and aggregating normalized candidates.
 
@@ -73,3 +88,4 @@ For watched Bonza cars, ingestion SHALL prefer WooCommerce Store API stock field
 | --- | --- | --- | --- |
 | UC-AU-01 | Bonza paginated search | All 36-item pages traversed and aggregated without duplicates | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-paginated-search-all-pages` |
 | UC-AU-02 | Bonza watched stock enrichment | Watched cars trigger detail-page stock extraction and normalized update | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-watched-detail-stock-level` |
+| UC-AU-03 | Provider items-per-page config | Query run uses configured page-size with safe-cap fallback + telemetry | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-items-per-page-config-safe-cap` |
