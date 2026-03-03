@@ -13,6 +13,7 @@ type QuerySet = {
   id: string
   name: string
   keywords: string[]
+  provider_scope?: string[]
 }
 
 type Failure = {
@@ -27,6 +28,28 @@ type ActionFeedback = {
   actions: string[]
   diagnosticCode?: string
 }
+
+type Candidate = {
+  id: string
+  query_set_id: string
+  listing_id: string
+  title: string
+  source?: string
+}
+
+const MARKET_WATCH_PROVIDER_OPTIONS = [
+  'ebay',
+  'amazon',
+  'bonzaslotcars',
+  'frontlinehobbies',
+  'hobbytechtoys',
+  'andrewshobbies',
+  'voglers',
+  'acercmodels',
+  'mrtoys',
+]
+
+type ProviderMode = 'single' | 'multi'
 
 function parseErrorCode(payload: unknown, fallback: string): string {
   if (payload && typeof payload === 'object' && 'error' in payload) {
@@ -86,6 +109,7 @@ function mapScannerActionError(operation: 'run' | 'retry', status: number, error
 export function Scanner() {
   const [querySets, setQuerySets] = useState<QuerySet[]>([])
   const [failures, setFailures] = useState<Failure[]>([])
+  const [candidatesByQuerySet, setCandidatesByQuerySet] = useState<Record<string, Candidate[]>>({})
   const [providerHealth, setProviderHealth] = useState('unknown')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -93,6 +117,10 @@ export function Scanner() {
   const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
+  const [providerMode, setProviderMode] = useState<ProviderMode>('single')
+  const [singleProvider, setSingleProvider] = useState('ebay')
+  const [multiProviders, setMultiProviders] = useState<string[]>(['ebay', 'amazon'])
+  const [providerValidation, setProviderValidation] = useState<string | null>(null)
 
   const loadScanner = useCallback(async () => {
     setLoading(true)
@@ -119,11 +147,13 @@ export function Scanner() {
 
       setQuerySets(querySetPayload.query_sets ?? [])
       setFailures(failuresPayload.failures ?? [])
+      setCandidatesByQuerySet({})
       setProviderHealth(healthPayload.status ?? 'unknown')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
       setQuerySets([])
       setFailures([])
+      setCandidatesByQuerySet({})
       setProviderHealth('unknown')
     } finally {
       setLoading(false)
@@ -134,10 +164,30 @@ export function Scanner() {
     void loadScanner()
   }, [loadScanner])
 
+  const resolveProviderScope = () => {
+    if (providerMode === 'single') {
+      const normalized = singleProvider.trim().toLowerCase()
+      return normalized ? [normalized] : []
+    }
+    return Array.from(
+      new Set(
+        multiProviders
+          .map((provider) => provider.trim().toLowerCase())
+          .filter((provider) => provider.length > 0)
+      )
+    )
+  }
+
   const createQuerySet = async () => {
     if (!newName.trim()) {
       return
     }
+    const providerScope = resolveProviderScope()
+    if (providerScope.length === 0) {
+      setProviderValidation('Select at least one provider')
+      return
+    }
+    setProviderValidation(null)
     const keywords = newKeywords
       .split(',')
       .map((value) => value.trim())
@@ -149,6 +199,7 @@ export function Scanner() {
         name: newName.trim(),
         keywords,
         exclusions: [],
+        provider_scope: providerScope,
         enabled: true,
       }),
     })
@@ -159,18 +210,25 @@ export function Scanner() {
       )
       return
     }
+    const createdQuerySet = (await response.json()) as QuerySet
     setActionStatus('query_set_created')
     setActionFeedback(null)
+    setQuerySets((current) => [...current, createdQuerySet])
     setNewName('')
     setNewKeywords('')
-    await loadScanner()
   }
 
-  const runNow = async (querySetID: string) => {
+  const runNow = async (querySet: QuerySet) => {
+    const providerScope = Array.isArray(querySet.provider_scope)
+      ? querySet.provider_scope
+      : []
     const response = await fetch('/api/scanner/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query_set_id: querySetID }),
+      body: JSON.stringify({
+        query_set_id: querySet.id,
+        provider_scope: providerScope,
+      }),
     })
     if (!response.ok) {
       const fallbackCode = `run_failed_${response.status}`
@@ -184,7 +242,17 @@ export function Scanner() {
       setActionFeedback(mapScannerActionError('run', response.status, code))
       return
     }
-    setActionStatus(`run_started_${querySetID}`)
+    const candidatesResponse = await fetch(
+      `/api/scanner/candidates?query_set_id=${encodeURIComponent(querySet.id)}`
+    )
+    if (candidatesResponse.ok) {
+      const payload = (await candidatesResponse.json()) as { candidates?: Candidate[] }
+      setCandidatesByQuerySet((current) => ({
+        ...current,
+        [querySet.id]: payload.candidates ?? [],
+      }))
+    }
+    setActionStatus(`run_started_${querySet.id}`)
     setActionFeedback(null)
   }
 
@@ -254,10 +322,66 @@ export function Scanner() {
             placeholder='Keywords (comma-separated)'
             data-testid='scanner-new-query-keywords'
           />
+          <select
+            className='h-9 rounded-md border bg-background px-3 text-sm'
+            value={providerMode}
+            onChange={(event) => {
+              setProviderMode(event.target.value as ProviderMode)
+              setProviderValidation(null)
+            }}
+            data-testid='market-watch-provider-mode'
+          >
+            <option value='single'>single</option>
+            <option value='multi'>multi</option>
+          </select>
+          {providerMode === 'single' ? (
+            <select
+              className='h-9 rounded-md border bg-background px-3 text-sm md:col-span-2'
+              value={singleProvider}
+              onChange={(event) => {
+                setSingleProvider(event.target.value)
+                setProviderValidation(null)
+              }}
+              data-testid='market-watch-provider-single'
+            >
+              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
+                <option key={provider} value={provider}>
+                  {provider}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className='flex flex-wrap gap-2 md:col-span-2'>
+              {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
+                <label key={provider} className='inline-flex items-center gap-2 text-sm'>
+                  <input
+                    type='checkbox'
+                    checked={multiProviders.includes(provider)}
+                    onChange={(event) => {
+                      setProviderValidation(null)
+                      setMultiProviders((current) => {
+                        if (event.target.checked) {
+                          return current.includes(provider) ? current : [...current, provider]
+                        }
+                        return current.filter((value) => value !== provider)
+                      })
+                    }}
+                    data-testid={`market-watch-provider-checkbox-${provider}`}
+                  />
+                  <span>{provider}</span>
+                </label>
+              ))}
+            </div>
+          )}
           <Button onClick={() => void createQuerySet()} data-testid='scanner-create-query'>
             Create Query Set
           </Button>
         </section>
+        {providerValidation ? (
+          <p className='text-sm text-destructive' data-testid='market-watch-provider-validation'>
+            {providerValidation}
+          </p>
+        ) : null}
 
         {loading ? (
           <div className='rounded-md border p-4 text-sm text-muted-foreground'>
@@ -319,11 +443,17 @@ export function Scanner() {
                     <p className='text-xs text-muted-foreground'>
                       {querySet.keywords?.join(', ') || 'no keywords'}
                     </p>
+                    <p
+                      className='text-xs text-muted-foreground'
+                      data-testid={`scanner-query-providers-${querySet.id}`}
+                    >
+                      {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
+                    </p>
                   </div>
                   <Button
                     size='sm'
                     data-testid={`scanner-run-${querySet.id}`}
-                    onClick={() => void runNow(querySet.id)}
+                    onClick={() => void runNow(querySet)}
                   >
                     Run Now
                   </Button>
@@ -332,6 +462,27 @@ export function Scanner() {
             </div>
           </section>
         ) : null}
+
+        {Object.entries(candidatesByQuerySet).map(([querySetID, candidates]) => (
+          <section
+            key={querySetID}
+            className='rounded-md border p-3'
+            data-testid={`scanner-candidates-${querySetID}`}
+          >
+            <p className='mb-2 text-sm font-medium'>Candidates</p>
+            {candidates.length === 0 ? (
+              <p className='text-xs text-muted-foreground'>No candidates returned.</p>
+            ) : (
+              <ul className='space-y-1 text-xs text-muted-foreground'>
+                {candidates.map((candidate) => (
+                  <li key={candidate.id || candidate.listing_id}>
+                    {candidate.title} ({candidate.source ?? 'unknown'})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
 
         {failures.length > 0 ? (
           <section className='rounded-md border' data-testid='scanner-failures'>
