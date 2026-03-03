@@ -33,6 +33,15 @@ The global left rail MUST expose a visible `Storage` entry as part of settings n
 - **THEN** rail MUST include visible `Storage` entry
 - **AND** selecting `Storage` MUST route to `/settings/storage`
 
+### Requirement UI-SCREEN-SETTINGS-005: Settings forms SHALL block edits when active profile is unavailable
+When `GET /api/profiles/active` fails with missing-profile response, settings forms SHALL enter a deterministic blocked state and hide editable submit actions.
+
+#### Scenario: Active profile missing blocks edits and shows remediation
+- **GIVEN** an authenticated user opens settings routes and `GET /api/profiles/active` returns `404` with `active_profile_404`
+- **WHEN** profile-backed sections (`/settings`, `/settings/notifications`) render
+- **THEN** sections MUST show an explicit blocked panel with retry + `Create or Select Profile` action
+- **AND** editable submit actions (`Update profile`, `Update notifications`) MUST NOT render while blocked
+
 ## Notes
 Detailed interaction specs are split per section:
 - `settings/profile/spec.md`

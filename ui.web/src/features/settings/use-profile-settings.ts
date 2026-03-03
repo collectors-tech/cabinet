@@ -81,6 +81,8 @@ export function useProfileSettings() {
     settings,
     loading,
     error,
+    profileContextMissing:
+      error === 'active_profile_missing' || error?.startsWith('active_profile_'),
     saving,
     reload: load,
     saveSettings,

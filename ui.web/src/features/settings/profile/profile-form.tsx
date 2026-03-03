@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ProfileContextBlocked } from '../components/profile-context-blocked'
 import { useProfileSettings } from '../use-profile-settings'
 
 const profileFormSchema = z.object({
@@ -55,7 +56,15 @@ const defaultValues: Partial<ProfileFormValues> = {
 }
 
 export function ProfileForm() {
-  const { settings, loading, error, saving, saveSettings, reload } =
+  const {
+    settings,
+    loading,
+    error,
+    profileContextMissing,
+    saving,
+    saveSettings,
+    reload,
+  } =
     useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -117,19 +126,23 @@ export function ProfileForm() {
         className='space-y-8'
       >
         {error ? (
-          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
-            <p className='font-medium'>Failed to load profile settings.</p>
-            <p className='mt-1 text-muted-foreground'>{error}</p>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              className='mt-3'
-              onClick={() => void reload()}
-            >
-              Retry
-            </Button>
-          </div>
+          profileContextMissing ? (
+            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+          ) : (
+            <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+              <p className='font-medium'>Failed to load profile settings.</p>
+              <p className='mt-1 text-muted-foreground'>{error}</p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => void reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          )
         ) : null}
         {saveError ? (
           <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
@@ -141,7 +154,9 @@ export function ProfileForm() {
             {saveMessage}
           </div>
         ) : null}
-        <FormField
+        {profileContextMissing ? null : (
+          <>
+            <FormField
           control={form.control}
           name='username'
           render={({ field }) => (
@@ -238,9 +253,11 @@ export function ProfileForm() {
             Add URL
           </Button>
         </div>
-        <Button type='submit' disabled={saving || loading}>
-          Update profile
-        </Button>
+            <Button type='submit' disabled={saving || loading}>
+              Update profile
+            </Button>
+          </>
+        )}
       </form>
     </Form>
   )

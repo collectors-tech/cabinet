@@ -75,4 +75,36 @@ describe('ui-screen-settings', () => {
 
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
   })
+
+  it('UI-SCREEN-SETTINGS-005 blocks editable settings controls when active profile is unavailable', () => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.visit('/sign-in?redirect=%2Fsettings%2F')
+    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/?$/)
+    cy.wait('@activeProfileMissing')
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.contains('button', 'Update profile').should('not.exist')
+
+    cy.visit('/settings/notifications')
+    cy.wait('@activeProfileMissing')
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('button', 'Update notifications').should('not.exist')
+
+    cy.visit('/settings/storage')
+    cy.wait('@activeProfileMissing')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+  })
 })

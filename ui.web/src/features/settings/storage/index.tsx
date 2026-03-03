@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,9 @@ export function SettingsStorage() {
               }}
             >
               Retry
+            </Button>
+            <Button asChild variant='default' size='sm' className='mt-3 ml-2'>
+              <Link to='/'>Create or Select Profile</Link>
             </Button>
           </div>
         ) : null}

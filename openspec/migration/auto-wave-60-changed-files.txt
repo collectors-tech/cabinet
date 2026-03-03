@@ -1,0 +1,13 @@
+ui.web/src/features/settings/components/profile-context-blocked.tsx
+ui.web/src/features/settings/use-profile-settings.ts
+ui.web/src/features/settings/profile/profile-form.tsx
+ui.web/src/features/settings/account/account-form.tsx
+ui.web/src/features/settings/appearance/appearance-form.tsx
+ui.web/src/features/settings/notifications/notifications-form.tsx
+ui.web/src/features/settings/display/display-form.tsx
+ui.web/src/features/settings/storage/index.tsx
+ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts
+openspec/specs/settings/ui-screen-settings/spec.md
+openspec/traceability.md
+internal/ui/static/index.html
+openspec/migration/auto-wave-60-summary.md

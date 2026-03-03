@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
+import { ProfileContextBlocked } from '../components/profile-context-blocked'
 import { useProfileSettings } from '../use-profile-settings'
 
 const notificationsFormSchema = z.object({
@@ -44,7 +45,15 @@ const defaultValues: Partial<NotificationsFormValues> = {
 }
 
 export function NotificationsForm() {
-  const { settings, loading, error, saving, saveSettings, reload } =
+  const {
+    settings,
+    loading,
+    error,
+    profileContextMissing,
+    saving,
+    saveSettings,
+    reload,
+  } =
     useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -101,19 +110,23 @@ export function NotificationsForm() {
         className='space-y-8'
       >
         {error ? (
-          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
-            <p className='font-medium'>Failed to load notification settings.</p>
-            <p className='mt-1 text-muted-foreground'>{error}</p>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              className='mt-3'
-              onClick={() => void reload()}
-            >
-              Retry
-            </Button>
-          </div>
+          profileContextMissing ? (
+            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+          ) : (
+            <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+              <p className='font-medium'>Failed to load notification settings.</p>
+              <p className='mt-1 text-muted-foreground'>{error}</p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => void reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          )
         ) : null}
         {saveError ? (
           <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
@@ -125,7 +138,9 @@ export function NotificationsForm() {
             {saveMessage}
           </div>
         ) : null}
-        <FormField
+        {profileContextMissing ? null : (
+          <>
+            <FormField
           control={form.control}
           name='type'
           render={({ field }) => (
@@ -289,9 +304,11 @@ export function NotificationsForm() {
             </FormItem>
           )}
         />
-        <Button type='submit' disabled={saving || loading}>
-          Update notifications
-        </Button>
+            <Button type='submit' disabled={saving || loading}>
+              Update notifications
+            </Button>
+          </>
+        )}
       </form>
     </Form>
   )

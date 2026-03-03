@@ -18,6 +18,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { ProfileContextBlocked } from '../components/profile-context-blocked'
 import { useProfileSettings } from '../use-profile-settings'
 
 const appearanceFormSchema = z.object({
@@ -28,7 +29,15 @@ const appearanceFormSchema = z.object({
 type AppearanceFormValues = z.infer<typeof appearanceFormSchema>
 
 export function AppearanceForm() {
-  const { settings, loading, error, saving, saveSettings, reload } =
+  const {
+    settings,
+    loading,
+    error,
+    profileContextMissing,
+    saving,
+    saveSettings,
+    reload,
+  } =
     useProfileSettings()
   const { font, setFont } = useFont()
   const { theme, setTheme } = useTheme()
@@ -83,19 +92,23 @@ export function AppearanceForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
         {error ? (
-          <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
-            <p className='font-medium'>Failed to load appearance settings.</p>
-            <p className='mt-1 text-muted-foreground'>{error}</p>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              className='mt-3'
-              onClick={() => void reload()}
-            >
-              Retry
-            </Button>
-          </div>
+          profileContextMissing ? (
+            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+          ) : (
+            <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
+              <p className='font-medium'>Failed to load appearance settings.</p>
+              <p className='mt-1 text-muted-foreground'>{error}</p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => void reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          )
         ) : null}
         {saveError ? (
           <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'>
@@ -107,7 +120,9 @@ export function AppearanceForm() {
             {saveMessage}
           </div>
         ) : null}
-        <FormField
+        {profileContextMissing ? null : (
+          <>
+            <FormField
           control={form.control}
           name='font'
           render={({ field }) => (
@@ -211,9 +226,11 @@ export function AppearanceForm() {
           )}
         />
 
-        <Button type='submit' disabled={saving || loading}>
-          Update preferences
-        </Button>
+            <Button type='submit' disabled={saving || loading}>
+              Update preferences
+            </Button>
+          </>
+        )}
       </form>
     </Form>
   )
