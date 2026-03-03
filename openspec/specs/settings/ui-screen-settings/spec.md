@@ -6,7 +6,7 @@ Define Settings shell behavior: section navigation, deep-link routing, and share
 Settings SHALL support direct navigation to section routes.
 
 #### Scenario: Open section via URL
-- **GIVEN** user opens a direct settings URL (`/settings`, `/settings/account`, `/settings/appearance`, `/settings/notifications`, `/settings/display`, `/settings/storage`)
+- **GIVEN** user opens a direct settings URL (`/settings`, `/settings/account`, `/settings/appearance`, `/settings/notifications`, `/settings/display`, `/settings/storage`, `/settings/operations`, `/settings/billing`)
 - **WHEN** route resolves
 - **THEN** corresponding section MUST render and sidebar navigation MUST reflect active section
 
@@ -15,7 +15,7 @@ Settings SHALL support direct navigation to section routes.
 #### Scenario: Render canonical settings sections
 - **GIVEN** settings screen loads
 - **WHEN** sidebar navigation renders
-- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, and `Storage` with stable route mapping
+- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, `Storage`, `Operations`, and `Billing` with stable route mapping
 
 ### Requirement UI-SCREEN-SETTINGS-003: Settings shell SHALL support deterministic route-level states
 
@@ -41,6 +41,24 @@ When `GET /api/profiles/active` fails with missing-profile response, settings fo
 - **WHEN** profile-backed sections (`/settings`, `/settings/notifications`) render
 - **THEN** sections MUST show an explicit blocked panel with retry + `Create or Select Profile` action
 - **AND** editable submit actions (`Update profile`, `Update notifications`) MUST NOT render while blocked
+
+### Requirement UI-SCREEN-SETTINGS-006: Settings shell SHALL include Operations section route and active-state navigation
+Settings shell MUST expose `/settings/operations` in sidebar and resolve deep-link loads deterministically.
+
+#### Scenario: Open Operations section by deep link
+- **GIVEN** user loads `/settings/operations`
+- **WHEN** route resolves
+- **THEN** Operations section MUST render
+- **AND** Operations item in settings sidebar MUST be active
+
+### Requirement UI-SCREEN-SETTINGS-007: Settings shell SHALL include Billing section route and active-state navigation
+Settings shell MUST expose `/settings/billing` in sidebar and resolve deep-link loads deterministically.
+
+#### Scenario: Open Billing section by deep link
+- **GIVEN** user loads `/settings/billing`
+- **WHEN** route resolves
+- **THEN** Billing section MUST render
+- **AND** Billing item in settings sidebar MUST be active
 
 ## Notes
 Detailed interaction specs are split per section:

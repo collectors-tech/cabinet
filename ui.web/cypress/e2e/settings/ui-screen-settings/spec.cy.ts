@@ -21,6 +21,8 @@ describe('ui-screen-settings', () => {
       { path: '/settings/notifications', title: 'Notifications' },
       { path: '/settings/display', title: 'Display' },
       { path: '/settings/storage', title: 'Storage' },
+      { path: '/settings/operations', title: 'Operations' },
+      { path: '/settings/billing', title: 'Billing' },
     ]
 
     routes.forEach(({ path, title }) => {
@@ -38,6 +40,8 @@ describe('ui-screen-settings', () => {
       ['Notifications', '/settings/notifications'],
       ['Display', '/settings/display'],
       ['Storage', '/settings/storage'],
+      ['Operations', '/settings/operations'],
+      ['Billing', '/settings/billing'],
     ] as const
 
     sections.forEach(([label, href]) => {
@@ -186,6 +190,28 @@ describe('ui-screen-settings', () => {
     cy.contains('C:/cabinet/profiles/default/recovered.db').should('be.visible')
     cy.contains('C:/cabinet/profiles/default/recovered-media').should(
       'be.visible'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-006 resolves Operations section route and active nav state', () => {
+    cy.visit('/settings/operations')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.contains('h3', 'Operations').should('be.visible')
+    cy.get('aside a[href="/settings/operations"]').should(
+      'have.attr',
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-007 resolves Billing section route and active nav state', () => {
+    cy.visit('/settings/billing')
+    cy.location('pathname').should('match', /^\/settings\/billing\/?$/)
+    cy.contains('h3', 'Billing').should('be.visible')
+    cy.get('aside a[href="/settings/billing"]').should(
+      'have.attr',
+      'aria-current',
+      'page'
     )
   })
 })

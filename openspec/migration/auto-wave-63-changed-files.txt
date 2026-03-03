@@ -1,0 +1,11 @@
+openspec/specs/settings/ui-screen-settings/spec.md
+openspec/traceability.md
+ui.web/src/features/settings/index.tsx
+ui.web/src/features/settings/operations/index.tsx
+ui.web/src/features/settings/billing/index.tsx
+ui.web/src/routes/_authenticated/settings/operations.tsx
+ui.web/src/routes/_authenticated/settings/billing.tsx
+ui.web/src/routeTree.gen.ts
+ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts
+internal/ui/static/index.html
+openspec/migration/auto-wave-63-summary.md
