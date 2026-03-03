@@ -34,6 +34,10 @@ import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { tasks } from '@/features/tasks/data/tasks'
 import { type Task } from '@/features/tasks/data/schema'
+import {
+  collectionKey,
+  useWorkspaceCollections,
+} from '@/features/collections/use-workspace-collections'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -119,6 +123,8 @@ export function Collection({
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const [activeFolder, setActiveFolder] = useState('All Items')
+  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
+  const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => new Set()
   )
@@ -158,6 +164,12 @@ export function Collection({
     null
   )
   const aiApplyTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const {
+    workspaceCollections,
+    activeWorkspaceCollection,
+    setActiveWorkspaceCollection,
+    addCollection,
+  } = useWorkspaceCollections()
 
   const loadInventoryItems = useCallback(async () => {
     if (routePath !== '/_authenticated/inventory/') {
@@ -373,6 +385,12 @@ export function Collection({
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
+
+  useEffect(() => {
+    if (activeWorkspaceCollection) {
+      setActiveFolder(activeWorkspaceCollection)
+    }
+  }, [activeWorkspaceCollection])
 
   const loadInventoryPhotos = useCallback(async () => {
     if (!isInventoryRoute) {
@@ -786,6 +804,67 @@ export function Collection({
                   </strong>
                 </span>
               </p>
+              <div className='rounded-md border p-3' data-testid='collection-inline-picker'>
+                <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center'>
+                  <select
+                    className='h-9 rounded-md border bg-background px-2 text-sm'
+                    value={activeWorkspaceCollection}
+                    onChange={(event) => {
+                      const selected = event.target.value
+                      setActiveWorkspaceCollection(selected)
+                      setActiveFolder(selected)
+                    }}
+                  >
+                    {workspaceCollections.map((collection) => (
+                      <option
+                        key={collection}
+                        value={collection}
+                        data-testid={`collection-inline-picker-option-${collectionKey(collection)}`}
+                      >
+                        {collection}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className='text-sm text-muted-foreground'
+                    data-testid='collection-inline-picker-selected'
+                  >
+                    {activeWorkspaceCollection}
+                  </span>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    data-testid='collection-inline-add-new'
+                    onClick={() => setInlineCollectionInputOpen((open) => !open)}
+                  >
+                    + New Collection
+                  </Button>
+                </div>
+                {inlineCollectionInputOpen ? (
+                  <div className='mt-2 flex gap-2'>
+                    <Input
+                      data-testid='collection-inline-new-name'
+                      placeholder='Collection name'
+                      value={inlineCollectionName}
+                      onChange={(event) => setInlineCollectionName(event.target.value)}
+                    />
+                    <Button
+                      type='button'
+                      data-testid='collection-inline-save'
+                      onClick={() => {
+                        const created = addCollection(inlineCollectionName)
+                        if (created) {
+                          setActiveFolder(created)
+                        }
+                        setInlineCollectionName('')
+                        setInlineCollectionInputOpen(false)
+                      }}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
               {loading ? (
                 <div className='rounded-md border p-6 text-sm text-muted-foreground'>
                   Loading inventory...

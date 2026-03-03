@@ -1,1 +1,0 @@
-import{j as m}from"./index-BF_DPeXp.js";import{c as o}from"./index-yhhCkvMT.js";import{S as a}from"./skeleton-CPFwfpu_.js";const n=()=>m.jsx(o,{initialValues:{emailAddress:"your_mail+shadcn_admin@gmail.com"},fallback:m.jsx(a,{className:"h-[30rem] w-[25rem]"})});export{n as component};

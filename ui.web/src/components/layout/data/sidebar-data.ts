@@ -47,6 +47,11 @@ export const sidebarData: SidebarData = {
           icon: ListChecks,
         },
         {
+          title: 'Collections',
+          url: '/collections',
+          icon: ListChecks,
+        },
+        {
           title: 'Wishlist',
           url: '/wishlist',
           icon: Heart,

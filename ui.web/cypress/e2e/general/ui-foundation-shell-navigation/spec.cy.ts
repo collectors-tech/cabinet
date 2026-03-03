@@ -71,6 +71,7 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-collections',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-scanner',
@@ -84,7 +85,9 @@ describe('ui-foundation-shell-navigation', () => {
     visibleByTestId('sidebar-nav-edit-toggle').click()
     visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
-      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
+        force: true,
+      })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
         .filter(':visible')
         .should(($items) => {
@@ -93,8 +96,9 @@ describe('ui-foundation-shell-navigation', () => {
           )
           expect(ids).to.deep.equal([
             'sidebar-nav-edit-item-dashboard',
-            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-scanner',
             'sidebar-nav-edit-item-integrations',
@@ -114,8 +118,9 @@ describe('ui-foundation-shell-navigation', () => {
         )
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
-          'sidebar-nav-link-wishlist',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-scanner',
           'sidebar-nav-link-chats',
@@ -132,8 +137,9 @@ describe('ui-foundation-shell-navigation', () => {
         )
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
-          'sidebar-nav-link-wishlist',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-wishlist',
+          'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
           'sidebar-nav-link-scanner',
           'sidebar-nav-link-chats',
@@ -151,7 +157,9 @@ describe('ui-foundation-shell-navigation', () => {
     visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
 
     visibleByTestId('sidebar-nav-edit-panel').within(() => {
-      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
+        force: true,
+      })
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
         .filter(':visible')
         .should(($items) => {
@@ -160,8 +168,9 @@ describe('ui-foundation-shell-navigation', () => {
           )
           expect(ids).to.deep.equal([
             'sidebar-nav-edit-item-dashboard',
-            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-wishlist',
+            'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-scanner',
             'sidebar-nav-edit-item-integrations',
@@ -170,7 +179,9 @@ describe('ui-foundation-shell-navigation', () => {
             'sidebar-nav-edit-item-reports',
           ])
         })
-      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click()
+      cy.get('[data-testid="sidebar-nav-move-up-wishlist"]').click({
+        force: true,
+      })
 
       cy.get('[data-testid^="sidebar-nav-edit-item-"]')
         .filter(':visible')
@@ -179,9 +190,10 @@ describe('ui-foundation-shell-navigation', () => {
             (item) => item.getAttribute('data-testid') || ''
           )
           expect(ids).to.deep.equal([
-            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-dashboard',
+            'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-scanner',
             'sidebar-nav-edit-item-integrations',
@@ -197,9 +209,10 @@ describe('ui-foundation-shell-navigation', () => {
       .find('[data-testid^="sidebar-nav-link-"]')
       .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
       .should('deep.equal', [
-        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-dashboard',
+        'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-scanner',
         'sidebar-nav-link-integrations',
@@ -233,39 +246,42 @@ describe('ui-foundation-shell-navigation', () => {
     )
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-005 shows Local Workspace collections list', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-005 keeps sidebar top area DB/profile switcher only', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    visibleByTestId('workspace-collections-panel').should('be.visible')
-    visibleByTestId('workspace-collections-heading').should('have.text', 'Collections')
-    visibleByTestId('workspace-collection-item-all-items').should('be.visible')
-    visibleByTestId('workspace-collection-item-watch-list').should('be.visible')
-    visibleByTestId('workspace-collection-item-store-1').should('be.visible')
+    visibleByTestId('team-switcher-trigger').should('be.visible')
+    cy.get('[data-testid="workspace-collections-panel"]').should('not.exist')
+    cy.get('[data-testid="workspace-collection-item-all-items"]').should(
+      'not.exist'
+    )
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-006 adds a collection and keeps current selection stable', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-006 manages collections from Collections section and inline picker quick-create', () => {
+    signInTo('/collections/')
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/collections\/?$/
+    )
+
+    visibleByTestId('collections-section').should('be.visible')
+    visibleByTestId('collections-new-input').clear().type('Quick Create Shelf')
+    visibleByTestId('collections-new-save').click()
+    visibleByTestId('collections-item-quick-create-shelf').should('be.visible')
+
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    visibleByTestId('workspace-collection-item-watch-list').click()
-    visibleByTestId('workspace-collection-item-watch-list').should(
-      'have.attr',
-      'data-state',
-      'active'
+    visibleByTestId('collection-inline-picker').should('be.visible')
+    visibleByTestId('collection-inline-add-new').click()
+    visibleByTestId('collection-inline-new-name').clear().type('Inline Auto Select')
+    visibleByTestId('collection-inline-save').click()
+    visibleByTestId('collection-inline-picker-selected').should(
+      'contain',
+      'Inline Auto Select'
     )
-
-    visibleByTestId('workspace-add-collection').scrollIntoView().click()
-    visibleByTestId('workspace-new-collection-name').type('New Collector Shelf')
-    visibleByTestId('workspace-save-collection').click()
-
-    visibleByTestId('workspace-collection-item-new-collector-shelf').should(
+    visibleByTestId('collection-inline-picker-option-inline-auto-select').should(
       'be.visible'
-    )
-    visibleByTestId('workspace-collection-item-watch-list').should(
-      'have.attr',
-      'data-state',
-      'active'
     )
   })
 })

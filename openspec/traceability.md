@@ -245,8 +245,8 @@
 
 | UI-SCREEN-CHAT-COPILOT-006 | openspec/specs/chats/ui-screen-chat-copilot/spec.md | ui.web/cypress/e2e/chats/ui-screen-chat-copilot/header-trigger-icon-only.cy.ts | e2e: validates icon-only shell chat trigger, preserved accessible naming, and open/close chat rail behavior | implemented |
 
-| UI-FOUNDATION-SHELL-NAVIGATION-005 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Local Workspace collections list contract | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-005 shows Local Workspace collections list`) | implemented |
-| UI-FOUNDATION-SHELL-NAVIGATION-006 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Local Workspace add collection action | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-006 adds a collection and keeps current selection stable`) | implemented |
+| UI-FOUNDATION-SHELL-NAVIGATION-005 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Sidebar top area DB/profile-only contract | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-005 keeps sidebar top area DB/profile switcher only`) | implemented |
+| UI-FOUNDATION-SHELL-NAVIGATION-006 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | Collections section + inline picker management placement | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-006 manages collections from Collections section and inline picker quick-create`) | implemented |
 
 | UI-FOUNDATION-SHELL-NAVIGATION-007 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | nav edit dialog live reorder UI contract | ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-007 reflects live nav edit order and saves the exact shown order`) | implemented |
 
