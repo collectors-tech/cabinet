@@ -31,6 +31,16 @@ The screen SHALL support loading, empty, error, and ready states for query sets 
 - **WHEN** no query sets exist
 - **THEN** screen SHALL provide create-first guidance
 
+### Requirement UI-SCREEN-SCANNER-004: Scanner run failures SHALL surface actionable guidance instead of raw keys
+Scanner run and retry failures SHALL map backend taxonomy/status to user-readable guidance with deterministic recovery actions.
+
+#### Scenario: Run Now failure guidance
+- **GIVEN** scanner query set exists and `POST /api/scanner/run` returns non-2xx (for example `400`)
+- **WHEN** user clicks `Run Now`
+- **THEN** UI MUST render human-readable failure summary (not raw key such as `run_failed_400`)
+- **AND** UI MUST render actionable next steps for query validation/provider health/credentials checks
+- **AND** UI MAY expose raw diagnostic code only in secondary details region
+
 ## Acceptance Criteria
 - UC IDs cover query management, execution, and failure handling.
 - E2E mapping includes run-now and retry paths.
@@ -52,3 +62,4 @@ The screen SHALL support loading, empty, error, and ready states for query sets 
 | UC-SCN-04 | No query sets | Empty guidance appears | planned: `cypress/e2e/ui/scanner.cy.ts` `scanner-empty-state` |
 | UC-SCN-05 | Scanner API failure | Error + retry shown | planned: `cypress/e2e/ui/scanner.cy.ts` `scanner-error-state` |
 | UC-SCN-06 | Create query set from form | New query set appears after `Create Query Set` action | planned: `ui.web/cypress/e2e/integrations/ui-screen-scanner/spec.cy.ts` `scanner-create-query-set` |
+| UC-SCN-07 | Run Now failure taxonomy mapping | UI shows actionable guidance, secondary diagnostics | planned: `ui.web/cypress/e2e/integrations/ui-screen-scanner/spec.cy.ts` `UI-SCREEN-SCANNER-004 maps run failures to actionable guidance` |

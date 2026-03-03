@@ -105,4 +105,40 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait('@querySetsError')
     cy.get('[data-testid="scanner-error-state"]').should('be.visible')
   })
+
+  it('UI-SCREEN-SCANNER-004 maps run failures to actionable guidance', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [{ id: 'qs-bad', name: 'Broken Query', keywords: ['bad'] }],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'degraded' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run', {
+      statusCode: 400,
+      body: { error: 'query_validation_failed' },
+    }).as('runNowFailed')
+
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-bad"]').click()
+    cy.wait('@runNowFailed')
+
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('be.visible')
+      .and('contain', 'Run failed due to query validation.')
+      .and('contain', 'Check query keywords and exclusions.')
+      .and('contain', 'Review provider health and credentials before retrying.')
+    cy.get('[data-testid="scanner-action-feedback"]').should('not.contain', 'run_failed_400')
+    cy.get('[data-testid="scanner-action-diagnostics"]')
+      .should('be.visible')
+      .and('contain', 'query_validation_failed')
+  })
 })

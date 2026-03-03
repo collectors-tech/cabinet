@@ -22,6 +22,67 @@ type Failure = {
   message: string
 }
 
+type ActionFeedback = {
+  summary: string
+  actions: string[]
+  diagnosticCode?: string
+}
+
+function parseErrorCode(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object' && 'error' in payload) {
+    const value = (payload as { error?: unknown }).error
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim()
+    }
+  }
+  return fallback
+}
+
+function mapScannerActionError(operation: 'run' | 'retry', status: number, errorCode: string): ActionFeedback {
+  if (operation === 'run' && status === 400) {
+    return {
+      summary: 'Run failed due to query validation.',
+      actions: [
+        'Check query keywords and exclusions.',
+        'Review provider health and credentials before retrying.',
+      ],
+      diagnosticCode: errorCode,
+    }
+  }
+  if (operation === 'retry' && status === 400) {
+    return {
+      summary: 'Retry request was rejected due to invalid scanner state.',
+      actions: [
+        'Confirm the failed query set still exists.',
+        'Re-run the query set directly after fixing provider inputs.',
+      ],
+      diagnosticCode: errorCode,
+    }
+  }
+  if (status === 401 || status === 403) {
+    return {
+      summary: 'Scanner action was denied.',
+      actions: ['Sign in again and confirm profile access permissions.'],
+      diagnosticCode: errorCode,
+    }
+  }
+  if (status >= 500) {
+    return {
+      summary: 'Scanner service is temporarily unavailable.',
+      actions: ['Retry shortly.', 'Check diagnostics for provider/runtime health.'],
+      diagnosticCode: errorCode,
+    }
+  }
+  return {
+    summary: operation === 'run' ? 'Run failed.' : 'Retry failed.',
+    actions: [
+      'Verify provider health and credentials.',
+      'Validate query set configuration, then retry.',
+    ],
+    diagnosticCode: errorCode,
+  }
+}
+
 export function Scanner() {
   const [querySets, setQuerySets] = useState<QuerySet[]>([])
   const [failures, setFailures] = useState<Failure[]>([])
@@ -29,6 +90,7 @@ export function Scanner() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
 
@@ -91,10 +153,14 @@ export function Scanner() {
       }),
     })
     if (!response.ok) {
-      setActionStatus(`create_query_set_${response.status}`)
+      setActionStatus('create_query_set_failed')
+      setActionFeedback(
+        mapScannerActionError('run', response.status, `create_query_set_${response.status}`)
+      )
       return
     }
     setActionStatus('query_set_created')
+    setActionFeedback(null)
     setNewName('')
     setNewKeywords('')
     await loadScanner()
@@ -107,10 +173,19 @@ export function Scanner() {
       body: JSON.stringify({ query_set_id: querySetID }),
     })
     if (!response.ok) {
-      setActionStatus(`run_failed_${response.status}`)
+      const fallbackCode = `run_failed_${response.status}`
+      let code = fallbackCode
+      try {
+        code = parseErrorCode(await response.json(), fallbackCode)
+      } catch {
+        code = fallbackCode
+      }
+      setActionStatus('run_failed')
+      setActionFeedback(mapScannerActionError('run', response.status, code))
       return
     }
     setActionStatus(`run_started_${querySetID}`)
+    setActionFeedback(null)
   }
 
   const retryFailure = async (querySetID: string) => {
@@ -120,10 +195,19 @@ export function Scanner() {
       body: JSON.stringify({ query_set_id: querySetID }),
     })
     if (!response.ok) {
-      setActionStatus(`retry_failed_${response.status}`)
+      const fallbackCode = `retry_failed_${response.status}`
+      let code = fallbackCode
+      try {
+        code = parseErrorCode(await response.json(), fallbackCode)
+      } catch {
+        code = fallbackCode
+      }
+      setActionStatus('retry_failed')
+      setActionFeedback(mapScannerActionError('retry', response.status, code))
       return
     }
     setActionStatus(`retry_requested_${querySetID}`)
+    setActionFeedback(null)
     await loadScanner()
   }
 
@@ -207,6 +291,22 @@ export function Scanner() {
           <p data-testid='scanner-action-status' className='text-sm'>
             {actionStatus}
           </p>
+        ) : null}
+        {actionFeedback ? (
+          <div className='rounded-md border p-3 text-sm' data-testid='scanner-action-feedback'>
+            <p className='font-medium'>{actionFeedback.summary}</p>
+            <ul className='mt-2 list-disc ps-4 text-muted-foreground'>
+              {actionFeedback.actions.map((action) => (
+                <li key={action}>{action}</li>
+              ))}
+            </ul>
+            {actionFeedback.diagnosticCode ? (
+              <details className='mt-2 text-xs text-muted-foreground' data-testid='scanner-action-diagnostics'>
+                <summary>Diagnostics</summary>
+                <p className='mt-1'>{actionFeedback.diagnosticCode}</p>
+              </details>
+            ) : null}
+          </div>
         ) : null}
 
         {querySets.length > 0 ? (
