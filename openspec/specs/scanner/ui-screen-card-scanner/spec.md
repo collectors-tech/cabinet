@@ -17,6 +17,7 @@ Card Scanner SHALL expose a `Quick Scan` action for fast capture workflows on bo
 - **GIVEN** user opens scanner on desktop
 - **WHEN** user clicks `Quick Scan`
 - **THEN** app MUST offer camera capture (if available) and immediate upload fallback for rapid scan intake
+- **AND** quick-scan entry MUST remain reachable by keyboard (Tab + Enter/Space)
 
 #### Scenario: Capture or upload card image
 - **GIVEN** user is on `/scanner`
