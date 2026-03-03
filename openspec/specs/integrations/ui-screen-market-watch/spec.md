@@ -41,6 +41,7 @@ Market Watch SHALL provide a table view for query sets so users can find saved q
 - **GIVEN** query row has prior run output
 - **WHEN** user opens output detail action from table row
 - **THEN** UI MUST show deterministic run output details for testing/verification
+- **AND** output detail view MUST include provider attribution and run timestamp
 
 #### Scenario: No query sets yet
 - **GIVEN** no query sets exist
