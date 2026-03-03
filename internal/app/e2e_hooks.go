@@ -35,6 +35,7 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
+		resetAuthProviderOptionsOverride()
 		_ = os.RemoveAll(filepath.Join(cfg.DataDir, "media"))
 		_ = os.RemoveAll(filepath.Join(cfg.DataDir, "chat-attachments"))
 		_ = os.RemoveAll(filepath.Join(cfg.DataDir, "backups"))
@@ -121,6 +122,23 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(raw)
+	})
+
+	mux.HandleFunc("/api/test/auth/provider-options", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req authProviderOptionsPayload
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !strings.Contains(strings.ToLower(err.Error()), "eof") {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		setAuthProviderOptionsOverride(req)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 }
 

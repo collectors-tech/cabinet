@@ -1,0 +1,13 @@
+internal/app/app.go
+internal/app/e2e_hooks.go
+internal/app/auth_provider_options.go
+internal/app/auth_provider_options_api_test.go
+ui.web/src/features/auth/sign-in/components/user-auth-form.tsx
+ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts
+openspec/specs/general/ui-screen-onboarding-auth/spec.md
+openspec/traceability.md
+internal/ui/static/index.html
+openspec/migration/auth-provider-expansion-summary.md
+openspec/migration/auth-provider-expansion-changed-files.txt
+openspec/migration/auto-wave-72-summary.md
+openspec/migration/auto-wave-72-changed-files.txt

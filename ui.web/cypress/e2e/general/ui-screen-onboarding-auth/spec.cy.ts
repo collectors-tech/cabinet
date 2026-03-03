@@ -64,7 +64,10 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/sign-in');
     cy.contains('Setup Wizard').should('be.visible');
-    cy.contains('Complete Setup').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.get('[data-testid="setup-start-app"]').click();
     cy.contains('Sign in').should('be.visible');
   });
 
@@ -79,5 +82,39 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .and('have.attr', 'href', '/sign-up')
       .click();
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.get('[data-testid="provider-google"]').should('be.visible');
+    cy.get('[data-testid="provider-apple"]').should('be.visible');
+    cy.get('[data-testid="provider-microsoft"]').should('be.visible');
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.request('POST', '/api/test/auth/provider-options', {
+      identity_mode: 'clerk',
+      providers: [
+        { id: 'google', enabled: true },
+        { id: 'apple', enabled: false },
+        { id: 'microsoft', enabled: true },
+      ],
+    })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'clerk');
+    cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
+    cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
   });
 });

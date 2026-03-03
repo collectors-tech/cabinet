@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -34,12 +34,29 @@ interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
 }
 
+type ProviderOption = {
+  id: string
+  label: string
+  enabled: boolean
+}
+
+type ProviderOptionsPayload = {
+  identity_mode?: string
+  providers?: ProviderOption[]
+}
+
 export function UserAuthForm({
   className,
   redirectTo,
   ...props
 }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [identityMode, setIdentityMode] = useState('local')
+  const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([
+    { id: 'google', label: 'Google', enabled: true },
+    { id: 'apple', label: 'Apple', enabled: true },
+    { id: 'microsoft', label: 'Microsoft', enabled: true },
+  ])
   const navigate = useNavigate()
   const { auth } = useAuthStore()
 
@@ -80,6 +97,40 @@ export function UserAuthForm({
       error: 'Error',
     })
   }
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadProviderOptions() {
+      try {
+        const response = await fetch('/api/auth/provider-options')
+        if (!response.ok) {
+          return
+        }
+        const payload = (await response.json()) as ProviderOptionsPayload
+        if (cancelled) {
+          return
+        }
+        const nextMode =
+          payload.identity_mode === 'clerk' ? 'clerk' : 'local'
+        setIdentityMode(nextMode)
+        if (Array.isArray(payload.providers) && payload.providers.length > 0) {
+          setProviderOptions(
+            payload.providers.map((provider) => ({
+              id: String(provider.id || '').toLowerCase(),
+              label: String(provider.label || provider.id || ''),
+              enabled: Boolean(provider.enabled),
+            }))
+          )
+        }
+      } catch {
+        // Keep deterministic local defaults on fetch failure.
+      }
+    }
+    void loadProviderOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <Form {...form}>
@@ -134,6 +185,27 @@ export function UserAuthForm({
               Or continue with
             </span>
           </div>
+        </div>
+
+        <p
+          className='text-xs text-muted-foreground'
+          data-testid='identity-mode-indicator'
+        >
+          Identity mode: {identityMode}
+        </p>
+
+        <div className='grid grid-cols-3 gap-2'>
+          {providerOptions.map((provider) => (
+            <Button
+              key={provider.id}
+              variant='outline'
+              type='button'
+              disabled={isLoading || !provider.enabled}
+              data-testid={`provider-${provider.id}`}
+            >
+              {provider.label}
+            </Button>
+          ))}
         </div>
 
         <div className='grid grid-cols-2 gap-2'>

@@ -205,6 +205,14 @@ func New(cfg config.Config) (*App, error) {
 			"runtime_port":                 port,
 		})
 	})
+	mux.HandleFunc("/api/auth/provider-options", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(resolveAuthProviderOptions())
+	})
 	mux.HandleFunc("/api/runtime/setup-status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {

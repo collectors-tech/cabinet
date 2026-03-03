@@ -285,8 +285,8 @@
 | `UI-SCREEN-SETTINGS-STORAGE-004` | `openspec/specs/settings/storage/spec.md` | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` (`UI-SCREEN-SETTINGS-STORAGE-004 renders storage paths and keeps diagnostics actions disabled in degraded mode`) | implemented |
 | `UI-SCREEN-SETTINGS-STORAGE-005` | `openspec/specs/settings/storage/spec.md` | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` (`UI-SCREEN-SETTINGS-STORAGE-005 retries storage fetch and recovers without route reload`) | implemented |
 
-| UI-SCREEN-ONBOARDING-AUTH-006 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | auth provider buttons on sign-in screen | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (enders Google/Apple/Microsoft provider actions) | partial |
-| UI-SCREEN-ONBOARDING-AUTH-007 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | identity platform mode/config resolution | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (configured provider visibility by auth mode) | partial |
+| UI-SCREEN-ONBOARDING-AUTH-006 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | auth provider buttons on sign-in screen | ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (`UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically`) | implemented |
+| UI-SCREEN-ONBOARDING-AUTH-007 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | identity platform mode/config resolution | ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (`UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config`) | implemented |
 
 | UI-SCREEN-ONBOARDING-AUTH-008 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | passkey/WebAuthn login flow | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (passkey sign-in + fallback behavior) | partial |
 
