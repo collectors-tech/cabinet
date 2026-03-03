@@ -542,3 +542,55 @@ func TestRuntimeSetupCompletePersistsFixedPortRuntime(t *testing.T) {
 		t.Fatalf("expected runtime.resolvedUrl to end with :18999, got %v", runtimePayload["resolvedUrl"])
 	}
 }
+
+func TestRuntimeSetupCompletePersistsClerkAuthConfiguration(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	completeReq := map[string]any{
+		"instance_name":          "Clerk Persist",
+		"profile_key":            "",
+		"storage_mode":           "exe_local",
+		"auth_mode":              "clerk",
+		"clerk_publishable_key":  "pk_test_wave25",
+		"runtime_port_mode":      "auto",
+		"bootstrap_workspace":    "Local Workspace",
+		"bootstrap_database_ref": "Primary DB",
+	}
+	completeReqJSON, err := json.Marshal(completeReq)
+	if err != nil {
+		t.Fatalf("marshal complete request: %v", err)
+	}
+	complete := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
+	if complete.Code != http.StatusOK {
+		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
+	}
+	rawConfig, err := os.ReadFile(setupPath)
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var configPayload map[string]any
+	if err := json.Unmarshal(rawConfig, &configPayload); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	authPayload, ok := configPayload["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth object in setup config")
+	}
+	if strings.TrimSpace(asString(authPayload["mode"])) != "clerk" {
+		t.Fatalf("expected auth.mode=clerk, got %v", authPayload["mode"])
+	}
+	clerkPayload, ok := authPayload["clerk"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth.clerk object in setup config")
+	}
+	if clerkPayload["enabled"] != true {
+		t.Fatalf("expected auth.clerk.enabled=true, got %v", clerkPayload["enabled"])
+	}
+	if strings.TrimSpace(asString(clerkPayload["publishableKey"])) != "pk_test_wave25" {
+		t.Fatalf("expected auth.clerk.publishableKey=pk_test_wave25, got %v", clerkPayload["publishableKey"])
+	}
+}

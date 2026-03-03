@@ -202,6 +202,63 @@ describe('SETUP-WIZ', () => {
       });
   });
 
+  it('UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'local');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
+
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('be.visible');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Missing Clerk key');
+
+    cy.get('[data-testid="setup-auth-mode"]').select('local');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').should('not.exist');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Ready: Local auth');
+  });
+
+  it('UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-wizard-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Clerk publishable key is required.');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 4 OF 5');
+  });
+
+  it('UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Clerk Persist');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').clear().type('pk_test_wave25');
+    cy.get('[data-testid="setup-auth-readiness"]').should('contain.text', 'Configured');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.auth.mode).to.eq('clerk');
+        expect(payload.auth.clerk.enabled).to.eq(true);
+        expect(payload.auth.clerk.publishableKey).to.eq('pk_test_wave25');
+      });
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
@@ -308,7 +365,6 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-complete"]').click();
     cy.get('[data-testid="setup-wizard-error"]')
       .should('be.visible')
       .and('contain.text', 'Clerk publishable key is required');
@@ -321,7 +377,6 @@ describe('SETUP-WIZ', () => {
       expect(response.status).to.eq(404);
     });
 
-    cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-clerk-publishable-key"]')
       .clear()
       .type('pk_test_123');

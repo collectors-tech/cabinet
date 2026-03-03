@@ -197,6 +197,27 @@ Runtime step MUST expose deterministic runtime port strategy (`auto` or `fixed`)
 - **WHEN** completion is attempted
 - **THEN** required Clerk keys/settings refs MUST be present in config payload or completion MUST fail with actionable validation message
 
+### Requirement SETUP-WIZ-015: Auth step MUST expose deterministic Local/Clerk readiness state before review
+Auth step MUST provide explicit mode selection and readiness state so users can resolve Clerk requirements before proceeding.
+
+#### Scenario: Auth mode switch contract
+- **GIVEN** setup wizard auth step is active
+- **WHEN** user switches auth mode between `local` and `clerk`
+- **THEN** mode control MUST update deterministically
+- **AND** mode-specific controls MUST appear/disappear without stale values leaking into inactive mode UI
+
+#### Scenario: Clerk readiness missing state
+- **GIVEN** auth mode is set to `clerk` and Clerk key is blank
+- **WHEN** auth step is evaluated
+- **THEN** readiness status MUST render as missing
+- **AND** `Next` transition MUST be blocked with actionable inline validation
+
+#### Scenario: Clerk readiness configured state
+- **GIVEN** auth mode is set to `clerk` and publishable key is provided
+- **WHEN** user continues to review and completes setup
+- **THEN** readiness status MUST render as configured
+- **AND** config payload MUST persist `auth.mode=clerk`, `auth.clerk.enabled=true`, and configured key value
+
 #### Initial `cabinet.json` schema (v1)
 ```json
 {
@@ -268,3 +289,6 @@ Runtime step MUST expose deterministic runtime port strategy (`auto` or `fixed`)
 | UC-SW-20 | Runtime defaults | Runtime step defaults to auto mode and shows resolved URL preview | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-20 setup-wizard-runtime-defaults shows auto mode with resolved URL preview` |
 | UC-SW-21 | Runtime fixed port validation | Runtime fixed mode validates required/valid port before next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-21 setup-wizard-runtime-fixed-port-validation blocks invalid fixed port` |
 | UC-SW-22 | Runtime persistence | Runtime port strategy and resolved URL persist in setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-22 setup-wizard-runtime-selection persists fixed port and resolved URL`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFixedPortRuntime` |
+| UC-SW-23 | Auth mode switch | Auth step toggles Local/Clerk mode and mode-specific controls deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-23 setup-wizard-auth-mode-switch toggles clerk controls and readiness state` |
+| UC-SW-24 | Clerk readiness missing | Clerk mode without publishable key shows missing readiness and blocks next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-24 setup-wizard-auth-readiness-missing blocks next with actionable message` |
+| UC-SW-25 | Clerk readiness configured persistence | Clerk mode with publishable key shows configured readiness and persists clerk auth payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-25 setup-wizard-auth-readiness-configured persists clerk auth config`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsClerkAuthConfiguration` |

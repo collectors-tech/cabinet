@@ -144,6 +144,15 @@ export function SignIn() {
     return `http://${setupDefaultRuntimeHost}:${selectedRuntimePort()}`
   }
 
+  function authReadinessLabel() {
+    if (setupForm.authMode === 'local') {
+      return 'Ready: Local auth'
+    }
+    return setupForm.clerkPublishableKey.trim() === ''
+      ? 'Missing Clerk key'
+      : 'Configured'
+  }
+
   async function goToNextStep() {
     if (setupStep === 0 && setupForm.instanceName.trim() === '') {
       setSetupError('Instance name is required.')
@@ -183,6 +192,12 @@ export function SignIn() {
     if (setupStep === 2) {
       if (setupForm.runtimePortMode === 'fixed' && setupForm.runtimeFixedPort <= 0) {
         setSetupError('Fixed port value is required when runtime port mode is fixed.')
+        return
+      }
+    }
+    if (setupStep === 3) {
+      if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
+        setSetupError('Clerk publishable key is required.')
         return
       }
     }
@@ -621,6 +636,10 @@ export function SignIn() {
                       setSetupForm((previous) => ({
                         ...previous,
                         authMode: event.target.value === 'clerk' ? 'clerk' : 'local',
+                        clerkPublishableKey:
+                          event.target.value === 'clerk'
+                            ? previous.clerkPublishableKey
+                            : '',
                       }))
                     }
                     data-testid='setup-auth-mode'
@@ -629,6 +648,12 @@ export function SignIn() {
                     <option value='clerk'>clerk</option>
                   </select>
                 </label>
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='setup-auth-readiness'
+                >
+                  {authReadinessLabel()}
+                </p>
                 {setupForm.authMode === 'clerk' ? (
                   <label className='grid gap-1 text-sm'>
                     <span>Clerk Publishable Key</span>
