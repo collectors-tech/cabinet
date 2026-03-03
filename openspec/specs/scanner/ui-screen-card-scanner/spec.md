@@ -49,6 +49,7 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 - **GIVEN** recent scan results exist and are not yet linked to inventory records
 - **WHEN** user opens quick-category panel and toggles `Cards`/`Table`
 - **THEN** scanner MUST render the same unlinked recent set in selected view mode with deterministic ordering by most-recent first
+- **AND** linked inventory records MUST NOT appear in the quick-category dataset
 
 #### Scenario: Recognition failure
 - **GIVEN** recognition request fails or low-confidence ambiguity occurs
