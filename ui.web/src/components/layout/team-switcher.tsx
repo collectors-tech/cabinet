@@ -64,7 +64,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               id,
               name,
               logo: teams[index]?.logo ?? teams[0]?.logo,
-              plan: 'Profile DB',
+              plan: 'Database',
             }
           })
           .filter((workspace): workspace is { id: string; name: string; logo: React.ElementType; plan: string } => Boolean(workspace))
@@ -129,6 +129,9 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     const selectedWorkspace = availableWorkspaces.find((workspace) => workspace.name === targetName)
     if (selectedWorkspace) {
       setActiveTeam(selectedWorkspace)
+    }
+    if (typeof window !== 'undefined') {
+      window.location.reload()
     }
   }
 

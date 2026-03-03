@@ -265,6 +265,7 @@ describe('ui-foundation-shell-navigation', () => {
     )
 
     visibleByTestId('collections-section').should('be.visible')
+    visibleByTestId('collections-new-action').click()
     visibleByTestId('collections-new-input').clear().type('Quick Create Shelf')
     visibleByTestId('collections-new-save').click()
     visibleByTestId('collections-item-quick-create-shelf').should('be.visible')
@@ -283,5 +284,88 @@ describe('ui-foundation-shell-navigation', () => {
     visibleByTestId('collection-inline-picker-option-inline-auto-select').should(
       'be.visible'
     )
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-008 uses explicit Database terminology in top switcher', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-slot="dropdown-menu-content"]').should('be.visible')
+    cy.contains('[data-slot="dropdown-menu-label"]', /^Database$/).should('be.visible')
+    cy.contains('[data-slot="dropdown-menu-item"]', /add database/i).should('be.visible')
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-009 switches active DB profile and reloads active data context', () => {
+    cy.request('POST', '/api/test/reset', {})
+    cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
+      expect(primaryResp.status).to.eq(201)
+      const primaryID = primaryResp.body.id as string
+
+      cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
+        expect(showcaseResp.status).to.eq(201)
+        const showcaseID = showcaseResp.body.id as string
+
+        cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+        cy.request('POST', '/api/items', {
+          part_number: 'PRI-001',
+          title: 'Primary Item',
+          brand: 'AFX',
+          category: 'Cars',
+        }).its('status').should('eq', 201)
+
+        cy.request('PUT', '/api/profiles/active', { profile_id: showcaseID }).its('status').should('eq', 200)
+        cy.request('POST', '/api/items', {
+          part_number: 'SHW-001',
+          title: 'Showcase Item',
+          brand: 'AFX',
+          category: 'Cars',
+        }).its('status').should('eq', 201)
+
+        cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+      })
+    })
+
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.contains('Primary Item').should('be.visible')
+    cy.contains('Showcase Item').should('not.exist')
+
+    visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-showcase-db"]').click()
+    cy.contains('Showcase Item', { timeout: 20000 }).should('be.visible')
+    cy.contains('Primary Item').should('not.exist')
+    visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context', () => {
+    cy.request('POST', '/api/test/reset', {})
+    cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
+      const primaryID = primaryResp.body.id as string
+      cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
+        const showcaseID = showcaseResp.body.id as string
+        cy.request('PUT', '/api/profiles/active', { profile_id: showcaseID }).its('status').should('eq', 200)
+        cy.request('POST', '/api/items', {
+          part_number: 'SHW-100',
+          title: 'Showcase Seed One',
+          brand: 'AFX',
+          category: 'Cars',
+        }).its('status').should('eq', 201)
+        cy.request('POST', '/api/items', {
+          part_number: 'SHW-101',
+          title: 'Showcase Seed Two',
+          brand: 'Tyco',
+          category: 'Cars',
+        }).its('status').should('eq', 201)
+        cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+      })
+    })
+
+    signInTo('/inventory/')
+    visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-showcase-db"]').click()
+    cy.contains('Showcase Seed One', { timeout: 20000 }).should('be.visible')
+    cy.contains('Showcase Seed Two').should('be.visible')
+    visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
   })
 })

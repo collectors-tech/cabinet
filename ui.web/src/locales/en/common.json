@@ -16,8 +16,8 @@
     "placeholder": "Search"
   },
   "workspace": {
-    "label": "Workspace DB",
-    "add": "Add workspace"
+    "label": "Database",
+    "add": "Add database"
   },
   "language": {
     "label": "Language"
