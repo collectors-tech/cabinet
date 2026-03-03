@@ -91,4 +91,26 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
   });
+
+  it('UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.get('input[name="email"]').type('e2e-setup-home@example.com');
+    cy.get('input[name="password"]').type('password123');
+    cy.contains('button', 'Sign in').click();
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^(\/|\/_authenticated\/?)$/
+    );
+    cy.contains('Home').should('be.visible');
+
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+    cy.contains('Starter Onboarding').should('not.exist');
+    cy.contains('Start Setup').should('not.exist');
+    cy.contains('Import Existing Collection').should('not.exist');
+    cy.contains('Use Sample Data').should('not.exist');
+  });
 });
