@@ -101,4 +101,25 @@ describe('inventory-folder-tree-control', () => {
       expect(['auto', 'scroll']).to.include(styles.overflowX)
     })
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-007 allows node-level add-child creation', () => {
+    cy.get('[data-testid="folder-tree-add-child-store-1"]').click()
+    cy.get('[data-testid="folder-tree-name-input"]').clear().type('Store 1 Child')
+    cy.get('[data-testid="folder-tree-create-submit"]').click()
+    cy.contains('[role="treeitem"]', 'Store 1 Child').should('be.visible')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-008 allows explicit root folder creation', () => {
+    cy.get('[data-testid="folder-tree-add-root"]').click()
+    cy.get('[data-testid="folder-tree-name-input"]').clear().type('Top Level Added')
+    cy.get('[data-testid="folder-tree-create-submit"]').click()
+    cy.get('[data-testid="folder-tree-item-top-level-added"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-009 renders hierarchy connector lines', () => {
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-connector-warehouse-1"]')
+      .should('be.visible')
+      .and('have.class', 'border-l')
+  })
 })

@@ -293,10 +293,9 @@
 | UI-SCREEN-INVENTORY-FOLDER-TREE-005 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (vertical) | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-005 keeps tree scrolling inside pane without growing full page`) | implemented |
 | UI-SCREEN-INVENTORY-FOLDER-TREE-006 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (horizontal) | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-006 provides horizontal overflow access for deep indentation`) | implemented |
 
-| UI-SCREEN-INVENTORY-FOLDER-TREE-007 | openspec/specs/inventory/folder-tree-control/spec.md | node-level add-child affordance | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (
-ode + creates child folder) | partial |
-| UI-SCREEN-INVENTORY-FOLDER-TREE-008 | openspec/specs/inventory/folder-tree-control/spec.md | root-level folder creation | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (Add Root Folder creates top-level node) | partial |
-| UI-SCREEN-INVENTORY-FOLDER-TREE-009 | openspec/specs/inventory/folder-tree-control/spec.md | hierarchy connector line visuals | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (	ree connector lines rendered for nested nodes) | partial |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-007 | openspec/specs/inventory/folder-tree-control/spec.md | node-level add-child affordance | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-007 allows node-level add-child creation`) | implemented |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-008 | openspec/specs/inventory/folder-tree-control/spec.md | root-level folder creation | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-008 allows explicit root folder creation`) | implemented |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-009 | openspec/specs/inventory/folder-tree-control/spec.md | hierarchy connector line visuals | implemented: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (`UI-SCREEN-INVENTORY-FOLDER-TREE-009 renders hierarchy connector lines`) | implemented |
 
 | AUDIT-METADATA-001 | openspec/specs/general/audit-metadata-history/spec.md | core entity record metadata | planned: internal/app/*_audit_test.go (created/updated metadata persistence) | partial |
 | AUDIT-METADATA-002 | openspec/specs/general/audit-metadata-history/spec.md | soft-delete metadata | planned: internal/app/*_audit_test.go (deleted_at/by persistence) | partial |

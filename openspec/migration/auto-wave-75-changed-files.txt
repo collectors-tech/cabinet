@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts
+ui.web/src/features/collection/index.tsx
+openspec/migration/inventory-tree-child-root-lines-summary.md
+openspec/migration/inventory-tree-child-root-lines-changed-files.txt
+openspec/migration/auto-wave-75-summary.md

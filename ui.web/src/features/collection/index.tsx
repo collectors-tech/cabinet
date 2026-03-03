@@ -78,7 +78,7 @@ type FolderNode = {
   children?: FolderNode[]
 }
 
-const folderTree: FolderNode[] = [
+const initialFolderTree: FolderNode[] = [
   { id: 'all-items', name: 'All Items' },
   { id: 'watch-list', name: 'Watch List' },
   { id: 'wishlist-focus', name: 'Wishlist Focus' },
@@ -122,18 +122,76 @@ function countFolderNodes(nodes: FolderNode[]): number {
   }, 0)
 }
 
+function slugifyFolderName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function buildUniqueFolderID(name: string, nodes: FolderNode[]): string {
+  const slug = slugifyFolderName(name) || 'folder'
+  const existingIDs = new Set<string>()
+  const walk = (items: FolderNode[]) => {
+    items.forEach((item) => {
+      existingIDs.add(item.id)
+      if (item.children?.length) {
+        walk(item.children)
+      }
+    })
+  }
+  walk(nodes)
+  if (!existingIDs.has(slug)) {
+    return slug
+  }
+  let counter = 2
+  while (existingIDs.has(`${slug}-${counter}`)) {
+    counter += 1
+  }
+  return `${slug}-${counter}`
+}
+
+function addChildFolder(
+  nodes: FolderNode[],
+  parentID: string,
+  child: FolderNode
+): FolderNode[] {
+  return nodes.map((node) => {
+    if (node.id === parentID) {
+      return {
+        ...node,
+        children: [...(node.children ?? []), child],
+      }
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: addChildFolder(node.children, parentID, child),
+      }
+    }
+    return node
+  })
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
   routePath,
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [folderTree, setFolderTree] = useState<FolderNode[]>(initialFolderTree)
   const [activeFolder, setActiveFolder] = useState('All Items')
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => new Set()
   )
+  const [folderCreateOpen, setFolderCreateOpen] = useState(false)
+  const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
+    null
+  )
+  const [folderCreateName, setFolderCreateName] = useState('')
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -250,7 +308,7 @@ export function Collection({
     }
     walk(folderTree)
     return nodes
-  }, [expandedNodeIDs])
+  }, [expandedNodeIDs, folderTree])
 
   const focusTreeItemByOffset = useCallback(
     (currentID: string, offset: number) => {
@@ -327,7 +385,15 @@ export function Collection({
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
         return (
           <div key={node.id} role='none'>
-            <div className='flex items-center gap-2' style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}>
+            <div
+              className='flex items-center gap-2'
+              style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}
+            >
+              <span
+                aria-hidden='true'
+                data-testid={`folder-tree-connector-${node.id}`}
+                className='inline-flex h-7 w-2 shrink-0 border-l border-border/70'
+              />
               {hasChildren ? (
                 <Button
                   type='button'
@@ -361,6 +427,21 @@ export function Collection({
               >
                 <span data-testid={`collection-folder-${node.id}`}>{node.name}</span>
               </button>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground'
+                data-testid={`folder-tree-add-child-${node.id}`}
+                aria-label={`Add child folder under ${node.name}`}
+                onClick={() => {
+                  setFolderCreateParentID(node.id)
+                  setFolderCreateName('')
+                  setFolderCreateOpen(true)
+                }}
+              >
+                +
+              </Button>
             </div>
             {hasChildren && expanded ? (
               <div
@@ -385,7 +466,7 @@ export function Collection({
       activeCategory: 'All',
       activeContext: activeFolder,
     }),
-    [activeFolder, tableData.length]
+    [activeFolder, folderTree, tableData.length]
   )
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
@@ -799,6 +880,21 @@ export function Collection({
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2 min-h-0'>
+              <div className='flex justify-end'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  data-testid='folder-tree-add-root'
+                  onClick={() => {
+                    setFolderCreateParentID(null)
+                    setFolderCreateName('')
+                    setFolderCreateOpen(true)
+                  }}
+                >
+                  Add Root Folder
+                </Button>
+              </div>
               <div
                 role='tree'
                 tabIndex={0}
@@ -813,6 +909,77 @@ export function Collection({
                   {renderFolderTree(folderTree)}
                 </div>
               </div>
+              <Dialog
+                open={folderCreateOpen}
+                onOpenChange={(open) => {
+                  setFolderCreateOpen(open)
+                  if (!open) {
+                    setFolderCreateName('')
+                    setFolderCreateParentID(null)
+                  }
+                }}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {folderCreateParentID ? 'Add Child Folder' : 'Add Root Folder'}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <Input
+                    data-testid='folder-tree-name-input'
+                    placeholder='Folder name'
+                    value={folderCreateName}
+                    onChange={(event) => setFolderCreateName(event.target.value)}
+                  />
+                  <DialogFooter>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='folder-tree-create-cancel'
+                      onClick={() => {
+                        setFolderCreateOpen(false)
+                        setFolderCreateName('')
+                        setFolderCreateParentID(null)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='folder-tree-create-submit'
+                      onClick={() => {
+                        const name = folderCreateName.trim()
+                        if (name === '') {
+                          return
+                        }
+                        setFolderTree((previous) => {
+                          const newNode: FolderNode = {
+                            id: buildUniqueFolderID(name, previous),
+                            name,
+                          }
+                          if (!folderCreateParentID) {
+                            return [...previous, newNode]
+                          }
+                          return addChildFolder(previous, folderCreateParentID, newNode)
+                        })
+                        if (folderCreateParentID) {
+                          setExpandedNodeIDs((previous) => {
+                            const next = new Set(previous)
+                            next.add(folderCreateParentID)
+                            return next
+                          })
+                        }
+                        setActiveFolder(name)
+                        setFolderCreateOpen(false)
+                        setFolderCreateName('')
+                        setFolderCreateParentID(null)
+                      }}
+                    >
+                      Create
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
 
