@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/specs/general/ui-screen-onboarding-auth/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts
+ui.web/src/features/auth/sign-in/index.tsx
+openspec/migration/auto-wave-56-summary.md
+openspec/migration/auto-wave-56-changed-files.txt

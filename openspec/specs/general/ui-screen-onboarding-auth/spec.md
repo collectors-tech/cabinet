@@ -68,6 +68,15 @@ Sign-in route SHALL present a full-screen setup wizard before auth controls when
 - **WHEN** `POST /api/runtime/setup-complete` returns 200 with `{"ok":true,"setup_required":false}`
 - **THEN** setup wizard MUST dismiss and sign-in form MUST render without route change
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010: Sign-in SHALL expose a visible Create account path
+Sign-in screen SHALL include a first-time-user CTA that routes deterministically to sign-up.
+
+#### Scenario: Create account entry path
+- **GIVEN** runtime setup is complete and sign-in route is visible
+- **WHEN** user scans sign-in actions for first-time account creation
+- **THEN** UI MUST show visible `Create account` link/button
+- **AND** control MUST navigate to `/sign-up`
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.

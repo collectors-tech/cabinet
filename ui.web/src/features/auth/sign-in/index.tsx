@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { useSearch } from '@tanstack/react-router'
 import {
   Card,
@@ -136,23 +137,31 @@ export function SignIn() {
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>
-          <p className='px-8 text-center text-sm text-muted-foreground'>
-            By clicking sign in, you agree to our{' '}
-            <a
-              href='/terms'
-              className='underline underline-offset-4 hover:text-primary'
-            >
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a
-              href='/privacy'
-              className='underline underline-offset-4 hover:text-primary'
-            >
-              Privacy Policy
-            </a>
-            .
-          </p>
+          <div className='w-full space-y-3 px-8 text-center text-sm text-muted-foreground'>
+            <p>
+              New to Cabinet?{' '}
+              <Link to='/sign-up' className='underline underline-offset-4 hover:text-primary'>
+                Create account
+              </Link>
+            </p>
+            <p>
+              By clicking sign in, you agree to our{' '}
+              <a
+                href='/terms'
+                className='underline underline-offset-4 hover:text-primary'
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href='/privacy'
+                className='underline underline-offset-4 hover:text-primary'
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
+          </div>
         </CardFooter>
       </Card>
     </AuthLayout>

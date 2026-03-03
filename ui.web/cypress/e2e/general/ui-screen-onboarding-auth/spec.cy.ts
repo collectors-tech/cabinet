@@ -67,4 +67,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains('Complete Setup').click();
     cy.contains('Sign in').should('be.visible');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-010 exposes a visible Create account path from sign-in', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.contains('a', 'Create account')
+      .should('be.visible')
+      .and('have.attr', 'href', '/sign-up')
+      .click();
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
 });
