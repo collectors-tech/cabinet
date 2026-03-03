@@ -13,6 +13,7 @@ This directory is organized by UI section hierarchy.
 - `users`
 - `settings`
 - `helpcenter`
+- `collections`
 
 Each section includes:
 - `README.md` with purpose and sub-spec listing

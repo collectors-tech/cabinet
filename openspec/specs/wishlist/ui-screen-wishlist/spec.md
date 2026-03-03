@@ -26,6 +26,24 @@ Wishlist screen SHALL support row/card selection and bulk action controls.
 - **WHEN** user selects multiple entries
 - **THEN** bulk action controls MUST appear and selected state MUST remain consistent through pagination changes
 
+### Requirement UI-SCREEN-WISHLIST-004: Wishlist screen SHALL expose dedicated New action and adjacent Create menu
+Wishlist SHALL provide a dedicated `New` button for primary wishlist entry creation and an adjacent `Create` menu for quick create actions.
+
+#### Scenario: Wishlist New + Create menu
+- **GIVEN** user is on `/wishlist`
+- **WHEN** user clicks `New`
+- **THEN** primary create-wishlist-entry flow MUST open
+- **WHEN** user clicks adjacent `Create` menu
+- **THEN** menu MUST show quick-create actions relevant to wishlist context
+
+### Requirement UI-SCREEN-WISHLIST-005: Wishlist detail collection picker SHALL support inline quick-create
+Wishlist detail collection picker MUST support `+ New Collection` inline create.
+
+#### Scenario: Quick-create collection while assigning wishlist entry
+- **GIVEN** user edits wishlist entry and opens collection picker
+- **WHEN** user creates a new collection from picker
+- **THEN** collection MUST be created and selected without leaving wishlist edit flow
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |

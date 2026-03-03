@@ -34,6 +34,24 @@ The screen SHALL remain usable with both starter and stress datasets.
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-004: Inventory Collection layout SHALL keep controls compact and non-duplicated
 Inventory Collection layout SHALL avoid duplicate control strips and keep summary context inside the Collection Browser header area.
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-005: Inventory screen SHALL expose dedicated New action and adjacent Create menu
+Inventory SHALL provide a dedicated `New` button for primary inventory entry creation and an adjacent `Create` menu for quick create actions.
+
+#### Scenario: Inventory New + Create menu
+- **GIVEN** user is on `/inventory`
+- **WHEN** user clicks `New`
+- **THEN** primary create-item flow MUST open
+- **WHEN** user clicks adjacent `Create` menu
+- **THEN** menu MUST show quick-create actions relevant to inventory context
+
+### Requirement UI-SCREEN-INVENTORY-ITEMS-006: Inventory detail collection picker SHALL support inline quick-create
+Inventory item details collection picker MUST support `+ New Collection` inline create.
+
+#### Scenario: Quick-create collection while assigning inventory item
+- **GIVEN** user edits inventory item and opens collection picker
+- **WHEN** user creates a new collection from picker
+- **THEN** collection MUST be created and selected without leaving inventory edit flow
+
 #### Scenario: Compact summary in browser header and no duplicate command/summary blocks
 - **GIVEN** an authenticated user opens `/inventory` with a resolved collection dataset
 - **WHEN** the Inventory workspace renders the Collection Browser region
