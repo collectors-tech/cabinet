@@ -29,6 +29,14 @@ When `GET /api/users` fails, Users screen SHALL render deterministic error state
 - **WHEN** user clicks `Retry`
 - **THEN** screen MUST re-attempt users list fetch and recover to ready/empty/error state deterministically
 
+### Requirement UI-SCREEN-USERS-005: Users screen SHALL remain available when active profile is missing
+When no active profile is currently set for the authenticated session, `GET /api/users` SHALL return a deterministic default-scope users payload instead of `404`.
+
+#### Scenario: Users route loads without an active profile
+- **GIVEN** an authenticated user lands on `/users` and profile runtime returns no active profile id
+- **WHEN** the screen requests `GET /api/users`
+- **THEN** API response MUST be `200` with `users[]` payload and the screen MUST render `User List` without `users_fetch_failed_404`
+
 #### Scenario: Edit or delete selected row
 - **GIVEN** a user row is selected from table row actions
 - **WHEN** user saves edits (`PUT /api/users/{id}`) or confirms deletion (`DELETE /api/users/{id}`)
@@ -42,3 +50,4 @@ When `GET /api/users` fails, Users screen SHALL render deterministic error state
 | UC-USR-03 | Invite user | Invite dialog opens and submits | planned: `cypress/e2e/ui/users.cy.ts` `users-invite` |
 | UC-USR-04 | Edit/delete user | Row action dialogs open with selected context | planned: `cypress/e2e/ui/users.cy.ts` `users-row-actions` |
 | UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | planned: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `users-error-retry` |
+| UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |

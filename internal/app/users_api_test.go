@@ -85,3 +85,22 @@ func TestUsersAPIListCreateInviteUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestUsersAPIListWithoutActiveProfileFallsBackToDefaultScope(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	list := doRequest(t, a, http.MethodGet, "/api/users", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list users without active profile status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Users []runtimeUser `json:"users"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode users payload: %v", err)
+	}
+	if len(payload.Users) == 0 {
+		t.Fatal("expected default scoped owner user when active profile is missing")
+	}
+}

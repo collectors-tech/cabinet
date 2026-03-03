@@ -151,11 +151,11 @@ func registerUsersRoutes(mux *http.ServeMux, conn *sql.DB, profiles *profile.Rep
 func resolveUsersProfileID(ctx context.Context, profiles *profile.Repository) (string, error) {
 	active, err := profiles.GetActiveProfile(ctx)
 	if err != nil {
-		return "", err
+		return "local-default", nil
 	}
 	id := strings.TrimSpace(active.ID)
 	if id == "" {
-		return "", fmt.Errorf("active_profile_not_set")
+		return "local-default", nil
 	}
 	return id, nil
 }

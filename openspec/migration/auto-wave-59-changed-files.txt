@@ -1,0 +1,6 @@
+internal/app/users_api_test.go
+internal/app/users_runtime.go
+openspec/specs/users/ui-screen-users/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts
+openspec/migration/auto-wave-59-summary.md
