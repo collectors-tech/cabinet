@@ -1,0 +1,3 @@
+ui.web/cypress/e2e/settings/storage/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-64-summary.md
