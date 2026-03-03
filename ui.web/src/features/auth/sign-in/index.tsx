@@ -17,6 +17,10 @@ type RuntimeSetupStatus = {
   setup_required?: boolean
   config_path?: string
   default_storage_data_dir?: string
+  default_runtime_host?: string
+  default_runtime_port?: number
+  default_runtime_port_mode?: 'auto' | 'fixed'
+  default_runtime_url?: string
 }
 
 type RuntimeSetupCompletePayload = {
@@ -34,6 +38,8 @@ type SetupFormState = {
   storageMode: 'exe_local' | 'custom'
   customDataDir: string
   portableMode: boolean
+  runtimePortMode: 'auto' | 'fixed'
+  runtimeFixedPort: number
   authMode: 'local' | 'clerk'
   clerkPublishableKey: string
 }
@@ -47,6 +53,8 @@ export function SignIn() {
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setupConfigPath, setSetupConfigPath] = useState('')
   const [setupDefaultStorageDataDir, setSetupDefaultStorageDataDir] = useState('')
+  const [setupDefaultRuntimeHost, setSetupDefaultRuntimeHost] = useState('127.0.0.1')
+  const [setupDefaultRuntimePort, setSetupDefaultRuntimePort] = useState(17880)
   const [completingSetup, setCompletingSetup] = useState(false)
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
@@ -59,11 +67,13 @@ export function SignIn() {
     storageMode: 'exe_local',
     customDataDir: '',
     portableMode: false,
+    runtimePortMode: 'auto',
+    runtimeFixedPort: 17880,
     authMode: 'local',
     clerkPublishableKey: '',
   })
 
-  const totalSteps = 4
+  const totalSteps = 5
   const progressPercent = Math.round(((setupStep + 1) / totalSteps) * 100)
 
   useEffect(() => {
@@ -81,6 +91,13 @@ export function SignIn() {
           setSetupRequired(Boolean(payload.setup_required))
           setSetupConfigPath(payload.config_path ?? '')
           setSetupDefaultStorageDataDir(payload.default_storage_data_dir ?? '')
+          setSetupDefaultRuntimeHost(payload.default_runtime_host ?? '127.0.0.1')
+          setSetupDefaultRuntimePort(payload.default_runtime_port ?? 17880)
+          setSetupForm((previous) => ({
+            ...previous,
+            runtimePortMode: payload.default_runtime_port_mode ?? 'auto',
+            runtimeFixedPort: payload.default_runtime_port ?? 17880,
+          }))
         }
       } catch (error) {
         if (!cancelled) {
@@ -115,6 +132,16 @@ export function SignIn() {
       return setupForm.customDataDir.trim()
     }
     return setupDefaultStorageDataDir.trim()
+  }
+
+  function selectedRuntimePort() {
+    return setupForm.runtimePortMode === 'fixed'
+      ? setupForm.runtimeFixedPort
+      : setupDefaultRuntimePort
+  }
+
+  function selectedRuntimeURL() {
+    return `http://${setupDefaultRuntimeHost}:${selectedRuntimePort()}`
   }
 
   async function goToNextStep() {
@@ -153,6 +180,12 @@ export function SignIn() {
         setCompletingSetup(false)
       }
     }
+    if (setupStep === 2) {
+      if (setupForm.runtimePortMode === 'fixed' && setupForm.runtimeFixedPort <= 0) {
+        setSetupError('Fixed port value is required when runtime port mode is fixed.')
+        return
+      }
+    }
     setSetupError(null)
     setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
   }
@@ -181,12 +214,14 @@ export function SignIn() {
           storage_mode: setupForm.storageMode,
           storage_data_dir: selectedStorageDataDir(),
           portable_mode: setupForm.portableMode,
+          runtime_port_mode: setupForm.runtimePortMode,
+          runtime_fixed_port:
+            setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
           auth_mode: setupForm.authMode,
           clerk_publishable_key:
             setupForm.authMode === 'clerk'
               ? setupForm.clerkPublishableKey.trim()
               : '',
-          runtime_port_mode: 'auto',
           bootstrap_workspace: 'Local Workspace',
           bootstrap_database_ref: 'Primary DB',
         }),
@@ -525,6 +560,59 @@ export function SignIn() {
             {setupEntryMode === 'form' && setupStep === 2 ? (
               <div className='grid gap-3'>
                 <label className='grid gap-1 text-sm'>
+                  <span>Runtime Port Mode</span>
+                  <select
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupForm.runtimePortMode}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        runtimePortMode:
+                          event.target.value === 'fixed' ? 'fixed' : 'auto',
+                      }))
+                    }
+                    data-testid='setup-runtime-port-mode'
+                  >
+                    <option value='auto'>auto</option>
+                    <option value='fixed'>fixed</option>
+                  </select>
+                </label>
+                {setupForm.runtimePortMode === 'fixed' ? (
+                  <label className='grid gap-1 text-sm'>
+                    <span>Fixed Port</span>
+                    <input
+                      className='h-9 rounded-md border bg-background px-3'
+                      type='number'
+                      min={1}
+                      value={setupForm.runtimeFixedPort}
+                      onChange={(event) =>
+                        setSetupForm((previous) => ({
+                          ...previous,
+                          runtimeFixedPort: Number(event.target.value),
+                        }))
+                      }
+                      data-testid='setup-runtime-fixed-port'
+                    />
+                  </label>
+                ) : null}
+                <p className='text-xs text-muted-foreground'>
+                  Resolved URL preview:{' '}
+                  <span className='font-medium' data-testid='setup-runtime-url-preview'>
+                    {selectedRuntimeURL()}
+                  </span>
+                </p>
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='setup-runtime-fallback-message'
+                >
+                  Auto mode allows runtime port fallback when another local instance is
+                  already using the default port.
+                </p>
+              </div>
+            ) : null}
+            {setupEntryMode === 'form' && setupStep === 3 ? (
+              <div className='grid gap-3'>
+                <label className='grid gap-1 text-sm'>
                   <span>Auth Mode</span>
                   <select
                     className='h-9 rounded-md border bg-background px-3'
@@ -559,7 +647,7 @@ export function SignIn() {
                 ) : null}
               </div>
             ) : null}
-            {setupEntryMode === 'form' && setupStep === 3 ? (
+            {setupEntryMode === 'form' && setupStep === 4 ? (
               <div className='rounded-md border bg-muted/40 p-3 text-sm'>
                 <p>
                   <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
@@ -575,6 +663,15 @@ export function SignIn() {
                 </p>
                 <p>
                   <strong>Portable:</strong> {setupForm.portableMode ? 'enabled' : 'disabled'}
+                </p>
+                <p>
+                  <strong>Runtime Mode:</strong> {setupForm.runtimePortMode}
+                </p>
+                <p>
+                  <strong>Runtime Port:</strong> {selectedRuntimePort()}
+                </p>
+                <p>
+                  <strong>Runtime URL:</strong> {selectedRuntimeURL()}
                 </p>
                 <p>
                   <strong>Auth Mode:</strong> {setupForm.authMode}

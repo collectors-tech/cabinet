@@ -494,3 +494,51 @@ func TestRuntimeSetupCompletePersistsSelectedStoragePath(t *testing.T) {
 		t.Fatalf("expected storage.mediaDir=%s, got %v", filepath.Join(customDir, "media"), storage["mediaDir"])
 	}
 }
+
+func TestRuntimeSetupCompletePersistsFixedPortRuntime(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	completeReq := map[string]any{
+		"instance_name":          "Runtime Persist",
+		"profile_key":            "",
+		"storage_mode":           "exe_local",
+		"auth_mode":              "local",
+		"runtime_port_mode":      "fixed",
+		"runtime_fixed_port":     18999,
+		"bootstrap_workspace":    "Local Workspace",
+		"bootstrap_database_ref": "Primary DB",
+	}
+	completeReqJSON, err := json.Marshal(completeReq)
+	if err != nil {
+		t.Fatalf("marshal complete request: %v", err)
+	}
+	complete := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
+	if complete.Code != http.StatusOK {
+		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
+	}
+	rawConfig, err := os.ReadFile(setupPath)
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var configPayload map[string]any
+	if err := json.Unmarshal(rawConfig, &configPayload); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	runtimePayload, ok := configPayload["runtime"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtime object in setup config")
+	}
+	if strings.TrimSpace(asString(runtimePayload["portMode"])) != "fixed" {
+		t.Fatalf("expected runtime.portMode=fixed, got %v", runtimePayload["portMode"])
+	}
+	if asFloat64(runtimePayload["port"]) != 18999 {
+		t.Fatalf("expected runtime.port=18999, got %v", runtimePayload["port"])
+	}
+	if !strings.HasSuffix(strings.TrimSpace(asString(runtimePayload["resolvedUrl"])), ":18999") {
+		t.Fatalf("expected runtime.resolvedUrl to end with :18999, got %v", runtimePayload["resolvedUrl"])
+	}
+}

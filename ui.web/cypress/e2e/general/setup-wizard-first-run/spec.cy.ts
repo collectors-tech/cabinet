@@ -18,18 +18,18 @@ describe('SETUP-WIZ', () => {
 
   it('UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions', () => {
     enterSetupFormMode();
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 4');
-    cy.get('[data-testid="setup-step-percent"]').should('contain.text', '25%');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 5');
+    cy.get('[data-testid="setup-step-percent"]').should('contain.text', '20%');
     cy.get('[data-testid="setup-progress-bar"]')
       .should('have.attr', 'aria-valuenow')
-      .and('eq', '25');
+      .and('eq', '20');
     cy.get('[data-testid="setup-prev"]').should('be.disabled');
     cy.get('[data-testid="setup-next"]').should('be.visible').and('not.be.disabled');
     cy.get('[data-testid="setup-complete"]').should('not.exist');
 
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 4');
-    cy.get('[data-testid="setup-step-percent"]').should('contain.text', '50%');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 5');
+    cy.get('[data-testid="setup-step-percent"]').should('contain.text', '40%');
     cy.get('[data-testid="setup-prev"]').should('not.be.disabled');
   });
 
@@ -80,6 +80,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 
@@ -97,7 +98,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-wizard-error"]')
       .should('be.visible')
       .and('contain.text', 'Instance name is required.');
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 4');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 5');
   });
 
   it('UC-SW-17 setup-wizard-storage-defaults shows exe-local mode and default data path', () => {
@@ -105,7 +106,7 @@ describe('SETUP-WIZ', () => {
       enterSetupFormMode();
       cy.get('[data-testid="setup-next"]').click();
 
-      cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 4');
+      cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 5');
       cy.get('[data-testid="setup-storage-mode"]').should('have.value', 'exe_local');
       cy.get('[data-testid="setup-storage-data-dir-preview"]')
         .should('be.visible')
@@ -126,7 +127,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-wizard-error"]')
       .should('be.visible')
       .and('contain.text', 'Custom storage path is required.');
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 4');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 5');
   });
 
   it('UC-SW-19 setup-wizard-storage-selection persists data and media dirs', () => {
@@ -140,6 +141,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-storage-custom-data-dir"]').clear().type(customDir);
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 
@@ -151,15 +153,66 @@ describe('SETUP-WIZ', () => {
       });
   });
 
+  it('UC-SW-20 setup-wizard-runtime-defaults shows auto mode with resolved URL preview', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 3 OF 5');
+    cy.get('[data-testid="setup-runtime-port-mode"]').should('have.value', 'auto');
+    cy.get('[data-testid="setup-runtime-url-preview"]')
+      .should('be.visible')
+      .and('contain.text', 'http://');
+  });
+
+  it('UC-SW-21 setup-wizard-runtime-fixed-port-validation blocks invalid fixed port', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-runtime-port-mode"]').select('fixed');
+    cy.get('[data-testid="setup-runtime-fixed-port"]').type('{selectall}0');
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-wizard-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Fixed port value is required');
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 3 OF 5');
+  });
+
+  it('UC-SW-22 setup-wizard-runtime-selection persists fixed port and resolved URL', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Runtime Persist');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-runtime-port-mode"]').select('fixed');
+    cy.get('[data-testid="setup-runtime-fixed-port"]').type('{selectall}18999');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.contains('Config complete').should('be.visible');
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.runtime.portMode).to.eq('fixed');
+        expect(payload.runtime.port).to.eq(18999);
+        expect(payload.runtime.resolvedUrl).to.match(/:18999$/);
+      });
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
     cy.get('[data-testid="setup-profile-key"]').clear().type('wave3-profile');
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
 
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
     cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_wave3');
+    cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
     cy.get('[data-testid="setup-prev"]').click();
 
@@ -174,6 +227,7 @@ describe('SETUP-WIZ', () => {
 
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').should('have.value', 'clerk');
     cy.get('[data-testid="setup-clerk-publishable-key"]').should(
       'have.value',
@@ -186,7 +240,8 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 4 OF 4');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 5 OF 5');
     cy.get('[data-testid="setup-complete"]').should('be.visible').click();
 
     cy.contains('Config complete').should('be.visible');
@@ -196,6 +251,7 @@ describe('SETUP-WIZ', () => {
 
   it('UC-SW-04 setup-wizard-completion-state shows runtime and storage details with start action', () => {
     enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
@@ -218,6 +274,7 @@ describe('SETUP-WIZ', () => {
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Primary');
     cy.get('[data-testid="setup-profile-key"]').clear().type('primary');
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
@@ -246,6 +303,7 @@ describe('SETUP-WIZ', () => {
 
   it('UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing', () => {
     enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');

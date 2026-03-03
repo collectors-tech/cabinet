@@ -228,6 +228,14 @@ func New(cfg config.Config) (*App, error) {
 		}
 		configPath := runtimeSetupConfigPath(cfg)
 		defaultStorageDataDir := runtimeDefaultStorageDataDir(cfg)
+		host := strings.TrimSpace(cfg.Host)
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		port := cfg.Port
+		if port <= 0 {
+			port = 17880
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"setup_required":              runtimeSetupRequired(cfg),
 			"config_path":                 configPath,
@@ -236,6 +244,10 @@ func New(cfg config.Config) (*App, error) {
 			"default_storage_portable":    false,
 			"default_storage_mode":        "exe_local",
 			"default_storage_free_status": "unknown",
+			"default_runtime_host":        host,
+			"default_runtime_port":        port,
+			"default_runtime_port_mode":   "auto",
+			"default_runtime_url":         fmt.Sprintf("http://%s:%d", host, port),
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-complete", func(w http.ResponseWriter, r *http.Request) {

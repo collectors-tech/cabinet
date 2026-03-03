@@ -170,6 +170,28 @@ Storage form step MUST expose default exe-local storage, optional custom data pa
 - **THEN** `storage.dataDir` and `storage.mediaDir` MUST match selected storage mode/path
 - **AND** storage selection MUST be reflected in completion details
 
+### Requirement SETUP-WIZ-014: Runtime step MUST support auto/fixed port strategy with resolved URL preview
+Runtime step MUST expose deterministic runtime port strategy (`auto` or `fixed`), provide fixed-port entry validation, and show resolved URL preview before completion.
+
+#### Scenario: Runtime step defaults
+- **GIVEN** setup wizard runtime step is active
+- **WHEN** step first renders
+- **THEN** runtime mode MUST default to `auto`
+- **AND** resolved URL preview MUST be visible and include host + effective port
+
+#### Scenario: Fixed port validation
+- **GIVEN** runtime mode is set to `fixed`
+- **WHEN** user leaves fixed port empty or invalid and attempts to continue
+- **THEN** wizard MUST render inline validation error
+- **AND** wizard MUST remain on runtime step
+
+#### Scenario: Runtime selection persisted
+- **GIVEN** setup completion succeeds after runtime selection
+- **WHEN** setup config is written
+- **THEN** `runtime.portMode` MUST reflect selected mode
+- **AND** when fixed mode is selected `runtime.port` MUST equal selected fixed port
+- **AND** `runtime.resolvedUrl` and completion runtime URL preview MUST match resolved runtime host+port
+
 #### Scenario: Clerk mode config requirements
 - **GIVEN** user selects auth mode `clerk`
 - **WHEN** completion is attempted
@@ -243,3 +265,6 @@ Storage form step MUST expose default exe-local storage, optional custom data pa
 | UC-SW-17 | Exe-local storage defaults | Storage step defaults to exe-local mode with `<exe_dir>/data` preview and portable toggle | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-17 setup-wizard-storage-defaults shows exe-local mode and default data path` |
 | UC-SW-18 | Storage custom path validation | Custom storage mode blocks next with blank path and shows inline error | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-18 setup-wizard-storage-custom-path-validation blocks blank custom path` |
 | UC-SW-19 | Storage persistence | Selected storage mode/path persists into setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-19 setup-wizard-storage-selection persists data and media dirs`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsSelectedStoragePath` |
+| UC-SW-20 | Runtime defaults | Runtime step defaults to auto mode and shows resolved URL preview | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-20 setup-wizard-runtime-defaults shows auto mode with resolved URL preview` |
+| UC-SW-21 | Runtime fixed port validation | Runtime fixed mode validates required/valid port before next | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-21 setup-wizard-runtime-fixed-port-validation blocks invalid fixed port` |
+| UC-SW-22 | Runtime persistence | Runtime port strategy and resolved URL persist in setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-22 setup-wizard-runtime-selection persists fixed port and resolved URL`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFixedPortRuntime` |
