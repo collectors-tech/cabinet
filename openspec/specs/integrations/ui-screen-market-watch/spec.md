@@ -32,6 +32,19 @@ Screen SHALL support loading, empty, ready, and error states with retry controls
 ### Requirement UI-SCREEN-MARKET-WATCH-005: Market Watch SHALL provide query-set table view with run output visibility
 Market Watch SHALL provide a table view for query sets so users can find saved queries quickly and inspect latest run outputs.
 
+### Requirement UI-SCREEN-MARKET-WATCH-006: Market Watch SHALL support saved watched-query execution for Bonza `AFX`
+Market Watch SHALL support creating and running provider-scoped watched query `AFX` for Bonza and surface aggregated cross-page candidate outputs.
+
+#### Scenario: Create watched AFX query for Bonza
+- **GIVEN** user is on `/market-watch`
+- **WHEN** user creates query name `AFX` with provider scope `Bonza`
+- **THEN** query set MUST persist with watched flag and provider scope metadata
+
+#### Scenario: Run watched AFX query
+- **GIVEN** watched Bonza query `AFX` exists
+- **WHEN** user clicks `Run Now`
+- **THEN** Market Watch MUST display run output summary including total pages scanned and candidate count
+
 #### Scenario: Query table inspection
 - **GIVEN** query sets exist
 - **WHEN** user switches to `Table` view
@@ -57,3 +70,5 @@ Market Watch SHALL provide a table view for query sets so users can find saved q
 | UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
 | UC-MW-05 | Query-set table review | Table shows saved queries with status/time/output summary columns | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-query-table` |
 | UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-output-detail` |
+| UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |
+| UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |

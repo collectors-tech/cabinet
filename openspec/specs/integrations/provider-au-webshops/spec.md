@@ -32,7 +32,31 @@ Cabinet SHALL parse stock/availability from webshop listing pages where availabl
 ### Requirement OPS-001: AU webshop providers MUST enforce robots/terms policy and throttling
 Cabinet MUST store per-domain crawling policy metadata including robots/terms review status, crawl delay/rate limit, and failure backoff behavior.
 
+### Requirement INTEGRATION-013: Bonza search ingestion MUST paginate using 36-items-per-page contract
+Bonza provider ingestion SHALL iterate all available search-result pages using Bonza listing page size contract (36 items per page) and aggregate normalized candidate records.
+
+#### Scenario: Bonza paginated search ingestion
+- **GIVEN** Market Watch executes provider-scoped query against Bonza
+- **WHEN** listing results span multiple pages at 36 items per page
+- **THEN** ingestion MUST navigate all result pages until terminal page
+- **AND** candidates from all pages MUST be included exactly once in normalized output
+
+### Requirement INTEGRATION-014: Bonza detail-page enrichment MUST fetch watched-car stock level
+For watched Bonza cars, ingestion SHALL fetch detail page data to capture stock level signals not present on listing cards.
+
+#### Scenario: Watched car stock-level enrichment
+- **GIVEN** watched car candidate exists for Bonza source
+- **WHEN** listing-level stock signal is missing/insufficient
+- **THEN** runtime MUST request Bonza detail page for that candidate
+- **AND** extracted stock level MUST update integration stock observation for purchase prompting logic
+
 #### Scenario: Domain throttle applied
 - **GIVEN** domain policy declares `crawl_delay_ms` and `max_requests_per_minute`
 - **WHEN** scanner executes multiple AU webshop requests in one run window
 - **THEN** scheduler MUST enforce throttle policy and transition provider state to `degraded` after repeated policy violations
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-AU-01 | Bonza paginated search | All 36-item pages traversed and aggregated without duplicates | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-paginated-search-all-pages` |
+| UC-AU-02 | Bonza watched stock enrichment | Watched cars trigger detail-page stock extraction and normalized update | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-watched-detail-stock-level` |
