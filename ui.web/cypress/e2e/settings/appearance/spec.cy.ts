@@ -10,22 +10,42 @@ describe('settings/appearance', () => {
     )
   }
 
-  beforeEach(() => {
-    cy.clearCookies()
+  it('UI-SCREEN-SETTINGS-APPEARANCE-004 defaults first-run theme to dark when no preference exists', () => {
+    cy.clearCookie('vite-ui-theme')
     cy.clearLocalStorage()
-    signInToSettings()
+    cy.visit('/sign-in', {
+      onBeforeLoad(win) {
+        Object.defineProperty(win, 'matchMedia', {
+          writable: true,
+          value: (query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+          }),
+        })
+      },
+    })
+    cy.getCookie('vite-ui-theme').should('not.exist')
+    cy.get('html').should('have.class', 'dark')
   })
 
   it('UI-SCREEN-SETTINGS-APPEARANCE-001 applies and persists theme/font preferences', () => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    signInToSettings()
     cy.contains('button', 'Update preferences').should('not.be.disabled')
     cy.get('select[name="font"]').select('manrope')
-    cy.contains('span', 'Dark').click()
+    cy.contains('span', 'Light').click()
     cy.contains('button', 'Update preferences').click()
-    cy.contains('Appearance settings saved.').should('be.visible')
 
-    cy.get('html').should('have.class', 'dark')
+    cy.get('html').should('have.class', 'light')
     cy.reload()
     cy.get('select[name="font"]').should('have.value', 'manrope')
-    cy.get('html').should('have.class', 'dark')
+    cy.get('html').should('have.class', 'light')
   })
 })

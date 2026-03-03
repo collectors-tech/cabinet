@@ -24,3 +24,13 @@ Language preferences MUST include at minimum English, Chinese, and Japanese opti
 - **GIVEN** selected language lacks specific translation key
 - **WHEN** UI renders missing key
 - **THEN** runtime MUST fallback to default language text deterministically without breaking layout
+
+### Requirement UI-SCREEN-SETTINGS-APPEARANCE-004: First-run theme SHALL default to dark without startup flash
+
+#### Scenario: First-run with no saved preference
+- **GIVEN** user opens the app with no `vite-ui-theme` cookie present
+- **AND** system color preference resolves to light mode
+- **WHEN** initial HTML and app shell render
+- **THEN** `<html>` MUST apply `dark` class on first paint
+- **AND** UI MUST NOT flash a light theme before hydration
+- **AND** no theme cookie MUST be created until user explicitly selects a preference

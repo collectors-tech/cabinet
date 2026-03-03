@@ -4,7 +4,7 @@ import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
 type Theme = 'dark' | 'light' | 'system'
 type ResolvedTheme = Exclude<Theme, 'system'>
 
-const DEFAULT_THEME = 'system'
+const DEFAULT_THEME: Theme = 'dark'
 const THEME_COOKIE_NAME = 'vite-ui-theme'
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 // 1 year
 
@@ -24,7 +24,7 @@ type ThemeProviderState = {
 
 const initialState: ThemeProviderState = {
   defaultTheme: DEFAULT_THEME,
-  resolvedTheme: 'light',
+  resolvedTheme: 'dark',
   theme: DEFAULT_THEME,
   setTheme: () => null,
   resetTheme: () => null,
@@ -41,6 +41,13 @@ export function ThemeProvider({
   const [theme, _setTheme] = useState<Theme>(
     () => (getCookie(storageKey) as Theme) || defaultTheme
   )
+
+  useEffect(() => {
+    const storedTheme = getCookie(storageKey)
+    if (!storedTheme && theme !== 'dark') {
+      _setTheme('dark')
+    }
+  }, [storageKey, theme])
 
   // Optimized: Memoize the resolved theme calculation to prevent unnecessary re-computations
   const resolvedTheme = useMemo((): ResolvedTheme => {
@@ -82,7 +89,7 @@ export function ThemeProvider({
 
   const resetTheme = () => {
     removeCookie(storageKey)
-    _setTheme(DEFAULT_THEME)
+    _setTheme(defaultTheme)
   }
 
   const contextValue = {
