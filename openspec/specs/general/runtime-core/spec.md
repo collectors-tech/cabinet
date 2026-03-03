@@ -41,6 +41,21 @@ After successful listener bind, Cabinet MUST print a machine-parseable startup l
 ### Requirement RUNTIME-CORE-005: Startup console output SHALL include human banner and structured JSON line
 After successful listener bind, Cabinet MUST emit human-readable startup lines and a structured JSON line while preserving existing key-value machine output.
 
+### Requirement RUNTIME-CORE-006: Project-local execution SHALL prefer `bin` folder runtime path over ephemeral temp locations
+When running from a project workspace, startup and validation workflows MUST prefer executable path under project-local `bin` (or equivalent configured project runtime path) and MUST NOT default to transient template/temp directories.
+
+#### Scenario: Project run-path resolution
+- **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
+- **WHEN** run instructions or automation resolves executable path
+- **THEN** runtime MUST launch from project-local `bin` executable by default
+- **AND** logs/checkpoints MUST record resolved executable path used for run
+
+#### Scenario: Equivalent configured runtime path
+- **GIVEN** project defines an explicit runtime executable path different from `bin`
+- **WHEN** run instructions resolve launch target
+- **THEN** runtime MAY use configured project-local equivalent path
+- **AND** transient template/temp-folder executable paths MUST be rejected unless explicitly forced for a test case
+
 #### Scenario: Human startup banner lines
 - **GIVEN** runtime starts and listener bind succeeds with resolved address known
 - **WHEN** startup console output is emitted
