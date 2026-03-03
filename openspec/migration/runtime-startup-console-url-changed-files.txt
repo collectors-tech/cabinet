@@ -1,0 +1,5 @@
+internal/app/app.go
+internal/app/runtime_startup_console_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-startup-console-url-summary.md

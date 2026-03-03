@@ -27,3 +27,13 @@ Cabinet SHALL expose runtime and health diagnostics for local supportability.
 - **THEN** Cabinet SHALL return runtime health payloads
   - `GET /healthz` MUST return `200` with body `ok`
   - `GET /api/runtime` MUST return `200` with `app_version` and `build_date`
+
+### Requirement RUNTIME-CORE-004: Startup console output SHALL report resolved runtime endpoint and execution context
+After successful listener bind, Cabinet MUST print a machine-parseable startup line containing resolved URL and runtime context.
+
+#### Scenario: Startup console line after bind
+- **GIVEN** runtime starts with configured listen address and writable data directory
+- **WHEN** listener bind succeeds and resolved address is known
+- **THEN** console output MUST include `url=<resolved-url>` matching actual bound endpoint
+- **AND** output MUST include `instance`, `profile`, and `data_dir` context values
+- **AND** when requested port and resolved port differ, output MUST include both `requested_port` and `resolved_port`

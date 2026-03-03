@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -51,12 +53,13 @@ import (
 )
 
 type App struct {
-	cfg         config.Config
-	db          *sql.DB
-	srv         *http.Server
-	backupSvc   *backup.Service
-	authService *auth.Service
-	openapiSpec []byte
+	cfg           config.Config
+	db            *sql.DB
+	srv           *http.Server
+	backupSvc     *backup.Service
+	authService   *auth.Service
+	openapiSpec   []byte
+	startupNotice func(string)
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -2985,6 +2988,9 @@ func New(cfg config.Config) (*App, error) {
 		backupSvc:   backupSvc,
 		authService: authService,
 		openapiSpec: openapiSpec,
+		startupNotice: func(line string) {
+			log.Print(line)
+		},
 	}
 
 	return a, nil
@@ -3116,6 +3122,10 @@ func runtimeResolvedURLFromConfig(cfg config.Config) string {
 }
 
 func syncRuntimeSetupCurrentURL(cfg config.Config) error {
+	return syncRuntimeSetupCurrentURLWithURL(cfg, runtimeResolvedURLFromConfig(cfg))
+}
+
+func syncRuntimeSetupCurrentURLWithURL(cfg config.Config, resolvedURL string) error {
 	configPath := runtimeSetupConfigPath(cfg)
 	raw, err := os.ReadFile(configPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -3128,12 +3138,18 @@ func syncRuntimeSetupCurrentURL(cfg config.Config) error {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return err
 	}
-	resolved := strings.TrimSpace(payload.Runtime.ResolvedURL)
-	if resolved == "" {
-		resolved = runtimeResolvedURLFromConfig(cfg)
-		payload.Runtime.ResolvedURL = resolved
-	}
 	changed := false
+	resolved := strings.TrimSpace(resolvedURL)
+	if resolved == "" {
+		resolved = strings.TrimSpace(payload.Runtime.ResolvedURL)
+		if resolved == "" {
+			resolved = runtimeResolvedURLFromConfig(cfg)
+		}
+	}
+	if strings.TrimSpace(payload.Runtime.ResolvedURL) != resolved {
+		payload.Runtime.ResolvedURL = resolved
+		changed = true
+	}
 	if strings.TrimSpace(payload.Meta.CurrentURL) != resolved {
 		payload.Meta.CurrentURL = resolved
 		payload.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -4085,9 +4101,20 @@ func (a *App) Run(ctx context.Context) error {
 	defer func() {
 		_ = removeRuntimePIDFile(a.cfg)
 	}()
+	listener, err := net.Listen("tcp", a.srv.Addr)
+	if err != nil {
+		return err
+	}
+	resolvedAddr := listener.Addr().String()
+	resolvedURL := startupURLFromResolvedAddr(resolvedAddr)
+	_ = syncRuntimeSetupCurrentURLWithURL(a.cfg, resolvedURL)
+	if a.startupNotice != nil {
+		a.startupNotice(buildStartupConsoleLine(a.cfg, resolvedAddr))
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- a.srv.ListenAndServe()
+		errCh <- a.srv.Serve(listener)
 	}()
 
 	select {
@@ -4103,6 +4130,65 @@ func (a *App) Run(ctx context.Context) error {
 		_ = a.close()
 		return err
 	}
+}
+
+func startupURLFromResolvedAddr(addr string) string {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return runtimeResolvedURLFromConfig(config.Config{Host: "127.0.0.1", Port: 17880})
+	}
+	host = strings.TrimSpace(host)
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+func splitPortFromAddr(addr string) int {
+	_, portRaw, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil {
+		return 0
+	}
+	return port
+}
+
+func readRuntimeSetupIdentity(cfg config.Config) (instanceName, profileKey string) {
+	raw, err := os.ReadFile(runtimeSetupConfigPath(cfg))
+	if err != nil {
+		return "", ""
+	}
+	var payload runtimeSetupConfigFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return "", ""
+	}
+	return strings.TrimSpace(payload.Instance.Name), strings.TrimSpace(payload.Instance.Profile)
+}
+
+func buildStartupConsoleLine(cfg config.Config, resolvedAddr string) string {
+	instanceName, profileKey := readRuntimeSetupIdentity(cfg)
+	if instanceName == "" {
+		instanceName = "unknown"
+	}
+	if profileKey == "" {
+		profileKey = "unknown"
+	}
+	requestedPort := splitPortFromAddr(cfg.Addr)
+	resolvedPort := splitPortFromAddr(resolvedAddr)
+	return fmt.Sprintf(
+		"CABINET_STARTUP url=%s requested_addr=%s resolved_addr=%s instance=%s profile=%s data_dir=%s requested_port=%d resolved_port=%d",
+		startupURLFromResolvedAddr(resolvedAddr),
+		strings.TrimSpace(cfg.Addr),
+		strings.TrimSpace(resolvedAddr),
+		instanceName,
+		profileKey,
+		strings.TrimSpace(cfg.DataDir),
+		requestedPort,
+		resolvedPort,
+	)
 }
 
 func (a *App) close() error {
