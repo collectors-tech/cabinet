@@ -807,7 +807,7 @@ export function SignIn() {
                     disabled={completingSetup}
                     data-testid='setup-complete'
                   >
-                    {completingSetup ? 'Completing Setup...' : 'Complete'}
+                    {completingSetup ? 'Creating Config...' : 'Create Config & Launch'}
                   </Button>
                 )}
               </div>

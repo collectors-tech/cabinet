@@ -237,6 +237,26 @@ Integrations baseline step MUST allow users to toggle scanner/chat/provider feat
 - **WHEN** user proceeds without changing toggles
 - **THEN** wizard MUST allow forward transition without validation blockers
 
+### Requirement SETUP-WIZ-017: Review step MUST present resolved summary and deterministic create action
+Review step MUST present full resolved configuration summary and expose deterministic create action semantics before setup completion.
+
+#### Scenario: Review summary completeness
+- **GIVEN** setup wizard review step is active
+- **WHEN** summary is rendered
+- **THEN** summary MUST include resolved values for identity, storage, runtime, auth, and feature toggles
+- **AND** review action MUST be labeled `Create Config & Launch`
+
+#### Scenario: Deterministic create action
+- **GIVEN** review step is active with valid setup data
+- **WHEN** user triggers `Create Config & Launch`
+- **THEN** runtime MUST write deterministic config payload to the configured setup path
+- **AND** completion state MUST show persisted config and runtime metadata values
+
+#### Scenario: Review action disabled while in-flight
+- **GIVEN** create action request is in-flight
+- **WHEN** review action is rendered
+- **THEN** action control MUST be disabled and indicate in-progress state
+
 #### Initial `cabinet.json` schema (v1)
 ```json
 {
@@ -314,3 +334,6 @@ Integrations baseline step MUST allow users to toggle scanner/chat/provider feat
 | UC-SW-26 | Integrations defaults | Integrations step defaults scanner/chat/providers to enabled and shows editable-later guidance | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-26 setup-wizard-integrations-defaults shows enabled toggles and guidance` |
 | UC-SW-27 | Integrations toggle persistence | Integrations toggles persist into setup config `features` payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-27 setup-wizard-integrations-persistence writes feature toggles`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsFeatureToggles` |
 | UC-SW-28 | Integrations optional progression | Integrations step allows Next without required-field validation | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-28 setup-wizard-integrations-optional-step-allows-next` |
+| UC-SW-29 | Review summary completeness | Review step renders resolved identity/storage/runtime/auth/features summary and create action label | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-29 setup-wizard-review-summary shows resolved full summary and create label` |
+| UC-SW-30 | Deterministic create action | Create action writes deterministic config and completion metadata | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-30 setup-wizard-review-create-action writes config and completion metadata`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
+| UC-SW-31 | In-flight create action state | Create action disables and shows progress text while request is in-flight | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-31 setup-wizard-review-create-action shows in-flight disabled state` |

@@ -82,6 +82,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 
@@ -313,6 +314,74 @@ describe('SETUP-WIZ', () => {
 
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
     cy.get('[data-testid="setup-wizard-error"]').should('not.exist');
+  });
+
+  it('UC-SW-29 setup-wizard-review-summary shows resolved full summary and create label', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Review Summary');
+    cy.get('[data-testid="setup-profile-key"]').clear().type('review-summary');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-runtime-port-mode"]').select('fixed');
+    cy.get('[data-testid="setup-runtime-fixed-port"]').type('{selectall}18888');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-auth-mode"]').select('clerk');
+    cy.get('[data-testid="setup-clerk-publishable-key"]').type('pk_test_review');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-feature-chat"]').uncheck({ force: true });
+    cy.get('[data-testid="setup-next"]').click();
+
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
+    cy.contains('strong', 'Instance:').should('be.visible');
+    cy.contains('strong', 'Storage Mode:').should('be.visible');
+    cy.contains('strong', 'Runtime URL:').should('be.visible');
+    cy.contains('strong', 'Auth Mode:').should('be.visible');
+    cy.contains('strong', 'Features:').should('be.visible');
+    cy.get('[data-testid="setup-complete"]').should('contain.text', 'Create Config & Launch');
+  });
+
+  it('UC-SW-30 setup-wizard-review-create-action writes config and completion metadata', () => {
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-instance-name"]').clear().type('Review Persist');
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+
+    cy.contains('Config complete').should('be.visible');
+    cy.get('[data-testid="setup-complete-config-path"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-runtime-url"]').should('contain.text', 'http://');
+    cy.get('[data-testid="setup-complete-runtime-port"]').should('be.visible');
+  });
+
+  it('UC-SW-31 setup-wizard-review-create-action shows in-flight disabled state', () => {
+    cy.intercept('POST', '/api/runtime/setup-complete', {
+      delay: 1200,
+      statusCode: 200,
+      body: {
+        ok: true,
+        config_path: 'D:/cabinet.json',
+        data_dir: 'D:/data',
+        media_dir: 'D:/data/media',
+        runtime_url: 'http://127.0.0.1:17880',
+        runtime_port: 17880,
+      },
+    }).as('setupCompleteSlow');
+
+    enterSetupFormMode();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-complete"]').click();
+    cy.get('[data-testid="setup-complete"]')
+      .should('be.disabled')
+      .and('contain.text', 'Creating Config...');
+    cy.wait('@setupCompleteSlow');
+    cy.contains('Config complete').should('be.visible');
   });
 
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
