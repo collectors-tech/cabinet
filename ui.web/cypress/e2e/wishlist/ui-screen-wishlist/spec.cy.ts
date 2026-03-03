@@ -39,17 +39,34 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
   });
 
-  it("UI-SCREEN-WISHLIST-002 opens create drawer and import dialog workflows", () => {
+  it("UI-SCREEN-WISHLIST-002 opens create and import actions from Create menu", () => {
     signInToWishlist();
 
-    cy.contains("button", "Create").click();
-    cy.contains("Create Task").should("be.visible");
-    cy.contains("button", "Close").click();
-    cy.contains("Create Task").should("not.exist");
+    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
+    cy.get('[data-testid="wishlist-create-menu-entry"]').should("be.visible");
+    cy.get('[data-testid="wishlist-create-menu-import"]').should("be.visible");
+  });
 
-    cy.contains("button", "Import").click();
-    cy.contains("Import Tasks").should("be.visible");
-    cy.contains("button", "Close").click();
-    cy.contains("Import Tasks").should("not.exist");
+  it("UI-SCREEN-WISHLIST-004 shows dedicated New action with adjacent Create menu", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-new-action"]')
+      .should("be.visible")
+      .and("contain", "New");
+    cy.get('[data-testid="wishlist-create-menu-trigger"]')
+      .should("be.visible")
+      .and("contain", "Create");
+  });
+
+  it("UI-SCREEN-WISHLIST-005 supports inline collection create and auto-select", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-inline-add-new"]').click();
+    cy.get('[data-testid="wishlist-inline-new-name"]').type("Wishlist Inline Alpha");
+    cy.get('[data-testid="wishlist-inline-save"]').click();
+    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+      "contain",
+      "Wishlist Inline Alpha"
+    );
   });
 });

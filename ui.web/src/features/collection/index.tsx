@@ -29,6 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
@@ -753,8 +759,34 @@ export function Collection({
             </p>
           </div>
           <div className='flex gap-2'>
-            <Button>Add Item</Button>
-            <Button variant='outline'>Add Folder</Button>
+            <Button
+              type='button'
+              data-testid='inventory-new-action'
+            >
+              New
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='inventory-create-menu-trigger'
+                >
+                  Create
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end'>
+                <DropdownMenuItem data-testid='inventory-create-menu-item'>
+                  New Item
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid='inventory-create-menu-folder'
+                  onClick={() => setInlineCollectionInputOpen(true)}
+                >
+                  New Collection
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

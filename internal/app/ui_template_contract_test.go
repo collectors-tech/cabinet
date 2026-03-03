@@ -267,8 +267,10 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 	})
 	checkContains("../../ui.web/src/features/collection/index.tsx", []string{
 		"Collection",
-		"Add Item",
-		"Add Folder",
+		"New",
+		"Create",
+		"inventory-new-action",
+		"inventory-create-menu-trigger",
 		"Folders",
 		"Active Brand",
 		"Active Category",

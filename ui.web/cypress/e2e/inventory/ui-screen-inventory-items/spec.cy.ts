@@ -32,8 +32,8 @@ describe("inventory-management", () => {
 
     cy.contains("Inventory").should("be.visible");
     cy.contains("Collection Browser").should("be.visible");
-    cy.contains("button", "Add Item").should("be.visible");
-    cy.contains("button", "Add Folder").should("be.visible");
+    cy.contains("button", "New").should("be.visible");
+    cy.contains("button", "Create").should("be.visible");
 
     cy.contains("button", "Cards").click();
     cy.contains("Status:").should("be.visible");
@@ -164,5 +164,53 @@ describe("inventory-management", () => {
               });
           });
       });
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-005 shows New action with adjacent Create menu", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsActions");
+
+    signIn();
+    cy.wait("@itemsActions");
+
+    cy.get('[data-testid="inventory-new-action"]')
+      .should("be.visible")
+      .and("contain", "New");
+    cy.get('[data-testid="inventory-create-menu-trigger"]')
+      .should("be.visible")
+      .and("contain", "Create")
+      .click();
+    cy.get('[data-testid="inventory-create-menu-item"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-menu-folder"]').should("be.visible");
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection inline and auto-selects it", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-inline-1",
+            part_number: "PN-INLINE-1",
+            title: "Inline Collection Item",
+            status: "todo",
+            category: "feature",
+          },
+        ],
+      },
+    }).as("itemsInline");
+
+    signIn();
+    cy.wait("@itemsInline");
+
+    cy.get('[data-testid="collection-inline-add-new"]').click();
+    cy.get('[data-testid="collection-inline-new-name"]').type("Inline Alpha");
+    cy.get('[data-testid="collection-inline-save"]').click();
+    cy.get('[data-testid="collection-inline-picker-selected"]').should(
+      "contain",
+      "Inline Alpha"
+    );
   });
 });
