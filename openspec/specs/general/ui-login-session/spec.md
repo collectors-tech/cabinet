@@ -25,3 +25,11 @@ Cabinet SHALL support selecting/activating profile context after successful auth
 - **GIVEN** authenticated session exists and profile list has at least two profiles
 - **WHEN** user selects an active profile
 - **THEN** workspace context MUST switch to selected profile and subsequent API calls MUST use active profile scope
+
+### Requirement UI-LOGIN-SESSION-004: Session entry SHALL avoid active-profile missing errors on first-run core screens
+First-run signed-in sessions SHALL resolve a usable active profile context so core routes render without `active_profile_404`/`active_profile_not_set` failures.
+
+#### Scenario: First-run core route sweep
+- **GIVEN** a newly signed-in first-run user and no previously selected active profile context
+- **WHEN** user navigates core routes (`/settings/display`, `/chats`, `/integrations`, `/reports`, `/users`)
+- **THEN** routes MUST render usable states without surfacing raw `active_profile_404` or `active_profile_not_set` errors

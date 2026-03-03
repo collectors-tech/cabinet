@@ -1,4 +1,11 @@
 describe("ui-login-session", () => {
+  beforeEach(() => {
+    cy.e2eReset();
+    cy.request("POST", "/api/test/runtime/setup-status", { state: "present" })
+      .its("status")
+      .should("eq", 200);
+  });
+
   it("UI-LOGIN-SESSION-001 redirects unauthenticated access to sign-in and returns to target after login", () => {
     cy.clearCookies();
     cy.clearLocalStorage();
@@ -96,5 +103,27 @@ describe("ui-login-session", () => {
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/integrations\/?$/);
     cy.wait("@registry");
     cy.wait("@profile2Settings");
+  });
+
+  it("UI-LOGIN-SESSION-004 provisions active profile on first-run and avoids active_profile_404 across core routes", () => {
+    cy.visit("/sign-in?redirect=%2Fsettings%2Fdisplay");
+    cy.get('input[name="email"]').type("e2e-first-run-profile@example.com");
+    cy.get('input[name="password"]').type("password123");
+    cy.contains("button", "Sign in").click();
+
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/settings\/display\/?$/
+    );
+    cy.contains(/active_profile_404|active_profile_not_set/i).should("not.exist");
+
+    ["/chats", "/integrations", "/reports", "/users"].forEach((path) => {
+      cy.visit(path);
+      cy.location("pathname", { timeout: 15000 }).should(
+        "match",
+        new RegExp(`^${path}\\/?$`)
+      );
+      cy.contains(/active_profile_404|active_profile_not_set/i).should("not.exist");
+    });
   });
 });
