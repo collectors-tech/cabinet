@@ -1,0 +1,7 @@
+ui.web/src/features/settings/storage/index.tsx
+ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts
+openspec/traceability.md
+internal/ui/static/index.html
+openspec/migration/settings-storage-error-recovery-summary.md
+openspec/migration/settings-storage-error-recovery-changed-files.txt
+openspec/migration/auto-wave-61-summary.md

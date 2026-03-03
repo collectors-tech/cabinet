@@ -107,4 +107,85 @@ describe('ui-screen-settings', () => {
     cy.wait('@activeProfileMissing')
     cy.contains('a', 'Create or Select Profile').should('be.visible')
   })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-004 keeps last-known paths visible during degraded storage state', () => {
+    let storageAttempt = 0
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', (req) => {
+      storageAttempt += 1
+      if (storageAttempt === 1) {
+        req.reply(200, {
+          db_path: 'C:/cabinet/profiles/default/cabinet.db',
+          media_dir: 'C:/cabinet/profiles/default/media',
+        })
+        return
+      }
+      if (storageAttempt === 2) {
+        req.reply(503, { error: 'storage_unavailable' })
+        return
+      }
+      req.reply(200, {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      })
+    }).as('storageInfo')
+
+    cy.visit('/settings/storage')
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('cabinet.db').should('be.visible')
+    cy.contains('/default/media').should('be.visible')
+
+    cy.visit('/settings/storage')
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('Storage information is unavailable right now.').should(
+      'be.visible'
+    )
+    cy.contains('cabinet.db').should('be.visible')
+    cy.contains('/default/media').should('be.visible')
+    cy.contains('Diagnostics actions are unavailable while storage info is degraded.')
+      .should('be.visible')
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-005 retries storage fetch and recovers without route reload', () => {
+    let attempt = 0
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', (req) => {
+      attempt += 1
+      if (attempt === 1) {
+        req.reply(503, { error: 'storage_unavailable' })
+        return
+      }
+      req.reply(200, {
+        db_path: 'C:/cabinet/profiles/default/recovered.db',
+        media_dir: 'C:/cabinet/profiles/default/recovered-media',
+      })
+    }).as('storageInfo')
+
+    cy.visit('/settings/storage')
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('Storage information is unavailable right now.').should(
+      'be.visible'
+    )
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@storageInfo')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.contains('Storage information is unavailable right now.').should(
+      'not.exist'
+    )
+    cy.contains('C:/cabinet/profiles/default/recovered.db').should('be.visible')
+    cy.contains('C:/cabinet/profiles/default/recovered-media').should(
+      'be.visible'
+    )
+  })
 })

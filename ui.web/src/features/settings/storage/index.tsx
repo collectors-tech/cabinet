@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
@@ -13,11 +13,32 @@ type StorageResponse = {
   media_dir?: string
 }
 
+const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
+
 export function SettingsStorage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dbPath, setDbPath] = useState('')
   const [mediaDir, setMediaDir] = useState('')
+  const [lastKnown, setLastKnown] = useState<StorageResponse | null>(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    const raw = window.localStorage.getItem(LAST_KNOWN_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+    try {
+      const parsed = JSON.parse(raw) as StorageResponse
+      if (!parsed.db_path && !parsed.media_dir) {
+        return null
+      }
+      return parsed
+    } catch {
+      return null
+    }
+  })
+  const lastKnownRef = useRef<StorageResponse | null>(lastKnown)
 
   const loadStorage = useCallback(async () => {
     setLoading(true)
@@ -38,12 +59,21 @@ export function SettingsStorage() {
         throw new Error('storage_unavailable')
       }
       const storage = (await storageResp.json()) as StorageResponse
-      setDbPath(storage.db_path?.trim() || 'Unavailable')
-      setMediaDir(storage.media_dir?.trim() || 'Unavailable')
+      const next = {
+        db_path: storage.db_path?.trim() || 'Unavailable',
+        media_dir: storage.media_dir?.trim() || 'Unavailable',
+      }
+      setLastKnown(next)
+      lastKnownRef.current = next
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(LAST_KNOWN_STORAGE_KEY, JSON.stringify(next))
+      }
+      setDbPath(next.db_path)
+      setMediaDir(next.media_dir)
     } catch {
       setError('Storage information is unavailable right now.')
-      setDbPath('')
-      setMediaDir('')
+      setDbPath(lastKnownRef.current?.db_path || 'Unavailable')
+      setMediaDir(lastKnownRef.current?.media_dir || 'Unavailable')
     } finally {
       setLoading(false)
     }
@@ -108,6 +138,11 @@ export function SettingsStorage() {
             Rebuild Thumbnails (Diagnostics only)
           </Button>
         </div>
+        {error ? (
+          <p className='text-xs text-muted-foreground'>
+            Diagnostics actions are unavailable while storage info is degraded.
+          </p>
+        ) : null}
       </div>
     </ContentSection>
   )
