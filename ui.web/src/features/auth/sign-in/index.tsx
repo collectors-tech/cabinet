@@ -33,6 +33,8 @@ type SetupFormState = {
   clerkPublishableKey: string
 }
 
+type SetupEntryMode = 'welcome' | 'form' | 'import'
+
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
   const [setupLoading, setSetupLoading] = useState(true)
@@ -42,6 +44,8 @@ export function SignIn() {
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
     useState<RuntimeSetupCompletePayload | null>(null)
+  const [setupEntryMode, setSetupEntryMode] = useState<SetupEntryMode>('welcome')
+  const [setupImportSourcePath, setSetupImportSourcePath] = useState('')
   const [setupForm, setSetupForm] = useState<SetupFormState>({
     instanceName: 'Primary',
     profileKey: 'primary',
@@ -84,6 +88,15 @@ export function SignIn() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (setupRequired) {
+      setSetupEntryMode('welcome')
+      setSetupStep(0)
+      setSetupImportSourcePath('')
+      setSetupCompleteState(null)
+    }
+  }, [setupRequired])
 
   function goToNextStep() {
     setSetupError(null)
@@ -139,6 +152,58 @@ export function SignIn() {
       setSetupError(
         error instanceof Error ? error.message : 'setup_complete_failed'
       )
+    } finally {
+      setCompletingSetup(false)
+    }
+  }
+
+  function startSetupFlow() {
+    setSetupError(null)
+    setSetupEntryMode('form')
+    setSetupStep(0)
+  }
+
+  function openSetupImportFlow() {
+    setSetupError(null)
+    setSetupEntryMode('import')
+  }
+
+  function backToSetupWelcome() {
+    setSetupError(null)
+    setSetupEntryMode('welcome')
+  }
+
+  async function importExistingSetupConfig() {
+    setCompletingSetup(true)
+    setSetupError(null)
+    try {
+      const response = await fetch('/api/runtime/setup-import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_path: setupImportSourcePath.trim(),
+        }),
+      })
+      if (!response.ok) {
+        let message = `setup_import_failed_${response.status}`
+        try {
+          const payload = (await response.json()) as { message?: string }
+          if (payload?.message) {
+            message = payload.message
+          }
+        } catch {
+          // no-op
+        }
+        throw new Error(message)
+      }
+      setSetupRequired(false)
+      setSetupEntryMode('welcome')
+      setSetupStep(0)
+      setSetupImportSourcePath('')
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : 'setup_import_failed')
     } finally {
       setCompletingSetup(false)
     }
@@ -218,42 +283,90 @@ export function SignIn() {
       <AuthLayout>
         <Card className='gap-4' data-testid='setup-wizard'>
           <CardHeader>
-            <p
-              className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'
-              data-testid='setup-step-indicator'
-            >
-              STEP {setupStep + 1} OF {totalSteps}
-            </p>
-            <div className='flex items-center justify-between gap-2'>
-              <p className='text-sm text-muted-foreground'>Setup Progress</p>
-              <p className='text-sm font-medium' data-testid='setup-step-percent'>
-                {progressPercent}%
-              </p>
-            </div>
-            <div
-              className='h-2 w-full overflow-hidden rounded-full bg-muted'
-              role='progressbar'
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progressPercent}
-              data-testid='setup-progress-bar'
-            >
-              <div
-                className='h-full bg-primary transition-all'
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
             <CardTitle className='text-lg tracking-tight'>Setup Wizard</CardTitle>
             <CardDescription>
               Complete initial runtime setup before continuing to sign in.
             </CardDescription>
+            {setupEntryMode === 'form' ? (
+              <>
+                <p
+                  className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+                  data-testid='setup-step-indicator'
+                >
+                  STEP {setupStep + 1} OF {totalSteps}
+                </p>
+                <div className='flex items-center justify-between gap-2'>
+                  <p className='text-sm text-muted-foreground'>Setup Progress</p>
+                  <p className='text-sm font-medium' data-testid='setup-step-percent'>
+                    {progressPercent}%
+                  </p>
+                </div>
+                <div
+                  className='h-2 w-full overflow-hidden rounded-full bg-muted'
+                  role='progressbar'
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progressPercent}
+                  data-testid='setup-progress-bar'
+                >
+                  <div
+                    className='h-full bg-primary transition-all'
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </>
+            ) : null}
           </CardHeader>
           <CardContent className='space-y-3'>
             <p className='text-sm text-muted-foreground'>
               Cabinet detected missing startup configuration. Create the setup file
               to unlock login.
             </p>
-            {setupStep === 0 ? (
+            {setupEntryMode === 'welcome' ? (
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button data-testid='setup-start' onClick={startSetupFlow}>
+                  Start Setup
+                </Button>
+                <Button
+                  variant='outline'
+                  data-testid='setup-import-toggle'
+                  onClick={openSetupImportFlow}
+                >
+                  Import Existing Config
+                </Button>
+              </div>
+            ) : null}
+            {setupEntryMode === 'import' ? (
+              <div className='grid gap-3'>
+                <label className='grid gap-1 text-sm'>
+                  <span>Existing Config Path</span>
+                  <input
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupImportSourcePath}
+                    onChange={(event) => setSetupImportSourcePath(event.target.value)}
+                    data-testid='setup-import-source-path'
+                  />
+                </label>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <Button
+                    data-testid='setup-import-submit'
+                    disabled={completingSetup}
+                    onClick={() => void importExistingSetupConfig()}
+                  >
+                    {completingSetup ? 'Importing...' : 'Import Existing Config'}
+                  </Button>
+                  <Button
+                    variant='outline'
+                    data-testid='setup-import-cancel'
+                    disabled={completingSetup}
+                    onClick={backToSetupWelcome}
+                  >
+                    Back
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {setupEntryMode === 'form' && setupStep === 0 ? (
               <div className='grid gap-3'>
                 <label className='grid gap-1 text-sm'>
                   <span>Instance Name</span>
@@ -285,7 +398,7 @@ export function SignIn() {
                 </label>
               </div>
             ) : null}
-            {setupStep === 1 ? (
+            {setupEntryMode === 'form' && setupStep === 1 ? (
               <div className='grid gap-3'>
                 <label className='grid gap-1 text-sm'>
                   <span>Auth Mode</span>
@@ -322,7 +435,7 @@ export function SignIn() {
                 ) : null}
               </div>
             ) : null}
-            {setupStep === 2 ? (
+            {setupEntryMode === 'form' && setupStep === 2 ? (
               <div className='rounded-md border bg-muted/40 p-3 text-sm'>
                 <p>
                   <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
@@ -346,33 +459,35 @@ export function SignIn() {
                 {setupError}
               </p>
             ) : null}
-            <div className='flex items-center gap-2 pt-2'>
-              <Button
-                variant='outline'
-                onClick={goToPreviousStep}
-                disabled={setupStep === 0 || completingSetup}
-                data-testid='setup-prev'
-              >
-                Previous
-              </Button>
-              {setupStep < totalSteps - 1 ? (
+            {setupEntryMode === 'form' ? (
+              <div className='flex items-center gap-2 pt-2'>
                 <Button
-                  onClick={goToNextStep}
-                  disabled={completingSetup}
-                  data-testid='setup-next'
+                  variant='outline'
+                  onClick={goToPreviousStep}
+                  disabled={setupStep === 0 || completingSetup}
+                  data-testid='setup-prev'
                 >
-                  Next
+                  Previous
                 </Button>
-              ) : (
-                <Button
-                  onClick={() => void completeSetup()}
-                  disabled={completingSetup}
-                  data-testid='setup-complete'
-                >
-                  {completingSetup ? 'Completing Setup...' : 'Complete'}
-                </Button>
-              )}
-            </div>
+                {setupStep < totalSteps - 1 ? (
+                  <Button
+                    onClick={goToNextStep}
+                    disabled={completingSetup}
+                    data-testid='setup-next'
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => void completeSetup()}
+                    disabled={completingSetup}
+                    data-testid='setup-complete'
+                  >
+                    {completingSetup ? 'Completing Setup...' : 'Complete'}
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </AuthLayout>

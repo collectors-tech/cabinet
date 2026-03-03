@@ -90,6 +90,37 @@ Runtime process lifecycle MUST maintain a PID-only file separate from `cabinet.j
 - **THEN** PID file content MUST contain only the numeric PID value (no JSON/config payload)
 - **AND** PID file lifecycle MUST remain independent from `cabinet.json`
 
+### Requirement SETUP-WIZ-010: Step 1 MUST render explicit welcome actions for setup start and config import
+When setup is required, the first wizard screen MUST render `Start Setup` and `Import Existing Config` actions before the user enters multi-step configuration fields.
+
+#### Scenario: Welcome actions on missing config
+- **GIVEN** app startup detects `cabinet.json` missing and setup route is active
+- **WHEN** wizard Step 1 renders
+- **THEN** UI MUST show primary `Start Setup` and secondary `Import Existing Config` actions
+- **AND** instance/profile field editors MUST remain hidden until user chooses `Start Setup`
+
+#### Scenario: Start Setup deterministic transition
+- **GIVEN** wizard Step 1 welcome actions are visible
+- **WHEN** user clicks `Start Setup`
+- **THEN** wizard MUST transition deterministically to form step mode
+- **AND** instance/profile editors MUST become visible without route reload
+
+### Requirement SETUP-WIZ-011: Import Existing Config MUST support deterministic import flow
+Wizard Step 1 MUST provide an import path entry flow that copies a valid existing config file into the runtime setup config path and exits setup-required state.
+
+#### Scenario: Successful setup config import
+- **GIVEN** setup-required state with Step 1 visible and a valid external config file path
+- **WHEN** user submits import action
+- **THEN** runtime MUST validate and write imported config to active `cabinet.json` path
+- **AND** response MUST return status `200` with `ok=true`, `setup_required=false`, and `config_path`
+- **AND** subsequent `GET /api/runtime/setup-status` MUST return `setup_required=false`
+
+#### Scenario: Invalid import path validation
+- **GIVEN** setup-required state and import action is submitted with missing or unreadable source path
+- **WHEN** runtime processes import request
+- **THEN** runtime MUST return status `400` with deterministic `error_code` and `message`
+- **AND** setup-required state MUST remain `true`
+
 #### Scenario: Clerk mode config requirements
 - **GIVEN** user selects auth mode `clerk`
 - **WHEN** completion is attempted
@@ -155,3 +186,5 @@ Runtime process lifecycle MUST maintain a PID-only file separate from `cabinet.j
 | UC-SW-09 | Clerk config validation | Clerk mode blocks completion when required keys/settings refs are missing | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteRequiresClerkPublishableKey` |
 | UC-SW-10 | Startup runtime URL sync | Existing config receives `meta.currentUrl` matching resolved runtime URL on startup | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupSyncCurrentURLUpdatesConfigMetadata` |
 | UC-SW-11 | PID-only runtime lifecycle file | Runtime writes PID-only file and cleanup keeps PID lifecycle separate from config | implemented: `internal/app/runtime_setup_api_test.go` `TestRuntimePIDFileContainsPIDOnly` |
+| UC-SW-12 | Welcome actions before form | Step 1 shows `Start Setup` + `Import Existing Config` and hides editors until start | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields` |
+| UC-SW-13 | Import existing config action | Importing valid existing config clears setup-required state and returns sign-in form | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-13 setup-wizard-import-existing-config loads external config and exits setup mode`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupImportExistingConfigContract` |

@@ -1,4 +1,9 @@
 describe('SETUP-WIZ', () => {
+  function enterSetupFormMode() {
+    cy.get('[data-testid="setup-start"]').click();
+    cy.get('[data-testid="setup-instance-name"]').should('be.visible');
+  }
+
   beforeEach(() => {
     cy.e2eReset();
     cy.e2eBootstrap({ minimalProfile: true });
@@ -12,6 +17,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 1 OF 3');
     cy.get('[data-testid="setup-step-percent"]').should('contain.text', '33%');
     cy.get('[data-testid="setup-progress-bar"]')
@@ -27,7 +33,38 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-prev"]').should('not.be.disabled');
   });
 
+  it('UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields', () => {
+    cy.get('[data-testid="setup-start"]').should('be.visible');
+    cy.get('[data-testid="setup-import-toggle"]').should('be.visible');
+    cy.get('[data-testid="setup-instance-name"]').should('not.exist');
+    cy.get('[data-testid="setup-profile-key"]').should('not.exist');
+
+    cy.get('[data-testid="setup-start"]').click();
+    cy.get('[data-testid="setup-instance-name"]').should('be.visible');
+    cy.get('[data-testid="setup-profile-key"]').should('be.visible');
+  });
+
+  it('UC-SW-13 setup-wizard-import-existing-config loads external config and exits setup mode', () => {
+    cy.request('POST', '/api/test/runtime/setup-import-source', {
+      mode: 'valid',
+    })
+      .its('body')
+      .then((seed) => {
+        cy.get('[data-testid="setup-import-toggle"]').click();
+        cy.get('[data-testid="setup-import-source-path"]')
+          .clear()
+          .type(seed.source_path);
+        cy.get('[data-testid="setup-import-submit"]').click();
+      });
+
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+    cy.contains('Sign in').should('be.visible');
+
+    cy.request('GET', '/api/runtime/setup-status').its('body.setup_required').should('eq', false);
+  });
+
   it('UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Wave3 Instance');
     cy.get('[data-testid="setup-profile-key"]').clear().type('wave3-profile');
     cy.get('[data-testid="setup-next"]').click();
@@ -54,6 +91,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 3 OF 3');
@@ -65,6 +103,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-04 setup-wizard-completion-state shows runtime and storage details with start action', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-complete"]').click();
@@ -83,6 +122,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-08 setup-wizard-config-schema-write persists deterministic cabinet.json payload', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Primary');
     cy.get('[data-testid="setup-profile-key"]').clear().type('primary');
     cy.get('[data-testid="setup-next"]').click();
@@ -111,6 +151,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-09 setup-wizard-clerk-required-fields blocks completion when clerk key is missing', () => {
+    enterSetupFormMode();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-auth-mode"]').select('clerk');
     cy.get('[data-testid="setup-next"]').click();

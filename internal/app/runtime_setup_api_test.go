@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -275,5 +276,86 @@ func TestRuntimeSetupCompleteRequiresClerkPublishableKey(t *testing.T) {
 	}
 	if _, err := os.Stat(setupPath); !os.IsNotExist(err) {
 		t.Fatalf("setup file should not be created on validation failure")
+	}
+}
+
+func TestRuntimeSetupImportExistingConfigContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	payload, err := buildRuntimeSetupConfig(a.cfg, runtimeSetupRequest{
+		InstanceName: "Imported Instance",
+		ProfileKey:   "imported-profile",
+		AuthMode:     "local",
+	})
+	if err != nil {
+		t.Fatalf("buildRuntimeSetupConfig() error = %v", err)
+	}
+	sourcePath := filepath.Join(a.cfg.DataDir, "import-source.json")
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal import payload: %v", err)
+	}
+	raw = append(raw, '\n')
+	if err := os.WriteFile(sourcePath, raw, 0o644); err != nil {
+		t.Fatalf("write import source: %v", err)
+	}
+
+	resp := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-import",
+		strings.NewReader(fmt.Sprintf(`{"source_path":%q}`, sourcePath)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected setup-import 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var importPayload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &importPayload); err != nil {
+		t.Fatalf("decode import payload: %v", err)
+	}
+	if importPayload["ok"] != true {
+		t.Fatalf("expected ok=true from setup-import payload")
+	}
+	if importPayload["setup_required"] != false {
+		t.Fatalf("expected setup_required=false from setup-import payload")
+	}
+	if strings.TrimSpace(asString(importPayload["config_path"])) == "" {
+		t.Fatalf("expected config_path in setup-import payload")
+	}
+	status := doRequest(t, a, http.MethodGet, "/api/runtime/setup-status", nil, nil)
+	if status.Code != http.StatusOK {
+		t.Fatalf("setup-status after import expected 200, got %d body=%s", status.Code, status.Body.String())
+	}
+	var statusPayload map[string]any
+	if err := json.Unmarshal(status.Body.Bytes(), &statusPayload); err != nil {
+		t.Fatalf("decode setup-status payload: %v", err)
+	}
+	if statusPayload["setup_required"] != false {
+		t.Fatalf("expected setup_required=false after successful import, got %v", statusPayload["setup_required"])
+	}
+
+	invalid := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-import",
+		strings.NewReader(`{"source_path":""}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("expected setup-import 400 for missing source path, got %d body=%s", invalid.Code, invalid.Body.String())
+	}
+	var invalidPayload map[string]any
+	if err := json.Unmarshal(invalid.Body.Bytes(), &invalidPayload); err != nil {
+		t.Fatalf("decode invalid setup-import payload: %v", err)
+	}
+	if invalidPayload["error_code"] != "SETUP_IMPORT_SOURCE_PATH_REQUIRED" {
+		t.Fatalf("unexpected setup-import error code: %v", invalidPayload["error_code"])
 	}
 }

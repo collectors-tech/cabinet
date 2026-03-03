@@ -124,6 +124,62 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 		_, _ = w.Write(raw)
 	})
 
+	mux.HandleFunc("/api/test/runtime/setup-import-source", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Mode string `json:"mode"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		mode := strings.TrimSpace(strings.ToLower(req.Mode))
+		if mode == "" {
+			mode = "valid"
+		}
+		sourcePath := filepath.Join(cfg.DataDir, "setup-import-source.json")
+		if mode == "invalid" {
+			if err := os.WriteFile(sourcePath, []byte(`{"invalid":true}`), 0o644); err != nil {
+				http.Error(w, `{"error":"failed_to_write_import_source"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"mode":        "invalid",
+				"source_path": sourcePath,
+			})
+			return
+		}
+
+		payload, err := buildRuntimeSetupConfig(cfg, runtimeSetupRequest{
+			InstanceName: "Imported E2E Instance",
+			ProfileKey:   "imported-e2e",
+			AuthMode:     "local",
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_build_import_source"}`, http.StatusInternalServerError)
+			return
+		}
+		raw, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_encode_import_source"}`, http.StatusInternalServerError)
+			return
+		}
+		raw = append(raw, '\n')
+		if err := os.WriteFile(sourcePath, raw, 0o644); err != nil {
+			http.Error(w, `{"error":"failed_to_write_import_source"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"mode":        "valid",
+			"source_path": sourcePath,
+		})
+	})
+
 	mux.HandleFunc("/api/test/auth/provider-options", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)

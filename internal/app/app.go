@@ -277,6 +277,52 @@ func New(cfg config.Config) (*App, error) {
 			"runtime_port":   portFromResolvedURL(payload.Runtime.ResolvedURL),
 		})
 	})
+	mux.HandleFunc("/api/runtime/setup-import", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req runtimeSetupImportRequest
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		validationErr := validateRuntimeSetupImportRequest(req)
+		if validationErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "invalid_import_source",
+				"error_code":     validationErr.Code,
+				"message":        validationErr.Message,
+				"field":          validationErr.Field,
+				"setup_required": true,
+			})
+			return
+		}
+		importedPayload, err := importRuntimeSetupConfigFromPath(cfg, req.SourcePath)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "failed_to_import_setup_config",
+				"error_code":     "SETUP_IMPORT_FAILED",
+				"message":        err.Error(),
+				"field":          "source_path",
+				"setup_required": true,
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"setup_required": false,
+			"config_path":    runtimeSetupConfigPath(cfg),
+			"runtime_url":    importedPayload.Runtime.ResolvedURL,
+			"runtime_port":   portFromResolvedURL(importedPayload.Runtime.ResolvedURL),
+		})
+	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -3007,6 +3053,10 @@ type runtimeSetupRequest struct {
 	BootstrapDatabaseRef string `json:"bootstrap_database_ref"`
 }
 
+type runtimeSetupImportRequest struct {
+	SourcePath string `json:"source_path"`
+}
+
 type runtimeSetupValidationError struct {
 	Code    string
 	Message string
@@ -3227,6 +3277,17 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 	return nil
 }
 
+func validateRuntimeSetupImportRequest(req runtimeSetupImportRequest) *runtimeSetupValidationError {
+	if strings.TrimSpace(req.SourcePath) == "" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_IMPORT_SOURCE_PATH_REQUIRED",
+			Message: "Source path is required.",
+			Field:   "source_path",
+		}
+	}
+	return nil
+}
+
 func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtimeSetupConfigFile, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	profileKey := strings.TrimSpace(req.ProfileKey)
@@ -3301,6 +3362,73 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			CurrentURL:    fmt.Sprintf("http://%s:%d", host, port),
 		},
 	}, nil
+}
+
+func validateRuntimeSetupConfigFile(payload runtimeSetupConfigFile) error {
+	if strings.TrimSpace(payload.Instance.Name) == "" {
+		return fmt.Errorf("instance.name is required")
+	}
+	if strings.TrimSpace(payload.Instance.Profile) == "" {
+		return fmt.Errorf("instance.profile is required")
+	}
+	if strings.TrimSpace(payload.Storage.DataDir) == "" {
+		return fmt.Errorf("storage.dataDir is required")
+	}
+	if strings.TrimSpace(payload.Storage.MediaDir) == "" {
+		return fmt.Errorf("storage.mediaDir is required")
+	}
+	if strings.TrimSpace(payload.Runtime.ResolvedURL) == "" {
+		return fmt.Errorf("runtime.resolvedUrl is required")
+	}
+	authMode := strings.TrimSpace(strings.ToLower(payload.Auth.Mode))
+	if authMode == "" {
+		return fmt.Errorf("auth.mode is required")
+	}
+	if authMode != "local" && authMode != "clerk" {
+		return fmt.Errorf("auth.mode must be local or clerk")
+	}
+	if authMode == "clerk" && strings.TrimSpace(payload.Auth.Clerk.PublishableKey) == "" {
+		return fmt.Errorf("auth.clerk.publishableKey is required for clerk mode")
+	}
+	if strings.TrimSpace(payload.Meta.CreatedAt) == "" {
+		return fmt.Errorf("meta.createdAt is required")
+	}
+	if strings.TrimSpace(payload.Meta.UpdatedAt) == "" {
+		return fmt.Errorf("meta.updatedAt is required")
+	}
+	return nil
+}
+
+func importRuntimeSetupConfigFromPath(cfg config.Config, sourcePath string) (runtimeSetupConfigFile, error) {
+	raw, err := os.ReadFile(strings.TrimSpace(sourcePath))
+	if err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("failed to read source config")
+	}
+	var payload runtimeSetupConfigFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("source config is not valid JSON")
+	}
+	if err := validateRuntimeSetupConfigFile(payload); err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("source config validation failed: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if strings.TrimSpace(payload.Meta.CreatedAt) == "" {
+		payload.Meta.CreatedAt = now
+	}
+	payload.Meta.UpdatedAt = now
+	if strings.TrimSpace(payload.Meta.WizardVersion) == "" {
+		payload.Meta.WizardVersion = "1"
+	}
+	if strings.TrimSpace(payload.Runtime.ResolvedURL) == "" {
+		payload.Runtime.ResolvedURL = runtimeResolvedURLFromConfig(cfg)
+	}
+	if strings.TrimSpace(payload.Meta.CurrentURL) == "" {
+		payload.Meta.CurrentURL = strings.TrimSpace(payload.Runtime.ResolvedURL)
+	}
+	if err := writeRuntimeSetupConfig(cfg, payload); err != nil {
+		return runtimeSetupConfigFile{}, fmt.Errorf("failed to write imported setup config")
+	}
+	return payload, nil
 }
 
 const apiDocsHTML = `<!doctype html>
