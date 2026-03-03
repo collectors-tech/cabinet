@@ -26,6 +26,20 @@ Discover SHALL support ignore, wishlist, track, and create-item actions.
 ### Requirement UI-SCREEN-DISCOVER-003: Discover SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
+### Requirement UI-SCREEN-DISCOVER-004: Discoveries SHALL remain a triage workspace and MUST NOT expose provider query-run controls
+Discoveries MUST focus on triage actions for already discovered candidates and must not duplicate Market Watch query-set creation/run capabilities.
+
+#### Scenario: Discoveries boundary enforcement
+- **GIVEN** user is on Discoveries screen
+- **WHEN** screen actions render
+- **THEN** triage actions (ignore/wishlist/track/create item) MUST be available
+- **AND** provider query-set creation/run controls MUST NOT be present
+
+#### Scenario: Discoveries to Market Watch handoff
+- **GIVEN** user needs provider query-run workflow from Discoveries context
+- **WHEN** user selects handoff action
+- **THEN** app MUST route user to Market Watch with preserved context where applicable
+
 #### Scenario: Discover error state
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** discover API request fails
@@ -52,3 +66,5 @@ The screen SHALL support loading, empty, error, and ready states.
 | UC-DIS-04 | Track/create action | Pricing track or item create executes | planned: `cypress/e2e/ui/discover.cy.ts` `discover-track-create` |
 | UC-DIS-05 | Discover API failure | Error + retry appears | planned: `cypress/e2e/ui/discover.cy.ts` `discover-error-state` |
 | UC-DIS-06 | Apply Filters action | `Apply Filters` triggers deterministic filtered-query refresh | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discover-apply-filters` |
+| UC-DIS-07 | Boundary enforcement | Discoveries shows triage actions only; no provider query/run controls | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discoveries-no-market-watch-controls` |
+| UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discoveries-market-watch-handoff` |
