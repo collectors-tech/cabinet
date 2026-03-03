@@ -1,0 +1,1286 @@
+﻿[
+    {
+        "id":  "AI-ASSIST-001",
+        "spec":  "openspec\\specs\\chats\\ai-assist\\spec.md"
+    },
+    {
+        "id":  "AI-ASSIST-002",
+        "spec":  "openspec\\specs\\chats\\ai-assist\\spec.md"
+    },
+    {
+        "id":  "AI-ASSIST-003",
+        "spec":  "openspec\\specs\\chats\\ai-assist\\spec.md"
+    },
+    {
+        "id":  "AI-ASSIST-004",
+        "spec":  "openspec\\specs\\chats\\ai-assist\\spec.md"
+    },
+    {
+        "id":  "AI-GATEWAY-001",
+        "spec":  "openspec\\specs\\integrations\\ai-gateway\\spec.md"
+    },
+    {
+        "id":  "AI-GATEWAY-002",
+        "spec":  "openspec\\specs\\integrations\\ai-gateway\\spec.md"
+    },
+    {
+        "id":  "AI-GATEWAY-003",
+        "spec":  "openspec\\specs\\integrations\\ai-gateway\\spec.md"
+    },
+    {
+        "id":  "AI-GATEWAY-004",
+        "spec":  "openspec\\specs\\integrations\\ai-gateway\\spec.md"
+    },
+    {
+        "id":  "API-DOCS-001",
+        "spec":  "openspec\\specs\\general\\api-docs\\spec.md"
+    },
+    {
+        "id":  "API-DOCS-002",
+        "spec":  "openspec\\specs\\general\\api-docs\\spec.md"
+    },
+    {
+        "id":  "AUDIT-HISTORY-001",
+        "spec":  "openspec\\specs\\general\\audit-metadata-history\\spec.md"
+    },
+    {
+        "id":  "AUDIT-HISTORY-002",
+        "spec":  "openspec\\specs\\general\\audit-metadata-history\\spec.md"
+    },
+    {
+        "id":  "AUDIT-HISTORY-003",
+        "spec":  "openspec\\specs\\general\\audit-metadata-history\\spec.md"
+    },
+    {
+        "id":  "AUDIT-METADATA-001",
+        "spec":  "openspec\\specs\\general\\audit-metadata-history\\spec.md"
+    },
+    {
+        "id":  "AUDIT-METADATA-002",
+        "spec":  "openspec\\specs\\general\\audit-metadata-history\\spec.md"
+    },
+    {
+        "id":  "AUTH-001",
+        "spec":  "openspec\\specs\\general\\auth\\spec.md"
+    },
+    {
+        "id":  "AUTH-002",
+        "spec":  "openspec\\specs\\general\\auth\\spec.md"
+    },
+    {
+        "id":  "AUTH-003",
+        "spec":  "openspec\\specs\\general\\auth\\spec.md"
+    },
+    {
+        "id":  "AUTH-PERM-001",
+        "spec":  "openspec\\specs\\general\\auth-permissions-test-matrix\\spec.md"
+    },
+    {
+        "id":  "AUTH-PERM-002",
+        "spec":  "openspec\\specs\\general\\auth-permissions-test-matrix\\spec.md"
+    },
+    {
+        "id":  "AUTH-PERM-003",
+        "spec":  "openspec\\specs\\general\\auth-permissions-test-matrix\\spec.md"
+    },
+    {
+        "id":  "AUTH-PERM-004",
+        "spec":  "openspec\\specs\\general\\auth-permissions-test-matrix\\spec.md"
+    },
+    {
+        "id":  "AUTH-PERM-005",
+        "spec":  "openspec\\specs\\general\\auth-permissions-test-matrix\\spec.md"
+    },
+    {
+        "id":  "BARCODES-001",
+        "spec":  "openspec\\specs\\inventory\\barcodes\\spec.md"
+    },
+    {
+        "id":  "BARCODES-002",
+        "spec":  "openspec\\specs\\inventory\\barcodes\\spec.md"
+    },
+    {
+        "id":  "CANDIDATES-001",
+        "spec":  "openspec\\specs\\integrations\\candidates\\spec.md"
+    },
+    {
+        "id":  "CANDIDATES-002",
+        "spec":  "openspec\\specs\\integrations\\candidates\\spec.md"
+    },
+    {
+        "id":  "CHAT-COPILOT-001",
+        "spec":  "openspec\\specs\\chats\\chat-copilot\\spec.md"
+    },
+    {
+        "id":  "CHAT-COPILOT-002",
+        "spec":  "openspec\\specs\\chats\\chat-copilot\\spec.md"
+    },
+    {
+        "id":  "CHAT-COPILOT-003",
+        "spec":  "openspec\\specs\\chats\\chat-copilot\\spec.md"
+    },
+    {
+        "id":  "CHAT-COPILOT-004",
+        "spec":  "openspec\\specs\\chats\\chat-copilot\\spec.md"
+    },
+    {
+        "id":  "CLOUD-AUTH-BILLING-001",
+        "spec":  "openspec\\specs\\general\\cloud-auth-billing\\spec.md"
+    },
+    {
+        "id":  "CLOUD-AUTH-BILLING-002",
+        "spec":  "openspec\\specs\\general\\cloud-auth-billing\\spec.md"
+    },
+    {
+        "id":  "CLOUD-AUTH-BILLING-003",
+        "spec":  "openspec\\specs\\general\\cloud-auth-billing\\spec.md"
+    },
+    {
+        "id":  "CLOUD-AUTH-BILLING-004",
+        "spec":  "openspec\\specs\\general\\cloud-auth-billing\\spec.md"
+    },
+    {
+        "id":  "CLOUD-AUTH-BILLING-005",
+        "spec":  "openspec\\specs\\general\\cloud-auth-billing\\spec.md"
+    },
+    {
+        "id":  "COLLECTION-DOMAIN-001",
+        "spec":  "openspec\\specs\\inventory\\collection-domain\\spec.md"
+    },
+    {
+        "id":  "COLLECTION-DOMAIN-002",
+        "spec":  "openspec\\specs\\inventory\\collection-domain\\spec.md"
+    },
+    {
+        "id":  "COLLECTION-DOMAIN-003",
+        "spec":  "openspec\\specs\\inventory\\collection-domain\\spec.md"
+    },
+    {
+        "id":  "COLLECTION-DOMAIN-004",
+        "spec":  "openspec\\specs\\inventory\\collection-domain\\spec.md"
+    },
+    {
+        "id":  "DATA-MANAGEMENT-001",
+        "spec":  "openspec\\specs\\general\\data-management\\spec.md"
+    },
+    {
+        "id":  "DATA-MANAGEMENT-002",
+        "spec":  "openspec\\specs\\general\\data-management\\spec.md"
+    },
+    {
+        "id":  "DIAGNOSTICS-001",
+        "spec":  "openspec\\specs\\general\\diagnostics\\spec.md"
+    },
+    {
+        "id":  "DIAGNOSTICS-002",
+        "spec":  "openspec\\specs\\general\\diagnostics\\spec.md"
+    },
+    {
+        "id":  "DIAGNOSTICS-003",
+        "spec":  "openspec\\specs\\general\\diagnostics\\spec.md"
+    },
+    {
+        "id":  "DIAGNOSTICS-004",
+        "spec":  "openspec\\specs\\general\\diagnostics\\spec.md"
+    },
+    {
+        "id":  "DISCOVERY-001",
+        "spec":  "openspec\\specs\\dashboard\\discovery\\spec.md"
+    },
+    {
+        "id":  "DISCOVERY-002",
+        "spec":  "openspec\\specs\\dashboard\\discovery\\spec.md"
+    },
+    {
+        "id":  "DOCUMENTATION-GOVERNANCE-001",
+        "spec":  "openspec\\specs\\general\\documentation-governance\\spec.md"
+    },
+    {
+        "id":  "DOCUMENTATION-GOVERNANCE-002",
+        "spec":  "openspec\\specs\\general\\documentation-governance\\spec.md"
+    },
+    {
+        "id":  "DOCUMENTATION-GOVERNANCE-003",
+        "spec":  "openspec\\specs\\general\\documentation-governance\\spec.md"
+    },
+    {
+        "id":  "DOCUMENTATION-GOVERNANCE-004",
+        "spec":  "openspec\\specs\\general\\documentation-governance\\spec.md"
+    },
+    {
+        "id":  "DOCUMENTATION-GOVERNANCE-005",
+        "spec":  "openspec\\specs\\general\\documentation-governance\\spec.md"
+    },
+    {
+        "id":  "ENTITLEMENTS-001",
+        "spec":  "openspec\\specs\\general\\entitlements\\spec.md"
+    },
+    {
+        "id":  "ERRORS-001",
+        "spec":  "openspec\\specs\\general\\errors\\spec.md"
+    },
+    {
+        "id":  "ERRORS-002",
+        "spec":  "openspec\\specs\\general\\errors\\spec.md"
+    },
+    {
+        "id":  "ERRORS-003",
+        "spec":  "openspec\\specs\\general\\errors\\spec.md"
+    },
+    {
+        "id":  "FUTURE-HOOKS-001",
+        "spec":  "openspec\\specs\\general\\future-hooks\\spec.md"
+    },
+    {
+        "id":  "FUTURE-HOOKS-002",
+        "spec":  "openspec\\specs\\general\\future-hooks\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-001",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-002",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-003",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-004",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-005",
+        "spec":  "openspec\\specs\\integrations\\provider-ebay\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-006",
+        "spec":  "openspec\\specs\\integrations\\provider-ebay\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-007",
+        "spec":  "openspec\\specs\\integrations\\provider-ebay\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-008",
+        "spec":  "openspec\\specs\\integrations\\provider-amazon\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-009",
+        "spec":  "openspec\\specs\\integrations\\provider-amazon\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-010",
+        "spec":  "openspec\\specs\\integrations\\provider-amazon\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-011",
+        "spec":  "openspec\\specs\\integrations\\provider-au-webshops\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-012",
+        "spec":  "openspec\\specs\\integrations\\provider-au-webshops\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-013",
+        "spec":  "openspec\\specs\\integrations\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-014",
+        "spec":  "openspec\\specs\\integrations\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-015",
+        "spec":  "openspec\\specs\\integrations\\scanner\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-016",
+        "spec":  "openspec\\specs\\integrations\\default-site-search\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-017",
+        "spec":  "openspec\\specs\\integrations\\default-site-search\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-018",
+        "spec":  "openspec\\specs\\integrations\\provider-shop-catalog\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-019",
+        "spec":  "openspec\\specs\\integrations\\provider-shop-catalog\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-020",
+        "spec":  "openspec\\specs\\integrations\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-021",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-022",
+        "spec":  "openspec\\specs\\integrations\\spec.md"
+    },
+    {
+        "id":  "INTEGRATION-023",
+        "spec":  "openspec\\specs\\integrations\\provider-registry\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-DELETE-LIFECYCLE-001",
+        "spec":  "openspec\\specs\\inventory\\inventory-delete-lifecycle\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-DELETE-LIFECYCLE-002",
+        "spec":  "openspec\\specs\\inventory\\inventory-delete-lifecycle\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-DELETE-LIFECYCLE-003",
+        "spec":  "openspec\\specs\\inventory\\inventory-delete-lifecycle\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-GRADING-001",
+        "spec":  "openspec\\specs\\inventory\\inventory-grading\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-GRADING-002",
+        "spec":  "openspec\\specs\\inventory\\inventory-grading\\spec.md"
+    },
+    {
+        "id":  "INVENTORY-GRADING-003",
+        "spec":  "openspec\\specs\\inventory\\inventory-grading\\spec.md"
+    },
+    {
+        "id":  "LICENSING-001",
+        "spec":  "openspec\\specs\\general\\licensing\\spec.md"
+    },
+    {
+        "id":  "LICENSING-002",
+        "spec":  "openspec\\specs\\general\\licensing\\spec.md"
+    },
+    {
+        "id":  "LOGGING-001",
+        "spec":  "openspec\\specs\\general\\logging\\spec.md"
+    },
+    {
+        "id":  "LOGGING-002",
+        "spec":  "openspec\\specs\\general\\logging\\spec.md"
+    },
+    {
+        "id":  "LOGGING-003",
+        "spec":  "openspec\\specs\\general\\logging\\spec.md"
+    },
+    {
+        "id":  "LOGGING-004",
+        "spec":  "openspec\\specs\\general\\logging\\spec.md"
+    },
+    {
+        "id":  "LOOKUP-001",
+        "spec":  "openspec\\specs\\inventory\\lookup\\spec.md"
+    },
+    {
+        "id":  "MATCHING-001",
+        "spec":  "openspec\\specs\\inventory\\matching\\spec.md"
+    },
+    {
+        "id":  "MATCHING-002",
+        "spec":  "openspec\\specs\\inventory\\matching\\spec.md"
+    },
+    {
+        "id":  "MEDIA-AI-ASSIGNMENT-001",
+        "spec":  "openspec\\specs\\inventory\\media-ai-assignment\\spec.md"
+    },
+    {
+        "id":  "MEDIA-AI-ASSIGNMENT-002",
+        "spec":  "openspec\\specs\\inventory\\media-ai-assignment\\spec.md"
+    },
+    {
+        "id":  "MEDIA-AI-ASSIGNMENT-003",
+        "spec":  "openspec\\specs\\inventory\\media-ai-assignment\\spec.md"
+    },
+    {
+        "id":  "MEDIA-AI-ASSIGNMENT-004",
+        "spec":  "openspec\\specs\\inventory\\media-ai-assignment\\spec.md"
+    },
+    {
+        "id":  "MEDIA-AI-ASSIGNMENT-005",
+        "spec":  "openspec\\specs\\inventory\\media-ai-assignment\\spec.md"
+    },
+    {
+        "id":  "MEDIA-LINKAGE-001",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-LINKAGE-002",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-001",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-002",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-003",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-004",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-005",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-006",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-007",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-008",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-009",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-010",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MEDIA-STORAGE-011",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "MOBILE-CAMERA-001",
+        "spec":  "openspec\\specs\\inventory\\mobile-camera-capture\\spec.md"
+    },
+    {
+        "id":  "MOBILE-CAMERA-002",
+        "spec":  "openspec\\specs\\inventory\\mobile-camera-capture\\spec.md"
+    },
+    {
+        "id":  "NON-FUNCTIONAL-001",
+        "spec":  "openspec\\specs\\general\\non-functional\\spec.md"
+    },
+    {
+        "id":  "NON-FUNCTIONAL-002",
+        "spec":  "openspec\\specs\\general\\non-functional\\spec.md"
+    },
+    {
+        "id":  "ONBOARDING-STARTER-DATA-001",
+        "spec":  "openspec\\specs\\general\\onboarding-starter-data\\spec.md"
+    },
+    {
+        "id":  "ONBOARDING-STARTER-DATA-002",
+        "spec":  "openspec\\specs\\general\\onboarding-starter-data\\spec.md"
+    },
+    {
+        "id":  "ONBOARDING-STARTER-DATA-003",
+        "spec":  "openspec\\specs\\general\\onboarding-starter-data\\spec.md"
+    },
+    {
+        "id":  "OPS-001",
+        "spec":  "openspec\\specs\\integrations\\provider-au-webshops\\spec.md"
+    },
+    {
+        "id":  "PHOTOS-MEDIA-001",
+        "spec":  "openspec\\specs\\inventory\\photos-media\\spec.md"
+    },
+    {
+        "id":  "PHOTOS-MEDIA-002",
+        "spec":  "openspec\\specs\\inventory\\photos-media\\spec.md"
+    },
+    {
+        "id":  "PHOTOS-MEDIA-003",
+        "spec":  "openspec\\specs\\inventory\\photos-media\\spec.md"
+    },
+    {
+        "id":  "PHOTOS-MEDIA-004",
+        "spec":  "openspec\\specs\\inventory\\photos-media\\spec.md"
+    },
+    {
+        "id":  "PROFILES-001",
+        "spec":  "openspec\\specs\\users\\profiles\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-CLAUDE-001",
+        "spec":  "openspec\\specs\\integrations\\provider-claude\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-CLAUDE-002",
+        "spec":  "openspec\\specs\\integrations\\provider-claude\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-CLAUDE-003",
+        "spec":  "openspec\\specs\\integrations\\provider-claude\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-GEMINI-001",
+        "spec":  "openspec\\specs\\integrations\\provider-gemini\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-GEMINI-002",
+        "spec":  "openspec\\specs\\integrations\\provider-gemini\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-GEMINI-003",
+        "spec":  "openspec\\specs\\integrations\\provider-gemini\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-OPENAI-001",
+        "spec":  "openspec\\specs\\integrations\\provider-openai\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-OPENAI-002",
+        "spec":  "openspec\\specs\\integrations\\provider-openai\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-OPENAI-003",
+        "spec":  "openspec\\specs\\integrations\\provider-openai\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-OPENAI-004",
+        "spec":  "openspec\\specs\\integrations\\provider-openai\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-WORKFLOW-001",
+        "spec":  "openspec\\specs\\integrations\\provider-workflow-template\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-WORKFLOW-002",
+        "spec":  "openspec\\specs\\integrations\\provider-workflow-template\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-WORKFLOW-003",
+        "spec":  "openspec\\specs\\integrations\\provider-workflow-template\\spec.md"
+    },
+    {
+        "id":  "PROVIDER-WORKFLOW-004",
+        "spec":  "openspec\\specs\\integrations\\provider-workflow-template\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-CONFIG-ENV-001",
+        "spec":  "openspec\\specs\\general\\runtime-config-env\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-CONFIG-ENV-002",
+        "spec":  "openspec\\specs\\general\\runtime-config-env\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-CORE-001",
+        "spec":  "openspec\\specs\\general\\runtime-core\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-CORE-002",
+        "spec":  "openspec\\specs\\general\\runtime-core\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-CORE-003",
+        "spec":  "openspec\\specs\\general\\runtime-core\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-NETWORK-LAN-001",
+        "spec":  "openspec\\specs\\general\\runtime-network-lan\\spec.md"
+    },
+    {
+        "id":  "RUNTIME-NETWORK-LAN-002",
+        "spec":  "openspec\\specs\\general\\runtime-network-lan\\spec.md"
+    },
+    {
+        "id":  "SCANNER-001",
+        "spec":  "openspec\\specs\\integrations\\scanner\\spec.md"
+    },
+    {
+        "id":  "SCANNER-002",
+        "spec":  "openspec\\specs\\integrations\\scanner\\spec.md"
+    },
+    {
+        "id":  "SCANNER-003",
+        "spec":  "openspec\\specs\\integrations\\scanner\\spec.md"
+    },
+    {
+        "id":  "SEARCH-001",
+        "spec":  "openspec\\specs\\inventory\\search\\spec.md"
+    },
+    {
+        "id":  "SEARCH-002",
+        "spec":  "openspec\\specs\\inventory\\search\\spec.md"
+    },
+    {
+        "id":  "SECURITY-001",
+        "spec":  "openspec\\specs\\general\\security\\spec.md"
+    },
+    {
+        "id":  "SECURITY-002",
+        "spec":  "openspec\\specs\\general\\security\\spec.md"
+    },
+    {
+        "id":  "SETTINGS-001",
+        "spec":  "openspec\\specs\\settings\\spec.md"
+    },
+    {
+        "id":  "SETTINGS-002",
+        "spec":  "openspec\\specs\\settings\\spec.md"
+    },
+    {
+        "id":  "UI-DATA-CONTRACT-PARITY-001",
+        "spec":  "openspec\\specs\\general\\ui-data-contract-parity\\spec.md"
+    },
+    {
+        "id":  "UI-DATA-CONTRACT-PARITY-002",
+        "spec":  "openspec\\specs\\general\\ui-data-contract-parity\\spec.md"
+    },
+    {
+        "id":  "UI-DATA-CONTRACT-PARITY-003",
+        "spec":  "openspec\\specs\\general\\ui-data-contract-parity\\spec.md"
+    },
+    {
+        "id":  "UI-DATA-CONTRACT-PARITY-004",
+        "spec":  "openspec\\specs\\general\\ui-data-contract-parity\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-ACCESSIBILITY-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-accessibility\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-ACCESSIBILITY-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-accessibility\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-ACCESSIBILITY-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-accessibility\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-AUTH-MENUS-SHORTCUTS-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-auth-menus-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-AUTH-MENUS-SHORTCUTS-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-auth-menus-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-AUTH-MENUS-SHORTCUTS-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-auth-menus-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-COMPONENTS-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-components\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-COMPONENTS-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-components\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-COMPONENTS-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-components\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-COMPONENTS-004",
+        "spec":  "openspec\\specs\\general\\ui-foundation-components\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-COMPONENTS-005",
+        "spec":  "openspec\\specs\\general\\ui-foundation-components\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-INTERACTIONS-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-interactions\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-INTERACTIONS-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-interactions\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-INTERACTIONS-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-interactions\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-004",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-005",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-006",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-007",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-008",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-009",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-SHELL-NAVIGATION-010",
+        "spec":  "openspec\\specs\\general\\ui-foundation-shell-navigation\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-THEME-RTL-I18N-001",
+        "spec":  "openspec\\specs\\general\\ui-foundation-theme-rtl-i18n\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-THEME-RTL-I18N-002",
+        "spec":  "openspec\\specs\\general\\ui-foundation-theme-rtl-i18n\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-THEME-RTL-I18N-003",
+        "spec":  "openspec\\specs\\general\\ui-foundation-theme-rtl-i18n\\spec.md"
+    },
+    {
+        "id":  "UI-FOUNDATION-THEME-RTL-I18N-004",
+        "spec":  "openspec\\specs\\general\\ui-foundation-theme-rtl-i18n\\spec.md"
+    },
+    {
+        "id":  "UI-GLOBAL-SEARCH-COMMAND-001",
+        "spec":  "openspec\\specs\\general\\ui-global-search-command\\spec.md"
+    },
+    {
+        "id":  "UI-GLOBAL-SEARCH-COMMAND-002",
+        "spec":  "openspec\\specs\\general\\ui-global-search-command\\spec.md"
+    },
+    {
+        "id":  "UI-GLOBAL-SEARCH-COMMAND-003",
+        "spec":  "openspec\\specs\\general\\ui-global-search-command\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-001",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-002",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-003",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-004",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-005",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-GOVERNANCE-GATES-006",
+        "spec":  "openspec\\specs\\general\\ui-governance-gates\\spec.md"
+    },
+    {
+        "id":  "UI-KEYBOARD-SHORTCUTS-001",
+        "spec":  "openspec\\specs\\general\\ui-keyboard-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-KEYBOARD-SHORTCUTS-002",
+        "spec":  "openspec\\specs\\general\\ui-keyboard-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-KEYBOARD-SHORTCUTS-003",
+        "spec":  "openspec\\specs\\general\\ui-keyboard-shortcuts\\spec.md"
+    },
+    {
+        "id":  "UI-LOGIN-SESSION-001",
+        "spec":  "openspec\\specs\\general\\ui-login-session\\spec.md"
+    },
+    {
+        "id":  "UI-LOGIN-SESSION-002",
+        "spec":  "openspec\\specs\\general\\ui-login-session\\spec.md"
+    },
+    {
+        "id":  "UI-LOGIN-SESSION-003",
+        "spec":  "openspec\\specs\\general\\ui-login-session\\spec.md"
+    },
+    {
+        "id":  "UI-PERFORMANCE-001",
+        "spec":  "openspec\\specs\\general\\ui-performance\\spec.md"
+    },
+    {
+        "id":  "UI-PERFORMANCE-002",
+        "spec":  "openspec\\specs\\general\\ui-performance\\spec.md"
+    },
+    {
+        "id":  "UI-ROUTE-COVERAGE-001",
+        "spec":  "openspec\\specs\\general\\ui-route-coverage\\spec.md"
+    },
+    {
+        "id":  "UI-ROUTE-COVERAGE-002",
+        "spec":  "openspec\\specs\\general\\ui-route-coverage\\spec.md"
+    },
+    {
+        "id":  "UI-ROUTE-COVERAGE-003",
+        "spec":  "openspec\\specs\\general\\ui-route-coverage\\spec.md"
+    },
+    {
+        "id":  "UI-SCALE-001",
+        "spec":  "openspec\\specs\\general\\ui-scale\\spec.md"
+    },
+    {
+        "id":  "UI-SCALE-002",
+        "spec":  "openspec\\specs\\general\\ui-scale\\spec.md"
+    },
+    {
+        "id":  "UI-SCALE-003",
+        "spec":  "openspec\\specs\\general\\ui-scale\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-001",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-002",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-003",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-004",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-005",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-006",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-007",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-CHAT-COPILOT-008",
+        "spec":  "openspec\\specs\\chats\\ui-screen-chat-copilot\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-COLLECTIONS-001",
+        "spec":  "openspec\\specs\\collections\\ui-screen-collections\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-COLLECTIONS-002",
+        "spec":  "openspec\\specs\\collections\\ui-screen-collections\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-COLLECTIONS-003",
+        "spec":  "openspec\\specs\\collections\\ui-screen-collections\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-DISCOVER-001",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-discover\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-DISCOVER-002",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-discover\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-DISCOVER-003",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-discover\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-HELP-CENTER-001",
+        "spec":  "openspec\\specs\\helpcenter\\ui-screen-help-center\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-HELP-CENTER-002",
+        "spec":  "openspec\\specs\\helpcenter\\ui-screen-help-center\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-HOME-001",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-home\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-HOME-002",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-home\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-HOME-003",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-home\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-001",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-002",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-003",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-004",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-005",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-006",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INTEGRATIONS-007",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-integrations\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-AI-ASSIST-001",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-ai-assist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-AI-ASSIST-002",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-ai-assist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-AI-ASSIST-003",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-ai-assist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-BARCODES-001",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-barcodes\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-BARCODES-002",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-barcodes\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-BARCODES-003",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-barcodes\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-001",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-002",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-003",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-004",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-005",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-006",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-007",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-008",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-FOLDER-TREE-009",
+        "spec":  "openspec\\specs\\inventory\\folder-tree-control\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-001",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-002",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-003",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-004",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-005",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-ITEMS-006",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-items\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-PHOTOS-001",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-photos\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-PHOTOS-002",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-photos\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-INVENTORY-PHOTOS-003",
+        "spec":  "openspec\\specs\\inventory\\ui-screen-inventory-photos\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-MEDIA-001",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-MEDIA-002",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-MEDIA-003",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-MEDIA-004",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-MEDIA-005",
+        "spec":  "openspec\\specs\\media\\ui-screen-media\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-001",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-002",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-003",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-006",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-007",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-ONBOARDING-AUTH-008",
+        "spec":  "openspec\\specs\\general\\ui-screen-onboarding-auth\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-REPORTS-001",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-reports\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-REPORTS-002",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-reports\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-REPORTS-003",
+        "spec":  "openspec\\specs\\dashboard\\ui-screen-reports\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SCANNER-001",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-scanner\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SCANNER-002",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-scanner\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SCANNER-003",
+        "spec":  "openspec\\specs\\integrations\\ui-screen-scanner\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-001",
+        "spec":  "openspec\\specs\\settings\\ui-screen-settings\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-002",
+        "spec":  "openspec\\specs\\settings\\ui-screen-settings\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-003",
+        "spec":  "openspec\\specs\\settings\\ui-screen-settings\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-ACCOUNT-001",
+        "spec":  "openspec\\specs\\settings\\account\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-ACCOUNT-002",
+        "spec":  "openspec\\specs\\settings\\account\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-APPEARANCE-001",
+        "spec":  "openspec\\specs\\settings\\appearance\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-APPEARANCE-002",
+        "spec":  "openspec\\specs\\settings\\appearance\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-APPEARANCE-003",
+        "spec":  "openspec\\specs\\settings\\appearance\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-DISPLAY-001",
+        "spec":  "openspec\\specs\\settings\\display\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-DISPLAY-002",
+        "spec":  "openspec\\specs\\settings\\display\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-NOTIFICATIONS-001",
+        "spec":  "openspec\\specs\\settings\\notifications\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-NOTIFICATIONS-002",
+        "spec":  "openspec\\specs\\settings\\notifications\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-PROFILE-001",
+        "spec":  "openspec\\specs\\settings\\profile\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-PROFILE-002",
+        "spec":  "openspec\\specs\\settings\\profile\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-STORAGE-001",
+        "spec":  "openspec\\specs\\settings\\storage\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-STORAGE-002",
+        "spec":  "openspec\\specs\\settings\\storage\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-STORAGE-003",
+        "spec":  "openspec\\specs\\settings\\storage\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-STORAGE-004",
+        "spec":  "openspec\\specs\\settings\\storage\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-SETTINGS-STORAGE-005",
+        "spec":  "openspec\\specs\\settings\\storage\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-USERS-001",
+        "spec":  "openspec\\specs\\users\\ui-screen-users\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-USERS-002",
+        "spec":  "openspec\\specs\\users\\ui-screen-users\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-USERS-003",
+        "spec":  "openspec\\specs\\users\\ui-screen-users\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-WISHLIST-001",
+        "spec":  "openspec\\specs\\wishlist\\ui-screen-wishlist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-WISHLIST-002",
+        "spec":  "openspec\\specs\\wishlist\\ui-screen-wishlist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-WISHLIST-003",
+        "spec":  "openspec\\specs\\wishlist\\ui-screen-wishlist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-WISHLIST-004",
+        "spec":  "openspec\\specs\\wishlist\\ui-screen-wishlist\\spec.md"
+    },
+    {
+        "id":  "UI-SCREEN-WISHLIST-005",
+        "spec":  "openspec\\specs\\wishlist\\ui-screen-wishlist\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-001",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-002",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-003",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-004",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-005",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-006",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-SEMANTIC-COMPONENT-LAYER-007",
+        "spec":  "openspec\\specs\\general\\ui-semantic-component-layer\\spec.md"
+    },
+    {
+        "id":  "UI-THEME-SELECTION-001",
+        "spec":  "openspec\\specs\\general\\ui-theme-selection\\spec.md"
+    },
+    {
+        "id":  "UI-THEME-SELECTION-002",
+        "spec":  "openspec\\specs\\general\\ui-theme-selection\\spec.md"
+    },
+    {
+        "id":  "UI-THEME-SELECTION-003",
+        "spec":  "openspec\\specs\\general\\ui-theme-selection\\spec.md"
+    },
+    {
+        "id":  "WISHLIST-PRICING-DASHBOARD-001",
+        "spec":  "openspec\\specs\\wishlist\\wishlist-items\\spec.md"
+    },
+    {
+        "id":  "WISHLIST-PRICING-DASHBOARD-002",
+        "spec":  "openspec\\specs\\wishlist\\pricing-tracking\\spec.md"
+    },
+    {
+        "id":  "WISHLIST-PRICING-DASHBOARD-003",
+        "spec":  "openspec\\specs\\wishlist\\pricing-tracking\\spec.md"
+    },
+    {
+        "id":  "WISHLIST-PRICING-DASHBOARD-004",
+        "spec":  "openspec\\specs\\dashboard\\dashboard-attention-signals\\spec.md"
+    }
+]

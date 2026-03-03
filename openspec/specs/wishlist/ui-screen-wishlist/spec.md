@@ -21,6 +21,14 @@ Wishlist screen SHALL expose primary actions for create and import dialogs.
 ### Requirement UI-SCREEN-WISHLIST-003: Wishlist screen SHALL support selection and bulk action affordances
 Wishlist screen SHALL support row/card selection and bulk action controls.
 
+### Requirement UI-SCREEN-WISHLIST-006: Wishlist table SHALL support title sorting
+Wishlist table rows view SHALL expose sortable `Title` column with deterministic ordering behavior.
+
+#### Scenario: Sort wishlist by title
+- **GIVEN** wishlist rows view is visible
+- **WHEN** user clicks `Title` column sort control
+- **THEN** wishlist entries MUST reorder by title with deterministic ascending/descending toggle behavior
+
 #### Scenario: Select multiple wishlist entries
 - **GIVEN** wishlist rows/cards are visible
 - **WHEN** user selects multiple entries
@@ -50,3 +58,4 @@ Wishlist detail collection picker MUST support `+ New Collection` inline create.
 | UC-WSH-01 | Filter wishlist and switch views | List updates and view mode persists | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-filter-view-toggle` |
 | UC-WSH-02 | Open create/import | Correct dialog/drawer opens | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-create-import` |
 | UC-WSH-03 | Bulk select wishlist entries | Bulk controls appear with stable selection state | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-bulk-actions` |
+| UC-WSH-04 | Sort wishlist by title | Title sort control reorders rows deterministically | planned: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `wishlist-title-sort` |

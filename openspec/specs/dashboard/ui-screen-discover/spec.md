@@ -10,6 +10,11 @@ Discover SHALL support query/price/date filtering and list rendering.
 - **WHEN** user applies filters
 - **THEN** discover list SHALL render filtered candidates
 
+#### Scenario: Apply Filters control triggers deterministic query update
+- **GIVEN** discover filter inputs are populated
+- **WHEN** user clicks `Apply Filters`
+- **THEN** screen MUST execute filtered query and refresh candidate list without route transition
+
 ### Requirement UI-SCREEN-DISCOVER-002: Discover SHALL support all primary candidate actions
 Discover SHALL support ignore, wishlist, track, and create-item actions.
 
@@ -46,3 +51,4 @@ The screen SHALL support loading, empty, error, and ready states.
 | UC-DIS-03 | Add to wishlist action | Wishlist linkage created | planned: `cypress/e2e/ui/discover.cy.ts` `discover-wishlist` |
 | UC-DIS-04 | Track/create action | Pricing track or item create executes | planned: `cypress/e2e/ui/discover.cy.ts` `discover-track-create` |
 | UC-DIS-05 | Discover API failure | Error + retry appears | planned: `cypress/e2e/ui/discover.cy.ts` `discover-error-state` |
+| UC-DIS-06 | Apply Filters action | `Apply Filters` triggers deterministic filtered-query refresh | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discover-apply-filters` |

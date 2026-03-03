@@ -5,6 +5,11 @@ Define Scanner screen behavior for query set management, execution, and diagnost
 ### Requirement UI-SCREEN-SCANNER-001: Scanner SHALL support query set CRUD and run controls
 Scanner SHALL allow creating/loading query sets and triggering manual/scheduled runs.
 
+#### Scenario: Create Query Set action
+- **GIVEN** scanner route is loaded
+- **WHEN** user enters query set name/keywords and clicks `Create Query Set`
+- **THEN** query set MUST be created and displayed in scanner list with deterministic success/error feedback
+
 #### Scenario: Run query set
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user runs a selected query set
@@ -46,3 +51,4 @@ The screen SHALL support loading, empty, error, and ready states for query sets 
 | UC-SCN-03 | Retry failed run | Retry attempt updates status | planned: `cypress/e2e/ui/scanner.cy.ts` `scanner-retry-failure` |
 | UC-SCN-04 | No query sets | Empty guidance appears | planned: `cypress/e2e/ui/scanner.cy.ts` `scanner-empty-state` |
 | UC-SCN-05 | Scanner API failure | Error + retry shown | planned: `cypress/e2e/ui/scanner.cy.ts` `scanner-error-state` |
+| UC-SCN-06 | Create query set from form | New query set appears after `Create Query Set` action | planned: `ui.web/cypress/e2e/integrations/ui-screen-scanner/spec.cy.ts` `scanner-create-query-set` |

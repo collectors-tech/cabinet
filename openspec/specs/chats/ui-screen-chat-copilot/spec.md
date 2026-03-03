@@ -13,6 +13,16 @@ Chat SHALL support local profile-scoped thread and message persistence.
 ### Requirement UI-SCREEN-CHAT-COPILOT-002: Chat Copilot SHALL support attachment and action preview flows
 Chat SHALL support user-selected file attachments and preview-before-apply actions.
 
+#### Scenario: Upload attachment from chat panel
+- **GIVEN** user is on Chats screen with active thread context
+- **WHEN** user clicks `Upload` and selects a file
+- **THEN** attachment MUST be linked to chat context with deterministic success/error feedback
+
+#### Scenario: Preview action before apply
+- **GIVEN** chat action draft fields are available
+- **WHEN** user clicks `Preview Action`
+- **THEN** UI MUST render preview output without mutating persisted records
+
 #### Scenario: Apply action from preview
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user confirms apply for previewed action
@@ -52,6 +62,27 @@ Cabinet SHALL store maximal practical analysis metadata for each analyzed asset 
 - **WHEN** user opens media card, inventory assignment, wishlist assignment, or follow-up chat
 - **THEN** runtime/UI MUST retrieve and use stored metadata without requiring re-analysis unless explicitly requested
 
+### Requirement UI-SCREEN-CHAT-COPILOT-007: Chat Copilot SHALL support inventory and wishlist CRUD assistance with confirm-before-apply
+Copilot SHALL assist with creating/updating inventory and wishlist records, but MUST require explicit user confirmation before mutating data.
+
+#### Scenario: Update existing inventory item via chat
+- **GIVEN** user asks copilot to update an inventory item
+- **WHEN** copilot proposes field changes
+- **THEN** UI MUST present confirmation summary and only apply changes after explicit confirm action
+
+#### Scenario: Create new item/wishlist entry via chat
+- **GIVEN** user requests creation of new record in chat
+- **WHEN** copilot returns structured draft payload
+- **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
+
+### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
+Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
+
+#### Scenario: Mobile image-to-inventory flow
+- **GIVEN** user is on mobile chat and attaches an image
+- **WHEN** copilot analyzes image and suggests structured fields
+- **THEN** user MUST be able to confirm and create/update target record with linked media asset
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-006: Header chat trigger SHALL render as icon-only control
 Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (no inline text label in header row).
 
@@ -82,3 +113,5 @@ Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (n
 | UC-CHAT-03 | Add attachment | Attachment linked to thread | planned: `cypress/e2e/ui/chat.cy.ts` `chat-attachment` |
 | UC-CHAT-04 | Preview and apply action | Confirm-before-apply enforced | planned: `cypress/e2e/ui/chat.cy.ts` `chat-guarded-apply` |
 | UC-CHAT-05 | Chat API failure | Error + retry appears | planned: `cypress/e2e/ui/chat.cy.ts` `chat-error-state` |
+| UC-CHAT-06 | Upload attachment | `Upload` links file to chat context | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-upload-attachment` |
+| UC-CHAT-07 | Preview action | `Preview Action` renders dry-run output before apply | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-preview-action` |

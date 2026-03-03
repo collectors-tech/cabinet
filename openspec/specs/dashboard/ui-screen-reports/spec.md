@@ -13,6 +13,19 @@ Reports SHALL provide summary metrics for wishlist hits, trends, stats, and sour
 ### Requirement UI-SCREEN-REPORTS-002: Reports SHALL support export operations
 Reports SHALL allow export of report/pricing history outputs.
 
+### Requirement UI-SCREEN-REPORTS-004: Reports toolbar SHALL expose refresh and export actions
+Reports toolbar SHALL expose `Refresh Reports` and `Export CSV` actions with deterministic behavior.
+
+#### Scenario: Refresh reports action
+- **GIVEN** reports route is loaded
+- **WHEN** user clicks `Refresh Reports`
+- **THEN** reports data MUST re-fetch without route transition
+
+#### Scenario: Export CSV action
+- **GIVEN** reports route is loaded
+- **WHEN** user clicks `Export CSV`
+- **THEN** export operation MUST execute for active report context and return deterministic success/error feedback
+
 #### Scenario: Export report output
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user triggers export
@@ -45,3 +58,5 @@ Reports SHALL support loading, empty, error, and ready states.
 | UC-REP-02 | Export data | Export output generated | planned: `cypress/e2e/ui/reports.cy.ts` `reports-export` |
 | UC-REP-03 | No report data | Empty state guidance appears | planned: `cypress/e2e/ui/reports.cy.ts` `reports-empty-state` |
 | UC-REP-04 | Reports API failure | Error + retry appears | planned: `cypress/e2e/ui/reports.cy.ts` `reports-error-state` |
+| UC-REP-05 | Refresh reports toolbar action | `Refresh Reports` re-fetches analytics without route change | planned: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `reports-refresh-action` |
+| UC-REP-06 | Export CSV toolbar action | `Export CSV` triggers export with deterministic feedback | planned: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `reports-export-csv-action` |

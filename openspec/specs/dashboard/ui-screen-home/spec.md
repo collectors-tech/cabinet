@@ -36,9 +36,31 @@ Each quick action SHALL navigate to the correct destination with preserved conte
 - **WHEN** user clicks a Home quick action
 - **THEN** app SHALL open the expected screen/workflow context
 
+### Requirement UI-SCREEN-HOME-004: Home onboarding rail SHALL expose deterministic starter actions
+Home SHALL provide explicit starter actions for first-run workflows from the onboarding panel.
+
+#### Scenario: Starter onboarding actions available
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **WHEN** Home renders the starter onboarding panel
+- **THEN** users SHALL see `Start Setup`, `Import Existing Collection`, and `Use Sample Data` actions
+
+#### Scenario: Starter onboarding step navigation controls
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **WHEN** user interacts with onboarding step controls
+- **THEN** `Back Step` and `Next Step` controls SHALL move onboarding state deterministically
+
+### Requirement UI-SCREEN-HOME-005: Home toolbar SHALL support explicit refresh action
+Home SHALL expose a `Refresh Dashboard` action that re-fetches Home data and preserves route context.
+
+#### Scenario: Refresh dashboard action
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **WHEN** user clicks `Refresh Dashboard`
+- **THEN** Home data SHALL refresh and render updated panel state without route transition
+
 ## Acceptance Criteria
 - Every Home critical flow has UC ID and deterministic expected outcome.
 - E2E mapping exists for command-center render and quick actions.
+- Starter onboarding actions and refresh behavior are explicitly covered by requirements.
 
 ## Success Criteria
 - Users can identify and start next action from Home in one interaction.
@@ -51,3 +73,6 @@ Each quick action SHALL navigate to the correct destination with preserved conte
 | UC-HOME-02 | Open Home with no pending actions | Calm empty state with CTA renders | planned: `cypress/e2e/ui/home.cy.ts` `home-empty-state` |
 | UC-HOME-03 | Home data fetch failure | Inline error + retry appears | planned: `cypress/e2e/ui/home.cy.ts` `home-error-retry` |
 | UC-HOME-04 | Trigger quick action | Correct navigation/context opens | planned: `cypress/e2e/ui/home.cy.ts` `home-quick-action-routing` |
+| UC-HOME-05 | Use starter onboarding actions | Setup/import/sample actions are visible and actionable | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `home-starter-onboarding-actions` |
+| UC-HOME-06 | Click Refresh Dashboard | Home data re-fetches without route transition | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `home-refresh-dashboard` |
+| UC-HOME-07 | Navigate onboarding steps | Back/Next step controls update onboarding state deterministically | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `home-onboarding-step-nav` |

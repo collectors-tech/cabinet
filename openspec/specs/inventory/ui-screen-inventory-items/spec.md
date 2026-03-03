@@ -47,6 +47,28 @@ Inventory SHALL provide a dedicated `New` button for primary inventory entry cre
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-006: Inventory detail collection picker SHALL support inline quick-create
 Inventory item details collection picker MUST support `+ New Collection` inline create.
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-007: Inventory toolbar SHALL expose explicit create and folder actions
+Inventory toolbar SHALL expose primary create-item and folder-creation actions (`Add Item`, `Add Folder`) with deterministic behavior.
+
+#### Scenario: Add Item action
+- **GIVEN** user is on `/inventory`
+- **WHEN** user clicks `Add Item`
+- **THEN** create-item workflow MUST open without route crash
+
+#### Scenario: Add Folder action
+- **GIVEN** user is on `/inventory`
+- **WHEN** user clicks `Add Folder`
+- **THEN** folder creation workflow MUST open and add folder entry to collection browser on success
+
+### Requirement UI-SCREEN-INVENTORY-ITEMS-008: Inventory browser controls SHALL support filter/sort/view switching
+Inventory browser controls SHALL expose `Status`, `Priority`, `View`, and list/card toggles with deterministic state changes.
+
+#### Scenario: Filter and view controls available
+- **GIVEN** user is on `/inventory`
+- **WHEN** collection browser renders
+- **THEN** `Status`, `Priority`, and `View` controls MUST be available and operable
+- **AND** `Rows`/`Cards` mode toggles MUST switch presentation consistently
+
 #### Scenario: Quick-create collection while assigning inventory item
 - **GIVEN** user edits inventory item and opens collection picker
 - **WHEN** user creates a new collection from picker
@@ -79,3 +101,7 @@ Inventory item details collection picker MUST support `+ New Collection` inline 
 | UC-INV-03 | API failure on load | Error state + retry, no 500 route | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry` |
 | UC-INV-04 | Row click open details | Details drawer opens selected item | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-row-opens-details` |
 | UC-INV-05 | Checkbox bulk select | Selection mode appears, no row-open side effect | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-bulk-checkbox-mode` |
+| UC-INV-06 | Click Add Item | Create-item workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-item-opens-create-flow` |
+| UC-INV-07 | Click Add Folder | Folder creation workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-folder-opens-create-flow` |
+| UC-INV-08 | Toggle Rows/Cards view | View mode changes deterministically | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-view-mode-toggle` |
+| UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-browser-controls-available` |
