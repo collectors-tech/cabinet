@@ -49,11 +49,11 @@ Then run Cabinet again:
 ```powershell
 ./scripts/build-cabinet.ps1
 ./bin/cabinet.exe
+```
 
 Notes:
-- `./scripts/build-cabinet.ps1` builds frontend assets first by default.
-- Use `-SkipUIBuild` only if `internal/ui/static` was freshly generated already.
-```
+- `./scripts/build-cabinet.ps1` always builds `ui.web` and refreshes `internal/ui/static` before `go build`.
+- Use `./scripts/build-ui-static.ps1` only for explicit UI-only rebuild workflows.
 
 ## API Documentation
 - OpenAPI source: `docs/api/openapi.yaml`

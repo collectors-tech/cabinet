@@ -1,0 +1,5 @@
+scripts/build-cabinet.ps1
+README.md
+tests/build_pipeline_contract_test.go
+openspec/migration/auto-wave-70-summary.md
+openspec/migration/auto-wave-70-changed-files.txt
