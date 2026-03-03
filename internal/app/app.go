@@ -227,9 +227,15 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		configPath := runtimeSetupConfigPath(cfg)
+		defaultStorageDataDir := runtimeDefaultStorageDataDir(cfg)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"setup_required": runtimeSetupRequired(cfg),
-			"config_path":    configPath,
+			"setup_required":              runtimeSetupRequired(cfg),
+			"config_path":                 configPath,
+			"default_storage_data_dir":    defaultStorageDataDir,
+			"default_storage_media_dir":   filepath.Join(defaultStorageDataDir, "media"),
+			"default_storage_portable":    false,
+			"default_storage_mode":        "exe_local",
+			"default_storage_free_status": "unknown",
 		})
 	})
 	mux.HandleFunc("/api/runtime/setup-complete", func(w http.ResponseWriter, r *http.Request) {
@@ -321,6 +327,46 @@ func New(cfg config.Config) (*App, error) {
 			"config_path":    runtimeSetupConfigPath(cfg),
 			"runtime_url":    importedPayload.Runtime.ResolvedURL,
 			"runtime_port":   portFromResolvedURL(importedPayload.Runtime.ResolvedURL),
+		})
+	})
+	mux.HandleFunc("/api/runtime/setup-storage-validate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			DataDir string `json:"data_dir"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		targetDir := strings.TrimSpace(req.DataDir)
+		if targetDir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":                false,
+				"writable":          false,
+				"free_space_ok":     false,
+				"free_space_bytes":  nil,
+				"free_space_status": "unknown",
+				"error_code":        "SETUP_STORAGE_PATH_REQUIRED",
+				"message":           "Storage data directory is required.",
+			})
+			return
+		}
+		writable, message := checkRuntimeSetupStorageWritable(targetDir)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                writable,
+			"writable":          writable,
+			"free_space_ok":     true,
+			"free_space_bytes":  nil,
+			"free_space_status": "unknown",
+			"message":           message,
 		})
 	})
 	mux.HandleFunc("/api/runtime/update/install", func(w http.ResponseWriter, r *http.Request) {
@@ -3045,6 +3091,9 @@ func New(cfg config.Config) (*App, error) {
 type runtimeSetupRequest struct {
 	InstanceName         string `json:"instance_name"`
 	ProfileKey           string `json:"profile_key"`
+	StorageMode          string `json:"storage_mode"`
+	StorageDataDir       string `json:"storage_data_dir"`
+	PortableMode         bool   `json:"portable_mode"`
 	AuthMode             string `json:"auth_mode"`
 	ClerkPublishableKey  string `json:"clerk_publishable_key"`
 	RuntimePortMode      string `json:"runtime_port_mode"`
@@ -3080,8 +3129,9 @@ type runtimeSetupInstanceConfig struct {
 }
 
 type runtimeSetupStorageConfig struct {
-	DataDir  string `json:"dataDir"`
-	MediaDir string `json:"mediaDir"`
+	DataDir      string `json:"dataDir"`
+	MediaDir     string `json:"mediaDir"`
+	PortableMode bool   `json:"portableMode"`
 }
 
 type runtimeSetupRuntimeConfig struct {
@@ -3231,6 +3281,25 @@ func validateRuntimeSetupRequest(req runtimeSetupRequest) *runtimeSetupValidatio
 			Field:   "instance_name",
 		}
 	}
+	storageMode := strings.TrimSpace(strings.ToLower(req.StorageMode))
+	if storageMode == "" {
+		storageMode = "exe_local"
+	}
+	if storageMode != "exe_local" && storageMode != "custom" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_STORAGE_MODE_INVALID",
+			Message: "Storage mode must be exe_local or custom.",
+			Field:   "storage_mode",
+		}
+	}
+	if storageMode == "custom" && strings.TrimSpace(req.StorageDataDir) == "" {
+		return &runtimeSetupValidationError{
+			Code:    "SETUP_STORAGE_PATH_REQUIRED",
+			Message: "Custom storage path is required.",
+			Field:   "storage_data_dir",
+		}
+	}
+
 	authMode := strings.TrimSpace(strings.ToLower(req.AuthMode))
 	if authMode == "" {
 		authMode = "local"
@@ -3316,7 +3385,8 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 		databaseRef = "Primary DB"
 	}
 
-	profileDataDir := filepath.Join(cfg.DataDir, "profiles", profileKey)
+	storageDataDir := resolveRuntimeSetupStorageDataDir(cfg, req, profileKey)
+	storageMediaDir := filepath.Join(storageDataDir, "media")
 	return runtimeSetupConfigFile{
 		Version: 1,
 		Instance: runtimeSetupInstanceConfig{
@@ -3324,8 +3394,9 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			Profile: profileKey,
 		},
 		Storage: runtimeSetupStorageConfig{
-			DataDir:  profileDataDir,
-			MediaDir: filepath.Join(profileDataDir, "media"),
+			DataDir:      storageDataDir,
+			MediaDir:     storageMediaDir,
+			PortableMode: req.PortableMode,
 		},
 		Runtime: runtimeSetupRuntimeConfig{
 			PortMode:    portMode,
@@ -3355,6 +3426,48 @@ func buildRuntimeSetupConfig(cfg config.Config, req runtimeSetupRequest) (runtim
 			CurrentURL:    fmt.Sprintf("http://%s:%d", host, port),
 		},
 	}, nil
+}
+
+func runtimeDefaultStorageDataDir(cfg config.Config) string {
+	exePath, err := os.Executable()
+	if err != nil || strings.TrimSpace(exePath) == "" {
+		return filepath.Join(cfg.DataDir, "data")
+	}
+	return filepath.Join(filepath.Dir(exePath), "data")
+}
+
+func resolveRuntimeSetupStorageDataDir(cfg config.Config, req runtimeSetupRequest, profileKey string) string {
+	storageMode := strings.TrimSpace(strings.ToLower(req.StorageMode))
+	if storageMode == "" {
+		storageMode = "exe_local"
+	}
+	if storageMode == "custom" {
+		custom := strings.TrimSpace(req.StorageDataDir)
+		if custom != "" {
+			return custom
+		}
+	}
+	defaultDir := runtimeDefaultStorageDataDir(cfg)
+	if strings.TrimSpace(defaultDir) == "" {
+		return filepath.Join(cfg.DataDir, "profiles", profileKey)
+	}
+	return defaultDir
+}
+
+func checkRuntimeSetupStorageWritable(targetDir string) (bool, string) {
+	cleanDir := strings.TrimSpace(targetDir)
+	if cleanDir == "" {
+		return false, "Storage data directory is required."
+	}
+	if err := os.MkdirAll(cleanDir, 0o755); err != nil {
+		return false, "Storage path is not writable."
+	}
+	testFile := filepath.Join(cleanDir, ".cabinet-write-check.tmp")
+	if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+		return false, "Storage path is not writable."
+	}
+	_ = os.Remove(testFile)
+	return true, "Storage path is writable."
 }
 
 func deriveProfileKey(rawProfileKey, instanceName string) string {

@@ -142,6 +142,34 @@ Identity form step MUST capture instance name, accept optional profile key, and 
 - **THEN** UI MUST render inline validation error without leaving identity step
 - **AND** previously entered identity fields MUST remain intact
 
+### Requirement SETUP-WIZ-013: Storage step MUST support exe-local default, custom path validation, and portable mode
+Storage form step MUST expose default exe-local storage, optional custom data path, writable/free-space checks, and portable-mode toggle before proceeding.
+
+#### Scenario: Exe-local default storage
+- **GIVEN** setup wizard storage step is active
+- **WHEN** step first renders
+- **THEN** storage mode MUST default to `exe_local`
+- **AND** data directory preview MUST resolve to `<exe_dir>/data`
+- **AND** portable mode toggle MUST be visible and off by default
+
+#### Scenario: Custom storage inline validation
+- **GIVEN** storage mode is set to `custom`
+- **WHEN** user attempts to continue with blank custom data path
+- **THEN** UI MUST show inline validation error
+- **AND** wizard MUST remain on storage step
+
+#### Scenario: Storage validation contract
+- **GIVEN** storage step submits a candidate data path
+- **WHEN** runtime validates the path
+- **THEN** runtime MUST return deterministic validation payload including `writable` and free-space check fields
+- **AND** wizard MUST block next transition when `writable=false`
+
+#### Scenario: Persisted storage selection
+- **GIVEN** setup completion succeeds after storage step selection
+- **WHEN** setup config is written
+- **THEN** `storage.dataDir` and `storage.mediaDir` MUST match selected storage mode/path
+- **AND** storage selection MUST be reflected in completion details
+
 #### Scenario: Clerk mode config requirements
 - **GIVEN** user selects auth mode `clerk`
 - **WHEN** completion is attempted
@@ -212,3 +240,6 @@ Identity form step MUST capture instance name, accept optional profile key, and 
 | UC-SW-14 | Identity path preview | Identity step shows deterministic config path preview from setup status payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-14 setup-wizard-identity-path-preview shows config destination path` |
 | UC-SW-15 | Optional profile key derivation | Blank profile key auto-derives normalized profile during completion | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-15 setup-wizard-optional-profile-key auto-derives profile key from instance name`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompleteDerivesProfileKeyWhenBlank` |
 | UC-SW-16 | Inline identity validation | Blank instance name shows inline validation and stays on identity step | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-16 setup-wizard-identity-inline-validation blocks next on missing instance name` |
+| UC-SW-17 | Exe-local storage defaults | Storage step defaults to exe-local mode with `<exe_dir>/data` preview and portable toggle | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-17 setup-wizard-storage-defaults shows exe-local mode and default data path` |
+| UC-SW-18 | Storage custom path validation | Custom storage mode blocks next with blank path and shows inline error | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-18 setup-wizard-storage-custom-path-validation blocks blank custom path` |
+| UC-SW-19 | Storage persistence | Selected storage mode/path persists into setup config payload | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-19 setup-wizard-storage-selection persists data and media dirs`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupCompletePersistsSelectedStoragePath` |

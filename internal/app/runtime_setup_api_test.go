@@ -399,3 +399,98 @@ func TestRuntimeSetupCompleteDerivesProfileKeyWhenBlank(t *testing.T) {
 		t.Fatalf("expected derived profile key my-fancy-instance, got %v", instance["profile"])
 	}
 }
+
+func TestRuntimeSetupStorageValidateContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	missing := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-storage-validate",
+		strings.NewReader(`{"data_dir":""}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if missing.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing storage path, got %d body=%s", missing.Code, missing.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.Unmarshal(missing.Body.Bytes(), &missingPayload); err != nil {
+		t.Fatalf("decode missing storage payload: %v", err)
+	}
+	if missingPayload["error_code"] != "SETUP_STORAGE_PATH_REQUIRED" {
+		t.Fatalf("unexpected storage error code: %v", missingPayload["error_code"])
+	}
+
+	validDir := filepath.Join(a.cfg.DataDir, "custom-storage")
+	valid := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/runtime/setup-storage-validate",
+		strings.NewReader(fmt.Sprintf(`{"data_dir":%q}`, validDir)),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if valid.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid storage path, got %d body=%s", valid.Code, valid.Body.String())
+	}
+	var validPayload map[string]any
+	if err := json.Unmarshal(valid.Body.Bytes(), &validPayload); err != nil {
+		t.Fatalf("decode valid storage payload: %v", err)
+	}
+	if validPayload["writable"] != true {
+		t.Fatalf("expected writable=true, got %v", validPayload["writable"])
+	}
+	if strings.TrimSpace(asString(validPayload["free_space_status"])) == "" {
+		t.Fatalf("expected free_space_status in storage validation payload")
+	}
+}
+
+func TestRuntimeSetupCompletePersistsSelectedStoragePath(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	setupPath := runtimeSetupConfigPath(a.cfg)
+	_ = os.Remove(setupPath)
+
+	customDir := filepath.Join(a.cfg.DataDir, "persisted-storage")
+	completeReq := map[string]any{
+		"instance_name":          "Storage Persist",
+		"profile_key":            "",
+		"storage_mode":           "custom",
+		"storage_data_dir":       customDir,
+		"portable_mode":          true,
+		"auth_mode":              "local",
+		"runtime_port_mode":      "auto",
+		"bootstrap_workspace":    "Local Workspace",
+		"bootstrap_database_ref": "Primary DB",
+	}
+	completeReqJSON, err := json.Marshal(completeReq)
+	if err != nil {
+		t.Fatalf("marshal complete request: %v", err)
+	}
+	complete := doRequest(t, a, http.MethodPost, "/api/runtime/setup-complete", strings.NewReader(string(completeReqJSON)), map[string]string{"Content-Type": "application/json"})
+	if complete.Code != http.StatusOK {
+		t.Fatalf("setup-complete expected 200, got %d body=%s", complete.Code, complete.Body.String())
+	}
+	rawConfig, err := os.ReadFile(setupPath)
+	if err != nil {
+		t.Fatalf("read setup config: %v", err)
+	}
+	var configPayload map[string]any
+	if err := json.Unmarshal(rawConfig, &configPayload); err != nil {
+		t.Fatalf("decode setup config: %v", err)
+	}
+	storage, ok := configPayload["storage"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected storage object in setup config")
+	}
+	if strings.TrimSpace(asString(storage["dataDir"])) != customDir {
+		t.Fatalf("expected storage.dataDir=%s, got %v", customDir, storage["dataDir"])
+	}
+	if strings.TrimSpace(asString(storage["mediaDir"])) != filepath.Join(customDir, "media") {
+		t.Fatalf("expected storage.mediaDir=%s, got %v", filepath.Join(customDir, "media"), storage["mediaDir"])
+	}
+}

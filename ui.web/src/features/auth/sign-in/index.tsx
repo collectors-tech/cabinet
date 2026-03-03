@@ -16,6 +16,7 @@ import { UserAuthForm } from './components/user-auth-form'
 type RuntimeSetupStatus = {
   setup_required?: boolean
   config_path?: string
+  default_storage_data_dir?: string
 }
 
 type RuntimeSetupCompletePayload = {
@@ -30,6 +31,9 @@ type RuntimeSetupCompletePayload = {
 type SetupFormState = {
   instanceName: string
   profileKey: string
+  storageMode: 'exe_local' | 'custom'
+  customDataDir: string
+  portableMode: boolean
   authMode: 'local' | 'clerk'
   clerkPublishableKey: string
 }
@@ -42,6 +46,7 @@ export function SignIn() {
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setupConfigPath, setSetupConfigPath] = useState('')
+  const [setupDefaultStorageDataDir, setSetupDefaultStorageDataDir] = useState('')
   const [completingSetup, setCompletingSetup] = useState(false)
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
@@ -51,11 +56,14 @@ export function SignIn() {
   const [setupForm, setSetupForm] = useState<SetupFormState>({
     instanceName: 'Primary',
     profileKey: 'primary',
+    storageMode: 'exe_local',
+    customDataDir: '',
+    portableMode: false,
     authMode: 'local',
     clerkPublishableKey: '',
   })
 
-  const totalSteps = 3
+  const totalSteps = 4
   const progressPercent = Math.round(((setupStep + 1) / totalSteps) * 100)
 
   useEffect(() => {
@@ -72,6 +80,7 @@ export function SignIn() {
         if (!cancelled) {
           setSetupRequired(Boolean(payload.setup_required))
           setSetupConfigPath(payload.config_path ?? '')
+          setSetupDefaultStorageDataDir(payload.default_storage_data_dir ?? '')
         }
       } catch (error) {
         if (!cancelled) {
@@ -101,10 +110,48 @@ export function SignIn() {
     }
   }, [setupRequired])
 
-  function goToNextStep() {
+  function selectedStorageDataDir() {
+    if (setupForm.storageMode === 'custom') {
+      return setupForm.customDataDir.trim()
+    }
+    return setupDefaultStorageDataDir.trim()
+  }
+
+  async function goToNextStep() {
     if (setupStep === 0 && setupForm.instanceName.trim() === '') {
       setSetupError('Instance name is required.')
       return
+    }
+    if (setupStep === 1) {
+      if (setupForm.storageMode === 'custom' && setupForm.customDataDir.trim() === '') {
+        setSetupError('Custom storage path is required.')
+        return
+      }
+      setCompletingSetup(true)
+      try {
+        const response = await fetch('/api/runtime/setup-storage-validate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data_dir: selectedStorageDataDir(),
+          }),
+        })
+        const payload = (await response.json()) as {
+          writable?: boolean
+          message?: string
+        }
+        if (!response.ok || payload.writable !== true) {
+          setSetupError(payload.message ?? 'Storage path is not writable.')
+          return
+        }
+      } catch {
+        setSetupError('Storage validation failed.')
+        return
+      } finally {
+        setCompletingSetup(false)
+      }
     }
     setSetupError(null)
     setSetupStep((previous) => Math.min(previous + 1, totalSteps - 1))
@@ -131,6 +178,9 @@ export function SignIn() {
         body: JSON.stringify({
           instance_name: setupForm.instanceName.trim(),
           profile_key: setupForm.profileKey.trim(),
+          storage_mode: setupForm.storageMode,
+          storage_data_dir: selectedStorageDataDir(),
+          portable_mode: setupForm.portableMode,
           auth_mode: setupForm.authMode,
           clerk_publishable_key:
             setupForm.authMode === 'clerk'
@@ -414,6 +464,67 @@ export function SignIn() {
             {setupEntryMode === 'form' && setupStep === 1 ? (
               <div className='grid gap-3'>
                 <label className='grid gap-1 text-sm'>
+                  <span>Storage Mode</span>
+                  <select
+                    className='h-9 rounded-md border bg-background px-3'
+                    value={setupForm.storageMode}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        storageMode:
+                          event.target.value === 'custom' ? 'custom' : 'exe_local',
+                      }))
+                    }
+                    data-testid='setup-storage-mode'
+                  >
+                    <option value='exe_local'>exe_local</option>
+                    <option value='custom'>custom</option>
+                  </select>
+                </label>
+                <p className='text-xs text-muted-foreground'>
+                  Data directory preview:{' '}
+                  <span
+                    className='font-medium'
+                    data-testid='setup-storage-data-dir-preview'
+                  >
+                    {selectedStorageDataDir() || 'unknown'}
+                  </span>
+                </p>
+                {setupForm.storageMode === 'custom' ? (
+                  <label className='grid gap-1 text-sm'>
+                    <span>Custom Data Directory</span>
+                    <input
+                      className='h-9 rounded-md border bg-background px-3'
+                      value={setupForm.customDataDir}
+                      onChange={(event) =>
+                        setSetupForm((previous) => ({
+                          ...previous,
+                          customDataDir: event.target.value,
+                        }))
+                      }
+                      data-testid='setup-storage-custom-data-dir'
+                    />
+                  </label>
+                ) : null}
+                <label className='flex items-center gap-2 text-sm'>
+                  <input
+                    type='checkbox'
+                    checked={setupForm.portableMode}
+                    onChange={(event) =>
+                      setSetupForm((previous) => ({
+                        ...previous,
+                        portableMode: event.target.checked,
+                      }))
+                    }
+                    data-testid='setup-storage-portable-mode'
+                  />
+                  Portable mode
+                </label>
+              </div>
+            ) : null}
+            {setupEntryMode === 'form' && setupStep === 2 ? (
+              <div className='grid gap-3'>
+                <label className='grid gap-1 text-sm'>
                   <span>Auth Mode</span>
                   <select
                     className='h-9 rounded-md border bg-background px-3'
@@ -448,13 +559,22 @@ export function SignIn() {
                 ) : null}
               </div>
             ) : null}
-            {setupEntryMode === 'form' && setupStep === 2 ? (
+            {setupEntryMode === 'form' && setupStep === 3 ? (
               <div className='rounded-md border bg-muted/40 p-3 text-sm'>
                 <p>
                   <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
                 </p>
                 <p>
                   <strong>Profile Key:</strong> {setupForm.profileKey || 'Not set'}
+                </p>
+                <p>
+                  <strong>Storage Mode:</strong> {setupForm.storageMode}
+                </p>
+                <p>
+                  <strong>Data Dir:</strong> {selectedStorageDataDir() || 'Not set'}
+                </p>
+                <p>
+                  <strong>Portable:</strong> {setupForm.portableMode ? 'enabled' : 'disabled'}
                 </p>
                 <p>
                   <strong>Auth Mode:</strong> {setupForm.authMode}
@@ -484,7 +604,7 @@ export function SignIn() {
                 </Button>
                 {setupStep < totalSteps - 1 ? (
                   <Button
-                    onClick={goToNextStep}
+                    onClick={() => void goToNextStep()}
                     disabled={completingSetup}
                     data-testid='setup-next'
                   >
