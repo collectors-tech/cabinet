@@ -16,6 +16,23 @@ Define Storage settings screen behavior for media path management.
 - **WHEN** user saves or runs write-check
 - **THEN** UI MUST show deterministic validation error and runtime MUST reject update
 
+### Requirement UI-SCREEN-SETTINGS-STORAGE-004: Storage screen SHALL degrade gracefully when storage info endpoint is unavailable
+Storage section MUST avoid hard-fail UX and provide actionable recovery with retained baseline path context.
+
+#### Scenario: Storage info unavailable
+- **GIVEN** storage info endpoint fails or active profile context is temporarily unavailable
+- **WHEN** user opens `/settings/storage`
+- **THEN** UI MUST show non-blocking error state with retry action
+- **AND** last-known database/media locations (if available) MUST remain visible
+- **AND** diagnostics-only actions MUST be disabled with explicit reason, not generic failure
+
+### Requirement UI-SCREEN-SETTINGS-STORAGE-005: Retry action SHALL re-attempt storage info fetch without full page reload
+
+#### Scenario: Retry storage fetch
+- **GIVEN** storage info error state is visible
+- **WHEN** user clicks `Retry`
+- **THEN** runtime MUST re-attempt fetch and render ready state immediately on success without route reload
+
 ### Requirement UI-SCREEN-SETTINGS-STORAGE-003: Storage screen SHALL support optional migration
 
 #### Scenario: Migrate existing media on path change

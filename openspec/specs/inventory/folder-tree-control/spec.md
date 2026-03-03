@@ -34,6 +34,46 @@ Tree rendering MUST remain responsive for large folder sets.
 - **WHEN** user expands/collapses and selects nodes
 - **THEN** interactions MUST remain responsive and avoid blocking UI thread
 
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-005: Tree pane SHALL be independently scrollable and MUST NOT expand whole page layout
+Expanding tree nodes MUST not force global page growth; tree pane shall handle its own overflow.
+
+#### Scenario: Vertical overflow in tree pane
+- **GIVEN** tree has more nodes than visible pane height
+- **WHEN** user expands branches
+- **THEN** tree pane MUST provide internal vertical scrolling and page layout height MUST remain stable
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-006: Tree pane SHALL support horizontal overflow for deep indentation
+Deeply nested nodes MUST remain accessible via internal horizontal scrolling or equivalent overflow handling.
+
+#### Scenario: Horizontal overflow in deep tree
+- **GIVEN** nested hierarchy exceeds available tree pane width
+- **WHEN** user navigates deep nodes
+- **THEN** tree pane MUST allow horizontal access without clipping labels or expanding overall page width
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-007: Tree nodes SHALL provide subtle add-child affordance
+Each folder node SHALL provide a subtle `+` affordance to create a child folder directly under that node.
+
+#### Scenario: Add child from node control
+- **GIVEN** folder node is visible in tree
+- **WHEN** user clicks node-level `+` affordance and submits valid name
+- **THEN** new folder MUST be created as child of selected node and rendered in expanded tree context
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-008: Tree SHALL provide explicit root node for top-level folder creation
+Tree control SHALL expose a root context that allows creating top-level folders.
+
+#### Scenario: Create top-level folder at root
+- **GIVEN** user is in folder tree view
+- **WHEN** user chooses `Add Root Folder` action
+- **THEN** new folder MUST be created at root level and appear as top-level node
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-009: Tree visuals SHALL include connector lines for hierarchy clarity
+Tree view SHALL render visual connector lines/indent guides to make parent-child hierarchy clear.
+
+#### Scenario: Render hierarchy lines
+- **GIVEN** tree has multi-level nesting
+- **WHEN** tree renders nodes
+- **THEN** UI MUST show clear hierarchical line/guide cues between parent and child nodes
+
 ## Implementation recommendation
 Preferred component strategy:
 - `@react-aria/tree` + `@react-stately/tree` for accessible tree semantics

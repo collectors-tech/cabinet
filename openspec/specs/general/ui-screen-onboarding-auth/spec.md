@@ -26,6 +26,35 @@ The screen SHALL support loading, empty, error, and ready states for profile and
 - **WHEN** auth requirements fetch fails
 - **THEN** screen SHALL show actionable error with retry and MUST NOT advance wizard state until successful fetch
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-006: Sign-in screen SHALL support Google, Apple, and Microsoft providers
+Social/enterprise sign-in options SHALL include Google, Apple, and Microsoft in addition to any existing providers.
+
+#### Scenario: Render provider buttons
+- **GIVEN** sign-in screen is rendered
+- **WHEN** provider actions are displayed
+- **THEN** UI MUST include buttons for `Google`, `Apple`, and `Microsoft` with deterministic enabled/disabled state based on configuration
+
+### Requirement UI-SCREEN-ONBOARDING-AUTH-007: Identity provider platform decision SHALL be explicit and configurable
+Authentication implementation SHALL define whether Clerk is the source-of-truth identity platform and expose provider configuration deterministically.
+
+#### Scenario: Resolve identity platform
+- **GIVEN** runtime auth configuration is loaded
+- **WHEN** sign-in screen initializes
+- **THEN** app MUST resolve identity platform mode (for example Clerk-based vs local provider stack) and render only configured provider actions
+
+### Requirement UI-SCREEN-ONBOARDING-AUTH-008: Sign-in SHALL support passkeys (WebAuthn) for passwordless login
+Sign-in flow SHALL support passkey authentication compatible with platform authenticators and password managers (for example 1Password passkeys).
+
+#### Scenario: Sign in with passkey
+- **GIVEN** user account has enrolled passkey credential
+- **WHEN** user selects passkey sign-in and completes WebAuthn prompt
+- **THEN** authentication MUST succeed without password and redirect to authenticated shell
+
+#### Scenario: Passkey fallback behavior
+- **GIVEN** passkey is unavailable or challenge fails
+- **WHEN** passkey auth attempt fails
+- **THEN** UI MUST provide deterministic fallback to other enabled methods (password/social) with actionable error message
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.

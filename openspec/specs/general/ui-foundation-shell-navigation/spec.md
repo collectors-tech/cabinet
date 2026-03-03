@@ -34,14 +34,22 @@ Cabinet SHALL display app version and build date metadata in sidebar footer regi
 - **WHEN** shell renders
 - **THEN** version/build metadata SHALL be visible in footer
 
-### Requirement UI-FOUNDATION-SHELL-NAVIGATION-005: Local Workspace switcher SHALL remain DB/profile-only
-Local Workspace shell switcher SHALL represent workspace database/profile context only and SHALL NOT render collections management widget above primary navigation.
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-005: Database switcher SHALL remain DB/profile-only
+Top shell switcher SHALL represent database/profile context only and SHALL NOT render collections management widget above primary navigation.
 
 #### Scenario: Sidebar top area renders DB/profile only
 - **GIVEN** authenticated shell sidebar is rendered
-- **WHEN** Local Workspace switcher is visible
+- **WHEN** Database switcher is visible
 - **THEN** top area MUST show DB/profile switcher context only
 - **AND** collections list/add widget MUST NOT appear above primary nav items
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-008: Database switcher label SHALL use explicit Database terminology
+Shell switcher labels MUST use `Database` terminology instead of ambiguous `Local Workspace` wording.
+
+#### Scenario: Render database switcher labels
+- **GIVEN** sidebar top switcher is visible
+- **WHEN** switcher renders title/subtitle
+- **THEN** UI MUST display Database-oriented labels (for example `Database`, `Primary DB`, `Showcase DB`)
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-006: Collections management SHALL live in Collections section and inline pickers
 Collections creation/list management SHALL be provided via dedicated Collections section and inline picker quick-create flows, not via sidebar-top widget.
@@ -51,6 +59,22 @@ Collections creation/list management SHALL be provided via dedicated Collections
 - **WHEN** user uses navigation or picker flows
 - **THEN** collections list/create MUST be available in Collections section and relevant pickers
 - **AND** sidebar top area remains uncluttered
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-009: Database switcher SHALL support functional profile switching
+Selecting a different database profile from switcher MUST change active data context across app screens.
+
+#### Scenario: Switch from Primary DB to Showcase DB
+- **GIVEN** at least two configured database profiles exist (`Primary DB`, `Showcase DB`)
+- **WHEN** user selects `Showcase DB` in switcher
+- **THEN** runtime MUST switch active profile context and reload data views from selected DB without cross-profile leakage
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-010: App SHALL provide a seeded Showcase DB profile
+Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content.
+
+#### Scenario: Open showcase profile
+- **GIVEN** showcase profile is provisioned
+- **WHEN** user switches to `Showcase DB`
+- **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
 When user moves menu items up/down in nav edit mode, edit dialog list order MUST update immediately to match resulting navigation order.

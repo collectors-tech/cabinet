@@ -16,6 +16,7 @@ Contains provider registry/contracts, scanner contracts, integration UI behavior
 - `provider-openai` -> `openspec/specs/integrations/provider-openai/spec.md`
 - `provider-gemini` -> `openspec/specs/integrations/provider-gemini/spec.md`
 - `provider-claude` -> `openspec/specs/integrations/provider-claude/spec.md`
+- `provider-workflow-template` -> `openspec/specs/integrations/provider-workflow-template/spec.md`
 - `scanner` -> `openspec/specs/integrations/scanner/spec.md`
 - `ui-screen-integrations` -> `openspec/specs/integrations/ui-screen-integrations/spec.md`
 - `ui-screen-scanner` -> `openspec/specs/integrations/ui-screen-scanner/spec.md`

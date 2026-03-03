@@ -25,3 +25,11 @@ Cabinet SHALL normalize OpenAI upstream failures into gateway error taxonomy.
 - **GIVEN** OpenAI returns rate limit error
 - **WHEN** adapter maps provider error
 - **THEN** gateway error response MUST use stable internal code (for example `AI_PROVIDER_RATE_LIMIT`) with retry guidance and no secret leakage
+
+### Requirement PROVIDER-OPENAI-004: OpenAI integration SHALL support chat assistant tools for inventory/wishlist operations
+OpenAI adapter + gateway SHALL support structured tool-style operations for inventory/wishlist create/update assistance.
+
+#### Scenario: Structured update proposal
+- **GIVEN** chat request asks to update inventory or wishlist data
+- **WHEN** adapter returns structured operation payload
+- **THEN** payload MUST be schema-valid and include fields needed for confirm-before-apply UI flow

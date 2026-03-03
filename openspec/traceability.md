@@ -257,3 +257,63 @@
 | UI-SCREEN-INVENTORY-ITEMS-006 | openspec/specs/inventory/ui-screen-inventory-items/spec.md | inventory collection picker inline create | implemented: ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts (`UI-SCREEN-INVENTORY-ITEMS-006 creates collection inline and auto-selects it`) | implemented |
 | UI-SCREEN-WISHLIST-004 | openspec/specs/wishlist/ui-screen-wishlist/spec.md | wishlist New + Create menu controls | implemented: ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts (`UI-SCREEN-WISHLIST-004 shows dedicated New action with adjacent Create menu`) | implemented |
 | UI-SCREEN-WISHLIST-005 | openspec/specs/wishlist/ui-screen-wishlist/spec.md | wishlist collection picker inline create | implemented: ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts (`UI-SCREEN-WISHLIST-005 supports inline collection create and auto-select`) | implemented |
+
+| UI-FOUNDATION-SHELL-NAVIGATION-008 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | shell top switcher terminology | implemented: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-008 uses explicit Database terminology in top switcher`) | implemented |
+| UI-FOUNDATION-SHELL-NAVIGATION-009 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | active DB/profile switching context | implemented: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-009 switches active DB profile and reloads active data context`) | implemented |
+| UI-FOUNDATION-SHELL-NAVIGATION-010 | openspec/specs/general/ui-foundation-shell-navigation/spec.md | showcase DB seeded profile | implemented: ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts (`UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context`) | implemented |
+
+| UI-SCREEN-SETTINGS-STORAGE-004 | openspec/specs/settings/storage/spec.md | /settings/storage storage-info failure UX | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (storage-info-unavailable-graceful) | partial |
+| UI-SCREEN-SETTINGS-STORAGE-005 | openspec/specs/settings/storage/spec.md | /settings/storage retry fetch behavior | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (storage-retry-recovers-without-reload) | partial |
+
+| UI-SCREEN-ONBOARDING-AUTH-006 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | auth provider buttons on sign-in screen | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (enders Google/Apple/Microsoft provider actions) | partial |
+| UI-SCREEN-ONBOARDING-AUTH-007 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | identity platform mode/config resolution | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (configured provider visibility by auth mode) | partial |
+
+| UI-SCREEN-ONBOARDING-AUTH-008 | openspec/specs/general/ui-screen-onboarding-auth/spec.md | passkey/WebAuthn login flow | planned: ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts (passkey sign-in + fallback behavior) | partial |
+
+| UI-SCREEN-INVENTORY-FOLDER-TREE-005 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (vertical) | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (	ree expansion does not grow page; internal vertical scroll works) | partial |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-006 | openspec/specs/inventory/folder-tree-control/spec.md | tree pane overflow containment (horizontal) | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (deep tree supports horizontal overflow access) | partial |
+
+| UI-SCREEN-INVENTORY-FOLDER-TREE-007 | openspec/specs/inventory/folder-tree-control/spec.md | node-level add-child affordance | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (
+ode + creates child folder) | partial |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-008 | openspec/specs/inventory/folder-tree-control/spec.md | root-level folder creation | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (Add Root Folder creates top-level node) | partial |
+| UI-SCREEN-INVENTORY-FOLDER-TREE-009 | openspec/specs/inventory/folder-tree-control/spec.md | hierarchy connector line visuals | planned: ui.web/cypress/e2e/inventory/folder-tree-control/spec.cy.ts (	ree connector lines rendered for nested nodes) | partial |
+
+| AUDIT-METADATA-001 | openspec/specs/general/audit-metadata-history/spec.md | core entity record metadata | planned: internal/app/*_audit_test.go (created/updated metadata persistence) | partial |
+| AUDIT-METADATA-002 | openspec/specs/general/audit-metadata-history/spec.md | soft-delete metadata | planned: internal/app/*_audit_test.go (deleted_at/by persistence) | partial |
+| AUDIT-HISTORY-001 | openspec/specs/general/audit-metadata-history/spec.md | append-only audit events table/log | planned: internal/app/*_audit_test.go (event append on critical mutation) | partial |
+| AUDIT-HISTORY-002 | openspec/specs/general/audit-metadata-history/spec.md | before/after diff capture | planned: internal/app/*_audit_test.go (efore/after tracked fields) | partial |
+| AUDIT-HISTORY-003 | openspec/specs/general/audit-metadata-history/spec.md | entity timeline audit query | planned: internal/app/*_audit_test.go (	imeline retrieval by entity/time) | partial |
+
+| UI-SCREEN-CHAT-COPILOT-007 | openspec/specs/chats/ui-screen-chat-copilot/spec.md | chat-assisted inventory/wishlist update flows | planned: ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts (confirm-before-apply create/update from chat) | partial |
+| UI-SCREEN-CHAT-COPILOT-008 | openspec/specs/chats/ui-screen-chat-copilot/spec.md | mobile chat image attachment workflows | planned: ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts (mobile attach image -> analyze -> create/update) | partial |
+| PROVIDER-OPENAI-004 | openspec/specs/integrations/provider-openai/spec.md | structured tool payloads for inventory/wishlist assist | planned: internal/app/*openai*_test.go (schema-valid structured proposals) | partial |
+
+| UI-SCREEN-SETTINGS-APPEARANCE-002 | openspec/specs/settings/appearance/spec.md | language selector options (English, Chinese, Japanese) | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (switch language to zh/ja and persist) | partial |
+| UI-SCREEN-SETTINGS-APPEARANCE-003 | openspec/specs/settings/appearance/spec.md | i18n fallback behavior | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (missing key falls back without layout break) | partial |
+
+| UI-SCREEN-USERS-004 | openspec/specs/users/ui-screen-users/spec.md | users add/invite entitlement gating by plan | planned: ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts (Add User visible for Creator/Teams only) | partial |
+
+| UI-SCREEN-DISCOVERIES-004 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | discoveries missing-item detection vs local inventory | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (provider results classified missing vs owned) | partial |
+| UI-SCREEN-DISCOVERIES-005 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | ranked actionable missing candidates | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (missing candidates ranking/filtering + wishlist apply) | partial |
+| UI-SCREEN-DISCOVERIES-006 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | explainable match rationale | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (candidate rationale visibility) | partial |
+
+| DEFAULT-SITE-SEARCH-004 | openspec/specs/integrations/default-site-search/spec.md | saved searches per provider + filter persistence | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (create/edit/delete saved search with filters) | partial |
+| DEFAULT-SITE-SEARCH-005 | openspec/specs/integrations/default-site-search/spec.md | run-now and scheduled refresh for saved searches | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (saved search run-now + scheduled refresh) | partial |
+| DEFAULT-SITE-SEARCH-006 | openspec/specs/integrations/default-site-search/spec.md | saved search handoff to discoveries/wishlist workflows | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (saved search results -> discoveries/wishlist handoff) | partial |
+
+| PROVIDER-AU-WEBSHOPS-004 | openspec/specs/integrations/provider-au-webshops/spec.md | AU webshop domain allowlist configuration | planned: internal/app/*provider_au_webshops*_test.go (configured domain set includes approved shops) | partial |
+
+| PROVIDER-AU-WEBSHOPS-005 | openspec/specs/integrations/provider-au-webshops/spec.md | config/content-driven webshop domain source | planned: internal/app/*provider_au_webshops*_test.go (domains loaded from config source, no hardcoded source-of-truth) | partial |
+
+| PROVIDER-WORKFLOW-001 | openspec/specs/integrations/provider-workflow-template/spec.md | provider workflow stage completeness | planned: provider-specific Cypress/API checklists | partial |
+| PROVIDER-WORKFLOW-002 | openspec/specs/integrations/provider-workflow-template/spec.md | deterministic provider failure handling | planned: provider failure-mode suites | partial |
+| PROVIDER-WORKFLOW-003 | openspec/specs/integrations/provider-workflow-template/spec.md | mock/live parity for provider contracts | planned: mock-vs-live contract comparisons | partial |
+| PROVIDER-WORKFLOW-004 | openspec/specs/integrations/provider-workflow-template/spec.md | provider setup/token documentation completeness | planned: docs QA checklist + validate-token suites | partial |
+
+| PROVIDER-WORKFLOW-FULL-ASSESSMENT | openspec/migration/provider-workflow-full-assessment.md | cross-provider workflow completeness | planned: execution issues per provider + stage evidence | partial |
+
+| AUTH-PERM-001 | openspec/specs/general/auth-permissions-test-matrix/spec.md | Clerk auth mode initialization | planned: auth integration contract tests | partial |
+| AUTH-PERM-002 | openspec/specs/general/auth-permissions-test-matrix/spec.md | plan->capability resolution | planned: entitlement mapping tests | partial |
+| AUTH-PERM-003 | openspec/specs/general/auth-permissions-test-matrix/spec.md | seeded multi-plan account matrix | planned: seed + login matrix tests | partial |
+| AUTH-PERM-004 | openspec/specs/general/auth-permissions-test-matrix/spec.md | UI/API gate validation by account level | planned: cypress plan-matrix + api gate suites | partial |
+| AUTH-PERM-005 | openspec/specs/general/auth-permissions-test-matrix/spec.md | effective permissions diagnostics | planned: diagnostics endpoint/ui tests | partial |
