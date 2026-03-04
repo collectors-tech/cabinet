@@ -1,0 +1,4 @@
+ui.web/cypress/support/commands.ts
+ui.web/cypress/e2e/general/ui-foundation-accessibility/spec.cy.ts
+openspec/migration/auto-wave-113-summary.md
+openspec/migration/auto-wave-113-changed-files.txt
