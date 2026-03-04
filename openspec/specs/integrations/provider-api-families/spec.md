@@ -38,6 +38,20 @@ Given a provider homepage URL, onboarding SHALL run detection heuristics to infe
 ### Requirement PROVIDER-FAMILY-006: BigCommerce family SHALL support storefront-access-first retrieval with token-aware fallback
 BigCommerce-backed providers SHALL use available storefront-accessible data paths first and support token-aware GraphQL/management API integration when credentials are provided.
 
+### Requirement PROVIDER-FAMILY-007: Doofinder family SHALL support hashid-based search with origin-aware headers
+Doofinder-backed providers SHALL execute search via Doofinder search endpoint using discovered `hashid` and required origin/referrer headers when enforced by endpoint policy.
+
+#### Scenario: Doofinder search execution
+- **GIVEN** provider is classified as Doofinder family and hashid is discovered from Doofinder config
+- **WHEN** runtime executes query
+- **THEN** runtime MUST call Doofinder search endpoint with query/page/rpp params
+- **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
+
+#### Scenario: Doofinder discovery inputs
+- **GIVEN** onboarding detection scans provider assets
+- **WHEN** Doofinder scripts/config are present
+- **THEN** runtime MUST extract `store` UUID, `zone`, and `hashid` (`search_engines` mapping) for query execution
+
 #### Scenario: BigCommerce public/storefront-access run
 - **GIVEN** provider is classified as BigCommerce family and no privileged API token is configured
 - **WHEN** query run executes
@@ -64,6 +78,7 @@ BigCommerce-backed providers SHALL use available storefront-accessible data path
   - Boost/Shopify: `services.mybcapps.com/bc-sf-filter`, Boost script signatures
   - Algolia: `algoliasearch(` calls, app/search key/index markers
   - Shopify JSON: `/products.json` or `/collections/*/products.json` endpoint responses
+  - Doofinder: `cdn.doofinder.com` loader/config script + `hashid`/`search_engines` markers
 
 #### Scenario: Unified normalization output
 - **GIVEN** provider run returns family-specific payload
@@ -81,3 +96,4 @@ BigCommerce-backed providers SHALL use available storefront-accessible data path
 | UC-PF-06 | Manual override after detection | User can override detected family before provider save | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-autodetect-override` |
 | UC-PF-07 | BigCommerce storefront-access mode | Provider run works with storefront-accessible data paths and declares limits | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-storefront-mode` |
 | UC-PF-08 | BigCommerce token-enabled mode | Provider uses token-enabled API paths for deeper stock/catalog fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-token-enabled-mode` |
+| UC-PF-09 | Doofinder hashid search | Provider executes Doofinder search with discovered hashid and origin-aware headers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `doofinder-hashid-search-contract` |
