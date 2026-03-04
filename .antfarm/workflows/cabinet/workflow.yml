@@ -2,12 +2,18 @@
 # session with clean context. Memory persists via git history and progress files.
 id: cabinet
 name: Cabinet Workflow
-version: 5
+version: 6
 description: |
   Story-based execution pipeline. Planner decomposes tasks into user stories.
-  Setup prepares the environment and establishes baseline.
+  Setup prepares environment and establishes baseline.
   Developer implements each story (with tests) in a fresh session. Verifier checks each story.
-  Then integration/E2E testing, PR creation, and code review.
+  Then integration/E2E testing, artifact publish, PR creation, and code review.
+  Exhaustive UI validation runs in the separate `cabinet-validator` lane.
+
+  Non-negotiable execution policy:
+  - Issue -> Spec -> Validate -> Commit for every substantive change.
+  - UI work must validate control intent outcomes, form-field behavior, and dialog/layering contracts.
+  - Traceability updates must be backed by executable proof.
 
 polling:
   model: openai-codex/gpt-5.3-codex
@@ -69,6 +75,17 @@ agents:
         SOUL.md: agents/tester/SOUL.md
         IDENTITY.md: agents/tester/IDENTITY.md
 
+  - id: validator
+    name: Validator
+    role: testing
+    description: Exhaustive auth-first UI intent/form/layering validator.
+    workspace:
+      baseDir: agents/validator
+      files:
+        AGENTS.md: agents/validator/AGENTS.md
+        SOUL.md: agents/validator/SOUL.md
+        IDENTITY.md: agents/validator/IDENTITY.md
+
   - id: reviewer
     name: Reviewer
     role: analysis
@@ -98,6 +115,11 @@ steps:
       6. Always include "Typecheck passes" as the last criterion in every story
       7. Every story MUST include test criteria — "Tests for [feature] pass"
       8. The developer is expected to write tests as part of each story
+      9. Include explicit Issue->Spec->Validate->Commit checkpoints in each story
+      10. For frontend stories, include required checks for:
+          - control intent outcomes (route/state/data/error),
+          - form-field behavior (required/invalid/error/submission/keyboard),
+          - dialog layering contracts (visibility/focus trap/backdrop/z-index/Esc/Close/Cancel)
 
       Reply with:
       STATUS: done
@@ -178,12 +200,18 @@ steps:
       1. Read progress-{{run_id}}.txt — especially the Codebase Patterns section
       2. Pull latest on the branch
       3. Implement this story only
-      4. Write tests for this story's functionality
-      5. Run typecheck / build
-      6. Run tests to confirm they pass
-      7. Commit: feat: {{current_story_id}} - {{current_story_title}}
-      8. Append to progress-{{run_id}}.txt
-      9. Update Codebase Patterns if you found reusable patterns
+      4. Follow mandatory flow: Issue -> Spec -> Validate -> Commit
+      5. Write tests for this story's functionality
+      6. If UI is touched, add/adjust tests for:
+         - control intent outcomes (not click-only)
+         - form-field behavior and keyboard paths
+         - dialog/layering contracts
+      7. Run typecheck / build
+      8. Run tests to confirm they pass
+      9. Run openspec validate --all for spec/traceability integrity
+      10. Commit: feat: {{current_story_id}} - {{current_story_title}}
+      11. Append to progress-{{run_id}}.txt
+      12. Update Codebase Patterns if you found reusable patterns
 
       Reply with:
       STATUS: done
@@ -220,6 +248,9 @@ steps:
       4. Tests pass (run {{test_cmd}})
       5. No obvious incomplete work
       6. Typecheck passes
+      7. Mandatory flow evidence exists: Issue -> Spec -> Validate -> Commit
+      8. openspec validate --all passes (or failure is explicitly reported with reason)
+      9. For frontend stories, verify control intent + form behavior + layering checks are present and evidenced
 
       ## Visual Verification (Frontend Changes)
       Has frontend changes: {{has_frontend_changes}}
@@ -248,6 +279,15 @@ steps:
       STATUS: retry
       ISSUES:
       - What's missing or incomplete
+      ISSUE_FIELDS_REQUIRED:
+      - Screen/route
+      - Control/field type
+      - Expected intent
+      - Actual result
+      - Repro steps
+      - Evidence links
+      - Spec link/ID (or SPEC_GAP)
+      - Suggested fix path/module
     expects: "STATUS: done"
     on_fail:
       retry_step: implement
@@ -275,18 +315,36 @@ steps:
       Your job (integration/E2E testing — unit tests were already written per-story):
       1. Run the full test suite ({{test_cmd}}) to confirm everything passes together
       2. Look for integration issues between stories
-      3. If this is a UI feature, use agent-browser to test it end-to-end
-      4. Check cross-cutting concerns: error handling, edge cases across features
-      5. Verify the overall feature works as a cohesive whole
+      3. If this is a UI feature, run intent-level validation (not click-only):
+         - control intent outcomes (route/state/data/error)
+         - form-field behavior and keyboard accessibility
+         - dialog/layering contracts (visibility, focus trap, backdrop, z-index, Esc/Close/Cancel)
+      4. Use agent-browser to test UI end-to-end when frontend changes exist
+      5. Run openspec validate --all
+      6. Check cross-cutting concerns: error handling, edge cases across features
+      7. Verify the overall feature works as a cohesive whole
+      8. Publish build artifact manifest (mandatory) using:
+         - `pwsh -File .\.antfarm\scripts\publish-artifact.ps1 -Name cabinet -ValidationSummary "<key test/gate summary>" -ArtifactPath "<optional build path>"`
+      9. Confirm manifest exists in `.antfarm/artifacts/release-*.json` and include path in output
 
       Reply with:
       STATUS: done
       RESULTS: What you tested and the outcomes
+      ARTIFACT_MANIFEST: absolute path to manifest created under .antfarm/artifacts
 
       Or if issues found:
       STATUS: retry
       FAILURES:
       - Specific test failures or bugs found
+      ISSUE_FIELDS_REQUIRED:
+      - Screen/route
+      - Control/field type
+      - Expected intent
+      - Actual result
+      - Repro steps
+      - Evidence links
+      - Spec link/ID (or SPEC_GAP)
+      - Suggested fix path/module
     expects: "STATUS: done"
     on_fail:
       retry_step: implement
@@ -314,6 +372,7 @@ steps:
       - Clear title summarizing the change
       - Description explaining what and why
       - Reference to what was tested
+      - Evidence block: issue IDs, spec IDs, validation commands, outcomes, commit hashes
 
       Use: gh pr create
 

@@ -1,0 +1,69 @@
+id: cabinet-validator
+name: Cabinet Validator Lane
+version: 1
+description: |
+  Independent validator lane. Always validates the latest released build artifact and generates focused issues/spec gaps.
+
+polling:
+  model: openai-codex/gpt-5.3-codex
+  timeoutSeconds: 120
+
+agents:
+  - id: validator
+    name: Validator
+    role: testing
+    description: Exhaustive auth-first UI intent/form/layering validator.
+    workspace:
+      baseDir: agents/validator
+      files:
+        AGENTS.md: agents/validator/AGENTS.md
+        SOUL.md: agents/validator/SOUL.md
+        IDENTITY.md: agents/validator/IDENTITY.md
+
+steps:
+  - id: validate_latest_artifact
+    agent: validator
+    input: |
+      Validate latest build artifact for cabinet.
+
+      TASK:
+      {{task}}
+
+      Artifact policy:
+      1) Find latest artifact manifest under `.antfarm/artifacts/release-*.json` (newest by timestamp in filename or modified time).
+      2) If no artifact exists, return STATUS: retry with blocker.
+      3) Use the latest artifact only (skip older artifacts).
+      4) Record validated artifact id/hash in `.antfarm/state/last_validated_artifact.txt`.
+
+      Runtime isolation (mandatory, exact):
+      - source exe: C:\projects\collectors-tech\cabinet\bin\cabinet.exe
+      - target exe: C:\projects\collectors-tech\cabinet\tmp\demo1\bin\cabinet.exe
+      - data dir: C:\projects\collectors-tech\cabinet\tmp\demo1\data
+      - launch flags: -allow-parallel -no-open-browser -data-dir <data dir> -profile demo1-helper -instance-name demo1-helper -port 17881
+      - compare source/target hashes; copy source -> target when different/missing before launch
+
+      Mandatory validation mode:
+      - Run exhaustive UI validation against isolated demo1 runtime
+      - intent outcomes (route/state/data/error)
+      - form behavior + keyboard paths
+      - layering contracts (visibility/focus trap/backdrop/z-index/Esc/Close/Cancel)
+      - targeted Cypress + openspec validate --all
+
+      For failures/spec gaps:
+      - create focused GitHub issues via gh issue create
+      - include required fields: Screen/route, Control/field type, Expected intent, Actual result, Repro, Evidence, Spec ID/SPEC_GAP, Suggested fix path
+
+      Reply with:
+      STATUS: done
+      ARTIFACT: <artifact id/hash>
+      METRICS_CONTROLS: discovered=<n>; matched=<n>; unmatched=<n>
+      METRICS_FIELDS: discovered=<n>; validated=<n>; failing=<n>
+      METRICS_LAYERING: pass=<n>; fail=<n>
+      ISSUES_CREATED: <ids or none>
+      BLOCKERS: <none or details>
+      EVIDENCE: <commands + key outputs>
+    expects: "STATUS: done"
+    on_fail:
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
