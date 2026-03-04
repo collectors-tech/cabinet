@@ -4,6 +4,8 @@ param(
   [switch]$Headed,
   [switch]$NoServer,
   [switch]$RequireE2EHooks,
+  [string]$RuntimeExecutablePath = "",
+  [switch]$AllowTempRuntimePath,
   [string]$BaseUrl = "http://127.0.0.1:17880",
   [int]$StartupTimeoutSec = 45
 )
@@ -51,10 +53,52 @@ function Stop-PortListener([string]$url) {
   }
 }
 
+function Test-IsEphemeralRuntimePath([string]$path) {
+  if ([string]::IsNullOrWhiteSpace($path)) {
+    return $false
+  }
+  $normalized = $path.ToLowerInvariant().Replace('/', '\')
+  $markers = @(
+    '\appdata\local\temp\',
+    '\temp\',
+    '\tmp\',
+    '\.tmp\',
+    '\template\',
+    '\templates\'
+  )
+  foreach ($marker in $markers) {
+    if ($normalized.Contains($marker)) {
+      return $true
+    }
+  }
+  return $false
+}
+
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uiRoot = Join-Path $repoRoot "ui.web"
+$defaultRuntimeExecutable = Join-Path $repoRoot "bin/cabinet.exe"
 $configPath = Join-Path $uiRoot "cypress.config.ts"
 $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $uiRoot $Spec }
+
+$resolvedRuntimeExecutablePath = ""
+if ([string]::IsNullOrWhiteSpace($RuntimeExecutablePath)) {
+  if (Test-Path $defaultRuntimeExecutable) {
+    $resolvedRuntimeExecutablePath = (Resolve-Path $defaultRuntimeExecutable).Path
+  }
+} else {
+  $candidate = $RuntimeExecutablePath
+  if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+    $candidate = Join-Path $repoRoot $candidate
+  }
+  if (-not (Test-Path $candidate)) {
+    throw "Configured runtime executable path does not exist: $candidate"
+  }
+  $resolvedRuntimeExecutablePath = (Resolve-Path $candidate).Path
+}
+
+if ((Test-IsEphemeralRuntimePath $resolvedRuntimeExecutablePath) -and -not $AllowTempRuntimePath) {
+  throw "ephemeral temp/template runtime path was rejected: $resolvedRuntimeExecutablePath. Pass -AllowTempRuntimePath to override explicitly."
+}
 
 if (-not (Test-Path $configPath)) {
   throw "Missing Cypress config: $configPath"
@@ -83,10 +127,16 @@ try {
     }
     else {
       Write-Step "Starting Cabinet server..."
-      $serverProc = Start-Process -FilePath "go" -ArgumentList @(
-        "run",
-        "./cmd/cabinet"
-      ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+      if (-not [string]::IsNullOrWhiteSpace($resolvedRuntimeExecutablePath)) {
+        Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
+        $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+      } else {
+        Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
+        $serverProc = Start-Process -FilePath "go" -ArgumentList @(
+          "run",
+          "./cmd/cabinet"
+        ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+      }
       $startedServer = $true
 
       $deadline = (Get-Date).AddSeconds($StartupTimeoutSec)
