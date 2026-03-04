@@ -270,4 +270,95 @@ describe('ui-screen-integrations', () => {
       })
     })
   })
+
+  it('UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'au-webshop-voglers-com-au',
+            display_name: 'voglers.com.au',
+            base_domain: 'voglers.com.au',
+            integration_mode: 'storefront_access',
+            api_family: 'bigcommerce',
+            api_support_profile: 'bigcommerce_storefront_v1',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Storefront mode by default.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signIn()
+    cy.get('[data-testid="provider-card-au-webshop-voglers-com-au"]').should('be.visible')
+    cy.get('[data-testid="provider-api-family-au-webshop-voglers-com-au"]')
+      .should('be.visible')
+      .and('contain.text', 'API Family: bigcommerce')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'au-webshop-voglers-com-au',
+            display_name: 'voglers.com.au',
+            base_domain: 'voglers.com.au',
+            integration_mode: 'storefront_access',
+            api_family: 'bigcommerce',
+            api_support_profile: 'bigcommerce_storefront_v1',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Storefront mode by default.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signIn()
+    cy.get('[data-testid="provider-open-au-webshop-voglers-com-au"]').click()
+    cy.get('[data-testid="provider-detail-api-family"]')
+      .should('be.visible')
+      .and('contain.text', 'API Family: bigcommerce')
+    cy.get('[data-testid="provider-detail-api-support-profile"]')
+      .should('be.visible')
+      .and('contain.text', 'Support Profile: bigcommerce_storefront_v1')
+  })
 })

@@ -51,6 +51,8 @@ type ProviderRecord = {
   provider_id: string
   display_name: string
   base_domain: string
+  api_family?: string
+  api_support_profile?: string
   integration_mode: 'official_api' | 'web_ingestion' | 'program_api' | string
   auth_mode: 'none' | 'oauth' | 'api_key' | 'hybrid' | string
   state: 'ready' | 'degraded' | 'disabled' | string
@@ -667,6 +669,12 @@ export function Apps({
                   <div className='space-y-1'>
                     <h2 className='font-semibold'>{provider.display_name}</h2>
                     <p className='text-xs text-muted-foreground'>{provider.base_domain}</p>
+                    <p
+                      className='text-xs text-muted-foreground'
+                      data-testid={`provider-api-family-${provider.provider_id}`}
+                    >
+                      API Family: {provider.api_family ?? 'custom'}
+                    </p>
                   </div>
                   <Button
                     variant='outline'
@@ -714,6 +722,12 @@ export function Apps({
             <div className='space-y-4'>
               <div className='rounded-md border bg-muted/20 p-3 text-xs'>
                 <p>Mode: {editingProvider.integration_mode}</p>
+                <p data-testid='provider-detail-api-family'>
+                  API Family: {editingProvider.api_family ?? 'custom'}
+                </p>
+                <p data-testid='provider-detail-api-support-profile'>
+                  Support Profile: {editingProvider.api_support_profile ?? 'unknown'}
+                </p>
                 <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
                 <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
                 <p>

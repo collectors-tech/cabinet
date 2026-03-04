@@ -1,0 +1,8 @@
+internal/app/app.go
+internal/ui/static/index.html
+openspec/specs/integrations/ui-screen-integrations/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts
+ui.web/src/features/apps/index.tsx
+openspec/migration/auto-wave-100-summary.md
+openspec/migration/auto-wave-100-changed-files.txt

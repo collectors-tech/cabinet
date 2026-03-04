@@ -4723,6 +4723,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"display_name":     "eBay",
 			"base_domain":      "ebay.com",
 			"api_family":       "official_api",
+			"api_support_profile": "rest_v1",
 			"active_mode":      "official_api",
 			"integration_mode": "official_api",
 			"api_available":    true,
@@ -4742,6 +4743,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"display_name":         "Amazon",
 			"base_domain":          "amazon.com",
 			"api_family":           "official_api",
+			"api_support_profile":  "program_api_v1",
 			"active_mode":          map[bool]string{true: "program_api", false: "disabled"}[amazonMode == "program_api"],
 			"integration_mode":     amazonMode,
 			"api_available":        amazonMode == "program_api",
@@ -4775,21 +4777,40 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		apiFamily := "web_ingestion"
 		activeMode := "web_ingestion"
 		integrationMode := "web_ingestion"
+		supportProfile := "html_fallback"
 		if d == "voglers.com.au" {
 			apiFamily = "bigcommerce"
 			activeMode = "storefront_public"
 			integrationMode = "storefront_access"
+			supportProfile = "bigcommerce_storefront_v1"
 		}
 		if d == "mrtoys.com.au" {
 			apiFamily = "doofinder"
 			activeMode = "hashid_search"
 			integrationMode = "api_family_search"
+			supportProfile = "doofinder_hashid_v1"
+		}
+		if d == "bonzaslotcars.com.au" {
+			apiFamily = "woo_store_api"
+			activeMode = "store_api_first"
+			supportProfile = "store_v1"
+		}
+		if d == "frontlinehobbies.com.au" {
+			apiFamily = "algolia"
+			activeMode = "algolia_runtime"
+			supportProfile = "algolia_runtime_v1"
+		}
+		if d == "hobbytechtoys.com.au" {
+			apiFamily = "boost_shopify"
+			activeMode = "boost_api"
+			supportProfile = "boost_v2"
 		}
 		base = append(base, map[string]any{
 			"provider_id":      "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
 			"display_name":     d,
 			"base_domain":      d,
 			"api_family":       apiFamily,
+			"api_support_profile": supportProfile,
 			"active_mode":      activeMode,
 			"integration_mode": integrationMode,
 			"api_available":    d == "voglers.com.au" || d == "mrtoys.com.au",
@@ -4817,10 +4838,12 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		if strings.EqualFold(fmt.Sprintf("%v", provider["api_family"]), "bigcommerce") {
 			if hasToken {
 				provider["active_mode"] = "token_enabled"
+				provider["api_support_profile"] = "bigcommerce_token_v1"
 				provider["auth_requirement"] = "api_token_optional"
 				provider["auth_mode"] = "token_optional"
 			} else {
 				provider["active_mode"] = "storefront_public"
+				provider["api_support_profile"] = "bigcommerce_storefront_v1"
 				provider["auth_requirement"] = "none"
 				provider["auth_mode"] = "none"
 			}
@@ -4870,20 +4893,29 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				provider["active_mode"] = "hashid_search"
 				provider["integration_mode"] = "api_family_search"
 				provider["api_available"] = true
+				provider["api_support_profile"] = "doofinder_hashid_v1"
 			case "bigcommerce":
 				if hasToken {
 					provider["active_mode"] = "token_enabled"
+					provider["api_support_profile"] = "bigcommerce_token_v1"
 				} else {
 					provider["active_mode"] = "storefront_public"
+					provider["api_support_profile"] = "bigcommerce_storefront_v1"
 				}
 			case "woocommerce":
 				provider["active_mode"] = "store_api_first"
+				provider["api_support_profile"] = "store_v1"
 			case "boost_shopify":
 				provider["active_mode"] = "boost_api"
+				provider["api_support_profile"] = "boost_v2"
 			case "algolia":
 				provider["active_mode"] = "algolia_runtime"
+				provider["api_support_profile"] = "algolia_runtime_v1"
 			case "shopify_json":
 				provider["active_mode"] = "products_json"
+				provider["api_support_profile"] = "products_json_v1"
+			default:
+				provider["api_support_profile"] = "custom_override"
 			}
 		}
 	}
