@@ -1427,6 +1427,119 @@ func New(cfg config.Config) (*App, error) {
 			"warning":       warning,
 		})
 	})
+	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID                 string   `json:"query_set_id"`
+			DiscoveryAssetURL          string   `json:"discovery_asset_url"`
+			FallbackDiscoveryAssetURLs []string `json:"fallback_discovery_asset_urls"`
+			SearchURL                  string   `json:"search_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.hobbytechtoys.base_url"])
+		if baseURL == "" {
+			baseURL = "https://hobbytechtoys.com.au"
+		}
+		itemsPerPage := parsePositiveInt(settings["integration.hobbytechtoys.items_per_page"], 24)
+		if itemsPerPage > 50 {
+			itemsPerPage = 50
+		}
+		discoveryAssetURL := strings.TrimSpace(req.DiscoveryAssetURL)
+		if discoveryAssetURL == "" {
+			discoveryAssetURL = strings.TrimRight(baseURL, "/") + "/assets/hobby-search.js"
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = strings.TrimRight(baseURL, "/") + "/services.mybcapps.com/bc-sf-filter/search"
+		}
+		cfg, discoveryFallbackUsed, discoveryWarning, err := discoverHobbytechBoostConfig(
+			r.Context(),
+			conn,
+			http.DefaultClient,
+			discoveryAssetURL,
+			req.FallbackDiscoveryAssetURLs,
+			searchURL,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_discover_hobbytech_config"}`, http.StatusBadRequest)
+			return
+		}
+		candidates, pageCount, runErr := runHobbytechSearch(r.Context(), http.DefaultClient, qs, cfg, itemsPerPage)
+		driftRecovered := false
+		warning := discoveryWarning
+		if runErr != nil {
+			recoveryAssetURL := discoveryAssetURL
+			recoveryFallbackAssets := req.FallbackDiscoveryAssetURLs
+			if len(req.FallbackDiscoveryAssetURLs) > 0 {
+				recoveryAssetURL = strings.TrimSpace(req.FallbackDiscoveryAssetURLs[0])
+				recoveryFallbackAssets = req.FallbackDiscoveryAssetURLs[1:]
+			}
+			recoveredCfg, fallbackUsed, fallbackWarning, fallbackErr := discoverHobbytechBoostConfig(
+				r.Context(),
+				conn,
+				http.DefaultClient,
+				recoveryAssetURL,
+				recoveryFallbackAssets,
+				searchURL,
+			)
+			if fallbackErr == nil {
+				candidates, pageCount, runErr = runHobbytechSearch(r.Context(), http.DefaultClient, qs, recoveredCfg, itemsPerPage)
+				if runErr == nil {
+					driftRecovered = true
+					if strings.TrimSpace(fallbackWarning) != "" {
+						warning = fallbackWarning
+					} else if fallbackUsed {
+						warning = "hobbytech discovery fallback used cached config"
+					} else {
+						warning = "hobbytech session drift recovered via fallback discovery"
+					}
+				}
+			}
+		}
+		if runErr != nil {
+			http.Error(w, `{"error":"failed_to_run_hobbytech_provider"}`, http.StatusBadRequest)
+			return
+		}
+		if discoveryFallbackUsed && strings.TrimSpace(warning) == "" {
+			warning = "hobbytech discovery used cached config"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":     qs.ID,
+			"page_count":       pageCount,
+			"candidates":       candidates,
+			"drift_recovered":  driftRecovered,
+			"warning":          warning,
+			"discovery_config": cfg,
+		})
+	})
 	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4452,6 +4565,17 @@ type frontlineAlgoliaConfig struct {
 	DiscoveredAt  string   `json:"discovered_at"`
 }
 
+type hobbytechBoostConfig struct {
+	Shop         string `json:"shop"`
+	SID          string `json:"sid"`
+	Template     string `json:"template"`
+	Widget       string `json:"widget"`
+	SearchURL    string `json:"search_url"`
+	Source       string `json:"source"`
+	ConfigHash   string `json:"config_hash"`
+	DiscoveredAt string `json:"discovered_at"`
+}
+
 type bonzaProductResponse struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
@@ -4469,6 +4593,7 @@ type bonzaSearchResult struct {
 }
 
 const frontlineAlgoliaCacheKey = "frontline_algolia_last_known_good"
+const hobbytechBoostCacheKey = "hobbytech_boost_last_known_good"
 
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -4620,6 +4745,246 @@ func readFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB) (frontlineAlgo
 		return frontlineAlgoliaConfig{}, fmt.Errorf("frontline cache config is incomplete")
 	}
 	return config, nil
+}
+
+func discoverHobbytechBoostConfig(
+	ctx context.Context,
+	conn *sql.DB,
+	client *http.Client,
+	assetURL string,
+	fallbackAssetURLs []string,
+	searchURL string,
+) (hobbytechBoostConfig, bool, string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
+	candidates = append(candidates, strings.TrimSpace(assetURL))
+	for _, value := range fallbackAssetURLs {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			candidates = append(candidates, trimmed)
+		}
+	}
+	var discoveryErr error
+	for _, urlValue := range candidates {
+		if urlValue == "" {
+			continue
+		}
+		script, fetchErr := fetchProviderAsset(ctx, client, urlValue)
+		if fetchErr != nil {
+			discoveryErr = fetchErr
+			continue
+		}
+		config, parseErr := parseHobbytechBoostConfig(script, urlValue, searchURL)
+		if parseErr != nil {
+			discoveryErr = parseErr
+			continue
+		}
+		if persistErr := persistHobbytechBoostCache(ctx, conn, config); persistErr != nil {
+			discoveryErr = persistErr
+			continue
+		}
+		return config, false, "", nil
+	}
+	cached, cacheErr := readHobbytechBoostCache(ctx, conn)
+	if cacheErr == nil {
+		if strings.TrimSpace(searchURL) != "" {
+			cached.SearchURL = strings.TrimSpace(searchURL)
+		}
+		warning := "hobbytech discovery fallback used cached config"
+		if discoveryErr != nil {
+			warning = fmt.Sprintf("%s: %s", warning, strings.TrimSpace(discoveryErr.Error()))
+		}
+		return cached, true, warning, nil
+	}
+	if discoveryErr != nil {
+		return hobbytechBoostConfig{}, false, "", discoveryErr
+	}
+	return hobbytechBoostConfig{}, false, "", cacheErr
+}
+
+func parseHobbytechBoostConfig(script, source, searchURL string) (hobbytechBoostConfig, error) {
+	patternByKey := map[string]*regexp.Regexp{
+		"shop":     regexp.MustCompile(`(?i)shop\s*[:=]\s*['"]([^'"]+)['"]`),
+		"sid":      regexp.MustCompile(`(?i)sid\s*[:=]\s*['"]([^'"]+)['"]`),
+		"template": regexp.MustCompile(`(?i)template\s*[:=]\s*['"]([^'"]+)['"]`),
+		"widget":   regexp.MustCompile(`(?i)widget\s*[:=]\s*['"]([^'"]+)['"]`),
+	}
+	values := map[string]string{}
+	for key, pattern := range patternByKey {
+		match := pattern.FindStringSubmatch(script)
+		if len(match) >= 2 {
+			values[key] = strings.TrimSpace(match[1])
+		}
+	}
+	if values["shop"] == "" || values["sid"] == "" {
+		return hobbytechBoostConfig{}, fmt.Errorf("missing hobbytech discovery values")
+	}
+	resolvedSearchURL := strings.TrimSpace(searchURL)
+	if resolvedSearchURL == "" {
+		urlMatch := regexp.MustCompile(`(?i)https?://[^'"\s]*mybcapps[^'"\s]*`).FindString(script)
+		resolvedSearchURL = strings.TrimSpace(urlMatch)
+	}
+	if resolvedSearchURL == "" {
+		return hobbytechBoostConfig{}, fmt.Errorf("missing hobbytech search endpoint")
+	}
+	hash := sha256.Sum256([]byte(script))
+	return hobbytechBoostConfig{
+		Shop:         values["shop"],
+		SID:          values["sid"],
+		Template:     values["template"],
+		Widget:       values["widget"],
+		SearchURL:    resolvedSearchURL,
+		Source:       strings.TrimSpace(source),
+		ConfigHash:   fmt.Sprintf("%x", hash[:]),
+		DiscoveredAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func persistHobbytechBoostCache(ctx context.Context, conn *sql.DB, config hobbytechBoostConfig) error {
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal hobbytech cache config: %w", err)
+	}
+	_, execErr := conn.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, hobbytechBoostCacheKey, string(raw))
+	if execErr != nil {
+		return fmt.Errorf("persist hobbytech cache config: %w", execErr)
+	}
+	return nil
+}
+
+func readHobbytechBoostCache(ctx context.Context, conn *sql.DB) (hobbytechBoostConfig, error) {
+	var raw string
+	err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, hobbytechBoostCacheKey).Scan(&raw)
+	if err != nil {
+		return hobbytechBoostConfig{}, fmt.Errorf("load hobbytech cache config: %w", err)
+	}
+	var config hobbytechBoostConfig
+	if decodeErr := json.Unmarshal([]byte(raw), &config); decodeErr != nil {
+		return hobbytechBoostConfig{}, fmt.Errorf("decode hobbytech cache config: %w", decodeErr)
+	}
+	if strings.TrimSpace(config.Shop) == "" || strings.TrimSpace(config.SID) == "" || strings.TrimSpace(config.SearchURL) == "" {
+		return hobbytechBoostConfig{}, fmt.Errorf("hobbytech cache config is incomplete")
+	}
+	return config, nil
+}
+
+func runHobbytechSearch(
+	ctx context.Context,
+	client *http.Client,
+	qs scanner.QuerySet,
+	config hobbytechBoostConfig,
+	itemsPerPage int,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(config.SearchURL) == "" {
+		return nil, 0, fmt.Errorf("hobbytech search endpoint missing")
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 24
+	}
+	query := strings.TrimSpace(qs.Name)
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		query = strings.TrimSpace(qs.Keywords[0])
+	}
+	if query == "" {
+		query = "collectible"
+	}
+	candidateByID := map[string]map[string]any{}
+	pageCount := 0
+	totalPages := 0
+	for page := 1; ; page++ {
+		searchURL, err := url.Parse(strings.TrimSpace(config.SearchURL))
+		if err != nil {
+			return nil, 0, fmt.Errorf("parse hobbytech search url: %w", err)
+		}
+		params := searchURL.Query()
+		params.Set("q", query)
+		params.Set("page", strconv.Itoa(page))
+		params.Set("limit", strconv.Itoa(itemsPerPage))
+		params.Set("shop", config.Shop)
+		params.Set("sid", config.SID)
+		if strings.TrimSpace(config.Template) != "" {
+			params.Set("template", config.Template)
+		}
+		if strings.TrimSpace(config.Widget) != "" {
+			params.Set("widget", config.Widget)
+		}
+		searchURL.RawQuery = params.Encode()
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, searchURL.String(), nil)
+		if reqErr != nil {
+			return nil, 0, fmt.Errorf("build hobbytech search request: %w", reqErr)
+		}
+		resp, runErr := client.Do(req)
+		if runErr != nil {
+			return nil, 0, fmt.Errorf("run hobbytech search request: %w", runErr)
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			resp.Body.Close()
+			return nil, pageCount, fmt.Errorf("hobbytech search returned status %d", resp.StatusCode)
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, pageCount, fmt.Errorf("read hobbytech search response: %w", readErr)
+		}
+		var payload struct {
+			Products []struct {
+				ID    any    `json:"id"`
+				Title string `json:"title"`
+				URL   string `json:"url"`
+				Price string `json:"price"`
+				Image string `json:"image"`
+			} `json:"products"`
+			Pagination struct {
+				TotalPages int `json:"total_pages"`
+			} `json:"pagination"`
+			HTML string `json:"html"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil, pageCount, fmt.Errorf("decode hobbytech response: %w", err)
+		}
+		if totalPages == 0 && payload.Pagination.TotalPages > 0 {
+			totalPages = payload.Pagination.TotalPages
+		}
+		pageCount++
+		for _, product := range payload.Products {
+			listingID := fmt.Sprintf("hobbytech-%v", product.ID)
+			if strings.TrimSpace(listingID) == "" || strings.EqualFold(listingID, "hobbytech-<nil>") {
+				continue
+			}
+			if _, exists := candidateByID[listingID]; exists {
+				continue
+			}
+			candidateByID[listingID] = map[string]any{
+				"listing_id": listingID,
+				"title":      strings.TrimSpace(product.Title),
+				"url":        strings.TrimSpace(product.URL),
+				"price":      strings.TrimSpace(product.Price),
+				"image":      strings.TrimSpace(product.Image),
+				"source":     "hobbytechtoys",
+				"seller":     "hobbytechtoys.com.au",
+			}
+		}
+		if len(payload.Products) == 0 {
+			break
+		}
+		if totalPages > 0 && page >= totalPages {
+			break
+		}
+	}
+	candidates := make([]map[string]any, 0, len(candidateByID))
+	for _, candidate := range candidateByID {
+		candidates = append(candidates, candidate)
+	}
+	return candidates, pageCount, nil
 }
 
 func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs scanner.QuerySet, itemsPerPage int) (bonzaSearchResult, error) {
