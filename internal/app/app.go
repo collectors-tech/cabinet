@@ -6182,8 +6182,9 @@ func (a *App) Run(ctx context.Context) error {
 	defer func() {
 		_ = removeRuntimePIDFile(a.cfg)
 	}()
-	listener, err := net.Listen("tcp", a.srv.Addr)
+	listener, err := listenWithPortFallback(a.srv.Addr, 50)
 	if err != nil {
+		_ = a.close()
 		return err
 	}
 	resolvedAddr := listener.Addr().String()
@@ -6213,6 +6214,56 @@ func (a *App) Run(ctx context.Context) error {
 		_ = a.close()
 		return err
 	}
+}
+
+func listenWithPortFallback(addr string, maxFallbackAttempts int) (net.Listener, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err == nil {
+		return listener, nil
+	}
+	if !isAddressInUseError(err) {
+		return nil, err
+	}
+	host, requestedPort := splitHostPort(addr)
+	if strings.TrimSpace(host) == "" || requestedPort <= 0 || maxFallbackAttempts <= 0 {
+		return nil, err
+	}
+	for offset := 1; offset <= maxFallbackAttempts; offset++ {
+		candidatePort := requestedPort + offset
+		if candidatePort > 65535 {
+			break
+		}
+		candidateAddr := net.JoinHostPort(host, strconv.Itoa(candidatePort))
+		candidateListener, candidateErr := net.Listen("tcp", candidateAddr)
+		if candidateErr == nil {
+			return candidateListener, nil
+		}
+		if !isAddressInUseError(candidateErr) {
+			return nil, candidateErr
+		}
+	}
+	return nil, err
+}
+
+func splitHostPort(addr string) (string, int) {
+	host, portRaw, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return "", 0
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(portRaw))
+	if err != nil {
+		return host, 0
+	}
+	return host, port
+}
+
+func isAddressInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "address already in use") ||
+		strings.Contains(lower, "only one usage of each socket address")
 }
 
 func startupURLFromResolvedAddr(addr string) string {

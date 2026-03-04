@@ -112,3 +112,13 @@ When no explicit data directory override is provided, runtime MUST resolve data 
 - **THEN** default data directory MUST resolve to `<exe_dir>/data`
 - **AND** diagnostics/startup output MUST surface resolved data directory
 - **AND** explicit `--data-dir`/`CABINET_DATA_DIR` override MUST continue to take precedence
+
+### Requirement RUNTIME-CORE-011: Runtime startup SHALL negotiate fallback port when requested port is occupied
+When requested runtime port is already in use, startup MUST bind deterministically to the next available port within fallback scan window and continue serving.
+
+#### Scenario: Requested port occupied on startup
+- **GIVEN** runtime attempts to bind `host:requested_port` and that port is occupied by another process
+- **WHEN** startup bind occurs
+- **THEN** runtime MUST attempt fallback ports (`requested_port+1 ... requested_port+N`) and bind first available address
+- **AND** startup output MUST preserve `requested_port` and report actual `resolved_port`
+- **AND** resolved `/healthz` endpoint on fallback URL MUST return `200`

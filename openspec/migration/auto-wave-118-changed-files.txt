@@ -1,0 +1,8 @@
+internal/app/app.go
+internal/app/runtime_port_negotiation_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-port-negotiation-summary.md
+openspec/migration/runtime-port-negotiation-changed-files.txt
+openspec/migration/auto-wave-118-summary.md
+openspec/migration/auto-wave-118-changed-files.txt
