@@ -219,11 +219,10 @@ export function SignIn() {
     setSetupStep((previous) => Math.max(previous - 1, 0))
   }
 
-  async function completeSetup() {
-    if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
-      setSetupError('Clerk publishable key is required.')
-      return
-    }
+  async function submitSetupComplete(
+    requestPayload: Record<string, unknown>,
+    options?: { defaultsApplied?: boolean }
+  ) {
     setCompletingSetup(true)
     setSetupError(null)
     try {
@@ -232,42 +231,27 @@ export function SignIn() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          instance_name: setupForm.instanceName.trim(),
-          profile_key: setupForm.profileKey.trim(),
-          storage_mode: setupForm.storageMode,
-          storage_data_dir: selectedStorageDataDir(),
-          portable_mode: setupForm.portableMode,
-          runtime_port_mode: setupForm.runtimePortMode,
-          runtime_fixed_port:
-            setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
-          auth_mode: setupForm.authMode,
-          clerk_publishable_key:
-            setupForm.authMode === 'clerk'
-              ? setupForm.clerkPublishableKey.trim()
-              : '',
-          feature_chat: setupForm.featureChat,
-          feature_providers: setupForm.featureProviders,
-          feature_scanner: setupForm.featureScanner,
-          bootstrap_workspace: 'Local Workspace',
-          bootstrap_database_ref: 'Primary DB',
-        }),
+        body: JSON.stringify(requestPayload),
       })
       if (!response.ok) {
         let message = `setup_complete_failed_${response.status}`
         try {
-          const payload = (await response.json()) as { message?: string }
-          if (payload?.message) {
-            message = payload.message
+          const errorPayload = (await response.json()) as { message?: string }
+          if (errorPayload?.message) {
+            message = errorPayload.message
           }
         } catch {
           // no-op
         }
         throw new Error(message)
       }
-      const payload = (await response.json()) as RuntimeSetupCompletePayload
-      setSetupCompleteState(payload)
-      setSetupCompleteFeedback('')
+      const completePayload = (await response.json()) as RuntimeSetupCompletePayload
+      setSetupCompleteState(completePayload)
+      setSetupCompleteFeedback(
+        options?.defaultsApplied
+          ? 'Defaults applied. You can refine these settings later in Settings.'
+          : ''
+      )
     } catch (error) {
       setSetupError(
         error instanceof Error ? error.message : 'setup_complete_failed'
@@ -275,6 +259,56 @@ export function SignIn() {
     } finally {
       setCompletingSetup(false)
     }
+  }
+
+  async function completeSetup() {
+    if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
+      setSetupError('Clerk publishable key is required.')
+      return
+    }
+
+    await submitSetupComplete({
+      instance_name: setupForm.instanceName.trim(),
+      profile_key: setupForm.profileKey.trim(),
+      storage_mode: setupForm.storageMode,
+      storage_data_dir: selectedStorageDataDir(),
+      portable_mode: setupForm.portableMode,
+      runtime_port_mode: setupForm.runtimePortMode,
+      runtime_fixed_port:
+        setupForm.runtimePortMode === 'fixed' ? setupForm.runtimeFixedPort : 0,
+      auth_mode: setupForm.authMode,
+      clerk_publishable_key:
+        setupForm.authMode === 'clerk'
+          ? setupForm.clerkPublishableKey.trim()
+          : '',
+      feature_chat: setupForm.featureChat,
+      feature_providers: setupForm.featureProviders,
+      feature_scanner: setupForm.featureScanner,
+      bootstrap_workspace: 'Local Workspace',
+      bootstrap_database_ref: 'Primary DB',
+    })
+  }
+
+  async function useDefaultsSetup() {
+    await submitSetupComplete(
+      {
+        instance_name: 'Cabinet Local',
+        profile_key: 'default',
+        storage_mode: 'exe_local',
+        storage_data_dir: setupDefaultStorageDataDir,
+        portable_mode: false,
+        runtime_port_mode: 'auto',
+        runtime_fixed_port: 0,
+        auth_mode: 'local',
+        clerk_publishable_key: '',
+        feature_chat: true,
+        feature_providers: true,
+        feature_scanner: true,
+        bootstrap_workspace: 'Local Workspace',
+        bootstrap_database_ref: 'Primary DB',
+      },
+      { defaultsApplied: true }
+    )
   }
 
   function startSetupFlow() {
@@ -482,6 +516,14 @@ export function SignIn() {
               <div className='flex flex-wrap items-center gap-2'>
                 <Button data-testid='setup-start' onClick={startSetupFlow}>
                   Start Setup
+                </Button>
+                <Button
+                  variant='secondary'
+                  data-testid='setup-use-defaults'
+                  disabled={completingSetup}
+                  onClick={() => void useDefaultsSetup()}
+                >
+                  {completingSetup ? 'Applying Defaults...' : 'Use Defaults'}
                 </Button>
                 <Button
                   variant='outline'

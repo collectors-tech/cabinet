@@ -51,6 +51,7 @@ describe('SETUP-WIZ', () => {
 
   it('UC-SW-12 setup-wizard-welcome-actions renders start/import actions before form fields', () => {
     cy.get('[data-testid="setup-start"]').should('be.visible');
+    cy.get('[data-testid="setup-use-defaults"]').should('be.visible');
     cy.get('[data-testid="setup-import-toggle"]').should('be.visible');
     cy.get('[data-testid="setup-instance-name"]').should('not.exist');
     cy.get('[data-testid="setup-profile-key"]').should('not.exist');
@@ -58,6 +59,30 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-start"]').click();
     cy.get('[data-testid="setup-instance-name"]').should('be.visible');
     cy.get('[data-testid="setup-profile-key"]').should('be.visible');
+  });
+
+  it('UC-SW-37 setup-wizard-use-defaults writes deterministic config and shows defaults-applied completion feedback', () => {
+    cy.get('[data-testid="setup-use-defaults"]').click();
+    cy.get('[data-testid="setup-wizard-complete-state"]').should('be.visible');
+    cy.get('[data-testid="setup-complete-feedback"]')
+      .should('be.visible')
+      .and('contain.text', 'Defaults applied.');
+    cy.get('[data-testid="setup-complete-instance-name"]').should(
+      'contain.text',
+      'Cabinet Local'
+    );
+    cy.get('[data-testid="setup-complete-runtime-port"]').should(
+      'contain.text',
+      '17880'
+    );
+
+    cy.request('GET', '/api/test/runtime/setup-config')
+      .its('body')
+      .then((payload) => {
+        expect(payload.instance.name).to.eq('Cabinet Local');
+        expect(payload.instance.profile).to.eq('default');
+        expect(payload.auth.mode).to.eq('local');
+      });
   });
 
   it('UC-SW-13 setup-wizard-import-existing-config loads external config and exits setup mode', () => {

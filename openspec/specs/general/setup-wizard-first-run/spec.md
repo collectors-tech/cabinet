@@ -87,7 +87,7 @@ Setup Wizard SHALL provide a one-action path to apply safe defaults and continue
 - **THEN** wizard MUST write `cabinet.json` with required sections: `instance`, `storage`, `runtime`, `auth`, `bootstrap`, and `meta`
 - **AND** missing required fields MUST block completion with inline validation
 
-### Requirement SETUP-WIZ-008: Startup MUST synchronize current runtime URL into config metadata
+### Requirement SETUP-WIZ-020: Startup MUST synchronize current runtime URL into config metadata
 When `cabinet.json` exists, runtime startup MUST reconcile and persist the resolved runtime URL into metadata for deterministic post-launch introspection.
 
 #### Scenario: Startup metadata sync
@@ -376,6 +376,7 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 | UC-SW-34 | Open config folder feedback | Open Config Folder action shows deterministic feedback with config path context | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-34 setup-wizard-open-config-folder shows feedback` |
 | UC-SW-35 | Setup bypass helper for route specs | Test harness seeds setup-complete state before route assertions | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-35 setup-helper-bypass-seeds-config before route assertions` |
 | UC-SW-36 | Setup completion helper path | Test harness can complete setup deterministically before route assertions continue | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-36 setup-helper-completion-path clears setup gate deterministically` |
+| UC-SW-37 | Use defaults wizard path | Welcome action applies safe defaults, writes deterministic config, and enters completion state with defaults-applied feedback | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-37 setup-wizard-use-defaults writes deterministic config and shows defaults-applied completion feedback` |
 
 ### Requirement SETUP-WIZ-019: Test automation SHALL support deterministic setup bypass or completion helper
 UI test harness MUST provide deterministic setup handling so route tests are not invalidated by setup gating.

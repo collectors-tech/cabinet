@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/specs/general/setup-wizard-first-run/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts
+ui.web/src/features/auth/sign-in/index.tsx
+openspec/migration/auto-wave-102-summary.md
+openspec/migration/auto-wave-102-changed-files.txt
