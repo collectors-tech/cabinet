@@ -1,0 +1,5 @@
+openspec/specs/general/ui-data-contract-parity/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-138-summary.md
+openspec/migration/auto-wave-138-changed-files.txt
+ui.web/cypress/e2e/general/ui-data-contract-parity/spec.cy.ts
