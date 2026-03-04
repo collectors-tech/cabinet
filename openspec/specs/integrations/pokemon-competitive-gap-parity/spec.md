@@ -112,13 +112,22 @@ Cabinet SHALL support graded-card metadata fields (grader, grade, cert number, s
 - **WHEN** client calls `POST /api/integrations/pokemon/graded-overrides`
 - **THEN** API MUST return `400` with error envelope `{"error":"missing_item_id"}`
 
-### Requirement POKEMON-COMP-008: Social sharing hooks SHOULD support progress snapshots
-Cabinet SHOULD provide share-ready progress snapshots for selected lists/sets.
+### Requirement POKEMON-COMP-008: Social sharing hooks MUST support progress snapshots
+Cabinet SHALL provide deterministic share-ready progress snapshots for selected lists/sets.
 
-#### Scenario: Generate progress snapshot
-- **GIVEN** user requests share snapshot for a set progress report
-- **WHEN** snapshot API executes
-- **THEN** response SHOULD include summary metrics and canonical share payload
+#### Scenario: Generate progress snapshot with canonical share payload
+- **GIVEN** active profile has canonical inventory tagged with `set:<id>` and optional `language:<code>` tags
+- **AND** request includes `set_id` and `total_count`
+- **WHEN** client requests `GET /api/integrations/pokemon/progress-snapshot?set_id=<id>&total_count=<n>`
+- **THEN** API MUST return `200` with fields `set_id`, `owned_count`, `total_count`, `completion_percent`, `share_payload`, and `generated_at`
+- **AND** `share_payload` MUST include fields `headline`, `summary`, `visibility`, and `share_link`
+- **AND** `completion_percent` MUST be deterministic as `(owned_count / total_count) * 100` rounded to two decimals when `total_count > 0`
+- **AND** `share_payload.visibility` MUST default to `private`
+
+#### Scenario: Missing set identifier is rejected deterministically
+- **GIVEN** request omits `set_id`
+- **WHEN** client requests `GET /api/integrations/pokemon/progress-snapshot`
+- **THEN** API MUST return `400` with error envelope `{"error":"missing_set_id"}`
 
 ### Requirement POKEMON-COMP-009: Gamified milestones SHOULD support deterministic badge triggers
 Cabinet SHOULD expose milestone trigger rules for onboarding and collection progression badges.

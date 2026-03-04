@@ -1,0 +1,7 @@
+internal/app/app.go
+internal/app/pokemon_progress_snapshot_api_test.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/share-progress-snapshot.cy.ts
+openspec/migration/auto-wave-130-summary.md
+openspec/migration/auto-wave-130-changed-files.txt
