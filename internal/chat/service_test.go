@@ -78,4 +78,69 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	if !applied.Applied {
 		t.Fatalf("expected applied=true")
 	}
+	if applied.ItemID == "" {
+		t.Fatalf("expected created item id")
+	}
+
+	wishlistPreview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "create_wishlist_entry",
+		Payload: map[string]any{
+			"part_number": "CHAT-WISH-001",
+			"title":       "Wishlist Item",
+			"brand":       "AFX",
+			"category":    "General",
+			"priority":    "medium",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(create_wishlist_entry) error = %v", err)
+	}
+	wishlistResult, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: wishlistPreview.ID,
+		Confirm:   true,
+	})
+	if err != nil {
+		t.Fatalf("ApplyAction(create_wishlist_entry) error = %v", err)
+	}
+	if wishlistResult.WishlistID == "" || wishlistResult.ItemID == "" {
+		t.Fatalf("expected wishlist and item ids, got wishlist=%q item=%q", wishlistResult.WishlistID, wishlistResult.ItemID)
+	}
+
+	updatePreview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "update_inventory_item",
+		Payload: map[string]any{
+			"item_id":     applied.ItemID,
+			"title":       "Updated via Chat",
+			"part_number": "CHAT-001-UPDATED",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(update_inventory_item) error = %v", err)
+	}
+	updateResult, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: updatePreview.ID,
+		Confirm:   true,
+	})
+	if err != nil {
+		t.Fatalf("ApplyAction(update_inventory_item) error = %v", err)
+	}
+	if updateResult.ItemID != applied.ItemID {
+		t.Fatalf("expected update item id %q, got %q", applied.ItemID, updateResult.ItemID)
+	}
+
+	var updatedTitle string
+	if err := conn.QueryRowContext(ctx, `SELECT title FROM canonical_items WHERE id = ?`, applied.ItemID).Scan(&updatedTitle); err != nil {
+		t.Fatalf("load updated canonical item: %v", err)
+	}
+	if updatedTitle != "Updated via Chat" {
+		t.Fatalf("expected updated title, got %q", updatedTitle)
+	}
 }

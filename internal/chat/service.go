@@ -56,13 +56,14 @@ type PreviewActionInput struct {
 }
 
 type ActionPreview struct {
-	ID        string `json:"id"`
-	ProfileID string `json:"profile_id"`
-	ThreadID  string `json:"thread_id"`
-	Action    string `json:"action"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
-	AppliedAt string `json:"applied_at,omitempty"`
+	ID        string         `json:"id"`
+	ProfileID string         `json:"profile_id"`
+	ThreadID  string         `json:"thread_id"`
+	Action    string         `json:"action"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	Status    string         `json:"status"`
+	CreatedAt string         `json:"created_at"`
+	AppliedAt string         `json:"applied_at,omitempty"`
 }
 
 type ApplyActionInput struct {
@@ -73,10 +74,11 @@ type ApplyActionInput struct {
 }
 
 type ApplyActionResult struct {
-	Applied   bool   `json:"applied"`
-	Action    string `json:"action"`
-	ItemID    string `json:"item_id,omitempty"`
-	PreviewID string `json:"preview_id"`
+	Applied    bool   `json:"applied"`
+	Action     string `json:"action"`
+	ItemID     string `json:"item_id,omitempty"`
+	WishlistID string `json:"wishlist_id,omitempty"`
+	PreviewID  string `json:"preview_id"`
 }
 
 func NewService(db *sql.DB, dataDir string) *Service {
@@ -318,12 +320,25 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	}
 	result := ApplyActionResult{Applied: true, Action: preview.Action, PreviewID: preview.ID}
 	switch preview.Action {
-	case "create_item_stub":
+	case "create_item_stub", "create_inventory_item":
 		itemID, err := s.applyCreateItemStub(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
 		}
 		result.ItemID = itemID
+	case "update_inventory_item":
+		itemID, err := s.applyUpdateItem(ctx, in.ProfileID, payload)
+		if err != nil {
+			return ApplyActionResult{}, err
+		}
+		result.ItemID = itemID
+	case "create_wishlist_entry":
+		itemID, wishlistID, err := s.applyCreateWishlistEntry(ctx, in.ProfileID, payload)
+		if err != nil {
+			return ApplyActionResult{}, err
+		}
+		result.ItemID = itemID
+		result.WishlistID = wishlistID
 	default:
 		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", preview.Action)
 	}
@@ -366,12 +381,13 @@ func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID,
 
 func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
 	var preview ActionPreview
+	var payloadRaw string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, thread_id, action, status, created_at, COALESCE(applied_at, '')
+		SELECT id, profile_id, thread_id, action, payload_json, status, created_at, COALESCE(applied_at, '')
 		FROM chat_action_previews
 		WHERE id = ? AND profile_id = ?
 	`, strings.TrimSpace(previewID), strings.TrimSpace(profileID)).Scan(
-		&preview.ID, &preview.ProfileID, &preview.ThreadID, &preview.Action, &preview.Status, &preview.CreatedAt, &preview.AppliedAt,
+		&preview.ID, &preview.ProfileID, &preview.ThreadID, &preview.Action, &payloadRaw, &preview.Status, &preview.CreatedAt, &preview.AppliedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -379,16 +395,35 @@ func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (
 		}
 		return ActionPreview{}, err
 	}
+	if strings.TrimSpace(payloadRaw) != "" {
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadRaw), &payload); err == nil {
+			preview.Payload = payload
+		}
+	}
 	return preview, nil
 }
 
 func validateActionPayload(action string, payload map[string]any) error {
 	switch strings.TrimSpace(action) {
-	case "create_item_stub":
+	case "create_item_stub", "create_inventory_item", "create_wishlist_entry":
 		partNumber, _ := payload["part_number"].(string)
 		title, _ := payload["title"].(string)
 		if strings.TrimSpace(partNumber) == "" || strings.TrimSpace(title) == "" {
 			return fmt.Errorf("part_number and title are required")
+		}
+		return nil
+	case "update_inventory_item":
+		itemID, _ := payload["item_id"].(string)
+		partNumber, _ := payload["part_number"].(string)
+		title, _ := payload["title"].(string)
+		brand, _ := payload["brand"].(string)
+		category, _ := payload["category"].(string)
+		if strings.TrimSpace(itemID) == "" {
+			return fmt.Errorf("item_id is required")
+		}
+		if strings.TrimSpace(partNumber) == "" && strings.TrimSpace(title) == "" && strings.TrimSpace(brand) == "" && strings.TrimSpace(category) == "" {
+			return fmt.Errorf("at least one mutable field is required")
 		}
 		return nil
 	default:
@@ -417,6 +452,63 @@ func (s *Service) applyCreateItemStub(ctx context.Context, profileID string, pay
 		return "", fmt.Errorf("create stub item: %w", err)
 	}
 	return itemID, nil
+}
+
+func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload map[string]any) (string, error) {
+	itemID, _ := payload["item_id"].(string)
+	partNumber, _ := payload["part_number"].(string)
+	title, _ := payload["title"].(string)
+	brand, _ := payload["brand"].(string)
+	category, _ := payload["category"].(string)
+	if strings.TrimSpace(brand) == "" {
+		brand = "Unknown"
+	}
+	if strings.TrimSpace(category) == "" {
+		category = "General"
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET part_number = COALESCE(NULLIF(?, ''), part_number),
+		    title = COALESCE(NULLIF(?, ''), title),
+		    brand = COALESCE(NULLIF(?, ''), brand),
+		    category = COALESCE(NULLIF(?, ''), category),
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(partNumber), strings.TrimSpace(title), strings.TrimSpace(brand), strings.TrimSpace(category), strings.TrimSpace(itemID), strings.TrimSpace(profileID))
+	if err != nil {
+		return "", fmt.Errorf("update item: %w", err)
+	}
+	return strings.TrimSpace(itemID), nil
+}
+
+func (s *Service) applyCreateWishlistEntry(ctx context.Context, profileID string, payload map[string]any) (string, string, error) {
+	itemID, err := s.applyCreateItemStub(ctx, profileID, payload)
+	if err != nil {
+		return "", "", err
+	}
+	priority, _ := payload["priority"].(string)
+	if strings.TrimSpace(priority) == "" {
+		priority = "medium"
+	}
+	notes, _ := payload["notes"].(string)
+	targetPrice := 0.0
+	if value, ok := payload["target_price"]; ok {
+		switch typed := value.(type) {
+		case float64:
+			targetPrice = typed
+		case int:
+			targetPrice = float64(typed)
+		}
+	}
+	wishlistID := uuid.NewString()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+		VALUES (?, ?, ?, ?, ?, ?, 0)
+	`, wishlistID, strings.TrimSpace(profileID), itemID, targetPrice, strings.TrimSpace(priority), strings.TrimSpace(notes))
+	if err != nil {
+		return "", "", fmt.Errorf("create wishlist entry: %w", err)
+	}
+	return itemID, wishlistID, nil
 }
 
 func (s *Service) CleanupOldPreviews(ctx context.Context, olderThan time.Duration) error {

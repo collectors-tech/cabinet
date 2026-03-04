@@ -11,6 +11,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 type ChatThread = {
   id: string
@@ -45,6 +55,7 @@ type ChatActionPreview = {
   profile_id: string
   thread_id: string
   action: string
+  payload?: Record<string, unknown>
   status: string
   created_at: string
   applied_at?: string
@@ -54,6 +65,7 @@ type ChatApplyResult = {
   applied: boolean
   action: string
   item_id?: string
+  wishlist_id?: string
   preview_id: string
 }
 
@@ -82,8 +94,13 @@ export function Chats() {
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [actionPartNumber, setActionPartNumber] = useState('CHAT-001')
   const [actionTitle, setActionTitle] = useState('Chat Created Item')
+  const [actionMode, setActionMode] = useState<
+    'create_inventory_item' | 'create_wishlist_entry' | 'update_inventory_item'
+  >('create_inventory_item')
+  const [actionTargetItemID, setActionTargetItemID] = useState('')
   const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(null)
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
@@ -248,12 +265,14 @@ export function Chats() {
       body: JSON.stringify({
         profile_id: activeProfileId,
         thread_id: selectedThreadId,
-        action: 'create_item_stub',
+        action: actionMode,
         payload: {
           part_number: actionPartNumber.trim(),
           title: actionTitle.trim(),
           brand: 'AFX',
           category: 'General',
+          item_id: actionMode === 'update_inventory_item' ? actionTargetItemID.trim() : '',
+          priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
         },
       }),
     })
@@ -286,7 +305,27 @@ export function Chats() {
     }
     const result = (await response.json()) as ChatApplyResult
     setApplyResult(result)
+    setConfirmApplyOpen(false)
   }
+
+  const applyResultSummary = (() => {
+    if (!applyResult) {
+      return ''
+    }
+    const previewPart =
+      typeof actionPreview?.payload?.part_number === 'string'
+        ? actionPreview.payload.part_number
+        : ''
+    const base = `Applied ${applyResult.action}`
+    const withPart = previewPart ? `${base} (${previewPart})` : base
+    if (applyResult.wishlist_id) {
+      return `${withPart} to wishlist ${applyResult.wishlist_id}`
+    }
+    if (applyResult.item_id) {
+      return `${withPart} to item ${applyResult.item_id}`
+    }
+    return withPart
+  })()
 
   return (
     <>
@@ -454,6 +493,36 @@ export function Chats() {
 
             <div className='mt-4 space-y-3 rounded-md border p-3'>
               <p className='text-sm font-medium'>Action Preview</p>
+              <label className='grid gap-1 text-sm'>
+                <span>Action Mode</span>
+                <select
+                  data-testid='chat-preview-action-mode'
+                  className='h-9 rounded-md border bg-background px-3'
+                  value={actionMode}
+                  onChange={(event) =>
+                    setActionMode(
+                      event.target.value as
+                        | 'create_inventory_item'
+                        | 'create_wishlist_entry'
+                        | 'update_inventory_item'
+                    )
+                  }
+                  disabled={!selectedThreadId}
+                >
+                  <option value='create_inventory_item'>create_inventory_item</option>
+                  <option value='create_wishlist_entry'>create_wishlist_entry</option>
+                  <option value='update_inventory_item'>update_inventory_item</option>
+                </select>
+              </label>
+              {actionMode === 'update_inventory_item' ? (
+                <Input
+                  data-testid='chat-preview-target-item-id'
+                  value={actionTargetItemID}
+                  onChange={(event) => setActionTargetItemID(event.target.value)}
+                  placeholder='Existing item ID'
+                  disabled={!selectedThreadId}
+                />
+              ) : null}
               <div className='grid gap-2 sm:grid-cols-2'>
                 <Input
                   data-testid='chat-preview-part-number'
@@ -483,7 +552,7 @@ export function Chats() {
                   type='button'
                   variant='outline'
                   data-testid='chat-apply-action-button'
-                  onClick={() => void applyPreviewAction()}
+                  onClick={() => setConfirmApplyOpen(true)}
                   disabled={!selectedThreadId || !actionPreview?.id}
                 >
                   Apply Action
@@ -491,18 +560,45 @@ export function Chats() {
               </div>
               {actionPreview ? (
                 <p data-testid='chat-action-preview' className='text-sm text-muted-foreground'>
-                  Preview {actionPreview.id}: {actionPreview.status}
+                  Preview {actionPreview.id}: {actionPreview.action} ({actionPreview.status})
                 </p>
               ) : null}
               {applyResult ? (
                 <p data-testid='chat-action-apply-result' className='text-sm'>
-                  Applied {applyResult.action} to item {applyResult.item_id ?? 'n/a'}
+                  {applyResultSummary}
                 </p>
               ) : null}
             </div>
           </div>
         </section>
       </Main>
+
+      <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
+        <AlertDialogContent data-testid='chat-apply-confirm-dialog'>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
+            <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
+              {actionPreview
+                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                : 'No action preview selected.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid='chat-apply-confirm-cancel'>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid='chat-apply-confirm-submit'
+              onClick={(event) => {
+                event.preventDefault()
+                void applyPreviewAction()
+              }}
+            >
+              Confirm Apply
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

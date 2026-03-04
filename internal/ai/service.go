@@ -22,6 +22,14 @@ type Suggestion struct {
 	RequiresConfirmation bool    `json:"requires_confirmation"`
 }
 
+type OperationProposal struct {
+	Action               string         `json:"action"`
+	Target               string         `json:"target"`
+	Payload              map[string]any `json:"payload"`
+	Confidence           float64        `json:"confidence"`
+	RequiresConfirmation bool           `json:"requires_confirmation"`
+}
+
 type Service struct {
 	baseURL string
 	client  *http.Client
@@ -118,4 +126,62 @@ func (s *Service) SuggestFromTitle(ctx context.Context, apiKey, title string) (S
 func (s *Service) SuggestFromPhoto(ctx context.Context, apiKey, imageURL string) (Suggestion, error) {
 	// v1 behavior: route through title extraction prompt with photo URL context
 	return s.SuggestFromTitle(ctx, apiKey, "Photo URL: "+imageURL)
+}
+
+func (s *Service) ProposeOperation(ctx context.Context, apiKey, requestText string) (OperationProposal, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return OperationProposal{}, fmt.Errorf("api key is required")
+	}
+	prompt := "Return JSON only with keys action, target, payload, confidence for this request: " + strings.TrimSpace(requestText)
+	reqBody := map[string]any{
+		"model": "gpt-4o-mini",
+		"messages": []map[string]string{
+			{"role": "system", "content": "You are a strict structured operation planner for inventory and wishlist updates."},
+			{"role": "user", "content": prompt},
+		},
+	}
+	raw, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/v1/chat/completions", bytes.NewReader(raw))
+	if err != nil {
+		return OperationProposal{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return OperationProposal{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return OperationProposal{}, fmt.Errorf("propose operation failed: status %d", resp.StatusCode)
+	}
+	var payload struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return OperationProposal{}, err
+	}
+	if len(payload.Choices) == 0 {
+		return OperationProposal{}, fmt.Errorf("no AI choices")
+	}
+	content := strings.TrimSpace(payload.Choices[0].Message.Content)
+	content = strings.Trim(content, "`")
+	content = strings.TrimPrefix(content, "json")
+	content = strings.TrimSpace(content)
+	var out OperationProposal
+	if err := json.Unmarshal([]byte(content), &out); err != nil {
+		return OperationProposal{}, err
+	}
+	if strings.TrimSpace(out.Action) == "" || strings.TrimSpace(out.Target) == "" {
+		return OperationProposal{}, fmt.Errorf("invalid operation proposal")
+	}
+	if out.Payload == nil {
+		out.Payload = map[string]any{}
+	}
+	out.RequiresConfirmation = true
+	return out, nil
 }

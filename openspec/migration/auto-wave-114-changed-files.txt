@@ -1,0 +1,14 @@
+internal/ai/service.go
+internal/ai/service_test.go
+internal/chat/service.go
+internal/chat/service_test.go
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/cypress/e2e/chats/chat-copilot/spec.cy.ts
+ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts
+ui.web/cypress/support/commands.ts
+ui.web/src/features/chats/index.tsx
+openspec/migration/chatgpt-copilot-inventory-wishlist-summary.md
+openspec/migration/chatgpt-copilot-inventory-wishlist-changed-files.txt
+openspec/migration/auto-wave-114-summary.md
+openspec/migration/auto-wave-114-changed-files.txt
