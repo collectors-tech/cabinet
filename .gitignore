@@ -13,3 +13,5 @@ cabinet.exe
 .logs/
 .env
 internal/ui/static/assets/
+data/
+tmp/
