@@ -1070,7 +1070,10 @@ export function Collection({
                 ) : null}
               </div>
               {loading ? (
-                <div className='rounded-md border p-6 text-sm text-muted-foreground'>
+                <div
+                  className='rounded-md border p-6 text-sm text-muted-foreground'
+                  data-testid='inventory-loading'
+                >
                   Loading inventory...
                 </div>
               ) : null}

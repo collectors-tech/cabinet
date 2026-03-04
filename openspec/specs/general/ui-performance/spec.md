@@ -6,15 +6,22 @@ Define measurable UI performance thresholds and resilience-state contracts.
 Key UI interactions SHALL have defined threshold targets for S2 and non-crash constraints for S3.
 
 #### Scenario: Validate S2 interaction thresholds
-- **GIVEN** S2 benchmark executes
-- **WHEN** render/navigation/search/sort/details timings are measured
-- **THEN** medians SHALL remain within target limits
+- **GIVEN** `POST /api/test/scale/bootstrap` is executed with `profile="S2"` and deterministic `seed`
+- **WHEN** UI performance probe executes repeated calls to:
+  - `GET /api/items?status=active`
+  - `GET /api/search/items?q=scale&limit=20`
+  - `GET /api/scanner/candidates?query_set_id=<id>`
+- **THEN** each call SHALL return `200`
+- **AND** median response duration for each workflow SHALL remain below 1500 ms
+- **AND** the workflow SHALL complete without route crash or global `500` fallback UI
 
 ### Requirement UI-PERFORMANCE-002: Scale validation SHALL enforce UI resilience states
 Large-data operations SHALL expose deterministic loading, empty, error, and ready states.
 
 #### Scenario: S3 delayed response handling
-- **GIVEN** large list API response is delayed
-- **WHEN** UI waits for response
-- **THEN** UI SHALL remain responsive with loading state until ready/error transition
+- **GIVEN** the inventory list request `GET /api/items*` is delayed by test harness
+- **WHEN** user opens `/inventory`
+- **THEN** UI SHALL render `[data-testid="inventory-loading"]` while the request is pending
+- **AND** `[data-testid="inventory-loading"]` SHALL be removed after successful response
+- **AND** the inventory table SHALL render without global `500` fallback
 
