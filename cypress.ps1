@@ -129,12 +129,15 @@ try {
       Write-Step "Starting Cabinet server..."
       if (-not [string]::IsNullOrWhiteSpace($resolvedRuntimeExecutablePath)) {
         Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
-        $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
+        $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
+          "--no-open-browser"
+        ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
       } else {
         Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
         $serverProc = Start-Process -FilePath "go" -ArgumentList @(
           "run",
-          "./cmd/cabinet"
+          "./cmd/cabinet",
+          "--no-open-browser"
         ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
       }
       $startedServer = $true

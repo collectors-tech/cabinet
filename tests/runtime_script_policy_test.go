@@ -41,3 +41,16 @@ func TestCypressScriptRejectsEphemeralTempRuntimePathByDefault(t *testing.T) {
 	}
 }
 
+func TestCypressScriptDisablesBrowserAutoOpenForManagedRuns(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	if !strings.Contains(content, "--no-open-browser") {
+		t.Fatalf("expected managed cypress runtime startup to pass --no-open-browser")
+	}
+}

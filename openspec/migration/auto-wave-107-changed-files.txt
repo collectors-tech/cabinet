@@ -1,0 +1,7 @@
+cmd/cabinet/main.go
+cmd/cabinet/main_cli_test.go
+cypress.ps1
+tests/runtime_script_policy_test.go
+openspec/traceability.md
+openspec/migration/auto-wave-107-summary.md
+openspec/migration/auto-wave-107-changed-files.txt
