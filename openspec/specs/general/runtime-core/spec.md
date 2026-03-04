@@ -44,6 +44,20 @@ After successful listener bind, Cabinet MUST emit human-readable startup lines a
 ### Requirement RUNTIME-CORE-006: Project-local execution SHALL prefer `bin` folder runtime path over ephemeral temp locations
 When running from a project workspace, startup and validation workflows MUST prefer executable path under project-local `bin` (or equivalent configured project runtime path) and MUST NOT default to transient template/temp directories.
 
+### Requirement RUNTIME-CORE-007: CLI SHALL support browser auto-open suppression for automation runs
+Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g., `--no-open-browser`) for CI/agent/Cypress flows.
+
+#### Scenario: No-open-browser automation startup
+- **GIVEN** Cabinet is launched with browser-suppression flag
+- **WHEN** startup completes successfully
+- **THEN** runtime MUST serve normally without opening a browser window/tab
+- **AND** startup output MUST explicitly note browser auto-open is disabled
+
+#### Scenario: Default interactive startup
+- **GIVEN** Cabinet is launched without browser-suppression flag
+- **WHEN** startup completes successfully
+- **THEN** default browser-open behavior MUST remain unchanged unless overridden by config
+
 #### Scenario: Project run-path resolution
 - **GIVEN** Cabinet project root is available and contains `bin/cabinet(.exe)`
 - **WHEN** run instructions or automation resolves executable path
