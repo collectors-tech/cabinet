@@ -1,0 +1,151 @@
+name: Release On Main Success
+
+on:
+  workflow_run:
+    workflows:
+      - Go CI
+      - OpenAPI
+      - UI E2E
+    types:
+      - completed
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  evaluate:
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+      tag: ${{ steps.gate.outputs.tag }}
+      sha: ${{ steps.gate.outputs.sha }}
+      summary: ${{ steps.gate.outputs.summary }}
+    steps:
+      - name: Evaluate required workflow outcomes for this SHA
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = ['Go CI', 'OpenAPI', 'UI E2E']
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const sha = context.payload.workflow_run.head_sha
+            const shortSha = sha.slice(0, 12)
+            const tag = `main-${shortSha}`
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner,
+                repo,
+                head_sha: sha,
+                event: 'push',
+                per_page: 100,
+              }
+            )
+
+            const latestByName = new Map()
+            for (const run of runs) {
+              if (!required.includes(run.name)) continue
+              const current = latestByName.get(run.name)
+              if (!current) {
+                latestByName.set(run.name, run)
+                continue
+              }
+
+              const currentTime = new Date(current.created_at).getTime()
+              const runTime = new Date(run.created_at).getTime()
+              if (runTime > currentTime || (runTime === currentTime && run.run_attempt > current.run_attempt)) {
+                latestByName.set(run.name, run)
+              }
+            }
+
+            const statusLines = []
+            let ready = true
+
+            for (const name of required) {
+              const run = latestByName.get(name)
+              if (!run) {
+                ready = false
+                statusLines.push(`- ${name}: missing`)
+                continue
+              }
+              statusLines.push(`- ${name}: ${run.status}/${run.conclusion} (${run.html_url})`)
+              if (run.status !== 'completed' || run.conclusion !== 'success') {
+                ready = false
+              }
+            }
+
+            const summary = statusLines.join('\n')
+            core.info(`Release gate for ${sha}: ready=${ready}`)
+            core.info(summary)
+
+            core.setOutput('ready', ready ? 'true' : 'false')
+            core.setOutput('tag', tag)
+            core.setOutput('sha', sha)
+            core.setOutput('summary', summary)
+
+  release:
+    needs: [evaluate, release-e2e-gate]
+    if: needs.evaluate.outputs.ready == 'true' && needs.release-e2e-gate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update release for successful main SHA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.evaluate.outputs.tag }}
+          target_commitish: ${{ needs.evaluate.outputs.sha }}
+          name: main ${{ needs.evaluate.outputs.tag }}
+          body: |
+            Automatic release generated after successful main CI gates.
+
+            Commit: `${{ needs.evaluate.outputs.sha }}`
+            Required workflows:
+            ${{ needs.evaluate.outputs.summary }}
+            Release-gate E2E:
+            - ui.web Cypress journeys: success
+          generate_release_notes: true
+
+  release-e2e-gate:
+    needs: evaluate
+    if: needs.evaluate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.evaluate.outputs.sha }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Run Cypress E2E release gate
+        uses: cypress-io/github-action@v6
+        with:
+          install-command: npm ci
+          working-directory: ui.web
+          start: npm run serve:go
+          wait-on: "http://127.0.0.1:17880/healthz"
+          wait-on-timeout: 120
+          command: npm run e2e:journeys
+          browser: electron
+        env:
+          CABINET_E2E_MODE: "1"
+          CABINET_OPEN_BROWSER: "0"
+
+      - name: Upload release-gate Cypress artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-cypress-artifacts
+          path: |
+            ui.web/cypress/artifacts
