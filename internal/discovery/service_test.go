@@ -2,7 +2,9 @@ package discovery
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/db"
@@ -61,5 +63,53 @@ func TestListNotInCollectionAndActions(t *testing.T) {
 	}
 	if len(afterReset) != 1 {
 		t.Fatalf("expected 1 item after reset, got %d", len(afterReset))
+	}
+}
+
+func TestApplyActionAddWishlistRetainsMarketplaceMetadata(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('i1','AFX','Cars','E2E-PN-900','Seed Item')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Q','["afx"]','[]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count) VALUES ('c1','q1','L1','AFX P-2',44.95,0,'https://example.test/listing','','seller-1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay','low_stock',2)`); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c1','i1','not_in_collection',0.9,0,'E2E-PN-900',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed match: %v", err)
+	}
+
+	svc := NewService(conn)
+	if err := svc.ApplyAction(context.Background(), Action{CandidateID: "c1", Type: ActionAddWishlist}); err != nil {
+		t.Fatalf("ApplyAction(add_to_wishlist) error = %v", err)
+	}
+
+	var notes string
+	if err := conn.QueryRow(`SELECT notes FROM wishlist_entries WHERE item_id = 'i1'`).Scan(&notes); err != nil {
+		t.Fatalf("load wishlist notes: %v", err)
+	}
+	marker := "[discovery_metadata]"
+	idx := strings.Index(notes, marker)
+	if idx < 0 {
+		t.Fatalf("expected discovery metadata marker in notes, got %q", notes)
+	}
+	metadataJSON := strings.TrimSpace(notes[idx+len(marker):])
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		t.Fatalf("parse metadata json: %v", err)
+	}
+	for _, field := range []string{"listing_url", "seller", "stock_signal", "observed_price"} {
+		if _, ok := metadata[field]; !ok {
+			t.Fatalf("expected metadata field %q in %v", field, metadata)
+		}
 	}
 }

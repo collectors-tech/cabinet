@@ -1,0 +1,8 @@
+internal/app/pokemon_discovery_handoff_api_test.go
+internal/discovery/service.go
+internal/discovery/service_test.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/discovery-handoff-metadata.cy.ts
+openspec/migration/auto-wave-126-summary.md
+openspec/migration/auto-wave-126-changed-files.txt

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -124,11 +125,41 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	case ActionAddWishlist:
 		var itemID string
 		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
+			var profileID, listingURL, seller, stockSignal string
+			var observedPrice float64
+			scanErr := s.db.QueryRowContext(ctx, `
+				SELECT profile_id, url, seller, stock_state, price
+				FROM scanner_candidates
+				WHERE id = ?
+			`, a.CandidateID).Scan(&profileID, &listingURL, &seller, &stockSignal, &observedPrice)
+			if scanErr != nil {
+				_ = s.db.QueryRowContext(ctx, `
+					SELECT url, seller, stock_state, price
+					FROM scanner_candidates
+					WHERE id = ?
+				`, a.CandidateID).Scan(&listingURL, &seller, &stockSignal, &observedPrice)
+			}
+			profileID = strings.TrimSpace(profileID)
+			if profileID == "" {
+				_ = s.db.QueryRowContext(ctx, `SELECT profile_id FROM canonical_items WHERE id = ?`, itemID).Scan(&profileID)
+				profileID = strings.TrimSpace(profileID)
+			}
+			metadata := buildDiscoveryMetadataNote(listingURL, seller, stockSignal, observedPrice)
+			var existingID, existingNotes string
+			if err := s.db.QueryRowContext(ctx, `SELECT id, notes FROM wishlist_entries WHERE item_id = ? AND (? = '' OR profile_id = ?)`, itemID, profileID, profileID).Scan(&existingID, &existingNotes); err == nil {
+				mergedNotes := mergeDiscoveryMetadataNotes(existingNotes, metadata)
+				_, _ = s.db.ExecContext(ctx, `
+					UPDATE wishlist_entries
+					SET notes = ?, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
+					WHERE id = ?
+				`, mergedNotes, existingID)
+				break
+			}
 			_, _ = s.db.ExecContext(ctx, `
-				INSERT INTO wishlist_entries(id, item_id, target_price, priority, notes, highlight_hit)
-				VALUES (?, ?, ?, 'normal', '', 1)
-				ON CONFLICT(item_id) DO NOTHING
-			`, uuid.NewString(), itemID, 0.0)
+				INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
+				VALUES (?, ?, ?, ?, 'normal', ?, 1)
+				ON CONFLICT(item_id) DO UPDATE SET notes = excluded.notes, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
+			`, uuid.NewString(), profileID, itemID, 0.0, metadata)
 		}
 	case ActionCreateItem:
 		var title, partNumber string
@@ -148,6 +179,37 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 		}
 	}
 	return nil
+}
+
+func buildDiscoveryMetadataNote(listingURL, seller, stockSignal string, observedPrice float64) string {
+	payload := map[string]any{
+		"listing_url":    strings.TrimSpace(listingURL),
+		"seller":         strings.TrimSpace(seller),
+		"stock_signal":   strings.TrimSpace(stockSignal),
+		"observed_price": math.Round(observedPrice*100) / 100,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "[discovery_metadata]{}"
+	}
+	return "[discovery_metadata]" + string(raw)
+}
+
+func mergeDiscoveryMetadataNotes(existing, metadata string) string {
+	existing = strings.TrimSpace(existing)
+	metadata = strings.TrimSpace(metadata)
+	if existing == "" {
+		return metadata
+	}
+	const marker = "[discovery_metadata]"
+	if idx := strings.Index(existing, marker); idx >= 0 {
+		base := strings.TrimSpace(existing[:idx])
+		if base == "" {
+			return metadata
+		}
+		return base + "\n" + metadata
+	}
+	return existing + "\n" + metadata
 }
 
 func (s *Service) ResetIgnored(ctx context.Context) error {

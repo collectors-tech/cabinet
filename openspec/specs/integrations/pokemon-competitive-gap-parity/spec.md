@@ -47,9 +47,17 @@ Cabinet SHALL aggregate pricing snapshots across configured providers and expose
 Cabinet SHALL include seller reputation, stock signal, and direct buy-link context when handing candidates to wishlist/discovery actions.
 
 #### Scenario: Discovery to wishlist handoff
-- **GIVEN** scanner candidate includes provider listing metadata
-- **WHEN** user executes add-to-wishlist handoff
-- **THEN** wishlist record MUST retain listing URL, seller identity, stock signal, and observed price fields
+- **GIVEN** scanner candidate `candidate_id=<id>` exists with listing metadata fields `url`, `seller`, `stock_state`, and `price`
+- **AND** candidate has a resolved match with non-empty `item_id`
+- **WHEN** client calls `POST /api/discovery/action` with body `{"candidate_id":"<id>","type":"add_to_wishlist"}`
+- **THEN** API MUST return `200` with body field `ok=true`
+- **AND** subsequent `GET /api/wishlist` response MUST include a wishlist record for `item_id`
+- **AND** that wishlist record MUST retain listing decision metadata in persisted notes payload with fields `listing_url`, `seller`, `stock_signal`, and `observed_price`
+
+#### Scenario: Missing candidate identifier is rejected deterministically
+- **GIVEN** request omits `candidate_id`
+- **WHEN** client calls `POST /api/discovery/action` with body `{"type":"add_to_wishlist"}`
+- **THEN** API MUST return `400` with error envelope field `error` set to `failed_to_apply_discovery_action`
 
 ### Requirement POKEMON-COMP-005: Share controls MUST expose visibility policy per list/profile
 Cabinet SHALL support deterministic visibility controls (`private`, `shared_link`, `team`) for collections and dynamic lists.
