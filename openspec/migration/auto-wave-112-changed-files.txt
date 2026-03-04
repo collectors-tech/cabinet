@@ -1,0 +1,2 @@
+openspec/migration/auto-wave-112-summary.md
+openspec/migration/auto-wave-112-changed-files.txt
