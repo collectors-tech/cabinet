@@ -1,0 +1,1 @@
+openspec/migration/chat-copilot-ui-contract-summary.md
