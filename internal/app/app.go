@@ -1583,6 +1583,116 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/providers/bigcommerce/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID     string `json:"query_set_id"`
+			ProviderDomain string `json:"provider_domain"`
+			SearchURL      string `json:"search_url"`
+			GraphQLURL     string `json:"graphql_url"`
+			Page           int    `json:"page"`
+			PageSize       int    `json:"page_size"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		providerDomain := strings.TrimSpace(strings.ToLower(req.ProviderDomain))
+		if providerDomain == "" {
+			providerDomain = "voglers.com.au"
+		}
+		providerID := "au-webshop-" + strings.ReplaceAll(providerDomain, ".", "-")
+		keys := providerSettingsKeys(providerID)
+		token := strings.TrimSpace(settings[keys.TokenKey])
+		if token == "" {
+			token = strings.TrimSpace(settings["integration."+strings.ReplaceAll(providerDomain, ".", "-")+".token"])
+		}
+		page := req.Page
+		if page <= 0 {
+			page = 1
+		}
+		pageSize := req.PageSize
+		if pageSize <= 0 {
+			pageSize = 24
+		}
+		if pageSize > 50 {
+			pageSize = 50
+		}
+		query := strings.TrimSpace(qs.Name)
+		if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+			query = strings.TrimSpace(qs.Keywords[0])
+		}
+		if query == "" {
+			query = "collectible"
+		}
+
+		authMode := "storefront_public"
+		dataDepthSource := "storefront_public"
+		capabilityLimits := []string{"stock_depth_limited_without_token"}
+		candidates := []map[string]any{}
+
+		if token != "" {
+			authMode = "token_enabled"
+			dataDepthSource = "token_enabled"
+			capabilityLimits = []string{}
+			graphURL := strings.TrimSpace(req.GraphQLURL)
+			if graphURL == "" {
+				graphURL = "https://" + providerDomain + "/graphql"
+			}
+			out, runErr := runBigCommerceTokenSearch(r.Context(), http.DefaultClient, graphURL, token, query, providerDomain)
+			if runErr != nil {
+				http.Error(w, `{"error":"failed_to_run_bigcommerce_token_mode"}`, http.StatusBadRequest)
+				return
+			}
+			candidates = out
+		} else {
+			searchURL := strings.TrimSpace(req.SearchURL)
+			if searchURL == "" {
+				searchURL = "https://" + providerDomain + "/products/search"
+			}
+			out, runErr := runBigCommerceStorefrontSearch(r.Context(), http.DefaultClient, searchURL, query, page, pageSize, providerDomain)
+			if runErr != nil {
+				http.Error(w, `{"error":"failed_to_run_bigcommerce_storefront_mode"}`, http.StatusBadRequest)
+				return
+			}
+			candidates = out
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":      qs.ID,
+			"provider_domain":   providerDomain,
+			"auth_mode":         authMode,
+			"data_depth_source": dataDepthSource,
+			"capability_limits": capabilityLimits,
+			"candidate_count":   len(candidates),
+			"candidates":        candidates,
+		})
+	})
 	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4545,6 +4655,8 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 			"provider_id":      "ebay",
 			"display_name":     "eBay",
 			"base_domain":      "ebay.com",
+			"api_family":       "official_api",
+			"active_mode":      "official_api",
 			"integration_mode": "official_api",
 			"api_available":    true,
 			"auth_requirement": "api_key",
@@ -4562,6 +4674,8 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 			"provider_id":          "amazon",
 			"display_name":         "Amazon",
 			"base_domain":          "amazon.com",
+			"api_family":           "official_api",
+			"active_mode":          map[bool]string{true: "program_api", false: "disabled"}[amazonMode == "program_api"],
 			"integration_mode":     amazonMode,
 			"api_available":        amazonMode == "program_api",
 			"auth_requirement":     "oauth",
@@ -4591,12 +4705,27 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 		"metrohobbies.com.au",
 	}
 	for _, d := range auDomains {
+		apiFamily := "web_ingestion"
+		activeMode := "web_ingestion"
+		integrationMode := "web_ingestion"
+		if d == "voglers.com.au" {
+			apiFamily = "bigcommerce"
+			activeMode = "storefront_public"
+			integrationMode = "storefront_access"
+		}
+		if d == "mrtoys.com.au" {
+			apiFamily = "doofinder"
+			activeMode = "hashid_search"
+			integrationMode = "api_family_search"
+		}
 		base = append(base, map[string]any{
 			"provider_id":      "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
 			"display_name":     d,
 			"base_domain":      d,
-			"integration_mode": "web_ingestion",
-			"api_available":    false,
+			"api_family":       apiFamily,
+			"active_mode":      activeMode,
+			"integration_mode": integrationMode,
+			"api_available":    d == "voglers.com.au" || d == "mrtoys.com.au",
 			"auth_requirement": "none",
 			"auth_mode":        "none",
 			"capabilities": map[string]bool{
@@ -4618,6 +4747,17 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 		keys := providerSettingsKeys(providerID)
 		hasToken := strings.TrimSpace(settings[keys.TokenKey]) != ""
 		provider["has_token"] = hasToken
+		if strings.EqualFold(fmt.Sprintf("%v", provider["api_family"]), "bigcommerce") {
+			if hasToken {
+				provider["active_mode"] = "token_enabled"
+				provider["auth_requirement"] = "api_token_optional"
+				provider["auth_mode"] = "token_optional"
+			} else {
+				provider["active_mode"] = "storefront_public"
+				provider["auth_requirement"] = "none"
+				provider["auth_mode"] = "none"
+			}
+		}
 
 		healthStatus := "unknown"
 		healthMessage := ""
@@ -5116,6 +5256,160 @@ func runDoofinderSearch(
 		})
 	}
 	return candidates, payload.Meta.Total, nil
+}
+
+func runBigCommerceStorefrontSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query string,
+	page, pageSize int,
+	providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, fmt.Errorf("bigcommerce storefront search url is required")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse bigcommerce storefront url: %w", err)
+	}
+	params := parsed.Query()
+	params.Set("q", strings.TrimSpace(query))
+	params.Set("page", strconv.Itoa(page))
+	params.Set("limit", strconv.Itoa(pageSize))
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build bigcommerce storefront request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run bigcommerce storefront request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bigcommerce storefront returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read bigcommerce storefront response: %w", err)
+	}
+	var payload struct {
+		Products []struct {
+			ID    any    `json:"id"`
+			Name  string `json:"name"`
+			URL   string `json:"url"`
+			Price any    `json:"price"`
+			Image string `json:"image"`
+		} `json:"products"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode bigcommerce storefront response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Products))
+	for _, product := range payload.Products {
+		id := strings.TrimSpace(fmt.Sprintf("%v", product.ID))
+		if id == "" {
+			continue
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id": "bigcommerce-" + id,
+			"title":      strings.TrimSpace(product.Name),
+			"url":        strings.TrimSpace(product.URL),
+			"price":      strings.TrimSpace(fmt.Sprintf("%v", product.Price)),
+			"image":      strings.TrimSpace(product.Image),
+			"source":     providerDomain,
+			"seller":     providerDomain,
+		})
+	}
+	return candidates, nil
+}
+
+func runBigCommerceTokenSearch(
+	ctx context.Context,
+	client *http.Client,
+	graphURL, token, query, providerDomain string,
+) ([]map[string]any, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(graphURL) == "" {
+		return nil, fmt.Errorf("bigcommerce graphql url is required")
+	}
+	requestBody := fmt.Sprintf(`{"query":"query CabinetSearch { site { search { searchProducts(filters:{searchTerm:\\\"%s\\\"}) { products { entityId name path prices { price { value } } inventory { isInStock aggregated { availableToSell } } } } } } }"}`, strings.ReplaceAll(strings.TrimSpace(query), `"`, `\"`))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(graphURL), strings.NewReader(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("build bigcommerce token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Auth-Token", strings.TrimSpace(token))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("run bigcommerce token request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bigcommerce token mode returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read bigcommerce token response: %w", err)
+	}
+	var payload struct {
+		Data struct {
+			Site struct {
+				Search struct {
+					SearchProducts struct {
+						Products []struct {
+							EntityID int    `json:"entityId"`
+							Name     string `json:"name"`
+							Path     string `json:"path"`
+							Prices   struct {
+								Price struct {
+									Value any `json:"value"`
+								} `json:"price"`
+							} `json:"prices"`
+							Inventory struct {
+								IsInStock bool `json:"isInStock"`
+								Aggregated struct {
+									AvailableToSell int `json:"availableToSell"`
+								} `json:"aggregated"`
+							} `json:"inventory"`
+						} `json:"products"`
+					} `json:"searchProducts"`
+				} `json:"search"`
+			} `json:"site"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode bigcommerce token response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Data.Site.Search.SearchProducts.Products))
+	for _, product := range payload.Data.Site.Search.SearchProducts.Products {
+		if product.EntityID == 0 {
+			continue
+		}
+		urlValue := strings.TrimSpace(product.Path)
+		if strings.HasPrefix(urlValue, "/") {
+			urlValue = "https://" + providerDomain + urlValue
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id":  fmt.Sprintf("bigcommerce-%d", product.EntityID),
+			"title":       strings.TrimSpace(product.Name),
+			"url":         urlValue,
+			"price":       strings.TrimSpace(fmt.Sprintf("%v", product.Prices.Price.Value)),
+			"stock_state": map[bool]string{true: "in_stock", false: "out_of_stock"}[product.Inventory.IsInStock],
+			"stock_count": product.Inventory.Aggregated.AvailableToSell,
+			"source":      providerDomain,
+			"seller":      providerDomain,
+		})
+	}
+	return candidates, nil
 }
 
 func discoverHobbytechBoostConfig(
