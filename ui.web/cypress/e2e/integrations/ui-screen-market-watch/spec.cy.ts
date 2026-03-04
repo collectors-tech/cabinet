@@ -177,4 +177,106 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Candidates: 3')
       .and('contain', 'Observed page size: 2')
   })
+
+  it('UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-table-1',
+            name: 'Bonza AFX Watch',
+            keywords: ['AFX', 'Mega G+'],
+            provider_scope: ['bonzaslotcars'],
+          },
+          {
+            id: 'qs-mw-table-2',
+            name: 'eBay HO Scan',
+            keywords: ['HO slot'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').should('be.visible')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('th', 'Query Name').should('be.visible')
+      cy.contains('th', 'Provider Scope').should('be.visible')
+      cy.contains('th', 'Last Run Status').should('be.visible')
+      cy.contains('th', 'Last Run Time').should('be.visible')
+      cy.contains('th', 'Latest Output Summary').should('be.visible')
+      cy.contains('td', 'Bonza AFX Watch').should('be.visible')
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+    })
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-detail-1',
+            name: 'Bonza AFX Watch',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-detail-1',
+        page_count: 2,
+        observed_page_size: 2,
+        items_per_page_used: 36,
+        candidates: [
+          { listing_id: 'bonza-1', title: 'AFX Camaro', source: 'bonzaslotcars' },
+          { listing_id: 'bonza-2', title: 'AFX Mustang', source: 'bonzaslotcars' },
+        ],
+        run_summary: {
+          page_count: 2,
+          observed_page_size: 2,
+          candidates_total: 2,
+        },
+      },
+    }).as('runBonzaQuery')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-detail-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-detail-1"]').click()
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.contains('Bonza AFX Watch').should('be.visible')
+      cy.contains('Provider Scope').should('be.visible')
+      cy.contains('bonzaslotcars').should('be.visible')
+      cy.contains('Pages scanned').should('be.visible')
+      cy.contains('2').should('be.visible')
+      cy.contains('Candidates').should('be.visible')
+    })
+  })
 })

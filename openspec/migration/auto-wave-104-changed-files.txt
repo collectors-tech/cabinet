@@ -1,0 +1,5 @@
+internal/ui/static/index.html
+openspec/specs/integrations/ui-screen-market-watch/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts
+ui.web/src/features/scanner/index.tsx

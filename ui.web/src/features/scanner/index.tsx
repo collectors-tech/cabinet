@@ -43,6 +43,11 @@ type RunSummary = {
   candidates_total: number
 }
 
+type RunMeta = {
+  status: 'never' | 'running' | 'succeeded' | 'failed'
+  ranAtISO?: string
+}
+
 const MARKET_WATCH_PROVIDER_OPTIONS = [
   'ebay',
   'amazon',
@@ -117,6 +122,7 @@ export function Scanner() {
   const [failures, setFailures] = useState<Failure[]>([])
   const [candidatesByQuerySet, setCandidatesByQuerySet] = useState<Record<string, Candidate[]>>({})
   const [runSummaryByQuerySet, setRunSummaryByQuerySet] = useState<Record<string, RunSummary>>({})
+  const [runMetaByQuerySet, setRunMetaByQuerySet] = useState<Record<string, RunMeta>>({})
   const [providerHealth, setProviderHealth] = useState('unknown')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -128,6 +134,8 @@ export function Scanner() {
   const [singleProvider, setSingleProvider] = useState('ebay')
   const [multiProviders, setMultiProviders] = useState<string[]>(['ebay', 'amazon'])
   const [providerValidation, setProviderValidation] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<string | null>(null)
 
   const loadScanner = useCallback(async () => {
     setLoading(true)
@@ -156,6 +164,7 @@ export function Scanner() {
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
+      setRunMetaByQuerySet({})
       setProviderHealth(healthPayload.status ?? 'unknown')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
@@ -163,6 +172,7 @@ export function Scanner() {
       setFailures([])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
+      setRunMetaByQuerySet({})
       setProviderHealth('unknown')
     } finally {
       setLoading(false)
@@ -223,11 +233,19 @@ export function Scanner() {
     setActionStatus('query_set_created')
     setActionFeedback(null)
     setQuerySets((current) => [...current, createdQuerySet])
+    setRunMetaByQuerySet((current) => ({
+      ...current,
+      [createdQuerySet.id]: { status: 'never' },
+    }))
     setNewName('')
     setNewKeywords('')
   }
 
   const runNow = async (querySet: QuerySet) => {
+    setRunMetaByQuerySet((current) => ({
+      ...current,
+      [querySet.id]: { status: 'running' },
+    }))
     const providerScope = Array.isArray(querySet.provider_scope)
       ? querySet.provider_scope.map((value) => value.trim().toLowerCase()).filter(Boolean)
       : []
@@ -252,6 +270,10 @@ export function Scanner() {
         }
         setActionStatus('run_failed')
         setActionFeedback(mapScannerActionError('run', bonzaResponse.status, code))
+        setRunMetaByQuerySet((current) => ({
+          ...current,
+          [querySet.id]: { status: 'failed' },
+        }))
         return
       }
       const payload = (await bonzaResponse.json()) as {
@@ -270,6 +292,10 @@ export function Scanner() {
       }
       setActionStatus(`bonza_run_started_${querySet.id}`)
       setActionFeedback(null)
+      setRunMetaByQuerySet((current) => ({
+        ...current,
+        [querySet.id]: { status: 'succeeded', ranAtISO: new Date().toISOString() },
+      }))
       return
     }
     const response = await fetch('/api/scanner/run', {
@@ -290,6 +316,10 @@ export function Scanner() {
       }
       setActionStatus('run_failed')
       setActionFeedback(mapScannerActionError('run', response.status, code))
+      setRunMetaByQuerySet((current) => ({
+        ...current,
+        [querySet.id]: { status: 'failed' },
+      }))
       return
     }
     const candidatesResponse = await fetch(
@@ -312,6 +342,10 @@ export function Scanner() {
     })
     setActionStatus(`run_started_${querySet.id}`)
     setActionFeedback(null)
+    setRunMetaByQuerySet((current) => ({
+      ...current,
+      [querySet.id]: { status: 'succeeded', ranAtISO: new Date().toISOString() },
+    }))
   }
 
   const retryFailure = async (querySetID: string) => {
@@ -330,10 +364,18 @@ export function Scanner() {
       }
       setActionStatus('retry_failed')
       setActionFeedback(mapScannerActionError('retry', response.status, code))
+      setRunMetaByQuerySet((current) => ({
+        ...current,
+        [querySetID]: { status: 'failed' },
+      }))
       return
     }
     setActionStatus(`retry_requested_${querySetID}`)
     setActionFeedback(null)
+    setRunMetaByQuerySet((current) => ({
+      ...current,
+      [querySetID]: { status: 'running' },
+    }))
     await loadScanner()
   }
 
@@ -342,6 +384,32 @@ export function Scanner() {
     loading,
     querySets.length,
   ])
+
+  const formatRunStatus = (querySetID: string) => runMetaByQuerySet[querySetID]?.status ?? 'never'
+
+  const formatRunTime = (querySetID: string) => {
+    const ranAtISO = runMetaByQuerySet[querySetID]?.ranAtISO
+    if (!ranAtISO) {
+      return 'Never'
+    }
+    const value = new Date(ranAtISO)
+    if (Number.isNaN(value.getTime())) {
+      return 'Never'
+    }
+    return value.toLocaleString()
+  }
+
+  const formatOutputSummary = (querySetID: string) => {
+    const summary = runSummaryByQuerySet[querySetID]
+    if (summary) {
+      return `Pages: ${summary.page_count} | Candidates: ${summary.candidates_total}`
+    }
+    const count = candidatesByQuerySet[querySetID]?.length ?? 0
+    if (count > 0) {
+      return `Candidates: ${count}`
+    }
+    return 'No output'
+  }
 
   return (
     <>
@@ -435,6 +503,26 @@ export function Scanner() {
             Create Query Set
           </Button>
         </section>
+        <section className='flex items-center gap-2'>
+          <Button
+            type='button'
+            size='sm'
+            variant={viewMode === 'cards' ? 'default' : 'outline'}
+            data-testid='market-watch-view-mode-cards'
+            onClick={() => setViewMode('cards')}
+          >
+            Cards
+          </Button>
+          <Button
+            type='button'
+            size='sm'
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            data-testid='market-watch-view-mode-table'
+            onClick={() => setViewMode('table')}
+          >
+            Table
+          </Button>
+        </section>
         {providerValidation ? (
           <p className='text-sm text-destructive' data-testid='market-watch-provider-validation'>
             {providerValidation}
@@ -491,7 +579,7 @@ export function Scanner() {
           </div>
         ) : null}
 
-        {querySets.length > 0 ? (
+        {querySets.length > 0 && viewMode === 'cards' ? (
           <section className='rounded-md border' data-testid='scanner-query-list'>
             <div className='divide-y'>
               {querySets.map((querySet) => (
@@ -517,6 +605,110 @@ export function Scanner() {
                   </Button>
                 </div>
               ))}
+            </div>
+          </section>
+        ) : null}
+
+        {querySets.length > 0 && viewMode === 'table' ? (
+          <section className='rounded-md border' data-testid='market-watch-query-table'>
+            <div className='overflow-x-auto'>
+              <table className='w-full text-sm'>
+                <thead className='bg-muted/30 text-left'>
+                  <tr>
+                    <th className='px-3 py-2 font-medium'>Query Name</th>
+                    <th className='px-3 py-2 font-medium'>Provider Scope</th>
+                    <th className='px-3 py-2 font-medium'>Last Run Status</th>
+                    <th className='px-3 py-2 font-medium'>Last Run Time</th>
+                    <th className='px-3 py-2 font-medium'>Latest Output Summary</th>
+                    <th className='px-3 py-2 font-medium'>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {querySets.map((querySet) => (
+                    <tr key={querySet.id} className='border-t'>
+                      <td className='px-3 py-2'>{querySet.name}</td>
+                      <td className='px-3 py-2'>
+                        {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
+                      </td>
+                      <td className='px-3 py-2 capitalize'>{formatRunStatus(querySet.id)}</td>
+                      <td className='px-3 py-2'>{formatRunTime(querySet.id)}</td>
+                      <td className='px-3 py-2'>{formatOutputSummary(querySet.id)}</td>
+                      <td className='px-3 py-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid={`market-watch-open-output-${querySet.id}`}
+                          onClick={() => setSelectedOutputQuerySetID(querySet.id)}
+                        >
+                          Inspect Output
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {selectedOutputQuerySetID ? (
+          <section className='rounded-md border p-3' data-testid='market-watch-output-detail'>
+            <div className='flex items-start justify-between gap-3'>
+              <div>
+                <p className='text-sm font-medium'>
+                  {querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)?.name ??
+                    selectedOutputQuerySetID}
+                </p>
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  Provider Scope:{' '}
+                  {(querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)
+                    ?.provider_scope ?? ['ebay']
+                  ).join(', ')}
+                </p>
+                <p className='text-xs text-muted-foreground'>
+                  Last run at: {formatRunTime(selectedOutputQuerySetID)}
+                </p>
+                <p className='text-xs text-muted-foreground'>
+                  Last run status: {formatRunStatus(selectedOutputQuerySetID)}
+                </p>
+              </div>
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                onClick={() => setSelectedOutputQuerySetID(null)}
+              >
+                Close
+              </Button>
+            </div>
+            {runSummaryByQuerySet[selectedOutputQuerySetID] ? (
+              <div className='mt-3 rounded-md border p-2 text-xs'>
+                <p>
+                  Pages scanned: {runSummaryByQuerySet[selectedOutputQuerySetID].page_count}
+                </p>
+                <p>
+                  Candidates: {runSummaryByQuerySet[selectedOutputQuerySetID].candidates_total}
+                </p>
+                <p>
+                  Observed page size:{' '}
+                  {runSummaryByQuerySet[selectedOutputQuerySetID].observed_page_size}
+                </p>
+              </div>
+            ) : null}
+            <div className='mt-3'>
+              <p className='text-xs font-medium'>Latest output items</p>
+              {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length === 0 ? (
+                <p className='text-xs text-muted-foreground'>No output available yet.</p>
+              ) : (
+                <ul className='mt-1 space-y-1 text-xs text-muted-foreground'>
+                  {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).map((candidate) => (
+                    <li key={candidate.id || candidate.listing_id}>
+                      {candidate.title} ({candidate.source ?? 'unknown'})
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
         ) : null}
