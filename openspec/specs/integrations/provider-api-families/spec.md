@@ -35,6 +35,21 @@ All API families SHALL map to common pagination/stock schema to keep Market Watc
 ### Requirement PROVIDER-FAMILY-005: Provider onboarding SHALL support URL-based API family auto-detection
 Given a provider homepage URL, onboarding SHALL run detection heuristics to infer likely API family and confidence before manual confirmation.
 
+### Requirement PROVIDER-FAMILY-006: BigCommerce family SHALL support storefront-access-first retrieval with token-aware fallback
+BigCommerce-backed providers SHALL use available storefront-accessible data paths first and support token-aware GraphQL/management API integration when credentials are provided.
+
+#### Scenario: BigCommerce public/storefront-access run
+- **GIVEN** provider is classified as BigCommerce family and no privileged API token is configured
+- **WHEN** query run executes
+- **THEN** runtime MUST use storefront-accessible endpoints/content paths and normalize candidates
+- **AND** runtime MUST record capability limits when stock/variant depth is unavailable without token
+
+#### Scenario: BigCommerce token-enabled run
+- **GIVEN** provider has valid BigCommerce storefront/admin credentials configured
+- **WHEN** query run executes
+- **THEN** runtime MAY use GraphQL Storefront and/or Management API paths for richer catalog/stock fields
+- **AND** run summary MUST declare auth mode and data depth source
+
 #### Scenario: URL-based family detection
 - **GIVEN** user enters provider homepage URL
 - **WHEN** detection process scans page HTML/assets/scripts/known endpoints
@@ -64,3 +79,5 @@ Given a provider homepage URL, onboarding SHALL run detection heuristics to infe
 | UC-PF-04 | Unified normalization | Family-specific payloads normalize to common run-summary fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-normalization` |
 | UC-PF-05 | URL auto-detection | Entered provider URL returns proposed family + confidence + evidence markers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-url-autodetect` |
 | UC-PF-06 | Manual override after detection | User can override detected family before provider save | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-autodetect-override` |
+| UC-PF-07 | BigCommerce storefront-access mode | Provider run works with storefront-accessible data paths and declares limits | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-storefront-mode` |
+| UC-PF-08 | BigCommerce token-enabled mode | Provider uses token-enabled API paths for deeper stock/catalog fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-token-enabled-mode` |
