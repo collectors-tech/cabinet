@@ -17,6 +17,7 @@ type QuerySet struct {
 	Keywords      []string `json:"keywords"`
 	Exclusions    []string `json:"exclusions"`
 	ProviderScope []string `json:"provider_scope"`
+	ItemsPerPage  int      `json:"items_per_page"`
 	MaxPrice      float64  `json:"max_price"`
 	Region        string   `json:"region"`
 	Condition     string   `json:"condition"`
@@ -60,8 +61,11 @@ type Candidate struct {
 }
 
 type RunResult struct {
-	Attempts int `json:"attempts"`
-	Saved    int `json:"saved"`
+	Attempts              int    `json:"attempts"`
+	Saved                 int    `json:"saved"`
+	ItemsPerPageRequested int    `json:"items_per_page_requested"`
+	ItemsPerPageEffective int    `json:"items_per_page_effective"`
+	ItemsPerPageWarning   string `json:"items_per_page_warning,omitempty"`
 }
 
 type Provider interface {
@@ -88,6 +92,9 @@ func (s *Service) CreateQuerySetForProfile(ctx context.Context, profileID string
 		in.ProviderScope = defaultProviderScope(in.Region)
 	}
 	in.ProviderScope = normalizeProviderScope(in.ProviderScope)
+	if in.ItemsPerPage <= 0 {
+		in.ItemsPerPage = 24
+	}
 	in.ID = uuid.NewString()
 	if in.RateLimitRPS <= 0 {
 		in.RateLimitRPS = 2
@@ -103,9 +110,9 @@ func (s *Service) CreateQuerySetForProfile(ctx context.Context, profileID string
 		enabled = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.Name, string(k), string(e), string(p), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, provider_scope_json, items_per_page, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Name, string(k), string(e), string(p), in.ItemsPerPage, in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount)
 	if err != nil {
 		return QuerySet{}, fmt.Errorf("insert query set: %w", err)
 	}
@@ -131,6 +138,9 @@ func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id st
 		in.ProviderScope = defaultProviderScope(in.Region)
 	}
 	in.ProviderScope = normalizeProviderScope(in.ProviderScope)
+	if in.ItemsPerPage <= 0 {
+		in.ItemsPerPage = 24
+	}
 	if in.RateLimitRPS <= 0 {
 		in.RateLimitRPS = 2
 	}
@@ -146,9 +156,9 @@ func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id st
 	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE scanner_query_sets
-		SET name = ?, keywords_json = ?, exclusions_json = ?, provider_scope_json = ?, max_price = ?, region = ?, condition_filter = ?, schedule_cron = ?, enabled = ?, rate_limit_rps = ?, max_retry_count = ?, updated_at = CURRENT_TIMESTAMP
+		SET name = ?, keywords_json = ?, exclusions_json = ?, provider_scope_json = ?, items_per_page = ?, max_price = ?, region = ?, condition_filter = ?, schedule_cron = ?, enabled = ?, rate_limit_rps = ?, max_retry_count = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.Name, string(k), string(e), string(p), in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	`, in.Name, string(k), string(e), string(p), in.ItemsPerPage, in.MaxPrice, in.Region, in.Condition, in.ScheduleCron, enabled, in.RateLimitRPS, in.MaxRetryCount, strings.TrimSpace(id), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return QuerySet{}, fmt.Errorf("update query set: %w", err)
 	}
@@ -186,9 +196,9 @@ func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id strin
 	var keywordsJSON, exclusionsJSON, providerScopeJSON string
 	var enabled int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, keywords_json, exclusions_json, provider_scope_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at
+		SELECT id, name, keywords_json, exclusions_json, provider_scope_json, items_per_page, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at
 		FROM scanner_query_sets WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &providerScopeJSON, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&q.ID, &q.Name, &keywordsJSON, &exclusionsJSON, &providerScopeJSON, &q.ItemsPerPage, &q.MaxPrice, &q.Region, &q.Condition, &q.ScheduleCron, &enabled, &q.RateLimitRPS, &q.MaxRetryCount, &q.CreatedAt, &q.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return QuerySet{}, fmt.Errorf("query set not found")
@@ -242,6 +252,31 @@ func normalizeProviderScope(values []string) []string {
 	return out
 }
 
+func resolveItemsPerPage(providerScope []string, configured int) (requested int, effective int, warning string) {
+	requested = configured
+	if requested <= 0 {
+		requested = 24
+	}
+	cap := itemsPerPageCap(providerScope)
+	effective = requested
+	if effective > cap {
+		effective = cap
+		warning = fmt.Sprintf("items_per_page clamped from %d to %d", requested, cap)
+	}
+	return requested, effective, warning
+}
+
+func itemsPerPageCap(providerScope []string) int {
+	cap := 50
+	for _, provider := range providerScope {
+		normalized := strings.TrimSpace(strings.ToLower(provider))
+		if strings.Contains(normalized, "bonza") {
+			return 36
+		}
+	}
+	return cap
+}
+
 func (s *Service) ListQuerySets(ctx context.Context) ([]QuerySet, error) {
 	return s.ListQuerySetsByProfile(ctx, "")
 }
@@ -282,6 +317,11 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 	if provider == nil {
 		return RunResult{}, fmt.Errorf("provider is required")
 	}
+	requestedItemsPerPage, effectiveItemsPerPage, itemsPerPageWarning := resolveItemsPerPage(
+		qs.ProviderScope,
+		qs.ItemsPerPage,
+	)
+	qs.ItemsPerPage = effectiveItemsPerPage
 
 	maxAttempts := qs.MaxRetryCount + 1
 	if maxAttempts < 1 {
@@ -293,7 +333,17 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 		items, lastErr = provider.Search(ctx, qs)
 		if lastErr == nil {
 			s.recordProviderHealth(ctx, "ebay", "ok", "")
-			return s.persistCandidatesForProfile(ctx, strings.TrimSpace(profileID), qs.ID, items, attempt)
+			result, persistErr := s.persistCandidatesForProfile(
+				ctx,
+				strings.TrimSpace(profileID),
+				qs.ID,
+				items,
+				attempt,
+				requestedItemsPerPage,
+				effectiveItemsPerPage,
+				itemsPerPageWarning,
+			)
+			return result, persistErr
 		}
 		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
 		s.logFailure(ctx, qs.ID, "ebay", lastErr.Error())
@@ -305,7 +355,12 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			time.Sleep(sleep * time.Duration(attempt))
 		}
 	}
-	return RunResult{Attempts: maxAttempts}, fmt.Errorf("run failed: %w", lastErr)
+	return RunResult{
+		Attempts:              maxAttempts,
+		ItemsPerPageRequested: requestedItemsPerPage,
+		ItemsPerPageEffective: effectiveItemsPerPage,
+		ItemsPerPageWarning:   itemsPerPageWarning,
+	}, fmt.Errorf("run failed: %w", lastErr)
 }
 
 func (s *Service) RunScheduled(ctx context.Context, provider Provider) (int, error) {
@@ -331,10 +386,19 @@ func (s *Service) RunScheduledForProfile(ctx context.Context, profileID string, 
 }
 
 func (s *Service) persistCandidates(ctx context.Context, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
-	return s.persistCandidatesForProfile(ctx, "", querySetID, items, attempts)
+	return s.persistCandidatesForProfile(ctx, "", querySetID, items, attempts, 0, 0, "")
 }
 
-func (s *Service) persistCandidatesForProfile(ctx context.Context, profileID, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
+func (s *Service) persistCandidatesForProfile(
+	ctx context.Context,
+	profileID,
+	querySetID string,
+	items []CandidateInput,
+	attempts int,
+	requestedItemsPerPage int,
+	effectiveItemsPerPage int,
+	itemsPerPageWarning string,
+) (RunResult, error) {
 	saved := 0
 	for _, it := range items {
 		if strings.TrimSpace(it.ListingID) == "" {
@@ -369,7 +433,13 @@ func (s *Service) persistCandidatesForProfile(ctx context.Context, profileID, qu
 		}
 		saved++
 	}
-	return RunResult{Attempts: attempts, Saved: saved}, nil
+	return RunResult{
+		Attempts:              attempts,
+		Saved:                 saved,
+		ItemsPerPageRequested: requestedItemsPerPage,
+		ItemsPerPageEffective: effectiveItemsPerPage,
+		ItemsPerPageWarning:   itemsPerPageWarning,
+	}, nil
 }
 
 func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Candidate, error) {

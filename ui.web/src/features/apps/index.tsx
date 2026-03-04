@@ -77,6 +77,7 @@ type IntegrationForm = {
   baseURL: string
   token: string
   marketplace: string
+  itemsPerPage: string
 }
 
 type AppsProps = {
@@ -97,6 +98,7 @@ function providerSettingsKeys(providerID: string) {
       tokenKey: 'ebay_bearer_token',
       marketplaceKey: 'ebay_marketplace',
       enabledKey: 'integration.ebay.enabled',
+      itemsPerPageKey: 'integration.ebay.items_per_page',
     }
   }
   const slug = providerID.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
@@ -105,6 +107,7 @@ function providerSettingsKeys(providerID: string) {
     tokenKey: `integration.${slug}.token`,
     marketplaceKey: `integration.${slug}.marketplace`,
     enabledKey: `integration.${slug}.enabled`,
+    itemsPerPageKey: `integration.${slug}.items_per_page`,
   }
 }
 
@@ -171,6 +174,7 @@ export function Apps({
     baseURL: '',
     token: '',
     marketplace: '',
+    itemsPerPage: '',
   })
 
   const loadBootstrap = useCallback(async () => {
@@ -296,6 +300,7 @@ export function Apps({
         (provider.base_domain ? `https://${provider.base_domain}` : ''),
       token: '',
       marketplace: settings[keys.marketplaceKey] ?? 'AU',
+      itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
     })
     setReplaceToken(!provider.has_token)
   }
@@ -368,6 +373,7 @@ export function Apps({
       baseURL: '',
       token: '',
       marketplace: '',
+      itemsPerPage: '',
     })
   }
 
@@ -392,6 +398,7 @@ export function Apps({
       const next: Record<string, string> = {
         [keys.baseURLKey]: form.baseURL.trim(),
         [keys.marketplaceKey]: form.marketplace.trim(),
+        [keys.itemsPerPageKey]: form.itemsPerPage.trim(),
         [keys.enabledKey]:
           editingProvider.auth_mode === 'none' ||
           editingProvider.has_token ||
@@ -729,6 +736,13 @@ export function Apps({
                 placeholder='Marketplace / Region'
                 value={form.marketplace}
                 onChange={(e) => setForm((prev) => ({ ...prev, marketplace: e.target.value }))}
+              />
+              <Input
+                type='number'
+                min='1'
+                placeholder='Items per page'
+                value={form.itemsPerPage}
+                onChange={(e) => setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))}
               />
 
               {editingProvider.auth_mode !== 'none' ? (

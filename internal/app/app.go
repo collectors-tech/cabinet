@@ -1096,6 +1096,28 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
 			return
 		}
+		querySet, err := scannerSvc.GetQuerySetForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set"}`, http.StatusBadRequest)
+			return
+		}
+		if providerID := firstProviderInScope(querySet.ProviderScope); providerID != "" {
+			itemsPerPageKey := providerSettingsKeys(providerID).ItemsPerPageKey
+			if raw := strings.TrimSpace(settings[itemsPerPageKey]); raw != "" {
+				if value, parseErr := strconv.Atoi(raw); parseErr == nil {
+					querySet.ItemsPerPage = value
+					if _, updateErr := scannerSvc.UpdateQuerySetForProfile(
+						r.Context(),
+						strings.TrimSpace(active.ID),
+						querySet.ID,
+						querySet,
+					); updateErr != nil {
+						http.Error(w, `{"error":"failed_to_apply_provider_items_per_page"}`, http.StatusBadRequest)
+						return
+					}
+				}
+			}
+		}
 		provider := ebay.NewProvider(ebay.ProviderConfig{
 			BaseURL:     settings["ebay_base_url"],
 			BearerToken: settings["ebay_bearer_token"],
@@ -4121,6 +4143,16 @@ func claimAsString(claims map[string]any, key string) string {
 	}
 }
 
+func firstProviderInScope(scope []string) string {
+	for _, raw := range scope {
+		normalized := strings.TrimSpace(strings.ToLower(raw))
+		if normalized != "" {
+			return normalized
+		}
+	}
+	return ""
+}
+
 func entitlementFeaturesFromPlan(plan string) []string {
 	switch strings.TrimSpace(strings.ToLower(plan)) {
 	case "pro", "paid", "plus":
@@ -4264,29 +4296,32 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 }
 
 type providerSettingKeySet struct {
-	BaseURLKey     string
-	TokenKey       string
-	MarketplaceKey string
-	EnabledKey     string
+	BaseURLKey      string
+	TokenKey        string
+	MarketplaceKey  string
+	EnabledKey      string
+	ItemsPerPageKey string
 }
 
 func providerSettingsKeys(providerID string) providerSettingKeySet {
 	if strings.TrimSpace(strings.ToLower(providerID)) == "ebay" {
 		return providerSettingKeySet{
-			BaseURLKey:     "ebay_base_url",
-			TokenKey:       "ebay_bearer_token",
-			MarketplaceKey: "ebay_marketplace",
-			EnabledKey:     "integration.ebay.enabled",
+			BaseURLKey:      "ebay_base_url",
+			TokenKey:        "ebay_bearer_token",
+			MarketplaceKey:  "ebay_marketplace",
+			EnabledKey:      "integration.ebay.enabled",
+			ItemsPerPageKey: "integration.ebay.items_per_page",
 		}
 	}
 	slug := strings.TrimSpace(strings.ToLower(providerID))
 	slug = strings.ReplaceAll(slug, "-", "_")
 	slug = strings.ReplaceAll(slug, ".", "_")
 	return providerSettingKeySet{
-		BaseURLKey:     "integration." + slug + ".base_url",
-		TokenKey:       "integration." + slug + ".token",
-		MarketplaceKey: "integration." + slug + ".marketplace",
-		EnabledKey:     "integration." + slug + ".enabled",
+		BaseURLKey:      "integration." + slug + ".base_url",
+		TokenKey:        "integration." + slug + ".token",
+		MarketplaceKey:  "integration." + slug + ".marketplace",
+		EnabledKey:      "integration." + slug + ".enabled",
+		ItemsPerPageKey: "integration." + slug + ".items_per_page",
 	}
 }
 

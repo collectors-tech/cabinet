@@ -183,6 +183,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			keywords_json TEXT NOT NULL,
 			exclusions_json TEXT NOT NULL DEFAULT '[]',
 			provider_scope_json TEXT NOT NULL DEFAULT '[]',
+			items_per_page INTEGER NOT NULL DEFAULT 24,
 			max_price REAL NOT NULL DEFAULT 0,
 			region TEXT NOT NULL DEFAULT '',
 			condition_filter TEXT NOT NULL DEFAULT '',
@@ -434,6 +435,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "scanner_query_sets", "provider_scope_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_query_sets.provider_scope_json: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "scanner_query_sets", "items_per_page", "INTEGER NOT NULL DEFAULT 24"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_query_sets.items_per_page: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
 		conn.Close()

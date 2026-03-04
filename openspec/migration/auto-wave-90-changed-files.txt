@@ -1,0 +1,7 @@
+internal/app/app.go
+internal/app/scanner_api_test.go
+internal/db/sqlite.go
+internal/scanner/service.go
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/src/features/apps/index.tsx
