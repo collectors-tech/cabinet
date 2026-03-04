@@ -1,0 +1,6 @@
+internal/app/app.go
+internal/app/pokemon_visibility_policy_api_test.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-127-summary.md
+openspec/migration/auto-wave-127-changed-files.txt

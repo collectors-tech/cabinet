@@ -1083,6 +1083,55 @@ func New(cfg config.Config) (*App, error) {
 			"alerts": alerts,
 		})
 	})
+	mux.HandleFunc("/api/integrations/pokemon/visibility-access", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		visibility := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("visibility")))
+		actor := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("actor")))
+		if actor == "" {
+			actor = "anonymous"
+		}
+		shareToken := strings.TrimSpace(r.URL.Query().Get("share_token"))
+		switch visibility {
+		case "private":
+			if actor == "anonymous" {
+				http.Error(w, `{"error":"visibility_forbidden","visibility":"private","required":"authenticated"}`, http.StatusForbidden)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":         true,
+				"visibility": "private",
+				"actor":      actor,
+			})
+		case "shared_link":
+			if shareToken == "" {
+				http.Error(w, `{"error":"missing_share_token","visibility":"shared_link","required":"share_token"}`, http.StatusForbidden)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":                  true,
+				"visibility":          "shared_link",
+				"actor":               actor,
+				"share_token_present": true,
+			})
+		case "team":
+			if actor != "team_member" {
+				http.Error(w, `{"error":"visibility_forbidden","visibility":"team","required":"team_member"}`, http.StatusForbidden)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":         true,
+				"visibility": "team",
+				"actor":      actor,
+			})
+		default:
+			http.Error(w, `{"error":"invalid_visibility"}`, http.StatusBadRequest)
+			return
+		}
+	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {

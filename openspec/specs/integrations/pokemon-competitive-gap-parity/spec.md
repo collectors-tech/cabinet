@@ -63,9 +63,18 @@ Cabinet SHALL include seller reputation, stock signal, and direct buy-link conte
 Cabinet SHALL support deterministic visibility controls (`private`, `shared_link`, `team`) for collections and dynamic lists.
 
 #### Scenario: Visibility policy enforcement
-- **GIVEN** a list visibility is configured to `private`
-- **WHEN** external share endpoint is requested
-- **THEN** API MUST deny anonymous access with deterministic forbidden envelope
+- **GIVEN** visibility policy is configured via request parameter `visibility` with allowed values `private`, `shared_link`, `team`
+- **WHEN** client requests `GET /api/integrations/pokemon/visibility-access?visibility=<policy>&actor=<anonymous|authenticated|team_member>&share_token=<token>`
+- **THEN** API MUST return deterministic envelopes:
+  - `private` + `anonymous` => `403` with `{"error":"visibility_forbidden","visibility":"private","required":"authenticated"}`
+  - `shared_link` + missing `share_token` => `403` with `{"error":"missing_share_token","visibility":"shared_link","required":"share_token"}`
+  - `team` + actor not `team_member` => `403` with `{"error":"visibility_forbidden","visibility":"team","required":"team_member"}`
+  - allowed access => `200` with `{"ok":true,"visibility":"<policy>","actor":"<actor>"}` and optional `share_token_present`
+
+#### Scenario: Invalid visibility values are rejected deterministically
+- **GIVEN** `visibility` is omitted or outside `private|shared_link|team`
+- **WHEN** client requests `GET /api/integrations/pokemon/visibility-access`
+- **THEN** API MUST return `400` with `{"error":"invalid_visibility"}`
 
 ### Requirement POKEMON-COMP-006: Dynamic list templates MUST be first-class and reusable
 Cabinet SHALL support reusable list templates for wishlist, trade binder, and watchlist views with saved filters and sort order.
