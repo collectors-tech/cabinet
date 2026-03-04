@@ -1,0 +1,10 @@
+openspec/migration/auto-wave-115-summary.md
+openspec/traceability.md
+ui.web/cypress/e2e/settings/appearance/spec.cy.ts
+ui.web/src/components/language-switch.tsx
+ui.web/src/features/settings/appearance/appearance-form.tsx
+ui.web/src/i18n/index.ts
+ui.web/src/locales/en/common.json
+ui.web/src/locales/ja/common.json
+ui.web/src/locales/zh/common.json
+internal/ui/static/index.html

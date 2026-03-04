@@ -16,7 +16,8 @@ type LanguageOption = {
 
 const languages: LanguageOption[] = [
   { code: 'en', label: 'EN' },
-  { code: 'ar', label: 'AR' },
+  { code: 'zh', label: 'ZH' },
+  { code: 'ja', label: 'JA' },
 ]
 
 export function LanguageSwitch() {

@@ -358,8 +358,8 @@
 | UI-SCREEN-CHAT-COPILOT-008 | openspec/specs/chats/ui-screen-chat-copilot/spec.md | mobile chat image attachment workflows | implemented: ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts (`UI-SCREEN-CHAT-COPILOT-008 supports mobile image attachment and confirm-before-apply flow`) | implemented |
 | PROVIDER-OPENAI-004 | openspec/specs/integrations/provider-openai/spec.md | structured tool payloads for inventory/wishlist assist | implemented: internal/ai/service_test.go (`TestProposeOperationStructuredPayload` validates schema-shaped action/target/payload with confirmation requirement) | implemented |
 
-| UI-SCREEN-SETTINGS-APPEARANCE-002 | openspec/specs/settings/appearance/spec.md | language selector options (English, Chinese, Japanese) | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (switch language to zh/ja and persist) | partial |
-| UI-SCREEN-SETTINGS-APPEARANCE-003 | openspec/specs/settings/appearance/spec.md | i18n fallback behavior | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (missing key falls back without layout break) | partial |
+| UI-SCREEN-SETTINGS-APPEARANCE-002 | openspec/specs/settings/appearance/spec.md | language selector options (English, Chinese, Japanese) | implemented: ui.web/cypress/e2e/settings/appearance/spec.cy.ts (`UI-SCREEN-SETTINGS-APPEARANCE-002 supports Chinese and Japanese selection with persistence`) | implemented |
+| UI-SCREEN-SETTINGS-APPEARANCE-003 | openspec/specs/settings/appearance/spec.md | i18n fallback behavior | implemented: ui.web/cypress/e2e/settings/appearance/spec.cy.ts (`UI-SCREEN-SETTINGS-APPEARANCE-003 falls back to English text when key is missing in selected locale`) | implemented |
 
 ## Live UI Audit Issue Bindings (New-User Wave 2026-03-03)
 

@@ -1,10 +1,11 @@
 import i18next from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
-import commonAr from '@/locales/ar/common.json'
 import commonEn from '@/locales/en/common.json'
+import commonJa from '@/locales/ja/common.json'
 import navEn from '@/locales/en/nav.json'
 import pagesEn from '@/locales/en/pages.json'
+import commonZh from '@/locales/zh/common.json'
 
 function applyDocumentLocale(language: string) {
   if (typeof document === 'undefined') {
@@ -21,7 +22,7 @@ void i18next
   .init({
     lng: 'en',
     fallbackLng: 'en',
-    supportedLngs: ['en', 'ar'],
+    supportedLngs: ['en', 'zh', 'ja'],
     interpolation: { escapeValue: false },
     defaultNS: 'common',
     ns: ['common', 'nav', 'pages'],
@@ -31,8 +32,11 @@ void i18next
         nav: navEn,
         pages: pagesEn,
       },
-      ar: {
-        common: commonAr,
+      zh: {
+        common: commonZh,
+      },
+      ja: {
+        common: commonJa,
       },
     },
     detection: {

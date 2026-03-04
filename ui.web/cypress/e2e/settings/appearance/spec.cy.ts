@@ -48,4 +48,34 @@ describe('settings/appearance', () => {
     cy.get('select[name="font"]').should('have.value', 'manrope')
     cy.get('html').should('have.class', 'light')
   })
+
+  it('UI-SCREEN-SETTINGS-APPEARANCE-002 supports Chinese and Japanese selection with persistence', () => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    signInToSettings()
+
+    cy.get('[data-testid="appearance-language-select"]').select('zh')
+    cy.contains('button', 'Update preferences').click()
+    cy.window().its('localStorage.i18nextLng').should('eq', 'zh')
+
+    cy.get('[data-testid="appearance-language-select"]').select('ja')
+    cy.contains('button', 'Update preferences').click()
+    cy.window().its('localStorage.i18nextLng').should('eq', 'ja')
+
+    cy.reload()
+    cy.get('[data-testid="appearance-language-select"]').should('have.value', 'ja')
+  })
+
+  it('UI-SCREEN-SETTINGS-APPEARANCE-003 falls back to English text when key is missing in selected locale', () => {
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    signInToSettings()
+
+    cy.get('[data-testid="appearance-language-select"]').select('zh')
+    cy.contains('button', 'Update preferences').click()
+    cy.get('[data-testid="appearance-language-fallback-sample"]').should(
+      'contain',
+      'Fallback sample text from English defaults.'
+    )
+  })
 })

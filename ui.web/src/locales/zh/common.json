@@ -1,0 +1,25 @@
+{
+  "app": {
+    "name": "Cabinet"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "retry": "重试",
+    "open": "打开",
+    "rows": "列表",
+    "cards": "卡片"
+  },
+  "status": {
+    "loading": "加载中..."
+  },
+  "search": {
+    "placeholder": "搜索"
+  },
+  "workspace": {
+    "label": "数据库",
+    "add": "添加数据库"
+  },
+  "language": {
+    "label": "语言"
+  }
+}

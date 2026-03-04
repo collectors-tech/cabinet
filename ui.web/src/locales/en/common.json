@@ -21,5 +21,8 @@
   },
   "language": {
     "label": "Language"
+  },
+  "appearance": {
+    "sampleText": "Fallback sample text from English defaults."
   }
 }

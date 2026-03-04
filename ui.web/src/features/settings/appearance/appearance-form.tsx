@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { ChevronDownIcon } from '@radix-ui/react-icons'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { fonts } from '@/config/fonts'
 import { cn } from '@/lib/utils'
 import { useFont } from '@/context/font-provider'
@@ -24,11 +25,13 @@ import { useProfileSettings } from '../use-profile-settings'
 const appearanceFormSchema = z.object({
   theme: z.enum(['light', 'dark']),
   font: z.enum(fonts),
+  language: z.enum(['en', 'zh', 'ja']),
 })
 
 type AppearanceFormValues = z.infer<typeof appearanceFormSchema>
 
 export function AppearanceForm() {
+  const { i18n, t } = useTranslation('common')
   const {
     settings,
     loading,
@@ -47,6 +50,10 @@ export function AppearanceForm() {
   const defaultValues: Partial<AppearanceFormValues> = {
     theme: theme as 'light' | 'dark',
     font,
+    language:
+      i18n.resolvedLanguage === 'zh' || i18n.resolvedLanguage === 'ja'
+        ? (i18n.resolvedLanguage as 'zh' | 'ja')
+        : 'en',
   }
 
   const form = useForm<AppearanceFormValues>({
@@ -67,8 +74,16 @@ export function AppearanceForm() {
       font: fonts.includes(settings['appearance.font'] as (typeof fonts)[number])
         ? (settings['appearance.font'] as (typeof fonts)[number])
         : font,
+      language:
+        settings['appearance.language'] === 'zh' ||
+        settings['appearance.language'] === 'ja' ||
+        settings['appearance.language'] === 'en'
+          ? (settings['appearance.language'] as 'en' | 'zh' | 'ja')
+          : i18n.resolvedLanguage === 'zh' || i18n.resolvedLanguage === 'ja'
+            ? (i18n.resolvedLanguage as 'zh' | 'ja')
+            : 'en',
     })
-  }, [font, form, loading, settings, theme])
+  }, [font, form, i18n.resolvedLanguage, loading, settings, theme])
 
   async function onSubmit(data: AppearanceFormValues) {
     setSaveMessage(null)
@@ -76,9 +91,13 @@ export function AppearanceForm() {
     if (data.font != font) setFont(data.font)
     if (data.theme != theme) setTheme(data.theme)
     try {
+      if (data.language !== i18n.language) {
+        await i18n.changeLanguage(data.language)
+      }
       await saveSettings({
         'appearance.theme': data.theme,
         'appearance.font': data.font,
+        'appearance.language': data.language,
       })
       setSaveMessage('Appearance settings saved.')
     } catch (err) {
@@ -150,6 +169,43 @@ export function AppearanceForm() {
               <FormDescription className='font-manrope'>
                 Set the font you want to use in the dashboard.
               </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='language'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Language</FormLabel>
+              <div className='relative w-max'>
+                <FormControl>
+                  <select
+                    data-testid='appearance-language-select'
+                    className={cn(
+                      buttonVariants({ variant: 'outline' }),
+                      'w-[200px] appearance-none font-normal',
+                      'dark:bg-background dark:hover:bg-background'
+                    )}
+                    {...field}
+                  >
+                    <option value='en'>English</option>
+                    <option value='zh'>Chinese</option>
+                    <option value='ja'>Japanese</option>
+                  </select>
+                </FormControl>
+                <ChevronDownIcon className='absolute end-3 top-2.5 h-4 w-4 opacity-50' />
+              </div>
+              <FormDescription>
+                Select your preferred language for the dashboard UI.
+              </FormDescription>
+              <p
+                className='text-xs text-muted-foreground'
+                data-testid='appearance-language-fallback-sample'
+              >
+                {t('appearance.sampleText')}
+              </p>
               <FormMessage />
             </FormItem>
           )}
