@@ -32,6 +32,24 @@ Algolia-backed providers SHALL discover application/search keys and index names 
 ### Requirement PROVIDER-FAMILY-004: Family contracts SHALL expose shared pagination/stock normalization semantics
 All API families SHALL map to common pagination/stock schema to keep Market Watch behavior consistent.
 
+### Requirement PROVIDER-FAMILY-005: Provider onboarding SHALL support URL-based API family auto-detection
+Given a provider homepage URL, onboarding SHALL run detection heuristics to infer likely API family and confidence before manual confirmation.
+
+#### Scenario: URL-based family detection
+- **GIVEN** user enters provider homepage URL
+- **WHEN** detection process scans page HTML/assets/scripts/known endpoints
+- **THEN** runtime MUST propose `api_family` with confidence score and evidence markers
+- **AND** user MUST confirm or override mapping before saving provider
+
+#### Scenario: Detection heuristics evidence
+- **GIVEN** detector runs against provider URL
+- **WHEN** result is returned
+- **THEN** evidence MUST include matched markers such as:
+  - WooCommerce: `/wp-json/wc/store/v1`, `woocommerce` markers
+  - Boost/Shopify: `services.mybcapps.com/bc-sf-filter`, Boost script signatures
+  - Algolia: `algoliasearch(` calls, app/search key/index markers
+  - Shopify JSON: `/products.json` or `/collections/*/products.json` endpoint responses
+
 #### Scenario: Unified normalization output
 - **GIVEN** provider run returns family-specific payload
 - **WHEN** normalization completes
@@ -44,3 +62,5 @@ All API families SHALL map to common pagination/stock schema to keep Market Watc
 | UC-PF-02 | Boost API run | Boost provider resolves config/session and parses candidates deterministically | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `boost-api-contract` |
 | UC-PF-03 | Algolia drift fallback | Algolia provider continues with last-known-good config and warning telemetry | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `algolia-drift-fallback-contract` |
 | UC-PF-04 | Unified normalization | Family-specific payloads normalize to common run-summary fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-normalization` |
+| UC-PF-05 | URL auto-detection | Entered provider URL returns proposed family + confidence + evidence markers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-url-autodetect` |
+| UC-PF-06 | Manual override after detection | User can override detected family before provider save | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-autodetect-override` |
