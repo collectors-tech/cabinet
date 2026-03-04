@@ -1,6 +1,16 @@
 ## Purpose
 Define AU webshop provider family contract for slot-car collector discovery and stock-aware candidate ingestion.
 
+## Family Contract References
+This provider group reuses shared family-level contracts from:
+- `openspec/specs/integrations/provider-api-families/spec.md`
+
+Mapped reusable behavior:
+- WooCommerce ingestion and fallback semantics -> `PROVIDER-FAMILY-001`
+- Boost/Shopify runtime discovery + session handling semantics -> `PROVIDER-FAMILY-002`
+- Algolia runtime discovery + drift-safe fallback semantics -> `PROVIDER-FAMILY-003`
+- Shared pagination/stock normalization semantics -> `PROVIDER-FAMILY-004`
+
 ## Requirements
 ### Requirement INTEGRATION-011: AU webshop provider family MUST maintain domain catalog
 Cabinet SHALL maintain provider entries for:

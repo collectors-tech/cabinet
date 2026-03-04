@@ -46,3 +46,38 @@ func TestProviderSpecsExistAndRegistryLinksThem(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFamilyContractsAreIndexedAndLinkedFromAUProviderSpec(t *testing.T) {
+	t.Parallel()
+
+	familySpecPath := "../../openspec/specs/integrations/provider-api-families/spec.md"
+	if _, err := os.Stat(familySpecPath); err != nil {
+		t.Fatalf("missing provider family spec: %s (%v)", familySpecPath, err)
+	}
+	readmeBytes, err := os.ReadFile("../../openspec/specs/integrations/README.md")
+	if err != nil {
+		t.Fatalf("read integrations README: %v", err)
+	}
+	readme := string(readmeBytes)
+	if !strings.Contains(readme, "provider-api-families") {
+		t.Fatalf("integrations README missing provider-api-families index reference")
+	}
+
+	auSpecBytes, err := os.ReadFile("../../openspec/specs/integrations/provider-au-webshops/spec.md")
+	if err != nil {
+		t.Fatalf("read AU webshop provider spec: %v", err)
+	}
+	auSpec := string(auSpecBytes)
+	requiredTokens := []string{
+		"provider-api-families/spec.md",
+		"PROVIDER-FAMILY-001",
+		"PROVIDER-FAMILY-002",
+		"PROVIDER-FAMILY-003",
+		"PROVIDER-FAMILY-004",
+	}
+	for _, token := range requiredTokens {
+		if !strings.Contains(auSpec, token) {
+			t.Fatalf("AU webshop provider spec missing provider-family token: %s", token)
+		}
+	}
+}
