@@ -65,6 +65,8 @@ type RunResult struct {
 	Saved                 int    `json:"saved"`
 	ItemsPerPageRequested int    `json:"items_per_page_requested"`
 	ItemsPerPageEffective int    `json:"items_per_page_effective"`
+	ObservedPageSize      int    `json:"observed_page_size"`
+	PageCount             int    `json:"page_count"`
 	ItemsPerPageWarning   string `json:"items_per_page_warning,omitempty"`
 }
 
@@ -359,6 +361,8 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 		Attempts:              maxAttempts,
 		ItemsPerPageRequested: requestedItemsPerPage,
 		ItemsPerPageEffective: effectiveItemsPerPage,
+		ObservedPageSize:      effectiveItemsPerPage,
+		PageCount:             0,
 		ItemsPerPageWarning:   itemsPerPageWarning,
 	}, fmt.Errorf("run failed: %w", lastErr)
 }
@@ -438,8 +442,24 @@ func (s *Service) persistCandidatesForProfile(
 		Saved:                 saved,
 		ItemsPerPageRequested: requestedItemsPerPage,
 		ItemsPerPageEffective: effectiveItemsPerPage,
+		ObservedPageSize:      effectiveItemsPerPage,
+		PageCount:             calculatePageCount(saved, effectiveItemsPerPage),
 		ItemsPerPageWarning:   itemsPerPageWarning,
 	}, nil
+}
+
+func calculatePageCount(saved, pageSize int) int {
+	if saved <= 0 || pageSize <= 0 {
+		return 0
+	}
+	count := saved / pageSize
+	if saved%pageSize != 0 {
+		count++
+	}
+	if count <= 0 {
+		return 1
+	}
+	return count
 }
 
 func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Candidate, error) {

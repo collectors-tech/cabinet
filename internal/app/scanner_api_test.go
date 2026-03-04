@@ -215,6 +215,12 @@ func TestScannerRunItemsPerPageSummaryAppliesSafeCap(t *testing.T) {
 	if got, ok := summary["items_per_page_effective"].(float64); !ok || int(got) != 36 {
 		t.Fatalf("expected items_per_page_effective=36, got %#v", summary["items_per_page_effective"])
 	}
+	if got, ok := summary["observed_page_size"].(float64); !ok || int(got) != 36 {
+		t.Fatalf("expected observed_page_size=36, got %#v", summary["observed_page_size"])
+	}
+	if got, ok := summary["page_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected page_count=1, got %#v", summary["page_count"])
+	}
 	warning, _ := summary["items_per_page_warning"].(string)
 	if warning == "" {
 		t.Fatalf("expected items_per_page_warning in run summary, got %#v", summary["items_per_page_warning"])

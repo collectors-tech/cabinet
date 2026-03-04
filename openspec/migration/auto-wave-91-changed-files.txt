@@ -1,0 +1,3 @@
+internal/app/scanner_api_test.go
+internal/scanner/service.go
+openspec/traceability.md
