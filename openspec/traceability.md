@@ -383,9 +383,9 @@
 | UI-SCREEN-DISCOVERIES-005 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | ranked actionable missing candidates | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (missing candidates ranking/filtering + wishlist apply) | partial |
 | UI-SCREEN-DISCOVERIES-006 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | explainable match rationale | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (candidate rationale visibility) | partial |
 
-| DEFAULT-SITE-SEARCH-004 | openspec/specs/integrations/default-site-search/spec.md | saved searches per provider + filter persistence | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (create/edit/delete saved search with filters) | partial |
-| DEFAULT-SITE-SEARCH-005 | openspec/specs/integrations/default-site-search/spec.md | run-now and scheduled refresh for saved searches | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (saved search run-now + scheduled refresh) | partial |
-| DEFAULT-SITE-SEARCH-006 | openspec/specs/integrations/default-site-search/spec.md | saved search handoff to discoveries/wishlist workflows | planned: ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts (saved search results -> discoveries/wishlist handoff) | partial |
+| DEFAULT-SITE-SEARCH-004 | openspec/specs/integrations/default-site-search/spec.md | provider-bound saved searches with persisted filters and manage lifecycle (create/edit/delete) | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-004 manages provider-bound saved searches with persisted filters`) | implemented |
+| DEFAULT-SITE-SEARCH-005 | openspec/specs/integrations/default-site-search/spec.md | run-now + scheduled refresh execution summaries for saved searches | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh`) | implemented |
+| DEFAULT-SITE-SEARCH-006 | openspec/specs/integrations/default-site-search/spec.md | discoveries + wishlist handoff from saved-search output workflows | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and wishlist flows`) | implemented |
 
 | PROVIDER-AU-WEBSHOPS-004 | openspec/specs/integrations/provider-au-webshops/spec.md | AU webshop domain allowlist configuration | planned: internal/app/*provider_au_webshops*_test.go (configured domain set includes approved shops) | partial |
 

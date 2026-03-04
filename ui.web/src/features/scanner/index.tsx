@@ -13,7 +13,13 @@ type QuerySet = {
   id: string
   name: string
   keywords: string[]
+  exclusions?: string[]
   provider_scope?: string[]
+  max_price?: number
+  region?: string
+  condition?: string
+  schedule_cron?: string
+  enabled?: boolean
 }
 
 type Failure = {
@@ -138,12 +144,18 @@ export function Scanner() {
   const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
+  const [newScheduleCron, setNewScheduleCron] = useState('0 */6 * * *')
   const [providerMode, setProviderMode] = useState<ProviderMode>('single')
   const [singleProvider, setSingleProvider] = useState('ebay')
   const [multiProviders, setMultiProviders] = useState<string[]>(['ebay', 'amazon'])
   const [providerValidation, setProviderValidation] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<string | null>(null)
+  const [editingQuerySetID, setEditingQuerySetID] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [editingKeywords, setEditingKeywords] = useState('')
+  const [editingScheduleCron, setEditingScheduleCron] = useState('')
+  const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
   const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>('cards')
@@ -231,6 +243,7 @@ export function Scanner() {
         keywords,
         exclusions: [],
         provider_scope: providerScope,
+        schedule_cron: newScheduleCron.trim(),
         enabled: true,
       }),
     })
@@ -251,6 +264,138 @@ export function Scanner() {
     }))
     setNewName('')
     setNewKeywords('')
+    setNewScheduleCron('0 */6 * * *')
+  }
+
+  const startEditQuerySet = (querySet: QuerySet) => {
+    setEditingQuerySetID(querySet.id)
+    setEditingName(querySet.name)
+    setEditingKeywords((querySet.keywords ?? []).join(', '))
+    setEditingScheduleCron(querySet.schedule_cron ?? '')
+  }
+
+  const cancelEditQuerySet = () => {
+    setEditingQuerySetID(null)
+    setEditingName('')
+    setEditingKeywords('')
+    setEditingScheduleCron('')
+  }
+
+  const saveQuerySet = async (querySet: QuerySet) => {
+    if (editingQuerySetID !== querySet.id) {
+      return
+    }
+    const payload: QuerySet = {
+      ...querySet,
+      name: editingName.trim() || querySet.name,
+      keywords: editingKeywords
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+      schedule_cron: editingScheduleCron.trim(),
+    }
+    const response = await fetch(`/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      setActionStatus('update_query_set_failed')
+      setActionFeedback(mapScannerActionError('run', response.status, `update_query_set_${response.status}`))
+      return
+    }
+    const updated = (await response.json()) as QuerySet
+    setQuerySets((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    setActionStatus(`query_set_updated_${updated.id}`)
+    setActionFeedback(null)
+    cancelEditQuerySet()
+  }
+
+  const deleteQuerySet = async (querySetID: string) => {
+    const response = await fetch(`/api/scanner/query-sets/${encodeURIComponent(querySetID)}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      setActionStatus('delete_query_set_failed')
+      setActionFeedback(mapScannerActionError('run', response.status, `delete_query_set_${response.status}`))
+      return
+    }
+    setQuerySets((current) => current.filter((item) => item.id !== querySetID))
+    setActionStatus(`query_set_deleted_${querySetID}`)
+    setActionFeedback(null)
+    if (selectedOutputQuerySetID === querySetID) {
+      setSelectedOutputQuerySetID(null)
+    }
+  }
+
+  const runScheduledRefresh = async () => {
+    const response = await fetch('/api/scanner/run/scheduled', {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const fallbackCode = `scheduled_run_failed_${response.status}`
+      let code = fallbackCode
+      try {
+        code = parseErrorCode(await response.json(), fallbackCode)
+      } catch {
+        code = fallbackCode
+      }
+      setActionStatus('scheduled_run_failed')
+      setActionFeedback(mapScannerActionError('run', response.status, code))
+      return
+    }
+    const payload = (await response.json()) as {
+      run_id?: string
+      query_sets_executed?: number
+      candidates_collected?: number
+      failures?: number
+    }
+    setActionStatus(`scheduled_run_completed_${payload.run_id ?? 'unknown'}`)
+    setActionFeedback({
+      summary: 'Scheduled refresh completed.',
+      actions: [
+        `Query sets executed: ${payload.query_sets_executed ?? 0}`,
+        `Candidates collected: ${payload.candidates_collected ?? 0}`,
+        `Failures: ${payload.failures ?? 0}`,
+      ],
+    })
+  }
+
+  const handoffToDiscoveries = async (querySet: QuerySet) => {
+    const query = encodeURIComponent((querySet.keywords ?? [])[0] ?? '')
+    const response = await fetch(`/api/discovery/not-in-collection?q=${query}`)
+    if (!response.ok) {
+      setHandoffStatus(`discoveries_handoff_failed_${response.status}`)
+      return
+    }
+    const payload = (await response.json()) as { items?: Array<{ candidate_id: string }> }
+    setHandoffStatus(`discoveries_handoff_ok_${payload.items?.length ?? 0}`)
+  }
+
+  const handoffFirstCandidateToWishlist = async (querySetID: string) => {
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find((candidate) => (candidate.id ?? '').trim() !== '')
+    if (!firstCandidate || !firstCandidate.id) {
+      setHandoffStatus('wishlist_handoff_no_candidate')
+      return
+    }
+    const response = await fetch('/api/discovery/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: firstCandidate.id,
+        type: 'add_to_wishlist',
+        payload: {
+          source: 'market_watch',
+          query_set_id: querySetID,
+        },
+      }),
+    })
+    if (!response.ok) {
+      setHandoffStatus(`wishlist_handoff_failed_${response.status}`)
+      return
+    }
+    setHandoffStatus('wishlist_handoff_ok')
   }
 
   const runNow = async (querySet: QuerySet) => {
@@ -510,6 +655,12 @@ export function Scanner() {
             placeholder='Keywords (comma-separated)'
             data-testid='scanner-new-query-keywords'
           />
+          <Input
+            value={newScheduleCron}
+            onChange={(event) => setNewScheduleCron(event.target.value)}
+            placeholder='Schedule cron (e.g. 0 */6 * * *)'
+            data-testid='scanner-new-query-schedule'
+          />
           <select
             className='h-9 rounded-md border bg-background px-3 text-sm'
             value={providerMode}
@@ -563,6 +714,13 @@ export function Scanner() {
           )}
           <Button onClick={() => void createQuerySet()} data-testid='scanner-create-query'>
             Create Query Set
+          </Button>
+          <Button
+            variant='outline'
+            onClick={() => void runScheduledRefresh()}
+            data-testid='scanner-run-scheduled-refresh'
+          >
+            Run Scheduled Refresh
           </Button>
         </section>
         <section className='flex flex-wrap items-center gap-2'>
@@ -745,6 +903,11 @@ export function Scanner() {
             {actionStatus}
           </p>
         ) : null}
+        {handoffStatus ? (
+          <p data-testid='scanner-handoff-status' className='text-sm'>
+            {handoffStatus}
+          </p>
+        ) : null}
         {actionFeedback ? (
           <div className='rounded-md border p-3 text-sm' data-testid='scanner-action-feedback'>
             <p className='font-medium'>{actionFeedback.summary}</p>
@@ -768,24 +931,96 @@ export function Scanner() {
               {querySets.map((querySet) => (
                 <div key={querySet.id} className='flex flex-wrap items-center justify-between gap-2 p-3'>
                   <div>
-                    <p className='font-medium'>{querySet.name}</p>
-                    <p className='text-xs text-muted-foreground'>
-                      {querySet.keywords?.join(', ') || 'no keywords'}
-                    </p>
+                    {editingQuerySetID === querySet.id ? (
+                      <div className='grid gap-2'>
+                        <Input
+                          value={editingName}
+                          onChange={(event) => setEditingName(event.target.value)}
+                          data-testid={`scanner-edit-name-${querySet.id}`}
+                        />
+                        <Input
+                          value={editingKeywords}
+                          onChange={(event) => setEditingKeywords(event.target.value)}
+                          data-testid={`scanner-edit-keywords-${querySet.id}`}
+                        />
+                        <Input
+                          value={editingScheduleCron}
+                          onChange={(event) => setEditingScheduleCron(event.target.value)}
+                          data-testid={`scanner-edit-schedule-${querySet.id}`}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <p className='font-medium'>{querySet.name}</p>
+                        <p className='text-xs text-muted-foreground'>
+                          {querySet.keywords?.join(', ') || 'no keywords'}
+                        </p>
+                      </>
+                    )}
                     <p
                       className='text-xs text-muted-foreground'
                       data-testid={`scanner-query-providers-${querySet.id}`}
                     >
                       {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
                     </p>
+                    <p className='text-xs text-muted-foreground' data-testid={`scanner-query-schedule-${querySet.id}`}>
+                      Schedule: {querySet.schedule_cron || 'none'}
+                    </p>
                   </div>
-                  <Button
-                    size='sm'
-                    data-testid={`scanner-run-${querySet.id}`}
-                    onClick={() => void runNow(querySet)}
-                  >
-                    Run Now
-                  </Button>
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      size='sm'
+                      data-testid={`scanner-run-${querySet.id}`}
+                      onClick={() => void runNow(querySet)}
+                    >
+                      Run Now
+                    </Button>
+                    {editingQuerySetID === querySet.id ? (
+                      <>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          data-testid={`scanner-save-${querySet.id}`}
+                          onClick={() => void saveQuerySet(querySet)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='ghost'
+                          data-testid={`scanner-cancel-edit-${querySet.id}`}
+                          onClick={cancelEditQuerySet}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        data-testid={`scanner-edit-${querySet.id}`}
+                        onClick={() => startEditQuerySet(querySet)}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      data-testid={`scanner-delete-${querySet.id}`}
+                      onClick={() => void deleteQuerySet(querySet.id)}
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      data-testid={`scanner-handoff-discoveries-${querySet.id}`}
+                      onClick={() => void handoffToDiscoveries(querySet)}
+                    >
+                      Send to Discoveries
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -892,6 +1127,31 @@ export function Scanner() {
                   ))}
                 </ul>
               )}
+            </div>
+            <div className='mt-3 flex flex-wrap gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-wishlist-${selectedOutputQuerySetID}`}
+                onClick={() => void handoffFirstCandidateToWishlist(selectedOutputQuerySetID)}
+              >
+                Add First Result to Wishlist
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-discoveries-detail-${selectedOutputQuerySetID}`}
+                onClick={() => {
+                  const current = querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)
+                  if (current) {
+                    void handoffToDiscoveries(current)
+                  }
+                }}
+              >
+                Open Discoveries Handoff
+              </Button>
             </div>
           </section>
         ) : null}

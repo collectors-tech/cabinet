@@ -1,0 +1,7 @@
+openspec/specs/integrations/default-site-search/spec.md
+openspec/traceability.md
+ui.web/src/features/scanner/index.tsx
+ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts
+openspec/migration/saved-searches-provider-filters-summary.md
+openspec/migration/saved-searches-provider-filters-changed-files.txt
+openspec/migration/auto-wave-120-summary.md
