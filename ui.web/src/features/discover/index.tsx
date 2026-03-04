@@ -103,6 +103,29 @@ export function Discover() {
           </p>
         </div>
 
+        <section
+          className='rounded-md border border-dashed p-3 text-sm'
+          data-testid='discover-market-watch-handoff'
+        >
+          <p className='font-medium'>Need provider query controls?</p>
+          <p className='text-muted-foreground'>
+            Query creation and run execution are available in Market Watch.
+          </p>
+          <Button
+            variant='outline'
+            className='mt-2'
+            data-testid='discover-open-market-watch'
+            onClick={() => {
+              const suffix = query.trim()
+                ? `?from=discoveries&q=${encodeURIComponent(query.trim())}`
+                : '?from=discoveries'
+              window.location.assign(`/scanner/${suffix}`)
+            }}
+          >
+            Open Market Watch
+          </Button>
+        </section>
+
         <section className='grid gap-2 md:grid-cols-4'>
           <Input
             data-testid='discover-filter-query'

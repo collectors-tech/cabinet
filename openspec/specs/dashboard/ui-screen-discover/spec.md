@@ -6,7 +6,7 @@ Define Discover screen behavior for not-in-collection triage actions.
 Discover SHALL support query/price/date filtering and list rendering.
 
 #### Scenario: Filtered triage list
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** an authenticated collector session is active on `/discoveries` with seeded discovery candidates
 - **WHEN** user applies filters
 - **THEN** discover list SHALL render filtered candidates
 
@@ -19,7 +19,7 @@ Discover SHALL support query/price/date filtering and list rendering.
 Discover SHALL support ignore, wishlist, track, and create-item actions.
 
 #### Scenario: Candidate action apply
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** authenticated Discoveries list includes one candidate row
 - **WHEN** user chooses action on candidate
 - **THEN** candidate state and downstream linkage SHALL update
 
@@ -41,7 +41,7 @@ Discoveries MUST focus on triage actions for already discovered candidates and m
 - **THEN** app MUST route user to Market Watch with preserved context where applicable
 
 #### Scenario: Discover error state
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **GIVEN** authenticated Discoveries route receives non-`200` from `GET /api/discovery/not-in-collection`
 - **WHEN** discover API request fails
 - **THEN** screen SHALL present actionable retry state
 
@@ -66,5 +66,5 @@ Discoveries MUST focus on triage actions for already discovered candidates and m
 | UC-DIS-04 | Track/create action | Pricing track or item create executes | planned: `cypress/e2e/ui/discover.cy.ts` `discover-track-create` |
 | UC-DIS-05 | Discover API failure | Error + retry appears | planned: `cypress/e2e/ui/discover.cy.ts` `discover-error-state` |
 | UC-DIS-06 | Apply Filters action | `Apply Filters` triggers deterministic filtered-query refresh | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discover-apply-filters` |
-| UC-DIS-07 | Boundary enforcement | Discoveries shows triage actions only; no provider query/run controls | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discoveries-no-market-watch-controls` |
-| UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discoveries-market-watch-handoff` |
+| UC-DIS-07 | Boundary enforcement | Discoveries shows triage actions only; no provider query/run controls | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 keeps Discoveries as triage-only and excludes Market Watch query/run controls` |
+| UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 provides explicit handoff action to Market Watch with preserved context` |

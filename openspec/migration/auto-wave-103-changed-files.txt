@@ -1,0 +1,7 @@
+internal/ui/static/index.html
+openspec/specs/dashboard/ui-screen-discover/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts
+ui.web/src/features/discover/index.tsx
+openspec/migration/auto-wave-103-summary.md
+openspec/migration/auto-wave-103-changed-files.txt

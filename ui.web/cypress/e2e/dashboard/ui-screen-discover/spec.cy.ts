@@ -99,4 +99,52 @@ describe('dashboard/ui-screen-discover', () => {
     cy.get('[data-testid="discover-error-state"]').should('be.visible')
     cy.contains('button', 'Retry').should('be.visible')
   })
+
+  it('UI-SCREEN-DISCOVER-004 keeps Discoveries as triage-only and excludes Market Watch query/run controls', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-003',
+            title: 'AFX Boundary Candidate',
+            price: 27.0,
+            url: 'https://example.test/boundary',
+            last_seen: '2026-03-01T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 4,
+          },
+        ],
+      },
+    }).as('discoverListBoundary')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListBoundary')
+
+    cy.get('[data-testid="discover-action-ignore-cand-003"]').should('be.visible')
+    cy.get('[data-testid="discover-action-wishlist-cand-003"]').should('be.visible')
+    cy.get('[data-testid="discover-action-track-cand-003"]').should('be.visible')
+    cy.get('[data-testid="discover-action-create-cand-003"]').should('be.visible')
+
+    cy.get('[data-testid="scanner-create-query"]').should('not.exist')
+    cy.get('[data-testid^="scanner-run-"]').should('not.exist')
+    cy.contains('Manage provider query sets').should('not.exist')
+  })
+
+  it('UI-SCREEN-DISCOVER-004 provides explicit handoff action to Market Watch with preserved context', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('discoverListHandoff')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListHandoff')
+
+    cy.get('[data-testid="discover-filter-query"]').type('afx')
+    cy.get('[data-testid="discover-open-market-watch"]').click()
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/scanner\/?$/)
+    cy.location('search').should('include', 'from=discoveries')
+    cy.location('search').should('include', 'q=afx')
+  })
 })
