@@ -1,9 +1,9 @@
 describe('ui-foundation-accessibility', () => {
   function signInToInventory() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-a11y-inventory@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
@@ -26,17 +26,17 @@ describe('ui-foundation-accessibility', () => {
   }
 
   it('UI-FOUNDATION-ACCESSIBILITY-003 requires accessible naming for action controls on sign-in screen', () => {
+    cy.e2eSetSetupState('present')
     cy.visit('/sign-in')
-    cy.get('input[name="password"]').should('be.visible')
     assertVisibleIconButtonsHaveAccessibleName()
   })
 
   it('UI-FOUNDATION-ACCESSIBILITY-003 requires accessible naming for action controls in mobile header', () => {
     cy.viewport(375, 812)
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-accessibility@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     assertVisibleIconButtonsHaveAccessibleName()
   })

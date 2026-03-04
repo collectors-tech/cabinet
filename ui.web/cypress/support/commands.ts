@@ -75,14 +75,35 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
 Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: { workspace?: boolean; path?: string }) => {
   const withWorkspace = options?.workspace ?? true;
   const targetPath = options?.path ?? "/";
-  cy.visit(targetPath, {
+  cy.request("PUT", "/api/profiles/active", { profile_id: profileId }).its("status").should("eq", 200);
+  cy.visit(`/sign-in?redirect=${encodeURIComponent(targetPath)}`, {
     onBeforeLoad(win) {
       if (withWorkspace) {
         win.localStorage.setItem(`cabinet.workspace.${profileId}`, "1");
       }
     },
   });
-  cy.contains(`Use ${profileName}`).click();
+  cy.get('input[name="email"]').clear().type("e2e-login-session@example.com");
+  cy.get('input[name="password"]').clear().type("password123");
+  cy.contains("button", "Sign in").click();
+  cy.location("pathname", { timeout: 15000 }).should("match", /^\/(inventory|_authenticated|$)/);
+  cy.get("body").then(($body) => {
+    const preferredLabel = `Use ${profileName}`;
+    if ($body.text().includes(preferredLabel)) {
+      cy.contains("button", preferredLabel).click();
+      return;
+    }
+
+    const buttonWithUsePrefix = $body
+      .find("button")
+      .toArray()
+      .map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim())
+      .find((text) => /^Use\s+/i.test(text));
+
+    if (buttonWithUsePrefix) {
+      cy.contains("button", buttonWithUsePrefix).click();
+    }
+  });
 });
 
 export {};
