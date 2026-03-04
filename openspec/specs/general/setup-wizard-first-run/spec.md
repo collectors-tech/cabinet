@@ -66,6 +66,21 @@ Setup onboarding controls MUST NOT appear as dashboard card in authenticated app
 ### Requirement SETUP-WIZ-007: Initial config payload MUST follow deterministic `cabinet.json` schema
 Setup Wizard MUST produce a deterministic initial config object containing required runtime/bootstrap fields before app launch.
 
+### Requirement SETUP-WIZ-008: Wizard SHALL provide explicit `Use Defaults` skip path
+Setup Wizard SHALL provide a one-action path to apply safe defaults and continue app startup without full manual step entry.
+
+#### Scenario: Use defaults skip
+- **GIVEN** setup wizard is shown for missing config
+- **WHEN** user chooses `Use Defaults`
+- **THEN** runtime MUST create valid `cabinet.json` using safe default values and continue to app startup
+- **AND** completion state MUST clearly indicate defaults were applied
+
+#### Scenario: Default profile values
+- **GIVEN** `Use Defaults` path is selected
+- **WHEN** config is generated
+- **THEN** defaults MUST include deterministic baseline values for instance name, local data directory, runtime mode/port policy, and auth mode
+- **AND** defaults MUST be editable later in settings
+
 #### Scenario: Build initial config payload
 - **GIVEN** wizard required fields are completed
 - **WHEN** user clicks `Complete`
@@ -359,3 +374,16 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 | UC-SW-32 | Completion summary and actions | Completion screen shows runtime URL + instance/data-dir summary and launch action set | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-32 setup-wizard-completion-summary shows launch confirmation actions` |
 | UC-SW-33 | Open cabinet action | Open Cabinet action exits setup completion back to sign-in flow | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-33 setup-wizard-open-cabinet exits completion state` |
 | UC-SW-34 | Open config folder feedback | Open Config Folder action shows deterministic feedback with config path context | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-34 setup-wizard-open-config-folder shows feedback` |
+
+### Requirement SETUP-WIZ-019: Test automation SHALL support deterministic setup bypass or completion helper
+UI test harness MUST provide deterministic setup handling so route tests are not invalidated by setup gating.
+
+#### Scenario: Config-seeded bypass for route tests
+- **GIVEN** test suite targets post-auth routes
+- **WHEN** test bootstrap runs
+- **THEN** harness MUST seed valid `cabinet.json` (or equivalent setup-complete state) before route assertions
+
+#### Scenario: Setup-flow helper path
+- **GIVEN** test suite explicitly validates first-run behavior
+- **WHEN** setup gate is active
+- **THEN** harness MUST complete setup flow via deterministic helper before continuing route-level assertions
