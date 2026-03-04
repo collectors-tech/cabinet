@@ -123,4 +123,58 @@ describe('integrations/ui-screen-market-watch', () => {
       .should('be.visible')
       .and('contain', 'Select at least one provider')
   })
+
+  it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-bonza',
+            name: 'AFX',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-bonza')
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_set_id: 'qs-mw-bonza',
+          page_count: 2,
+          observed_page_size: 2,
+          items_per_page_used: 36,
+          candidates: [
+            { listing_id: 'bonza-1', title: 'AFX Camaro', source: 'bonzaslotcars' },
+            { listing_id: 'bonza-2', title: 'AFX Mustang', source: 'bonzaslotcars' },
+            { listing_id: 'bonza-3', title: 'AFX Mega G+', source: 'bonzaslotcars' },
+          ],
+          run_summary: {
+            page_count: 2,
+            observed_page_size: 2,
+            candidates_total: 3,
+          },
+        },
+      })
+    }).as('runBonzaQuery')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-bonza"]').click()
+    cy.wait('@runBonzaQuery')
+    cy.get('[data-testid="scanner-run-summary-qs-mw-bonza"]')
+      .should('contain', 'Pages: 2')
+      .and('contain', 'Candidates: 3')
+      .and('contain', 'Observed page size: 2')
+  })
 })

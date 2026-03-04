@@ -1,0 +1,7 @@
+internal/app/app.go
+internal/app/provider_bonza_run_api_test.go
+internal/ui/static/index.html
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts
+ui.web/src/features/scanner/index.tsx
+openspec/migration/auto-wave-92-summary.md

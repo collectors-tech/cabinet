@@ -1331,6 +1331,66 @@ func New(cfg config.Config) (*App, error) {
 			"candidates":   candidates,
 		})
 	})
+	mux.HandleFunc("/api/providers/bonza/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.bonzaslotcars.base_url"])
+		if baseURL == "" {
+			baseURL = "https://bonzaslotcars.com.au"
+		}
+		requested := parsePositiveInt(settings["integration.bonzaslotcars.items_per_page"], 36)
+		if requested > 36 {
+			requested = 36
+		}
+		searchResult, err := runBonzaSearch(r.Context(), http.DefaultClient, baseURL, qs, requested)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":        qs.ID,
+			"page_count":          searchResult.PageCount,
+			"observed_page_size":  searchResult.ObservedPageSize,
+			"items_per_page_used": searchResult.ItemsPerPageUsed,
+			"candidates":          searchResult.Candidates,
+			"run_summary": map[string]any{
+				"page_count":         searchResult.PageCount,
+				"observed_page_size": searchResult.ObservedPageSize,
+				"candidates_total":   len(searchResult.Candidates),
+			},
+		})
+	})
 	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4345,6 +4405,205 @@ func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
 			},
 		},
 	}
+}
+
+type bonzaProductResponse struct {
+	ID               int    `json:"id"`
+	Name             string `json:"name"`
+	Permalink        string `json:"permalink"`
+	Price            string `json:"prices"`
+	IsInStock        *bool  `json:"is_in_stock"`
+	LowStockRemaining *int  `json:"low_stock_remaining"`
+}
+
+type bonzaSearchResult struct {
+	PageCount        int              `json:"page_count"`
+	ObservedPageSize int              `json:"observed_page_size"`
+	ItemsPerPageUsed int              `json:"items_per_page_used"`
+	Candidates       []map[string]any `json:"candidates"`
+}
+
+func parsePositiveInt(raw string, fallback int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs scanner.QuerySet, itemsPerPage int) (bonzaSearchResult, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return bonzaSearchResult{}, fmt.Errorf("bonza base_url is required")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 36
+	}
+	if itemsPerPage > 36 {
+		itemsPerPage = 36
+	}
+
+	searchTerm := ""
+	if len(qs.Keywords) > 0 {
+		searchTerm = strings.TrimSpace(qs.Keywords[0])
+	}
+	if searchTerm == "" {
+		searchTerm = strings.TrimSpace(qs.Name)
+	}
+
+	type aggregate struct {
+		order int
+		data  map[string]any
+	}
+	candidateByID := map[string]aggregate{}
+	order := []string{}
+	pageCount := 0
+	observedPageSize := 0
+	totalPages := 0
+
+	for page := 1; ; page++ {
+		requestURL := fmt.Sprintf("%s/wp-json/wc/store/v1/products?search=%s&per_page=%d&page=%d",
+			strings.TrimRight(baseURL, "/"),
+			url.QueryEscape(searchTerm),
+			itemsPerPage,
+			page,
+		)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return bonzaSearchResult{}, fmt.Errorf("build bonza request: %w", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return bonzaSearchResult{}, fmt.Errorf("request bonza products: %w", err)
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			resp.Body.Close()
+			return bonzaSearchResult{}, fmt.Errorf("bonza products returned status %d", resp.StatusCode)
+		}
+		if totalPages == 0 {
+			totalPages = parsePositiveInt(resp.Header.Get("X-WP-TotalPages"), 0)
+		}
+		var products []bonzaProductResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&products)
+		resp.Body.Close()
+		if decodeErr != nil {
+			return bonzaSearchResult{}, fmt.Errorf("decode bonza products response: %w", decodeErr)
+		}
+		if len(products) == 0 {
+			break
+		}
+		pageCount++
+		if observedPageSize == 0 {
+			observedPageSize = len(products)
+		}
+		for _, product := range products {
+			listingID := fmt.Sprintf("bonza-%d", product.ID)
+			if strings.TrimSpace(listingID) == "" {
+				continue
+			}
+			permalink := normalizeBonzaURL(baseURL, strings.TrimSpace(product.Permalink))
+			rawStock, stockState, stockCount := deriveBonzaStockSignal(ctx, client, permalink, product)
+			if existing, exists := candidateByID[listingID]; exists {
+				if strings.EqualFold(strings.TrimSpace(existing.data["stock_state"].(string)), "unknown") && !strings.EqualFold(stockState, "unknown") {
+					existing.data["stock_state"] = stockState
+					existing.data["stock_count"] = stockCount
+					existing.data["stock_raw"] = rawStock
+					candidateByID[listingID] = existing
+				}
+				continue
+			}
+			candidate := map[string]any{
+				"listing_id":  listingID,
+				"title":       strings.TrimSpace(product.Name),
+				"url":         permalink,
+				"source":      "bonzaslotcars",
+				"seller":      "bonzaslotcars.com.au",
+				"stock_state": stockState,
+				"stock_count": stockCount,
+				"stock_raw":   rawStock,
+			}
+			candidateByID[listingID] = aggregate{order: len(order), data: candidate}
+			order = append(order, listingID)
+		}
+		if totalPages > 0 {
+			if page >= totalPages {
+				break
+			}
+		} else if len(products) < itemsPerPage {
+			break
+		}
+	}
+
+	candidates := make([]map[string]any, 0, len(order))
+	for _, listingID := range order {
+		candidates = append(candidates, candidateByID[listingID].data)
+	}
+	return bonzaSearchResult{
+		PageCount:        pageCount,
+		ObservedPageSize: observedPageSize,
+		ItemsPerPageUsed: itemsPerPage,
+		Candidates:       candidates,
+	}, nil
+}
+
+func normalizeBonzaURL(baseURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return strings.TrimRight(baseURL, "/")
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if strings.HasPrefix(raw, "/") {
+		return strings.TrimRight(baseURL, "/") + raw
+	}
+	baseParsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(raw, "/")
+	}
+	if strings.Contains(raw, "/") && strings.Contains(raw, ":") && !strings.Contains(raw, "://") {
+		return baseParsed.Scheme + "://" + raw
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(raw, "/")
+}
+
+func deriveBonzaStockSignal(ctx context.Context, client *http.Client, permalink string, product bonzaProductResponse) (raw, state string, count int) {
+	if product.LowStockRemaining != nil {
+		if *product.LowStockRemaining <= 0 {
+			return "Out of stock", "out_of_stock", 0
+		}
+		if *product.LowStockRemaining <= 3 {
+			return fmt.Sprintf("Only %d left in stock", *product.LowStockRemaining), "low_stock", *product.LowStockRemaining
+		}
+		return fmt.Sprintf("%d in stock", *product.LowStockRemaining), "in_stock", *product.LowStockRemaining
+	}
+	if product.IsInStock != nil {
+		if *product.IsInStock {
+			return "In stock", "in_stock", -1
+		}
+		return "Out of stock", "out_of_stock", 0
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, permalink, nil)
+	if err != nil {
+		return "", "unknown", -1
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "unknown", -1
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return "", "unknown", -1
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", "unknown", -1
+	}
+	return parseStockSignal(string(body))
 }
 
 func parseStockSignal(html string) (raw, normalized string, count int) {

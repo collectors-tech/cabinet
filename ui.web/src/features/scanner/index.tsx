@@ -37,6 +37,12 @@ type Candidate = {
   source?: string
 }
 
+type RunSummary = {
+  page_count: number
+  observed_page_size: number
+  candidates_total: number
+}
+
 const MARKET_WATCH_PROVIDER_OPTIONS = [
   'ebay',
   'amazon',
@@ -110,6 +116,7 @@ export function Scanner() {
   const [querySets, setQuerySets] = useState<QuerySet[]>([])
   const [failures, setFailures] = useState<Failure[]>([])
   const [candidatesByQuerySet, setCandidatesByQuerySet] = useState<Record<string, Candidate[]>>({})
+  const [runSummaryByQuerySet, setRunSummaryByQuerySet] = useState<Record<string, RunSummary>>({})
   const [providerHealth, setProviderHealth] = useState('unknown')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -148,12 +155,14 @@ export function Scanner() {
       setQuerySets(querySetPayload.query_sets ?? [])
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
+      setRunSummaryByQuerySet({})
       setProviderHealth(healthPayload.status ?? 'unknown')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
       setQuerySets([])
       setFailures([])
       setCandidatesByQuerySet({})
+      setRunSummaryByQuerySet({})
       setProviderHealth('unknown')
     } finally {
       setLoading(false)
@@ -220,8 +229,49 @@ export function Scanner() {
 
   const runNow = async (querySet: QuerySet) => {
     const providerScope = Array.isArray(querySet.provider_scope)
-      ? querySet.provider_scope
+      ? querySet.provider_scope.map((value) => value.trim().toLowerCase()).filter(Boolean)
       : []
+    const isBonzaOnly =
+      providerScope.length === 1 &&
+      (providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza')
+    if (isBonzaOnly) {
+      const bonzaResponse = await fetch('/api/providers/bonza/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query_set_id: querySet.id,
+        }),
+      })
+      if (!bonzaResponse.ok) {
+        const fallbackCode = `bonza_run_failed_${bonzaResponse.status}`
+        let code = fallbackCode
+        try {
+          code = parseErrorCode(await bonzaResponse.json(), fallbackCode)
+        } catch {
+          code = fallbackCode
+        }
+        setActionStatus('run_failed')
+        setActionFeedback(mapScannerActionError('run', bonzaResponse.status, code))
+        return
+      }
+      const payload = (await bonzaResponse.json()) as {
+        candidates?: Candidate[]
+        run_summary?: RunSummary
+      }
+      setCandidatesByQuerySet((current) => ({
+        ...current,
+        [querySet.id]: payload.candidates ?? [],
+      }))
+      if (payload.run_summary) {
+        setRunSummaryByQuerySet((current) => ({
+          ...current,
+          [querySet.id]: payload.run_summary as RunSummary,
+        }))
+      }
+      setActionStatus(`bonza_run_started_${querySet.id}`)
+      setActionFeedback(null)
+      return
+    }
     const response = await fetch('/api/scanner/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -252,6 +302,14 @@ export function Scanner() {
         [querySet.id]: payload.candidates ?? [],
       }))
     }
+    setRunSummaryByQuerySet((current) => {
+      if (!(querySet.id in current)) {
+        return current
+      }
+      const next = { ...current }
+      delete next[querySet.id]
+      return next
+    })
     setActionStatus(`run_started_${querySet.id}`)
     setActionFeedback(null)
   }
@@ -469,6 +527,16 @@ export function Scanner() {
             className='rounded-md border p-3'
             data-testid={`scanner-candidates-${querySetID}`}
           >
+            {runSummaryByQuerySet[querySetID] ? (
+              <p
+                className='mb-2 text-xs text-muted-foreground'
+                data-testid={`scanner-run-summary-${querySetID}`}
+              >
+                Pages: {runSummaryByQuerySet[querySetID].page_count} • Candidates:{' '}
+                {runSummaryByQuerySet[querySetID].candidates_total} • Observed page size:{' '}
+                {runSummaryByQuerySet[querySetID].observed_page_size}
+              </p>
+            ) : null}
             <p className='mb-2 text-sm font-medium'>Candidates</p>
             {candidates.length === 0 ? (
               <p className='text-xs text-muted-foreground'>No candidates returned.</p>
