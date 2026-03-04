@@ -1,0 +1,5 @@
+internal/ui/static/index.html
+openspec/specs/scanner/ui-screen-card-scanner/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts
+ui.web/src/features/scanner/index.tsx

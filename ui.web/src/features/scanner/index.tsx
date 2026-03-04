@@ -53,6 +53,7 @@ type QuickScanQueueItem = {
   fileName: string
   queuedAtISO: string
   status: 'Queued'
+  linkedToInventory: boolean
 }
 
 const MARKET_WATCH_PROVIDER_OPTIONS = [
@@ -145,6 +146,7 @@ export function Scanner() {
   const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
+  const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>('cards')
   const quickScanFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadScanner = useCallback(async () => {
@@ -448,11 +450,28 @@ export function Scanner() {
       fileName: file.name,
       queuedAtISO: new Date().toISOString(),
       status: 'Queued',
+      linkedToInventory: false,
     }
     setQuickScanQueue((current) => [entry, ...current].slice(0, 12))
     setQuickScanStatus(`Quick Scan queued: ${file.name}`)
     event.target.value = ''
   }
+
+  const markQuickScanLinked = (fileName: string) => {
+    setQuickScanQueue((current) =>
+      current.map((item) =>
+        item.fileName === fileName ? { ...item, linkedToInventory: true } : item
+      )
+    )
+  }
+
+  const recentUnlinkedQuickScans = useMemo(
+    () =>
+      quickScanQueue
+        .filter((item) => !item.linkedToInventory)
+        .sort((a, b) => b.queuedAtISO.localeCompare(a.queuedAtISO)),
+    [quickScanQueue]
+  )
 
   return (
     <>
@@ -605,6 +624,87 @@ export function Scanner() {
               ))}
             </ul>
           )}
+        </section>
+        <section className='rounded-md border p-3' data-testid='card-scanner-quick-category'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <p className='text-sm font-medium'>Recent Unlinked Scans</p>
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant={quickCategoryView === 'cards' ? 'default' : 'outline'}
+                data-testid='card-scanner-quick-category-view-cards'
+                onClick={() => setQuickCategoryView('cards')}
+              >
+                Cards
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant={quickCategoryView === 'table' ? 'default' : 'outline'}
+                data-testid='card-scanner-quick-category-view-table'
+                onClick={() => setQuickCategoryView('table')}
+              >
+                Table
+              </Button>
+            </div>
+          </div>
+          {recentUnlinkedQuickScans.length === 0 ? (
+            <p className='mt-2 text-xs text-muted-foreground'>
+              No recent unlinked scans. Add quick-scan items to review here.
+            </p>
+          ) : null}
+          {recentUnlinkedQuickScans.length > 0 && quickCategoryView === 'cards' ? (
+            <ul className='mt-3 space-y-2' data-testid='card-scanner-unlinked-cards-list'>
+              {recentUnlinkedQuickScans.map((item) => (
+                <li
+                  key={item.id}
+                  className='rounded-md border p-2'
+                  data-testid={`card-scanner-unlinked-item-${item.id}`}
+                >
+                  <div className='flex flex-wrap items-center justify-between gap-2'>
+                    <div>
+                      <p className='text-xs font-medium'>{item.fileName}</p>
+                      <p className='text-[11px] text-muted-foreground'>
+                        Queued: {new Date(item.queuedAtISO).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid={`card-scanner-mark-linked-${item.fileName}`}
+                      onClick={() => markQuickScanLinked(item.fileName)}
+                    >
+                      Mark Linked
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {recentUnlinkedQuickScans.length > 0 && quickCategoryView === 'table' ? (
+            <div className='mt-3 overflow-x-auto'>
+              <table className='w-full text-xs' data-testid='card-scanner-unlinked-table'>
+                <thead className='text-left'>
+                  <tr>
+                    <th className='px-2 py-1'>File</th>
+                    <th className='px-2 py-1'>Queued At</th>
+                    <th className='px-2 py-1'>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentUnlinkedQuickScans.map((item) => (
+                    <tr key={item.id} className='border-t'>
+                      <td className='px-2 py-1'>{item.fileName}</td>
+                      <td className='px-2 py-1'>{new Date(item.queuedAtISO).toLocaleString()}</td>
+                      <td className='px-2 py-1'>{item.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
         {providerValidation ? (
           <p className='text-sm text-destructive' data-testid='market-watch-provider-validation'>

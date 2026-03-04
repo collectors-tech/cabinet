@@ -48,4 +48,41 @@ describe('scanner/ui-screen-card-scanner', () => {
       .and('contain', 'photo-1.jpg')
       .and('contain', 'Queued')
   })
+
+  it('UI-SCREEN-CARD-SCANNER-005 shows recent unlinked scans in cards/table with deterministic newest-first ordering', () => {
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-quick-file-input"]').selectFile(
+      'cypress/fixtures/photo-1.jpg',
+      { force: true }
+    )
+    cy.wait(100)
+    cy.get('[data-testid="card-scanner-quick-file-input"]').selectFile(
+      'cypress/fixtures/photo-2.jpg',
+      { force: true }
+    )
+
+    cy.get('[data-testid="card-scanner-quick-category"]').should('be.visible')
+    cy.get('[data-testid="card-scanner-quick-category-view-cards"]').click()
+    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^=\"card-scanner-unlinked-item-\"]')
+      .should('have.length', 2)
+      .first()
+      .should('contain', 'photo-2.jpg')
+
+    cy.get('[data-testid="card-scanner-mark-linked-photo-2.jpg"]').click()
+    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^=\"card-scanner-unlinked-item-\"]')
+      .should('have.length', 1)
+      .first()
+      .should('contain', 'photo-1.jpg')
+
+    cy.get('[data-testid="card-scanner-quick-category-view-table"]').click()
+    cy.get('[data-testid="card-scanner-unlinked-table"]').within(() => {
+      cy.contains('th', 'File').should('be.visible')
+      cy.contains('th', 'Queued At').should('be.visible')
+      cy.contains('th', 'Status').should('be.visible')
+      cy.contains('td', 'photo-1.jpg').should('be.visible')
+      cy.contains('photo-2.jpg').should('not.exist')
+    })
+  })
 })
