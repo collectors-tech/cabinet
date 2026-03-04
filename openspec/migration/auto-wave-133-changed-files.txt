@@ -1,0 +1,7 @@
+internal/app/e2e_hooks.go
+internal/ui/static/index.html
+openspec/specs/general/ui-scale/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-133-summary.md
+openspec/migration/auto-wave-133-changed-files.txt
+ui.web/cypress/e2e/general/ui-scale/spec.cy.ts

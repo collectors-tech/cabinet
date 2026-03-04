@@ -2,13 +2,18 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/collectors-tech/cabinet/internal/config"
 )
@@ -23,6 +28,20 @@ type e2eBootstrapResponse struct {
 	ItemIDs     []string `json:"item_ids"`
 	QuerySetID  string   `json:"query_set_id"`
 	ThreadID    string   `json:"thread_id"`
+}
+
+type e2eScaleBootstrapRequest struct {
+	Profile string `json:"profile"`
+	Seed    int64  `json:"seed"`
+}
+
+type e2eScaleBootstrapResponse struct {
+	Profile     string         `json:"profile"`
+	Seed        int64          `json:"seed"`
+	ProfileID   string         `json:"profile_id"`
+	QuerySetID  string         `json:"query_set_id"`
+	DatasetHash string         `json:"dataset_hash"`
+	Counts      map[string]int `json:"counts"`
 }
 
 func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
@@ -59,6 +78,39 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 			http.Error(w, `{"error":"failed_to_bootstrap_e2e_state"}`, http.StatusInternalServerError)
 			return
 		}
+		_ = json.NewEncoder(w).Encode(out)
+	})
+
+	mux.HandleFunc("/api/test/scale/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req e2eScaleBootstrapRequest
+		if r.Body != nil {
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		profile := strings.TrimSpace(strings.ToUpper(req.Profile))
+		switch profile {
+		case "S0", "S1", "S2", "S3":
+		default:
+			http.Error(w, `{"error":"invalid_scale_profile"}`, http.StatusBadRequest)
+			return
+		}
+		if req.Seed == 0 {
+			req.Seed = 1
+		}
+		if err := resetE2EDatabase(r.Context(), conn); err != nil {
+			http.Error(w, `{"error":"failed_to_reset_e2e_state"}`, http.StatusInternalServerError)
+			return
+		}
+		out, err := bootstrapE2EScaleFixtures(r.Context(), conn, profile, req.Seed)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_bootstrap_scale_state"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = os.MkdirAll(filepath.Join(cfg.DataDir, "media"), 0o755)
 		_ = json.NewEncoder(w).Encode(out)
 	})
 
@@ -236,6 +288,7 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 		"tracked_items",
 		"webauthn_credentials",
 		"wishlist_entries",
+		"pokemon_graded_overrides",
 		"canonical_items",
 		"canonical_items_fts",
 	}
@@ -388,4 +441,137 @@ func isE2EHooksEnabled(cfg config.Config) bool {
 	}
 	raw := strings.TrimSpace(os.Getenv("CABINET_E2E_MODE"))
 	return raw == "1" || strings.EqualFold(raw, "true")
+}
+
+func bootstrapE2EScaleFixtures(ctx context.Context, conn *sql.DB, profile string, seed int64) (e2eScaleBootstrapResponse, error) {
+	profileID := "e2e-scale-" + strings.ToLower(profile)
+	profileName := "E2E " + profile + " Scale"
+	counts := map[string]int{
+		"items":      0,
+		"discovery":  0,
+		"wishlist":   0,
+		"query_sets": 1,
+	}
+	switch profile {
+	case "S1":
+		counts["items"] = 120
+		counts["discovery"] = 60
+		counts["wishlist"] = 25
+	case "S2":
+		counts["items"] = 800
+		counts["discovery"] = 260
+		counts["wishlist"] = 120
+	case "S3":
+		counts["items"] = 1600
+		counts["discovery"] = 600
+		counts["wishlist"] = 240
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("begin scale bootstrap tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, profileName); err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale profile: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES ('active_profile_id', ?, CURRENT_TIMESTAMP), ('clean_shutdown', '1', CURRENT_TIMESTAMP), ('recovery_required', '0', CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, profileID); err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("set active profile state: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO profile_settings(profile_id, key, value, updated_at)
+		VALUES (?, 'scanner_schedule', 'manual', CURRENT_TIMESTAMP)
+	`, profileID); err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale profile settings: %w", err)
+	}
+
+	querySetID := "e2e-scale-queryset-" + strings.ToLower(profile)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO scanner_query_sets(id, profile_id, name, keywords_json, exclusions_json, max_price, region, condition_filter, schedule_cron, enabled, rate_limit_rps, max_retry_count, created_at, updated_at)
+		VALUES (?, ?, ?, '["scale","collector"]', '[]', 250, 'AU', 'used', '', 1, 3, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, querySetID, profileID, "E2E "+profile+" Query Set"); err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale query set: %w", err)
+	}
+
+	rng := rand.New(rand.NewSource(seed))
+	now := time.Now().UTC()
+	itemIDs := make([]string, 0, counts["items"])
+	for i := 0; i < counts["items"]; i++ {
+		itemID := fmt.Sprintf("e2e-scale-item-%s-%05d", strings.ToLower(profile), i+1)
+		itemIDs = append(itemIDs, itemID)
+		partNumber := fmt.Sprintf("%s-%05d", profile, i+1)
+		title := fmt.Sprintf("%s Item %05d", profile, i+1)
+		tagSet := fmt.Sprintf("set:%s-core", strings.ToLower(profile))
+		tagsJSON := fmt.Sprintf(`["%s","scale:%s","seed:%d"]`, tagSet, strings.ToLower(profile), seed)
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, updated_at, created_by, updated_by)
+			VALUES (?, ?, 'E2E Scale', 'Cards', ?, ?, 'active', 'medium', 'ungraded', '', 0, 0, '', '', '', 'Cabinet', ?, '2026', '1:64', ?, ?, ?, ?, ?, 'system', 'system')
+		`, itemID, profileID, partNumber, title, "Model "+strconv.Itoa((i%90)+10), profile+" Series", "scale-seed", tagsJSON, now.Format(time.RFC3339), now.Format(time.RFC3339)); err != nil {
+			return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale item: %w", err)
+		}
+	}
+
+	for i := 0; i < counts["wishlist"] && i < len(itemIDs); i++ {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, created_at, updated_at)
+			VALUES (?, ?, ?, ?, 'normal', 'scale bootstrap', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`, fmt.Sprintf("e2e-scale-wishlist-%s-%04d", strings.ToLower(profile), i+1), profileID, itemIDs[i], roundPrice(20+rng.Float64()*80)); err != nil {
+			return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale wishlist entry: %w", err)
+		}
+	}
+
+	for i := 0; i < counts["discovery"]; i++ {
+		candidateID := fmt.Sprintf("e2e-scale-candidate-%s-%05d", strings.ToLower(profile), i+1)
+		itemID := ""
+		if len(itemIDs) > 0 {
+			itemID = itemIDs[i%len(itemIDs)]
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'e2e-scale', 'in_stock', ?)
+		`, candidateID, profileID, querySetID, fmt.Sprintf("listing-%s-%05d", strings.ToLower(profile), i+1), fmt.Sprintf("%s Candidate %05d", profile, i+1), roundPrice(10+rng.Float64()*140), roundPrice(1+rng.Float64()*12), fmt.Sprintf("https://example.test/%s/%05d", strings.ToLower(profile), i+1), "e2e-scale-seller", 1+(i%9)); err != nil {
+			return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale candidate: %w", err)
+		}
+		if itemID != "" {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at)
+				VALUES (?, ?, 'suggested', ?, 0, ?, CURRENT_TIMESTAMP)
+			`, candidateID, itemID, roundFloat(0.55+rng.Float64()*0.4), fmt.Sprintf("%s-%05d", profile, i+1)); err != nil {
+				return e2eScaleBootstrapResponse{}, fmt.Errorf("insert scale match: %w", err)
+			}
+		}
+	}
+
+	hashInput, _ := json.Marshal(map[string]any{
+		"profile": profile,
+		"seed":    seed,
+		"counts":  counts,
+	})
+	sum := sha256.Sum256(hashInput)
+	datasetHash := hex.EncodeToString(sum[:])
+
+	if err := tx.Commit(); err != nil {
+		return e2eScaleBootstrapResponse{}, fmt.Errorf("commit scale bootstrap tx: %w", err)
+	}
+	return e2eScaleBootstrapResponse{
+		Profile:     profile,
+		Seed:        seed,
+		ProfileID:   profileID,
+		QuerySetID:  querySetID,
+		DatasetHash: datasetHash,
+		Counts:      counts,
+	}, nil
+}
+
+func roundPrice(v float64) float64 {
+	return roundFloat(v)
+}
+
+func roundFloat(v float64) float64 {
+	return float64(int(v*100+0.5)) / 100
 }
