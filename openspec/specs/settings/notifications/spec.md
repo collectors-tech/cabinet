@@ -15,3 +15,21 @@ Define Notifications settings screen behavior.
 - **GIVEN** a control is marked immutable (for example security notification)
 - **WHEN** user attempts to modify it
 - **THEN** UI MUST block change and preserve required value
+
+### Requirement UI-SCREEN-SETTINGS-NOTIFICATIONS-003: Notifications screen SHALL expose Retry and Update notifications actions
+
+#### Scenario: Retry notifications load failure
+- **GIVEN** notifications section is in error state due to fetch/bootstrap failure
+- **WHEN** user clicks `Retry`
+- **THEN** notifications section MUST re-attempt load and render deterministic ready/empty/error state
+
+#### Scenario: Update notifications action
+- **GIVEN** notifications form is loaded with editable controls
+- **WHEN** user clicks `Update notifications`
+- **THEN** runtime MUST persist notification preferences and show deterministic success feedback
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | planned: `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` `settings-notifications-retry` |
+| UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | planned: `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` `settings-notifications-update` |

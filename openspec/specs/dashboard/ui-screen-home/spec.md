@@ -48,6 +48,7 @@ This requirement is deprecated. Starter setup is now a pre-auth setup wizard and
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user is in authenticated Home route
 - **THEN** onboarding step controls SHALL be absent
+- **AND** controls labeled `Back Step` and `Next Step` MUST NOT render on authenticated Home
 
 ### Requirement UI-SCREEN-HOME-005: Home toolbar SHALL support explicit refresh action
 Home SHALL expose a `Refresh Dashboard` action that re-fetches Home data and preserves route context.

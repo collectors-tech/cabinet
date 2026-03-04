@@ -39,3 +39,21 @@ Storage section MUST avoid hard-fail UX and provide actionable recovery with ret
 - **GIVEN** user changes storage root path and enables migration
 - **WHEN** migration runs
 - **THEN** runtime MUST preserve linkage integrity and return migration summary
+
+### Requirement UI-SCREEN-SETTINGS-STORAGE-006: Storage screen SHALL expose Reindex Search and Rebuild Thumbnails maintenance actions
+
+#### Scenario: Reindex Search action
+- **GIVEN** storage section is ready and maintenance actions are available
+- **WHEN** user clicks `Reindex Search`
+- **THEN** runtime MUST start reindex workflow and return deterministic completion/error feedback
+
+#### Scenario: Rebuild Thumbnails action
+- **GIVEN** storage section is ready and thumbnail rebuild action is available
+- **WHEN** user clicks `Rebuild Thumbnails`
+- **THEN** runtime MUST start thumbnail rebuild workflow and return deterministic completion/error feedback
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-SET-STR-01 | Reindex Search action | `Reindex Search` triggers search reindex workflow with deterministic feedback | planned: `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `settings-storage-reindex-search` |
+| UC-SET-STR-02 | Rebuild Thumbnails action | `Rebuild Thumbnails` triggers thumbnail maintenance workflow with deterministic feedback | planned: `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `settings-storage-rebuild-thumbnails` |

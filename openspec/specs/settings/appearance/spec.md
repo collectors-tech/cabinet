@@ -34,3 +34,21 @@ Language preferences MUST include at minimum English, Chinese, and Japanese opti
 - **THEN** `<html>` MUST apply `dark` class on first paint
 - **AND** UI MUST NOT flash a light theme before hydration
 - **AND** no theme cookie MUST be created until user explicitly selects a preference
+
+### Requirement UI-SCREEN-SETTINGS-APPEARANCE-005: Appearance screen SHALL expose explicit Update preferences and Retry actions
+
+#### Scenario: Update preferences action
+- **GIVEN** appearance controls are loaded with valid selectable values
+- **WHEN** user clicks `Update preferences`
+- **THEN** runtime MUST persist appearance settings and UI MUST show deterministic success feedback
+
+#### Scenario: Retry appearance load failure
+- **GIVEN** appearance section fails to load due to API/bootstrap error
+- **WHEN** user clicks `Retry`
+- **THEN** appearance section MUST re-attempt load and render ready/empty/error state deterministically
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-SET-APP-01 | Update preferences action | `Update preferences` persists theme/language/display selections | planned: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` `settings-appearance-update-preferences` |
+| UC-SET-APP-02 | Retry appearance load failure | `Retry` re-attempts appearance fetch deterministically | planned: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` `settings-appearance-retry` |

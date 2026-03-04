@@ -16,3 +16,29 @@ Profile screen SHALL allow editing username, display email, bio, and URL list wi
 - **GIVEN** profile API update fails
 - **WHEN** user submits profile form
 - **THEN** UI MUST show actionable error state and preserve entered values for retry
+
+### Requirement UI-SCREEN-SETTINGS-PROFILE-003: Profile screen SHALL expose retry action for failed profile bootstrap/load
+
+#### Scenario: Retry profile load
+- **GIVEN** profile section is in error state after fetch/bootstrap failure
+- **WHEN** user clicks `Retry`
+- **THEN** runtime MUST re-attempt profile fetch and render ready/empty/error state deterministically
+
+### Requirement UI-SCREEN-SETTINGS-PROFILE-004: Profile screen SHALL expose explicit Add URL and Update profile actions
+
+#### Scenario: Add URL action
+- **GIVEN** user is editing profile links list
+- **WHEN** user clicks `Add URL`
+- **THEN** UI MUST append a new editable URL row without losing existing form state
+
+#### Scenario: Update profile action
+- **GIVEN** profile form contains valid values
+- **WHEN** user clicks `Update profile`
+- **THEN** profile changes MUST persist and success feedback MUST render deterministically
+
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-SET-PROF-01 | Retry profile load failure | `Retry` re-attempts profile fetch deterministically | planned: `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `settings-profile-retry` |
+| UC-SET-PROF-02 | Add URL action | `Add URL` appends editable URL row | planned: `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `settings-profile-add-url` |
+| UC-SET-PROF-03 | Update profile action | `Update profile` persists profile values | planned: `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `settings-profile-update-profile` |

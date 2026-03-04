@@ -1,0 +1,12 @@
+openspec/specs/dashboard/ui-screen-home/spec.md
+openspec/specs/settings/profile/spec.md
+openspec/specs/settings/account/spec.md
+openspec/specs/settings/appearance/spec.md
+openspec/specs/settings/notifications/spec.md
+openspec/specs/settings/display/spec.md
+openspec/specs/settings/storage/spec.md
+workdocs/ui-action-spec-coverage-wave3-action-match.md
+tests/ui_action_wave3_contract_test.go
+openspec/traceability.md
+openspec/migration/auto-wave-109-summary.md
+openspec/migration/auto-wave-109-changed-files.txt
