@@ -887,6 +887,78 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/integrations/pokemon/set-progress", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		setID := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("set_id")))
+		if setID == "" {
+			http.Error(w, `{"error":"missing_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		totalCount := 0
+		if raw := strings.TrimSpace(r.URL.Query().Get("total_count")); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 0 {
+				http.Error(w, `{"error":"invalid_total_count"}`, http.StatusBadRequest)
+				return
+			}
+			totalCount = parsed
+		}
+		items, err := collectionRepo.ListItems(r.Context())
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+			items, err = collectionRepo.ListItemsByProfile(r.Context(), active.ID)
+		}
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_items"}`, http.StatusInternalServerError)
+			return
+		}
+
+		variantBreakdown := map[string]int{}
+		languageBreakdown := map[string]int{}
+		gradedBreakdown := map[string]int{
+			"graded":   0,
+			"ungraded": 0,
+		}
+		ownedCount := 0
+		for _, item := range items {
+			if strings.TrimSpace(strings.ToLower(item.Status)) == "deleted" || strings.TrimSpace(strings.ToLower(item.Status)) == "recycle" {
+				continue
+			}
+			itemSet, itemVariant, itemLanguage := parsePokemonSetProgressTags(item.Tags)
+			if itemSet != setID {
+				continue
+			}
+			ownedCount++
+			variantBreakdown[itemVariant]++
+			languageBreakdown[itemLanguage]++
+			if strings.EqualFold(strings.TrimSpace(item.GradingStatus), "graded") {
+				gradedBreakdown["graded"]++
+			} else {
+				gradedBreakdown["ungraded"]++
+			}
+		}
+		if totalCount <= 0 {
+			totalCount = ownedCount
+		}
+		completionPercent := 0.0
+		if totalCount > 0 {
+			completionPercent = roundTo2((float64(ownedCount) / float64(totalCount)) * 100)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"set_id":             setID,
+			"owned_count":        ownedCount,
+			"total_count":        totalCount,
+			"completion_percent": completionPercent,
+			"breakdown": map[string]any{
+				"variant": variantBreakdown,
+				"language": languageBreakdown,
+				"graded":  gradedBreakdown,
+			},
+		})
+	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -4642,6 +4714,40 @@ func filterItemsByLifecycleStatus(items []collection.Item, status string) []coll
 		}
 	}
 	return filtered
+}
+
+func parsePokemonSetProgressTags(tags []string) (setID, variant, language string) {
+	setID = ""
+	variant = "unknown"
+	language = "unknown"
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(strings.ToLower(tag))
+		if strings.HasPrefix(trimmed, "set:") {
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "set:"))
+			if value != "" {
+				setID = value
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "variant:") {
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "variant:"))
+			if value != "" {
+				variant = value
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "language:") {
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "language:"))
+			if value != "" {
+				language = value
+			}
+		}
+	}
+	return setID, variant, language
+}
+
+func roundTo2(value float64) float64 {
+	return float64(int(value*100+0.5)) / 100
 }
 
 func defaultConditionGrades() []string {

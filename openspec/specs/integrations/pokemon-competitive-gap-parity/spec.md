@@ -15,9 +15,17 @@ Cabinet SHALL provide a batch-capable camera/upload capture flow with confidence
 Cabinet SHALL model set completion across card variants, language, and graded state for progress reporting.
 
 #### Scenario: Progress model computation
-- **GIVEN** inventory contains cards tagged with set, variant, language, and graded metadata
-- **WHEN** progress is requested for a set
-- **THEN** response MUST include owned count, total count, completion percent, and variant/language/graded breakdown fields
+- **GIVEN** active profile inventory contains card items tagged with `set:<id>`, `variant:<name>`, and `language:<code>`
+- **AND** grading state is represented by each item `grading_status` (`graded` or `ungraded`)
+- **WHEN** client requests `GET /api/integrations/pokemon/set-progress?set_id=<id>&total_count=<n>`
+- **THEN** API MUST return `200` with fields `set_id`, `owned_count`, `total_count`, `completion_percent`, and `breakdown`
+- **AND** `breakdown` MUST include nested maps `variant`, `language`, and `graded`
+- **AND** `completion_percent` MUST be deterministic as `(owned_count / total_count) * 100` rounded to two decimals when `total_count > 0`
+
+#### Scenario: Missing set identifier is rejected deterministically
+- **GIVEN** request omits `set_id`
+- **WHEN** client requests `GET /api/integrations/pokemon/set-progress`
+- **THEN** API MUST return `400` with error envelope field `error` set to `missing_set_id`
 
 ### Requirement POKEMON-COMP-003: Pricing MUST support multi-source historical trends and alerts
 Cabinet SHALL aggregate pricing snapshots across configured providers and expose trend deltas with threshold alert rules.
