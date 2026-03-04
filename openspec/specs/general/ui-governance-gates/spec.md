@@ -6,49 +6,58 @@ Define mandatory UI/UX governance gates that determine when a screen is truly do
 Each screen SHALL present one primary above-the-fold outcome and SHALL de-prioritize secondary or technical controls.
 
 #### Scenario: Hierarchy review
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** a screen is reviewed for completion
-- **THEN** one primary outcome SHALL be clearly dominant above the fold
+- **GIVEN** an authenticated user opens the Dashboard route (`/`) with successful `GET /api/dashboard`
+- **WHEN** dashboard content is rendered
+- **THEN** page title `Home` and supporting summary text SHALL appear above the fold
+- **AND** the primary outcome panel `What needs attention now` SHALL be visible without opening diagnostics/admin panels
 
 ### Requirement UI-GOVERNANCE-GATES-002: Action clarity gate SHALL ensure operationally clear controls
 Primary action controls SHALL be visible without scrolling on desktop and SHALL use task language labels.
 
 #### Scenario: Action row validation
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** user opens a top-level screen
-- **THEN** primary action controls SHALL be visible and semantically task-oriented
+- **GIVEN** an authenticated user opens the Dashboard route (`/`)
+- **WHEN** top-level actions are displayed
+- **THEN** a primary action button with task-language label `Refresh Dashboard` SHALL be visible without scrolling
 
 ### Requirement UI-GOVERNANCE-GATES-003: Layout behavior gate SHALL enforce shell stability
 Left navigation SHALL remain fixed, page header SHALL remain sticky, and page body SHALL own vertical scroll.
 
 #### Scenario: Scroll ownership validation
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** content exceeds viewport height
-- **THEN** side navigation and header SHALL remain fixed while body content scrolls
+- **GIVEN** an authenticated user opens a top-level workspace route with overflowing content
+- **WHEN** the page scroll position changes
+- **THEN** the header SHALL keep sticky positioning
+- **AND** sidebar navigation SHALL remain visible
+- **AND** body content SHALL continue to scroll independently beneath the shell
 
 ### Requirement UI-GOVERNANCE-GATES-004: Progressive disclosure gate SHALL protect first-run usability
 Diagnostic and admin-heavy controls SHALL not dominate first-run surfaces and SHALL be behind dedicated screens or expansion boundaries.
 
 #### Scenario: First-run usability validation
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** a first-run user enters starter workflows
-- **THEN** advanced diagnostics controls SHALL be de-prioritized from primary action path
+- **GIVEN** an authenticated user opens the Dashboard route (`/`)
+- **WHEN** evaluating the first-run action path
+- **THEN** the dashboard primary surface SHALL NOT present diagnostics controls as primary actions
+- **AND** diagnostics-heavy guidance SHALL remain in dedicated support/settings surfaces
 
 ### Requirement UI-GOVERNANCE-GATES-005: Test gate SHALL be mandatory for screen completion
 Each screen SHALL have structure, primary action, and state coverage before issue closure.
 
 #### Scenario: Screen closure readiness
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** a screen issue is marked ready for close
-- **THEN** at least one structure test, one primary action test, and one state test SHALL have passing evidence in-session
+- **GIVEN** dashboard API responses include success and failure paths
+- **WHEN** UI is tested for structure, primary action, and state transitions
+- **THEN** passing evidence SHALL include:
+  - structure proof (header/sidebar and core content)
+  - primary action proof (`Refresh Dashboard` + `Retry`)
+  - state proof (loading, error, ready transitions)
 
 ### Requirement UI-GOVERNANCE-GATES-006: Governance gate evidence SHALL be attached to remediation waves
 Each remediation wave SHALL include before/after references, gap mapping, and unresolved follow-up issues.
 
 #### Scenario: Remediation wave review
-- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
-- **WHEN** a remediation wave is completed
-- **THEN** review evidence SHALL include screenshots, gate gap mapping, test evidence, and follow-up issues
+- **GIVEN** a remediation wave is completed for governance gates
+- **WHEN** evidence is reviewed in-app and in migration artifacts
+- **THEN** sidebar runtime metadata (`sidebar-runtime-meta`) SHALL expose build/version context
+- **AND** support surface copy SHALL reference diagnostics workflows
+- **AND** migration wave summary SHALL record commands, test results, and follow-up status
 
 ## Acceptance Criteria
 1. All gate requirements are normative (`SHALL`) and scenario-testable.

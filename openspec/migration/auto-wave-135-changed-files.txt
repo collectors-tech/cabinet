@@ -1,0 +1,6 @@
+internal/ui/static/index.html
+openspec/specs/general/ui-governance-gates/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-135-summary.md
+openspec/migration/auto-wave-135-changed-files.txt
+ui.web/cypress/e2e/general/ui-governance-gates/spec.cy.ts
