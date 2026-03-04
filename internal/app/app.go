@@ -1286,6 +1286,13 @@ func New(cfg config.Config) (*App, error) {
 		DefaultFilters map[string]any `json:"default_filters"`
 		SortOrder      []string       `json:"sort_order"`
 	}
+	type pokemonGoalBundle struct {
+		ID       string         `json:"id"`
+		Label    string         `json:"label"`
+		Filters  map[string]any `json:"filters"`
+		Actions  []string       `json:"actions"`
+		Shortcut string         `json:"shortcut"`
+	}
 	pokemonTemplates := map[string]pokemonListTemplate{
 		"wishlist": {
 			ID:            "wishlist",
@@ -1314,6 +1321,29 @@ func New(cfg config.Config) (*App, error) {
 				"status": []string{"discovered", "wishlist"},
 			},
 			SortOrder: []string{"updated_at:desc"},
+		},
+	}
+	pokemonGoalBundles := map[string]pokemonGoalBundle{
+		"finish-master-set": {
+			ID:       "finish-master-set",
+			Label:    "Finish Master Set",
+			Filters:  map[string]any{"status": "missing", "priority": "high"},
+			Actions:  []string{"run_scanner_now", "open_wishlist_focus", "track_price_drops"},
+			Shortcut: "goal.master_set",
+		},
+		"optimize-trade-binder": {
+			ID:       "optimize-trade-binder",
+			Label:    "Optimize Trade Binder",
+			Filters:  map[string]any{"status": "duplicate", "grading_status": "graded"},
+			Actions:  []string{"open_trade_binder", "export_trade_cards"},
+			Shortcut: "goal.trade_binder",
+		},
+		"price-drop-watch": {
+			ID:       "price-drop-watch",
+			Label:    "Price Drop Watch",
+			Filters:  map[string]any{"watch": true, "price_drop": true},
+			Actions:  []string{"open_pricing_panel", "run_price_snapshot"},
+			Shortcut: "goal.price_drop_watch",
 		},
 	}
 	mux.HandleFunc("/api/integrations/pokemon/list-templates", func(w http.ResponseWriter, r *http.Request) {
@@ -1367,6 +1397,58 @@ func New(cfg config.Config) (*App, error) {
 			"default_filters":  template.DefaultFilters,
 			"sort_order":       template.SortOrder,
 			"share_visibility": "private",
+		})
+	})
+	mux.HandleFunc("/api/integrations/pokemon/goal-bundles", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		bundles := make([]pokemonGoalBundle, 0, len(pokemonGoalBundles))
+		for _, bundle := range pokemonGoalBundles {
+			bundles = append(bundles, bundle)
+		}
+		sort.Slice(bundles, func(i, j int) bool {
+			return bundles[i].ID < bundles[j].ID
+		})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"bundles": bundles,
+		})
+	})
+	mux.HandleFunc("/api/integrations/pokemon/goal-bundles/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			BundleID      string `json:"bundle_id"`
+			WorkspaceName string `json:"workspace_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		bundleID := strings.TrimSpace(req.BundleID)
+		bundle, ok := pokemonGoalBundles[bundleID]
+		if !ok {
+			http.Error(w, `{"error":"invalid_bundle_id"}`, http.StatusBadRequest)
+			return
+		}
+		workspaceName := strings.TrimSpace(req.WorkspaceName)
+		if workspaceName == "" {
+			workspaceName = bundle.Label
+		}
+		workspaceID := fmt.Sprintf("goal-%s-%d", bundleID, time.Now().UnixNano())
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"workspace_id":   workspaceID,
+			"workspace_name": workspaceName,
+			"bundle_id":      bundle.ID,
+			"filters":        bundle.Filters,
+			"actions":        bundle.Actions,
+			"shortcut":       bundle.Shortcut,
 		})
 	})
 	mux.HandleFunc("/api/integrations/pokemon/graded-overrides", func(w http.ResponseWriter, r *http.Request) {

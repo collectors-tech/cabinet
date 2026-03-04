@@ -146,10 +146,24 @@ Cabinet SHALL expose deterministic milestone trigger evaluation for collector pr
 - **WHEN** client calls `POST /api/integrations/pokemon/milestone-evaluate`
 - **THEN** API MUST return `400` with error envelope `{"error":"missing_set_id"}`
 
-### Requirement POKEMON-COMP-010: Goal bundle presets SHOULD support collector objective workflows
-Cabinet SHOULD provide objective presets that create grouped filters/actions for common collector goals.
+### Requirement POKEMON-COMP-010: Goal bundle presets MUST support collector objective workflows
+Cabinet SHALL provide objective presets that create grouped filters/actions for common collector goals.
 
-#### Scenario: Goal bundle activation
-- **GIVEN** user activates objective preset
-- **WHEN** preset is saved
-- **THEN** system SHOULD create linked filter set and dashboard action shortcuts
+#### Scenario: Goal bundle catalog is deterministic
+- **GIVEN** client requests collector objective presets
+- **WHEN** client requests `GET /api/integrations/pokemon/goal-bundles`
+- **THEN** API MUST return `200` with field `bundles`
+- **AND** each bundle MUST include `id`, `label`, `filters`, `actions`, and `shortcut`
+- **AND** catalog MUST include ids `finish-master-set`, `optimize-trade-binder`, and `price-drop-watch`
+
+#### Scenario: Goal bundle apply creates deterministic workspace definition
+- **GIVEN** user selects `finish-master-set` goal bundle
+- **WHEN** client calls `POST /api/integrations/pokemon/goal-bundles/apply` with `{"bundle_id":"finish-master-set","workspace_name":"Master Set Focus"}`
+- **THEN** API MUST return `201` with fields `workspace_id`, `workspace_name`, `bundle_id`, `filters`, `actions`, and `shortcut`
+- **AND** `bundle_id` in response MUST match the requested bundle
+- **AND** `filters` and `actions` MUST be copied from the selected bundle definition
+
+#### Scenario: Unknown goal bundle id is rejected deterministically
+- **GIVEN** `bundle_id` is not in the catalog
+- **WHEN** client calls `POST /api/integrations/pokemon/goal-bundles/apply`
+- **THEN** API MUST return `400` with error envelope `{"error":"invalid_bundle_id"}`

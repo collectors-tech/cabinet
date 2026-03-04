@@ -408,7 +408,7 @@
 | POKEMON-COMP-007 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | graded-card slab metadata + valuation overrides | `TestPokemonGradedOverrideSaveAndFetch`, `TestPokemonGradedOverrideRejectsMissingItemID` (`internal/app/pokemon_graded_overrides_api_test.go`) | implemented |
 | POKEMON-COMP-008 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | shareable progress snapshot payloads | `ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/share-progress-snapshot.cy.ts` (`POKEMON-COMP-008 returns deterministic progress snapshot share payload`, `POKEMON-COMP-008 rejects missing set_id deterministically`); `TestPokemonProgressSnapshotReturnsDeterministicPayload`, `TestPokemonProgressSnapshotRejectsMissingSetID` (`internal/app/pokemon_progress_snapshot_api_test.go`) | implemented |
 | POKEMON-COMP-009 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | deterministic milestone badge trigger events | `TestPokemonMilestoneEvaluateReturnsDeterministicEvents`, `TestPokemonMilestoneEvaluateRejectsMissingSetID` (`internal/app/pokemon_milestone_badges_test.go`) | implemented |
-| POKEMON-COMP-010 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | collector objective goal bundles with saved filters/actions | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/goal-bundle-presets.cy.ts | partial |
+| POKEMON-COMP-010 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | collector objective goal bundles with saved filters/actions | `ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/goal-bundle-presets.cy.ts` (`POKEMON-COMP-010 returns deterministic goal bundle catalog`, `POKEMON-COMP-010 applies goal bundle with deterministic workspace payload`, `POKEMON-COMP-010 rejects unknown bundle ids deterministically`) | implemented |
 
 | PROVIDER-WORKFLOW-001 | openspec/specs/integrations/provider-workflow-template/spec.md | provider workflow stage completeness | planned: provider-specific Cypress/API checklists | partial |
 | PROVIDER-WORKFLOW-002 | openspec/specs/integrations/provider-workflow-template/spec.md | deterministic provider failure handling | planned: provider failure-mode suites | partial |
@@ -426,6 +426,7 @@
 | ANTFARM-WORKFLOW-001 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/workflow.yml` local path portability contract | `TestAntFarmCabinetWorkflowIsRepoLocalAndSelfContained` (`tests/antfarm_workflow_contract_test.go`) | implemented |
 | ANTFARM-WORKFLOW-002 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/metadata.json` workflow identity contract | `TestAntFarmCabinetMetadataMatchesLocalWorkflow` (`tests/antfarm_workflow_contract_test.go`) | implemented |
 | ANTFARM-WORKFLOW-003 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/agents/*` role profile completeness contract | `TestAntFarmCabinetWorkflowRoleProfilesAreComplete` (`tests/antfarm_workflow_contract_test.go`) | implemented |
+
 
 
 

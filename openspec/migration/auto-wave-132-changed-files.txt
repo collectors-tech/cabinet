@@ -1,0 +1,6 @@
+internal/app/app.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/goal-bundle-presets.cy.ts
+openspec/migration/auto-wave-132-summary.md
+openspec/migration/auto-wave-132-changed-files.txt
