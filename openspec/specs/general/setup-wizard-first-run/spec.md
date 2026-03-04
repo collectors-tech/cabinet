@@ -374,6 +374,8 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 | UC-SW-32 | Completion summary and actions | Completion screen shows runtime URL + instance/data-dir summary and launch action set | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-32 setup-wizard-completion-summary shows launch confirmation actions` |
 | UC-SW-33 | Open cabinet action | Open Cabinet action exits setup completion back to sign-in flow | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-33 setup-wizard-open-cabinet exits completion state` |
 | UC-SW-34 | Open config folder feedback | Open Config Folder action shows deterministic feedback with config path context | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-34 setup-wizard-open-config-folder shows feedback` |
+| UC-SW-35 | Setup bypass helper for route specs | Test harness seeds setup-complete state before route assertions | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-35 setup-helper-bypass-seeds-config before route assertions` |
+| UC-SW-36 | Setup completion helper path | Test harness can complete setup deterministically before route assertions continue | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-36 setup-helper-completion-path clears setup gate deterministically` |
 
 ### Requirement SETUP-WIZ-019: Test automation SHALL support deterministic setup bypass or completion helper
 UI test harness MUST provide deterministic setup handling so route tests are not invalidated by setup gating.

@@ -1,0 +1,7 @@
+openspec/specs/general/setup-wizard-first-run/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts
+ui.web/cypress/support/commands.ts
+ui.web/cypress/support/e2e.ts
+openspec/migration/auto-wave-101-summary.md
+openspec/migration/auto-wave-101-changed-files.txt

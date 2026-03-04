@@ -7,13 +7,29 @@ describe('SETUP-WIZ', () => {
   beforeEach(() => {
     cy.e2eReset();
     cy.e2eBootstrap({ minimalProfile: true });
-    cy.request('POST', '/api/test/runtime/setup-status', { state: 'missing' })
-      .its('status')
-      .should('eq', 200);
+    cy.e2eSetSetupState('missing');
     cy.intercept('GET', '/api/runtime/setup-status').as('setupStatus');
     cy.visit('/sign-in');
     cy.wait('@setupStatus');
     cy.get('[data-testid="setup-wizard"]').should('be.visible');
+  });
+
+  it('UC-SW-35 setup-helper-bypass-seeds-config before route assertions', () => {
+    cy.e2eSetSetupState('present');
+    cy.visit('/sign-in');
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+    cy.contains('Sign in').should('be.visible');
+  });
+
+  it('UC-SW-36 setup-helper-completion-path clears setup gate deterministically', () => {
+    cy.e2eSetSetupState('missing');
+    cy.e2eCompleteSetupHelper({
+      instance_name: 'E2E Setup Completion',
+      profile_key: 'e2e-setup-completion',
+    });
+    cy.visit('/sign-in');
+    cy.get('[data-testid="setup-wizard"]').should('not.exist');
+    cy.contains('Sign in').should('be.visible');
   });
 
   it('UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions', () => {
