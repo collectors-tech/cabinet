@@ -1,0 +1,5 @@
+ui.web/src/features/scanner/index.tsx
+ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/scanner-confidence-batch.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-123-summary.md
+openspec/migration/auto-wave-123-changed-files.txt

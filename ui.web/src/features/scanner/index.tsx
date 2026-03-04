@@ -58,8 +58,12 @@ type QuickScanQueueItem = {
   id: string
   fileName: string
   queuedAtISO: string
-  status: 'Queued'
+  status: 'Queued' | 'Linked'
   linkedToInventory: boolean
+  confidencePct: number
+  suggestions: string[]
+  selectedSuggestion: string
+  overrideUsed: boolean
 }
 
 const MARKET_WATCH_PROVIDER_OPTIONS = [
@@ -158,6 +162,7 @@ export function Scanner() {
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
+  const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(null)
   const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>('cards')
   const quickScanFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -590,24 +595,68 @@ export function Scanner() {
     if (!file) {
       return
     }
+    const normalized = file.name.replace(/\.[^.]+$/, '').trim().toLowerCase() || 'scan'
+    const suggestions = [
+      `${normalized} (primary match)`,
+      `${normalized} (alt: foil variant)`,
+      `${normalized} (alt: promo variant)`,
+    ]
+    const confidencePct = Math.max(52, Math.min(96, 96 - (file.name.length % 32)))
     const entry: QuickScanQueueItem = {
       id: `${Date.now()}-${file.name}`,
       fileName: file.name,
       queuedAtISO: new Date().toISOString(),
       status: 'Queued',
       linkedToInventory: false,
+      confidencePct,
+      suggestions,
+      selectedSuggestion: suggestions[0],
+      overrideUsed: false,
     }
     setQuickScanQueue((current) => [entry, ...current].slice(0, 12))
     setQuickScanStatus(`Quick Scan queued: ${file.name}`)
     event.target.value = ''
   }
 
-  const markQuickScanLinked = (fileName: string) => {
+  const selectQuickScanAlternative = (itemID: string) => {
     setQuickScanQueue((current) =>
       current.map((item) =>
-        item.fileName === fileName ? { ...item, linkedToInventory: true } : item
+        item.id === itemID
+          ? {
+              ...item,
+              selectedSuggestion:
+                item.suggestions[(item.suggestions.indexOf(item.selectedSuggestion) + 1) % item.suggestions.length],
+              overrideUsed: true,
+            }
+          : item
       )
     )
+    setQuickScanStatus('Manual override selected. Confirm apply to mutate inventory link state.')
+  }
+
+  const reviewQuickScanApply = (itemID: string) => {
+    setPendingApplyScanID(itemID)
+    setQuickScanStatus('Reviewing apply mutation. Confirm to link scan to inventory.')
+  }
+
+  const confirmQuickScanApply = () => {
+    if (!pendingApplyScanID) {
+      return
+    }
+    setQuickScanQueue((current) =>
+      current.map((item) =>
+        item.id === pendingApplyScanID
+          ? { ...item, linkedToInventory: true, status: 'Linked' }
+          : item
+      )
+    )
+    setQuickScanStatus('Inventory mutation applied after explicit confirmation.')
+    setPendingApplyScanID(null)
+  }
+
+  const cancelQuickScanApply = () => {
+    setPendingApplyScanID(null)
+    setQuickScanStatus('Apply mutation cancelled.')
   }
 
   const recentUnlinkedQuickScans = useMemo(
@@ -823,20 +872,80 @@ export function Scanner() {
                   <div className='flex flex-wrap items-center justify-between gap-2'>
                     <div>
                       <p className='text-xs font-medium'>{item.fileName}</p>
+                      <p
+                        className='text-[11px] text-muted-foreground'
+                        data-testid={`card-scanner-confidence-${item.id}`}
+                      >
+                        Confidence: {item.confidencePct}%
+                      </p>
+                      <p
+                        className='text-[11px] text-muted-foreground'
+                        data-testid={`card-scanner-suggestion-${item.id}`}
+                      >
+                        Suggestion: {item.selectedSuggestion}
+                      </p>
                       <p className='text-[11px] text-muted-foreground'>
                         Queued: {new Date(item.queuedAtISO).toLocaleString()}
                       </p>
                     </div>
-                    <Button
-                      type='button'
-                      size='sm'
-                      variant='outline'
-                      data-testid={`card-scanner-mark-linked-${item.fileName}`}
-                      onClick={() => markQuickScanLinked(item.fileName)}
-                    >
-                      Mark Linked
-                    </Button>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={`card-scanner-override-${item.id}`}
+                        onClick={() => selectQuickScanAlternative(item.id)}
+                      >
+                        Use Alternative
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={`card-scanner-review-apply-${item.id}`}
+                        onClick={() => reviewQuickScanApply(item.id)}
+                      >
+                        Review Apply
+                      </Button>
+                    </div>
                   </div>
+                  {item.overrideUsed ? (
+                    <p
+                      className='mt-2 text-[11px] text-amber-500'
+                      data-testid={`card-scanner-override-flag-${item.id}`}
+                    >
+                      Manual override active
+                    </p>
+                  ) : null}
+                  {pendingApplyScanID === item.id ? (
+                    <div
+                      className='mt-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-[11px]'
+                      data-testid={`card-scanner-apply-confirmation-${item.id}`}
+                    >
+                      <p className='mb-2'>
+                        Confirm apply to link this scan to inventory using selected suggestion.
+                      </p>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          data-testid={`card-scanner-confirm-apply-${item.id}`}
+                          onClick={confirmQuickScanApply}
+                        >
+                          Confirm Apply
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid={`card-scanner-cancel-apply-${item.id}`}
+                          onClick={cancelQuickScanApply}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -847,6 +956,8 @@ export function Scanner() {
                 <thead className='text-left'>
                   <tr>
                     <th className='px-2 py-1'>File</th>
+                    <th className='px-2 py-1'>Confidence</th>
+                    <th className='px-2 py-1'>Suggestion</th>
                     <th className='px-2 py-1'>Queued At</th>
                     <th className='px-2 py-1'>Status</th>
                   </tr>
@@ -855,6 +966,8 @@ export function Scanner() {
                   {recentUnlinkedQuickScans.map((item) => (
                     <tr key={item.id} className='border-t'>
                       <td className='px-2 py-1'>{item.fileName}</td>
+                      <td className='px-2 py-1'>{item.confidencePct}%</td>
+                      <td className='px-2 py-1'>{item.selectedSuggestion}</td>
                       <td className='px-2 py-1'>{new Date(item.queuedAtISO).toLocaleString()}</td>
                       <td className='px-2 py-1'>{item.status}</td>
                     </tr>
