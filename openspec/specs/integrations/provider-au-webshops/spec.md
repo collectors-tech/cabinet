@@ -69,6 +69,21 @@ For watched Bonza cars, ingestion SHALL prefer WooCommerce Store API stock field
 ### Requirement INTEGRATION-015: Frontline provider config discovery SHALL be runtime-resolved from site assets with safe fallback
 Frontline integration SHALL discover Algolia runtime config (application ID, search key, index names) from maintained site assets (e.g., `pd-search.js`) and use cached last-known-good config when discovery fails.
 
+### Requirement INTEGRATION-016: Hobbytech provider SHALL support Shopify search via Boost/mybcapps endpoint with runtime config discovery
+Hobbytech integration SHALL support Shopify-backed search using Boost Commerce endpoint (`services.mybcapps.com/bc-sf-filter/search`) with runtime discovery of required query/session parameters and resilient fallback behavior.
+
+#### Scenario: Hobbytech search execution
+- **GIVEN** provider query executes for Hobbytech
+- **WHEN** runtime calls Boost/mybcapps search endpoint
+- **THEN** response parsing MUST extract product candidates from structured fields and/or returned HTML payload blocks
+- **AND** pagination MUST honor provider limit/page parameters until terminal page
+
+#### Scenario: Hobbytech config/session drift fallback
+- **GIVEN** required session/template parameters drift or expire
+- **WHEN** search request fails or returns unusable payload
+- **THEN** runtime MUST refresh discovery inputs from site assets/pages and retry with bounded attempts
+- **AND** emit drift warning with fallback status for operator review
+
 #### Scenario: Frontline config discovery from asset
 - **GIVEN** Frontline provider run starts
 - **WHEN** runtime fetches configured discovery asset path(s)
@@ -106,3 +121,5 @@ Frontline integration SHALL discover Algolia runtime config (application ID, sea
 | UC-AU-03 | Provider items-per-page config | Query run uses configured page-size with safe-cap fallback + telemetry | planned: `ui.web/cypress/e2e/integrations/provider-bonza/spec.cy.ts` `bonza-items-per-page-config-safe-cap` |
 | UC-AU-04 | Frontline Algolia config discovery | Provider extracts app/key/index from site asset and records discovery metadata | planned: `ui.web/cypress/e2e/integrations/provider-frontline/spec.cy.ts` `frontline-algolia-config-discovery` |
 | UC-AU-05 | Frontline config drift fallback | Provider uses last-known-good config on parse drift and emits warning event | planned: `ui.web/cypress/e2e/integrations/provider-frontline/spec.cy.ts` `frontline-config-drift-fallback` |
+| UC-AU-06 | Hobbytech Shopify/Boost search | Provider executes mybcapps endpoint and parses candidate products deterministically | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-mybcapps-search` |
+| UC-AU-07 | Hobbytech session drift recovery | Provider refreshes discovery/session params and retries boundedly on drift | planned: `ui.web/cypress/e2e/integrations/provider-hobbytech/spec.cy.ts` `hobbytech-session-drift-recovery` |
