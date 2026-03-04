@@ -90,6 +90,72 @@ func TestWave4ProvidersRegistryContract(t *testing.T) {
 	}
 }
 
+func TestWave4AUWebshopDomainsConfigSourceContract(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Wave4AUConfig"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	settingsBody := `{"settings":{"integration.au_webshops.domains":"bonzaslotcars.com.au, metrohobbies.com.au, customcollector.example"}}`
+	updateSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(settingsBody),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if updateSettings.Code != http.StatusOK {
+		t.Fatalf("update settings status=%d body=%s", updateSettings.Code, updateSettings.Body.String())
+	}
+
+	resp := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("providers registry expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode providers payload: %v", err)
+	}
+
+	auDomains := map[string]bool{}
+	for _, provider := range payload.Providers {
+		providerID, _ := provider["provider_id"].(string)
+		if !strings.HasPrefix(providerID, "au-webshop-") {
+			continue
+		}
+		domain, _ := provider["base_domain"].(string)
+		if domain != "" {
+			auDomains[domain] = true
+		}
+	}
+	if len(auDomains) != 3 {
+		t.Fatalf("expected exactly 3 config-driven AU domains, got %d domains=%v", len(auDomains), auDomains)
+	}
+	for _, expected := range []string{
+		"bonzaslotcars.com.au",
+		"metrohobbies.com.au",
+		"customcollector.example",
+	} {
+		if !auDomains[expected] {
+			t.Fatalf("registry missing config-driven AU domain %q from %v", expected, auDomains)
+		}
+	}
+}
+
 func TestWave4AmazonRunModeAndNormalizationContract(t *testing.T) {
 	t.Parallel()
 

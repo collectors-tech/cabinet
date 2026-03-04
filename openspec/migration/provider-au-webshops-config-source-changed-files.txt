@@ -1,0 +1,5 @@
+internal/app/app.go
+internal/app/traceability_wave4_provider_scanner_test.go
+openspec/specs/integrations/provider-au-webshops/spec.md
+openspec/traceability.md
+openspec/migration/provider-au-webshops-config-source-summary.md

@@ -47,6 +47,21 @@ Cabinet SHALL maintain a deterministic approved AU webshop domain allowlist used
   - `metrohobbies.com.au`
 - **AND** allowlist verification MUST be covered by automated runtime tests
 
+### Requirement PROVIDER-AU-WEBSHOPS-005: AU webshop domain source MUST be configuration-driven with deterministic fallback
+Cabinet SHALL resolve AU webshop domain catalog from profile/runtime configuration (`integration.au_webshops.domains`) so operators can update provider domains without code changes or recompilation.
+
+#### Scenario: Config-driven domain source
+- **GIVEN** active profile settings include `integration.au_webshops.domains` with comma-separated domains
+- **WHEN** `/api/providers/registry` is requested
+- **THEN** AU webshop provider entries MUST be generated from configured domains
+- **AND** provider IDs MUST follow `au-webshop-<normalized-domain>`
+
+#### Scenario: Invalid config fallback
+- **GIVEN** `integration.au_webshops.domains` is missing, blank, or parses to zero valid domains
+- **WHEN** `/api/providers/registry` is requested
+- **THEN** runtime MUST fallback to default approved allowlist domain set
+- **AND** fallback behavior MUST be deterministic across repeated requests
+
 ### Requirement INTEGRATION-012: AU webshop ingestion MUST extract stock observations
 Cabinet SHALL parse stock/availability from webshop listing pages where available and persist normalized stock observations.
 

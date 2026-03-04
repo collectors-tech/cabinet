@@ -4762,17 +4762,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		},
 	}
 
-	auDomains := []string{
-		"bonzaslotcars.com.au",
-		"frontlinehobbies.com.au",
-		"hobbytechtoys.com.au",
-		"andrewshobbies.com.au",
-		"voglers.com.au",
-		"acercmodels.com",
-		"mrtoys.com.au",
-		"hobbyco.com.au",
-		"metrohobbies.com.au",
-	}
+	auDomains := resolveAUWebshopDomains(settings)
 	for _, d := range auDomains {
 		apiFamily := "web_ingestion"
 		activeMode := "web_ingestion"
@@ -4921,6 +4911,46 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 
 	return base
+}
+
+func defaultAUWebshopDomains() []string {
+	return []string{
+		"bonzaslotcars.com.au",
+		"frontlinehobbies.com.au",
+		"hobbytechtoys.com.au",
+		"andrewshobbies.com.au",
+		"voglers.com.au",
+		"acercmodels.com",
+		"mrtoys.com.au",
+		"hobbyco.com.au",
+		"metrohobbies.com.au",
+	}
+}
+
+func resolveAUWebshopDomains(settings map[string]string) []string {
+	defaults := defaultAUWebshopDomains()
+	raw := strings.TrimSpace(settings["integration.au_webshops.domains"])
+	if raw == "" {
+		return defaults
+	}
+
+	seen := map[string]struct{}{}
+	resolved := make([]string, 0, len(defaults))
+	for _, part := range strings.Split(raw, ",") {
+		domain := normalizeProviderDomain(part)
+		if domain == "" {
+			continue
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		resolved = append(resolved, domain)
+	}
+	if len(resolved) == 0 {
+		return defaults
+	}
+	return resolved
 }
 
 type providerSettingKeySet struct {

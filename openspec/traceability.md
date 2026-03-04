@@ -389,7 +389,7 @@
 
 | PROVIDER-AU-WEBSHOPS-004 | openspec/specs/integrations/provider-au-webshops/spec.md | deterministic AU webshop domain allowlist configuration includes approved domains | `TestWave4ProvidersRegistryContract` (`internal/app/traceability_wave4_provider_scanner_test.go`) | implemented |
 
-| PROVIDER-AU-WEBSHOPS-005 | openspec/specs/integrations/provider-au-webshops/spec.md | config/content-driven webshop domain source | planned: internal/app/*provider_au_webshops*_test.go (domains loaded from config source, no hardcoded source-of-truth) | partial |
+| PROVIDER-AU-WEBSHOPS-005 | openspec/specs/integrations/provider-au-webshops/spec.md | config/content-driven webshop domain source with deterministic fallback when config is missing/invalid | `TestWave4AUWebshopDomainsConfigSourceContract` (`internal/app/traceability_wave4_provider_scanner_test.go`) | implemented |
 
 | PROVIDER-WORKFLOW-001 | openspec/specs/integrations/provider-workflow-template/spec.md | provider workflow stage completeness | planned: provider-specific Cypress/API checklists | partial |
 | PROVIDER-WORKFLOW-002 | openspec/specs/integrations/provider-workflow-template/spec.md | deterministic provider failure handling | planned: provider failure-mode suites | partial |
