@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type ActiveProfileResponse = {
   id?: string
@@ -14,6 +14,7 @@ export function useProfileSettings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const saveInFlightRef = useRef<Promise<Record<string, string>> | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -56,21 +57,34 @@ export function useProfileSettings() {
       if (!activeProfileId) {
         throw new Error('active_profile_missing')
       }
-      setSaving(true)
-      try {
-        const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ settings: next }),
-        })
-        if (!response.ok) {
-          throw new Error(`profile_settings_save_${response.status}`)
+      if (saveInFlightRef.current) {
+        return saveInFlightRef.current
+      }
+
+      const request = (async () => {
+        setSaving(true)
+        try {
+          const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: next }),
+          })
+          if (!response.ok) {
+            throw new Error(`profile_settings_save_${response.status}`)
+          }
+          const payload = (await response.json()) as ProfileSettingsResponse
+          setSettings(payload.settings ?? {})
+          return payload.settings ?? {}
+        } finally {
+          setSaving(false)
         }
-        const payload = (await response.json()) as ProfileSettingsResponse
-        setSettings(payload.settings ?? {})
-        return payload.settings ?? {}
+      })()
+
+      saveInFlightRef.current = request
+      try {
+        return await request
       } finally {
-        setSaving(false)
+        saveInFlightRef.current = null
       }
     },
     [activeProfileId]

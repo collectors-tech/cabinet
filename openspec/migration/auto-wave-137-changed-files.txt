@@ -1,0 +1,9 @@
+openspec/specs/general/ui-foundation-components/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-137-summary.md
+openspec/migration/auto-wave-137-changed-files.txt
+tests/ui_foundation_components_contract_test.go
+ui.web/cypress/e2e/general/ui-foundation-components/spec.cy.ts
+ui.web/src/features/settings/profile/profile-form.tsx
+ui.web/src/features/settings/use-profile-settings.ts
+internal/ui/static/index.html

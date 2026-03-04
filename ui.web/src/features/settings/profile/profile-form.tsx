@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,6 +68,9 @@ export function ProfileForm() {
     useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [submitLocked, setSubmitLocked] = useState(false)
+  const submitLockRef = useRef(false)
+  const mutationLockRef = useRef(false)
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues,
@@ -104,6 +107,10 @@ export function ProfileForm() {
   }, [form, loading, settings])
 
   const handleSubmit = async (data: ProfileFormValues) => {
+    if (mutationLockRef.current) {
+      return
+    }
+    mutationLockRef.current = true
     setSaveMessage(null)
     setSaveError(null)
     try {
@@ -116,13 +123,35 @@ export function ProfileForm() {
       setSaveMessage('Profile settings saved.')
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'failed_to_save_profile')
+    } finally {
+      mutationLockRef.current = false
     }
+  }
+
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (submitLockRef.current) {
+      return
+    }
+    submitLockRef.current = true
+    setSubmitLocked(true)
+    void (async () => {
+      const isValid = await form.trigger()
+      if (!isValid) {
+        return
+      }
+      const values = form.getValues()
+      await handleSubmit(values)
+    })().finally(() => {
+      submitLockRef.current = false
+      setSubmitLocked(false)
+    })
   }
 
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(handleSubmit)}
+        onSubmit={handleFormSubmit}
         className='space-y-8'
       >
         {error ? (
@@ -253,7 +282,15 @@ export function ProfileForm() {
             Add URL
           </Button>
         </div>
-            <Button type='submit' disabled={saving || loading}>
+            <Button
+              type='submit'
+              disabled={saving || loading || submitLocked}
+              onClickCapture={() => {
+                if (!submitLockRef.current && !submitLocked) {
+                  setSubmitLocked(true)
+                }
+              }}
+            >
               Update profile
             </Button>
           </>
