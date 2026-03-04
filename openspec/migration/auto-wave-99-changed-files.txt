@@ -1,0 +1,5 @@
+internal/app/app.go
+internal/app/provider_family_detection_api_test.go
+ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts
+openspec/traceability.md
+openspec/migration/auto-wave-99-summary.md

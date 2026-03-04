@@ -1283,7 +1283,68 @@ func New(cfg config.Config) (*App, error) {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"providers": providerRegistryPayload(r.Context(), scannerSvc, amazonMode, settings),
+			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
+		})
+	})
+	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProviderURL string `json:"provider_url"`
+			HTML        string `json:"html"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		providerURL := strings.TrimSpace(req.ProviderURL)
+		if providerURL == "" {
+			http.Error(w, `{"error":"missing_provider_url"}`, http.StatusBadRequest)
+			return
+		}
+		family, confidence, evidence, domain, err := detectProviderFamily(r.Context(), http.DefaultClient, providerURL, req.HTML)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_detect_provider_family"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider_domain":     domain,
+			"proposed_api_family": family,
+			"confidence":          confidence,
+			"evidence":            evidence,
+		})
+	})
+	mux.HandleFunc("/api/providers/family-override", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProviderDomain string `json:"provider_domain"`
+			APIFamily      string `json:"api_family"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		domain := normalizeProviderDomain(req.ProviderDomain)
+		family := strings.TrimSpace(strings.ToLower(req.APIFamily))
+		if domain == "" || family == "" {
+			http.Error(w, `{"error":"missing_domain_or_family"}`, http.StatusBadRequest)
+			return
+		}
+		if err := persistProviderFamilyOverride(r.Context(), conn, domain, family); err != nil {
+			http.Error(w, `{"error":"failed_to_save_provider_family_override"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"saved":           true,
+			"provider_domain": domain,
+			"api_family":      family,
 		})
 	})
 	mux.HandleFunc("/api/providers/amazon/run", func(w http.ResponseWriter, r *http.Request) {
@@ -4649,7 +4710,13 @@ func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
 	return "disabled"
 }
 
-func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, amazonMode string, settings map[string]string) []map[string]any {
+func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scanner.Service, amazonMode string, settings map[string]string) []map[string]any {
+	familyOverrides := map[string]string{}
+	if conn != nil {
+		if loaded, err := loadProviderFamilyOverrides(ctx, conn); err == nil {
+			familyOverrides = loaded
+		}
+	}
 	base := []map[string]any{
 		{
 			"provider_id":      "ebay",
@@ -4794,6 +4861,30 @@ func providerRegistryPayload(ctx context.Context, scannerSvc *scanner.Service, a
 		provider["last_run"] = map[string]any{
 			"status":      lastRunStatus,
 			"finished_at": lastRunFinished,
+		}
+		baseDomain := normalizeProviderDomain(fmt.Sprintf("%v", provider["base_domain"]))
+		if overrideFamily, ok := familyOverrides[baseDomain]; ok && strings.TrimSpace(overrideFamily) != "" {
+			provider["api_family"] = strings.TrimSpace(overrideFamily)
+			switch strings.TrimSpace(strings.ToLower(overrideFamily)) {
+			case "doofinder":
+				provider["active_mode"] = "hashid_search"
+				provider["integration_mode"] = "api_family_search"
+				provider["api_available"] = true
+			case "bigcommerce":
+				if hasToken {
+					provider["active_mode"] = "token_enabled"
+				} else {
+					provider["active_mode"] = "storefront_public"
+				}
+			case "woocommerce":
+				provider["active_mode"] = "store_api_first"
+			case "boost_shopify":
+				provider["active_mode"] = "boost_api"
+			case "algolia":
+				provider["active_mode"] = "algolia_runtime"
+			case "shopify_json":
+				provider["active_mode"] = "products_json"
+			}
 		}
 	}
 
@@ -5852,6 +5943,165 @@ func parseStockSignal(html string) (raw, normalized string, count int) {
 	default:
 		return raw, "unknown", count
 	}
+}
+
+func normalizeProviderDomain(input string) string {
+	value := strings.TrimSpace(strings.ToLower(input))
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, "://") {
+		if parsed, err := url.Parse(value); err == nil {
+			value = strings.TrimSpace(strings.ToLower(parsed.Hostname()))
+		}
+	}
+	value = strings.TrimPrefix(value, "www.")
+	return strings.TrimSpace(value)
+}
+
+func persistProviderFamilyOverride(ctx context.Context, conn *sql.DB, domain, family string) error {
+	domain = normalizeProviderDomain(domain)
+	family = strings.TrimSpace(strings.ToLower(family))
+	if domain == "" || family == "" {
+		return fmt.Errorf("domain and family are required")
+	}
+	key := "provider.family.override." + domain
+	_, err := conn.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, key, family)
+	if err != nil {
+		return fmt.Errorf("persist provider family override: %w", err)
+	}
+	return nil
+}
+
+func loadProviderFamilyOverrides(ctx context.Context, conn *sql.DB) (map[string]string, error) {
+	rows, err := conn.QueryContext(ctx, `
+		SELECT key, value
+		FROM app_state
+		WHERE key LIKE 'provider.family.override.%'
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list provider family overrides: %w", err)
+	}
+	defer rows.Close()
+	result := map[string]string{}
+	for rows.Next() {
+		var key string
+		var value string
+		if scanErr := rows.Scan(&key, &value); scanErr != nil {
+			return nil, fmt.Errorf("scan provider family override: %w", scanErr)
+		}
+		domain := strings.TrimPrefix(strings.TrimSpace(strings.ToLower(key)), "provider.family.override.")
+		domain = normalizeProviderDomain(domain)
+		family := strings.TrimSpace(strings.ToLower(value))
+		if domain == "" || family == "" {
+			continue
+		}
+		result[domain] = family
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate provider family overrides: %w", err)
+	}
+	return result, nil
+}
+
+func detectProviderFamily(ctx context.Context, client *http.Client, providerURL, htmlInput string) (string, float64, []string, string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	providerURL = strings.TrimSpace(providerURL)
+	if providerURL == "" {
+		return "", 0, nil, "", fmt.Errorf("provider_url is required")
+	}
+	parsedURL, err := url.Parse(providerURL)
+	if err != nil {
+		return "", 0, nil, "", fmt.Errorf("parse provider_url: %w", err)
+	}
+	if parsedURL.Scheme == "" {
+		parsedURL.Scheme = "https"
+	}
+	domain := normalizeProviderDomain(parsedURL.String())
+	html := strings.TrimSpace(htmlInput)
+	if html == "" {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+		if reqErr != nil {
+			return "", 0, nil, domain, fmt.Errorf("build detect request: %w", reqErr)
+		}
+		resp, runErr := client.Do(req)
+		if runErr != nil {
+			return "", 0, nil, domain, fmt.Errorf("request detect provider_url: %w", runErr)
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			resp.Body.Close()
+			return "", 0, nil, domain, fmt.Errorf("provider_url returned status %d", resp.StatusCode)
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return "", 0, nil, domain, fmt.Errorf("read provider_url body: %w", readErr)
+		}
+		html = string(body)
+	}
+	lower := strings.ToLower(html)
+	type familyScore struct {
+		name     string
+		score    float64
+		evidence []string
+	}
+	candidates := []familyScore{}
+
+	buildEvidence := func(name string, checks map[string]bool) {
+		evidence := []string{}
+		for marker, hit := range checks {
+			if hit {
+				evidence = append(evidence, marker)
+			}
+		}
+		if len(evidence) == 0 {
+			return
+		}
+		score := 0.55 + (float64(len(evidence)) * 0.12)
+		if score > 0.99 {
+			score = 0.99
+		}
+		candidates = append(candidates, familyScore{name: name, score: score, evidence: evidence})
+	}
+
+	buildEvidence("woocommerce", map[string]bool{
+		"/wp-json/wc/store/v1": strings.Contains(lower, "/wp-json/wc/store/v1"),
+		"woocommerce marker":   strings.Contains(lower, "woocommerce"),
+	})
+	buildEvidence("boost_shopify", map[string]bool{
+		"services.mybcapps.com/bc-sf-filter": strings.Contains(lower, "services.mybcapps.com/bc-sf-filter"),
+		"boost script signature":             strings.Contains(lower, "mybcapps"),
+	})
+	buildEvidence("algolia", map[string]bool{
+		"algoliasearch(": strings.Contains(lower, "algoliasearch("),
+		"glgoliasearch":  strings.Contains(lower, "glgoliasearch"),
+	})
+	buildEvidence("shopify_json", map[string]bool{
+		"/products.json":              strings.Contains(lower, "/products.json"),
+		"/collections/*/products.json": strings.Contains(lower, "/collections/") && strings.Contains(lower, "/products.json"),
+	})
+	buildEvidence("doofinder", map[string]bool{
+		"cdn.doofinder.com":         strings.Contains(lower, "cdn.doofinder.com"),
+		"hashid/search_engines":     strings.Contains(lower, "hashid") && strings.Contains(lower, "search_engines"),
+		"doofinder loader/config":   strings.Contains(lower, "doofinder"),
+	})
+
+	if len(candidates) == 0 {
+		return "unknown", 0.1, []string{"no_known_markers"}, domain, nil
+	}
+	best := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.score > best.score {
+			best = candidate
+		}
+	}
+	return best.name, best.score, best.evidence, domain, nil
 }
 
 func runtimeBuildMetadata() (string, string) {
