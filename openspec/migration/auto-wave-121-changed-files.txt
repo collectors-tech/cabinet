@@ -1,0 +1,3 @@
+openspec/specs/integrations/provider-au-webshops/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-121-summary.md

@@ -21,11 +21,31 @@ Cabinet SHALL maintain provider entries for:
 - voglers.com.au
 - acercmodels.com
 - mrtoys.com.au
+- hobbyco.com.au
+- metrohobbies.com.au
 
 #### Scenario: AU provider catalog list
 - **GIVEN** integrations registry endpoint is requested by an authenticated admin user
 - **WHEN** AU webshop providers are returned
 - **THEN** response MUST include all configured domains with `integration_mode: web_ingestion`
+
+### Requirement PROVIDER-AU-WEBSHOPS-004: AU webshop provider allowlist MUST be deterministic and test-covered
+Cabinet SHALL maintain a deterministic approved AU webshop domain allowlist used by provider registry payload generation.
+
+#### Scenario: Approved allowlist contract
+- **GIVEN** provider registry payload is generated for active profile
+- **WHEN** AU webshop domains are enumerated from registry output
+- **THEN** the domain set MUST include exactly:
+  - `bonzaslotcars.com.au`
+  - `frontlinehobbies.com.au`
+  - `hobbytechtoys.com.au`
+  - `andrewshobbies.com.au`
+  - `voglers.com.au`
+  - `acercmodels.com`
+  - `mrtoys.com.au`
+  - `hobbyco.com.au`
+  - `metrohobbies.com.au`
+- **AND** allowlist verification MUST be covered by automated runtime tests
 
 ### Requirement INTEGRATION-012: AU webshop ingestion MUST extract stock observations
 Cabinet SHALL parse stock/availability from webshop listing pages where available and persist normalized stock observations.

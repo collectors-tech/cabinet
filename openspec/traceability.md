@@ -387,7 +387,7 @@
 | DEFAULT-SITE-SEARCH-005 | openspec/specs/integrations/default-site-search/spec.md | run-now + scheduled refresh execution summaries for saved searches | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh`) | implemented |
 | DEFAULT-SITE-SEARCH-006 | openspec/specs/integrations/default-site-search/spec.md | discoveries + wishlist handoff from saved-search output workflows | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and wishlist flows`) | implemented |
 
-| PROVIDER-AU-WEBSHOPS-004 | openspec/specs/integrations/provider-au-webshops/spec.md | AU webshop domain allowlist configuration | planned: internal/app/*provider_au_webshops*_test.go (configured domain set includes approved shops) | partial |
+| PROVIDER-AU-WEBSHOPS-004 | openspec/specs/integrations/provider-au-webshops/spec.md | deterministic AU webshop domain allowlist configuration includes approved domains | `TestWave4ProvidersRegistryContract` (`internal/app/traceability_wave4_provider_scanner_test.go`) | implemented |
 
 | PROVIDER-AU-WEBSHOPS-005 | openspec/specs/integrations/provider-au-webshops/spec.md | config/content-driven webshop domain source | planned: internal/app/*provider_au_webshops*_test.go (domains loaded from config source, no hardcoded source-of-truth) | partial |
 
