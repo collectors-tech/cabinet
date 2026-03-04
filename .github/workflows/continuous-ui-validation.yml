@@ -1,0 +1,58 @@
+name: continuous-ui-validation
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  hourly-ui-validation:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui.web/package-lock.json
+
+      - name: Install UI dependencies
+        shell: pwsh
+        run: npm --prefix ui.web ci
+
+      - name: Build Cabinet runtime
+        shell: pwsh
+        run: go build -o bin/cabinet.exe ./cmd/cabinet
+
+      - name: Authenticate gh
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh auth status
+
+      - name: Run hourly release-aware UI validation
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pwsh -NoLogo -NoProfile -File ./scripts/hourly-ui-validation.ps1 -Browser chrome
+
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hourly-ui-validation-logs
+          path: .logs/hourly-ui-validation/

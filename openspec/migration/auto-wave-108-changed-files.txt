@@ -1,0 +1,6 @@
+.github/workflows/continuous-ui-validation.yml
+scripts/hourly-ui-validation.ps1
+tests/continuous_ui_validation_contract_test.go
+openspec/traceability.md
+openspec/migration/auto-wave-108-summary.md
+openspec/migration/auto-wave-108-changed-files.txt
