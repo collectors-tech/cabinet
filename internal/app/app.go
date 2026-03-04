@@ -1391,6 +1391,42 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/providers/frontline/discovery", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			AssetURL          string   `json:"asset_url"`
+			FallbackAssetURLs []string `json:"fallback_asset_urls"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.AssetURL = strings.TrimSpace(req.AssetURL)
+		if req.AssetURL == "" {
+			http.Error(w, `{"error":"missing_asset_url"}`, http.StatusBadRequest)
+			return
+		}
+		config, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
+			r.Context(),
+			conn,
+			http.DefaultClient,
+			req.AssetURL,
+			req.FallbackAssetURLs,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_discover_frontline_config"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"config":        config,
+			"fallback_used": fallbackUsed,
+			"warning":       warning,
+		})
+	})
 	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4407,6 +4443,15 @@ func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
 	}
 }
 
+type frontlineAlgoliaConfig struct {
+	ApplicationID string   `json:"application_id"`
+	SearchKey     string   `json:"search_key"`
+	IndexNames    []string `json:"index_names"`
+	Source        string   `json:"source"`
+	ConfigHash    string   `json:"config_hash"`
+	DiscoveredAt  string   `json:"discovered_at"`
+}
+
 type bonzaProductResponse struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
@@ -4423,12 +4468,158 @@ type bonzaSearchResult struct {
 	Candidates       []map[string]any `json:"candidates"`
 }
 
+const frontlineAlgoliaCacheKey = "frontline_algolia_last_known_good"
+
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || parsed <= 0 {
 		return fallback
 	}
 	return parsed
+}
+
+func discoverFrontlineAlgoliaConfig(
+	ctx context.Context,
+	conn *sql.DB,
+	client *http.Client,
+	assetURL string,
+	fallbackAssetURLs []string,
+) (frontlineAlgoliaConfig, bool, string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
+	candidates = append(candidates, strings.TrimSpace(assetURL))
+	for _, value := range fallbackAssetURLs {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			candidates = append(candidates, trimmed)
+		}
+	}
+	var discoveryErr error
+	for _, urlValue := range candidates {
+		if urlValue == "" {
+			continue
+		}
+		script, fetchErr := fetchProviderAsset(ctx, client, urlValue)
+		if fetchErr != nil {
+			discoveryErr = fetchErr
+			continue
+		}
+		config, parseErr := parseFrontlineAlgoliaConfig(script, urlValue)
+		if parseErr != nil {
+			discoveryErr = parseErr
+			continue
+		}
+		if persistErr := persistFrontlineAlgoliaCache(ctx, conn, config); persistErr != nil {
+			discoveryErr = persistErr
+			continue
+		}
+		return config, false, "", nil
+	}
+	cached, cacheErr := readFrontlineAlgoliaCache(ctx, conn)
+	if cacheErr == nil {
+		warning := "frontline discovery fallback used cached config"
+		if discoveryErr != nil {
+			warning = fmt.Sprintf("%s: %s", warning, strings.TrimSpace(discoveryErr.Error()))
+		}
+		return cached, true, warning, nil
+	}
+	if discoveryErr != nil {
+		return frontlineAlgoliaConfig{}, false, "", discoveryErr
+	}
+	return frontlineAlgoliaConfig{}, false, "", cacheErr
+}
+
+func fetchProviderAsset(ctx context.Context, client *http.Client, assetURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(assetURL), nil)
+	if err != nil {
+		return "", fmt.Errorf("build provider asset request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request provider asset: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return "", fmt.Errorf("provider asset returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("read provider asset: %w", err)
+	}
+	return string(body), nil
+}
+
+func parseFrontlineAlgoliaConfig(script, source string) (frontlineAlgoliaConfig, error) {
+	glgolia := regexp.MustCompile(`(?i)Glgoliasearch\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)`)
+	match := glgolia.FindStringSubmatch(script)
+	if len(match) < 3 {
+		return frontlineAlgoliaConfig{}, fmt.Errorf("missing algolia glgoliasearch credentials")
+	}
+	indexPattern := regexp.MustCompile(`(?i)index(?:Name)?\s*[:=]\s*['"]([^'"]+)['"]`)
+	indexMatches := indexPattern.FindAllStringSubmatch(script, -1)
+	seen := map[string]struct{}{}
+	indexes := make([]string, 0, len(indexMatches))
+	for _, entry := range indexMatches {
+		if len(entry) < 2 {
+			continue
+		}
+		value := strings.TrimSpace(entry[1])
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		indexes = append(indexes, value)
+	}
+	if len(indexes) == 0 {
+		return frontlineAlgoliaConfig{}, fmt.Errorf("missing algolia index names")
+	}
+	hash := sha256.Sum256([]byte(script))
+	return frontlineAlgoliaConfig{
+		ApplicationID: strings.TrimSpace(match[1]),
+		SearchKey:     strings.TrimSpace(match[2]),
+		IndexNames:    indexes,
+		Source:        strings.TrimSpace(source),
+		ConfigHash:    fmt.Sprintf("%x", hash[:]),
+		DiscoveredAt:  time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func persistFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB, config frontlineAlgoliaConfig) error {
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal frontline cache config: %w", err)
+	}
+	_, execErr := conn.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, frontlineAlgoliaCacheKey, string(raw))
+	if execErr != nil {
+		return fmt.Errorf("persist frontline cache config: %w", execErr)
+	}
+	return nil
+}
+
+func readFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB) (frontlineAlgoliaConfig, error) {
+	var raw string
+	err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, frontlineAlgoliaCacheKey).Scan(&raw)
+	if err != nil {
+		return frontlineAlgoliaConfig{}, fmt.Errorf("load frontline cache config: %w", err)
+	}
+	var config frontlineAlgoliaConfig
+	if decodeErr := json.Unmarshal([]byte(raw), &config); decodeErr != nil {
+		return frontlineAlgoliaConfig{}, fmt.Errorf("decode frontline cache config: %w", decodeErr)
+	}
+	if strings.TrimSpace(config.ApplicationID) == "" || strings.TrimSpace(config.SearchKey) == "" {
+		return frontlineAlgoliaConfig{}, fmt.Errorf("frontline cache config is incomplete")
+	}
+	return config, nil
 }
 
 func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs scanner.QuerySet, itemsPerPage int) (bonzaSearchResult, error) {
