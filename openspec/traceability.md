@@ -391,6 +391,17 @@
 
 | PROVIDER-AU-WEBSHOPS-005 | openspec/specs/integrations/provider-au-webshops/spec.md | config/content-driven webshop domain source with deterministic fallback when config is missing/invalid | `TestWave4AUWebshopDomainsConfigSourceContract` (`internal/app/traceability_wave4_provider_scanner_test.go`) | implemented |
 
+| POKEMON-COMP-001 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | confidence-first batch scanner capture with manual override before mutation | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/scanner-confidence-batch.cy.ts | partial |
+| POKEMON-COMP-002 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | set completion progress model with variant/language/graded dimensions | planned: internal/app/pokemon_set_progress_api_test.go | partial |
+| POKEMON-COMP-003 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | multi-source price history trend + threshold alerts | planned: internal/app/pokemon_price_alerts_api_test.go | partial |
+| POKEMON-COMP-004 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | discovery->wishlist handoff preserving marketplace decision metadata | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/discovery-handoff-metadata.cy.ts | partial |
+| POKEMON-COMP-005 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | list/profile visibility policy enforcement (`private`, `shared_link`, `team`) | planned: internal/app/pokemon_visibility_policy_api_test.go | partial |
+| POKEMON-COMP-006 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | reusable dynamic list templates (wishlist/trade/watch) | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/dynamic-list-templates.cy.ts | partial |
+| POKEMON-COMP-007 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | graded-card slab metadata + valuation overrides | planned: internal/app/pokemon_graded_overrides_api_test.go | partial |
+| POKEMON-COMP-008 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | shareable progress snapshot payloads | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/share-progress-snapshot.cy.ts | partial |
+| POKEMON-COMP-009 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | deterministic milestone badge trigger events | planned: internal/app/pokemon_milestone_badges_test.go | partial |
+| POKEMON-COMP-010 | openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md | collector objective goal bundles with saved filters/actions | planned: ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/goal-bundle-presets.cy.ts | partial |
+
 | PROVIDER-WORKFLOW-001 | openspec/specs/integrations/provider-workflow-template/spec.md | provider workflow stage completeness | planned: provider-specific Cypress/API checklists | partial |
 | PROVIDER-WORKFLOW-002 | openspec/specs/integrations/provider-workflow-template/spec.md | deterministic provider failure handling | planned: provider failure-mode suites | partial |
 | PROVIDER-WORKFLOW-003 | openspec/specs/integrations/provider-workflow-template/spec.md | mock/live parity for provider contracts | planned: mock-vs-live contract comparisons | partial |

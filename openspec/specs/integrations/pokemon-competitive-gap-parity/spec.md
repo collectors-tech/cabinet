@@ -1,0 +1,84 @@
+## Purpose
+Define competitive parity requirements derived from Pokemon-focused collector apps and map them into testable Cabinet feature slices.
+
+## Requirements
+### Requirement POKEMON-COMP-001: Scanner workflow MUST support confidence-first batch capture
+Cabinet SHALL provide a batch-capable camera/upload capture flow with confidence scoring, alternate suggestions, and explicit manual override before mutation apply.
+
+#### Scenario: Batch scan with confidence and override
+- **GIVEN** user captures multiple item photos from mobile or desktop upload queue
+- **WHEN** scanner returns candidate matches
+- **THEN** each candidate row MUST include confidence score and at least one manual override action
+- **AND** no inventory mutation occurs until user confirms apply
+
+### Requirement POKEMON-COMP-002: Collection model MUST support set progress dimensions
+Cabinet SHALL model set completion across card variants, language, and graded state for progress reporting.
+
+#### Scenario: Progress model computation
+- **GIVEN** inventory contains cards tagged with set, variant, language, and graded metadata
+- **WHEN** progress is requested for a set
+- **THEN** response MUST include owned count, total count, completion percent, and variant/language/graded breakdown fields
+
+### Requirement POKEMON-COMP-003: Pricing MUST support multi-source historical trends and alerts
+Cabinet SHALL aggregate pricing snapshots across configured providers and expose trend deltas with threshold alert rules.
+
+#### Scenario: Trend and alert evaluation
+- **GIVEN** tracked items have daily pricing snapshots from at least two sources
+- **WHEN** alert evaluation runs
+- **THEN** system MUST persist min/median/latest by source and emit alert events for crossed thresholds
+
+### Requirement POKEMON-COMP-004: Discovery handoff MUST preserve marketplace decision metadata
+Cabinet SHALL include seller reputation, stock signal, and direct buy-link context when handing candidates to wishlist/discovery actions.
+
+#### Scenario: Discovery to wishlist handoff
+- **GIVEN** scanner candidate includes provider listing metadata
+- **WHEN** user executes add-to-wishlist handoff
+- **THEN** wishlist record MUST retain listing URL, seller identity, stock signal, and observed price fields
+
+### Requirement POKEMON-COMP-005: Share controls MUST expose visibility policy per list/profile
+Cabinet SHALL support deterministic visibility controls (`private`, `shared_link`, `team`) for collections and dynamic lists.
+
+#### Scenario: Visibility policy enforcement
+- **GIVEN** a list visibility is configured to `private`
+- **WHEN** external share endpoint is requested
+- **THEN** API MUST deny anonymous access with deterministic forbidden envelope
+
+### Requirement POKEMON-COMP-006: Dynamic list templates MUST be first-class and reusable
+Cabinet SHALL support reusable list templates for wishlist, trade binder, and watchlist views with saved filters and sort order.
+
+#### Scenario: Template-based list creation
+- **GIVEN** user selects `trade_binder` template
+- **WHEN** list is created
+- **THEN** list MUST preload template fields, default filters, and saved sort order
+
+### Requirement POKEMON-COMP-007: Graded workflow MUST capture slab metadata with valuation overrides
+Cabinet SHALL support graded-card metadata fields (grader, grade, cert number, slab state) and optional valuation override with source attribution.
+
+#### Scenario: Graded card valuation override
+- **GIVEN** graded instance has grader + numeric grade + certificate data
+- **WHEN** user saves valuation override
+- **THEN** record MUST persist override amount, currency, timestamp, and override source note
+
+### Requirement POKEMON-COMP-008: Social sharing hooks SHOULD support progress snapshots
+Cabinet SHOULD provide share-ready progress snapshots for selected lists/sets.
+
+#### Scenario: Generate progress snapshot
+- **GIVEN** user requests share snapshot for a set progress report
+- **WHEN** snapshot API executes
+- **THEN** response SHOULD include summary metrics and canonical share payload
+
+### Requirement POKEMON-COMP-009: Gamified milestones SHOULD support deterministic badge triggers
+Cabinet SHOULD expose milestone trigger rules for onboarding and collection progression badges.
+
+#### Scenario: Milestone badge trigger
+- **GIVEN** user crosses configured milestone threshold
+- **WHEN** milestone evaluation runs
+- **THEN** badge event SHOULD be emitted with milestone id and timestamp
+
+### Requirement POKEMON-COMP-010: Goal bundle presets SHOULD support collector objective workflows
+Cabinet SHOULD provide objective presets that create grouped filters/actions for common collector goals.
+
+#### Scenario: Goal bundle activation
+- **GIVEN** user activates objective preset
+- **WHEN** preset is saved
+- **THEN** system SHOULD create linked filter set and dashboard action shortcuts

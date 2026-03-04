@@ -1,0 +1,5 @@
+workdocs/pokemon-app-capability-analysis-matrix.md
+openspec/specs/integrations/README.md
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+openspec/migration/pokemon-app-capability-analysis-summary.md
