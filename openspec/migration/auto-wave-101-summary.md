@@ -33,5 +33,5 @@
 - `openspec validate --all`: PASS (`5 passed, 0 failed`)
 
 ## Commit
-- Commit: <pending>
+- Commit: 0d4e4d11286e77dacb553b8a3bb762d83a860063
 - Branch: main
