@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -46,6 +46,13 @@ type RunSummary = {
 type RunMeta = {
   status: 'never' | 'running' | 'succeeded' | 'failed'
   ranAtISO?: string
+}
+
+type QuickScanQueueItem = {
+  id: string
+  fileName: string
+  queuedAtISO: string
+  status: 'Queued'
 }
 
 const MARKET_WATCH_PROVIDER_OPTIONS = [
@@ -136,6 +143,9 @@ export function Scanner() {
   const [providerValidation, setProviderValidation] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<string | null>(null)
+  const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
+  const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
+  const quickScanFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadScanner = useCallback(async () => {
     setLoading(true)
@@ -411,6 +421,39 @@ export function Scanner() {
     return 'No output'
   }
 
+  const launchQuickScan = () => {
+    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768
+    const hasCameraAPI =
+      typeof navigator !== 'undefined' &&
+      typeof navigator.mediaDevices !== 'undefined' &&
+      typeof navigator.mediaDevices.getUserMedia === 'function'
+
+    if (isMobileViewport) {
+      setQuickScanStatus('Mobile quick capture ready')
+    } else if (hasCameraAPI) {
+      setQuickScanStatus('Desktop quick capture ready (camera available + upload fallback)')
+    } else {
+      setQuickScanStatus('Desktop quick capture ready (upload fallback active)')
+    }
+    quickScanFileInputRef.current?.click()
+  }
+
+  const queueQuickScanFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    const entry: QuickScanQueueItem = {
+      id: `${Date.now()}-${file.name}`,
+      fileName: file.name,
+      queuedAtISO: new Date().toISOString(),
+      status: 'Queued',
+    }
+    setQuickScanQueue((current) => [entry, ...current].slice(0, 12))
+    setQuickScanStatus(`Quick Scan queued: ${file.name}`)
+    event.target.value = ''
+  }
+
   return (
     <>
       <Header fixed>
@@ -503,7 +546,24 @@ export function Scanner() {
             Create Query Set
           </Button>
         </section>
-        <section className='flex items-center gap-2'>
+        <section className='flex flex-wrap items-center gap-2'>
+          <Button
+            type='button'
+            size='sm'
+            data-testid='card-scanner-quick-scan'
+            onClick={launchQuickScan}
+          >
+            Quick Scan
+          </Button>
+          <input
+            ref={quickScanFileInputRef}
+            type='file'
+            accept='image/*'
+            capture='environment'
+            className='hidden'
+            data-testid='card-scanner-quick-file-input'
+            onChange={queueQuickScanFile}
+          />
           <Button
             type='button'
             size='sm'
@@ -522,6 +582,29 @@ export function Scanner() {
           >
             Table
           </Button>
+          {quickScanStatus ? (
+            <span className='text-xs text-muted-foreground' data-testid='card-scanner-quick-scan-status'>
+              {quickScanStatus}
+            </span>
+          ) : (
+            <span className='text-xs text-muted-foreground'>
+              Quick Scan supports one-tap mobile capture and desktop upload fallback.
+            </span>
+          )}
+        </section>
+        <section className='rounded-md border p-2 text-xs' data-testid='card-scanner-queue'>
+          {quickScanQueue.length === 0 ? (
+            <p className='text-muted-foreground'>No quick-scan items queued.</p>
+          ) : (
+            <ul className='space-y-1'>
+              {quickScanQueue.map((item) => (
+                <li key={item.id} className='flex flex-wrap items-center justify-between gap-2'>
+                  <span>{item.fileName}</span>
+                  <span className='text-muted-foreground'>{item.status}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
         {providerValidation ? (
           <p className='text-sm text-destructive' data-testid='market-watch-provider-validation'>
