@@ -1,0 +1,7 @@
+.antfarm/workflows/cabinet/metadata.json
+openspec/specs/general/README.md
+openspec/specs/general/antfarm-workflow-portability/spec.md
+openspec/traceability.md
+tests/antfarm_workflow_contract_test.go
+openspec/migration/auto-wave-122-summary.md
+openspec/migration/auto-wave-122-changed-files.txt

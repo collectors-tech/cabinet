@@ -422,3 +422,7 @@
 | AUTH-PERM-003 | openspec/specs/general/auth-permissions-test-matrix/spec.md | seeded multi-plan account matrix | `TestAuthPermissionsPlanCapabilityMatrix` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
 | AUTH-PERM-004 | openspec/specs/general/auth-permissions-test-matrix/spec.md | UI/API gate validation by account level | `TestAuthPermissionsFeatureGateMatrixFromCloudPlan` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
 | AUTH-PERM-005 | openspec/specs/general/auth-permissions-test-matrix/spec.md | effective permissions diagnostics | `TestAuthPermissionsEffectiveDiagnosticsContract` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
+
+| ANTFARM-WORKFLOW-001 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/workflow.yml` local path portability contract | `TestAntFarmCabinetWorkflowIsRepoLocalAndSelfContained` (`tests/antfarm_workflow_contract_test.go`) | implemented |
+| ANTFARM-WORKFLOW-002 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/metadata.json` workflow identity contract | `TestAntFarmCabinetMetadataMatchesLocalWorkflow` (`tests/antfarm_workflow_contract_test.go`) | implemented |
+| ANTFARM-WORKFLOW-003 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/agents/*` role profile completeness contract | `TestAntFarmCabinetWorkflowRoleProfilesAreComplete` (`tests/antfarm_workflow_contract_test.go`) | implemented |
