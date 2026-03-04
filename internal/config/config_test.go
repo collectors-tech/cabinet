@@ -110,6 +110,23 @@ func TestLoadLANBindModeUsesWildcardHostByDefault(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultDataDirUsesExecutableLocalPathFirst(t *testing.T) {
+	t.Setenv("CABINET_ADDR", "")
+	t.Setenv("CABINET_DATA_DIR", "")
+	t.Setenv("CABINET_DB_PATH", "")
+	exeDir := filepath.Join(t.TempDir(), "cabinet-bin")
+	if err := os.MkdirAll(exeDir, 0o755); err != nil {
+		t.Fatalf("mkdir exe dir: %v", err)
+	}
+	t.Setenv("CABINET_EXE_DIR", exeDir)
+
+	cfg := Load()
+	want := filepath.Join(exeDir, "data")
+	if cfg.DataDir != want {
+		t.Fatalf("expected exe-local data dir %q, got %q", want, cfg.DataDir)
+	}
+}
+
 func containsAll(in string, parts []string) bool {
 	for _, part := range parts {
 		if !strings.Contains(strings.ToLower(in), strings.ToLower(part)) {

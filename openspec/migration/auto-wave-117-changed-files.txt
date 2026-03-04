@@ -1,0 +1,8 @@
+internal/config/config.go
+internal/config/config_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-exe-local-data-dir-summary.md
+openspec/migration/runtime-exe-local-data-dir-changed-files.txt
+openspec/migration/auto-wave-117-summary.md
+openspec/migration/auto-wave-117-changed-files.txt

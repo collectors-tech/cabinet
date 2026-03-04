@@ -102,3 +102,13 @@ After CLI/env resolution and before service run, startup output MUST emit a dete
 - **WHEN** startup output is emitted
 - **THEN** output MUST include one line prefixed `CABINET_EFFECTIVE_CONFIG`
 - **AND** the line MUST include `addr`, `host`, `port`, `data_dir`, `profile`, `auth_mode`, `base_url`, `allow_parallel`, and `log_level`
+
+### Requirement RUNTIME-CORE-010: Default runtime data directory SHALL resolve to executable-local path first
+When no explicit data directory override is provided, runtime MUST resolve data storage under executable-local path before falling back to global/shared OS locations.
+
+#### Scenario: Fresh runtime launch without explicit data-dir override
+- **GIVEN** Cabinet launches without `CABINET_DATA_DIR` and without CLI `--data-dir`
+- **WHEN** startup resolves storage paths
+- **THEN** default data directory MUST resolve to `<exe_dir>/data`
+- **AND** diagnostics/startup output MUST surface resolved data directory
+- **AND** explicit `--data-dir`/`CABINET_DATA_DIR` override MUST continue to take precedence

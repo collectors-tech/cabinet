@@ -188,6 +188,10 @@ func parseBoolEnv(v string) bool {
 }
 
 func defaultDataDir() string {
+	if resolved := resolveExecutableLocalDataDir(); strings.TrimSpace(resolved) != "" {
+		return resolved
+	}
+
 	if runtime.GOOS == "windows" {
 		base := os.Getenv("LOCALAPPDATA")
 		if base == "" {
@@ -201,4 +205,15 @@ func defaultDataDir() string {
 		return ".cabinet"
 	}
 	return filepath.Join(home, ".cabinet")
+}
+
+func resolveExecutableLocalDataDir() string {
+	if override := strings.TrimSpace(os.Getenv("CABINET_EXE_DIR")); override != "" {
+		return filepath.Join(override, "data")
+	}
+	exePath, err := os.Executable()
+	if err != nil || strings.TrimSpace(exePath) == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exePath), "data")
 }

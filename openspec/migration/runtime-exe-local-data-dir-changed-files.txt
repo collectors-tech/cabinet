@@ -1,0 +1,5 @@
+internal/config/config.go
+internal/config/config_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-exe-local-data-dir-summary.md
