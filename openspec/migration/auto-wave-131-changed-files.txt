@@ -1,0 +1,6 @@
+internal/app/app.go
+internal/app/pokemon_milestone_badges_test.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-131-summary.md
+openspec/migration/auto-wave-131-changed-files.txt

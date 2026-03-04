@@ -1034,6 +1034,79 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/integrations/pokemon/milestone-evaluate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "method_not_allowed"})
+			return
+		}
+		var req struct {
+			SetID      string `json:"set_id"`
+			TotalCount int    `json:"total_count"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_json"})
+			return
+		}
+		setID := strings.TrimSpace(strings.ToLower(req.SetID))
+		if setID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "missing_set_id"})
+			return
+		}
+		totalCount := req.TotalCount
+		if totalCount < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_total_count"})
+			return
+		}
+		items, err := collectionRepo.ListItems(r.Context())
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+			items, err = collectionRepo.ListItemsByProfile(r.Context(), active.ID)
+		}
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "failed_to_list_items"})
+			return
+		}
+		ownedCount := 0
+		for _, item := range items {
+			if strings.TrimSpace(strings.ToLower(item.Status)) == "deleted" || strings.TrimSpace(strings.ToLower(item.Status)) == "recycle" {
+				continue
+			}
+			itemSet, _, _ := parsePokemonSetProgressTags(item.Tags)
+			if itemSet == setID {
+				ownedCount++
+			}
+		}
+		if totalCount <= 0 {
+			totalCount = ownedCount
+		}
+		completionPercent := 0.0
+		if totalCount > 0 {
+			completionPercent = roundTo2((float64(ownedCount) / float64(totalCount)) * 100)
+		}
+		thresholds := []int{25, 50, 75, 100}
+		events := make([]map[string]any, 0, len(thresholds))
+		triggeredAt := time.Now().UTC().Format(time.RFC3339)
+		for _, threshold := range thresholds {
+			if completionPercent >= float64(threshold) {
+				events = append(events, map[string]any{
+					"milestone_id":  fmt.Sprintf("milestone-%d", threshold),
+					"threshold_pct": threshold,
+					"triggered_at":  triggeredAt,
+				})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"set_id":             setID,
+			"owned_count":        ownedCount,
+			"completion_percent": completionPercent,
+			"events":             events,
+		})
+	})
 	mux.HandleFunc("/api/integrations/pokemon/price-alerts", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {

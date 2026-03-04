@@ -129,13 +129,22 @@ Cabinet SHALL provide deterministic share-ready progress snapshots for selected 
 - **WHEN** client requests `GET /api/integrations/pokemon/progress-snapshot`
 - **THEN** API MUST return `400` with error envelope `{"error":"missing_set_id"}`
 
-### Requirement POKEMON-COMP-009: Gamified milestones SHOULD support deterministic badge triggers
-Cabinet SHOULD expose milestone trigger rules for onboarding and collection progression badges.
+### Requirement POKEMON-COMP-009: Gamified milestones MUST support deterministic badge triggers
+Cabinet SHALL expose deterministic milestone trigger evaluation for collector progression badges.
 
-#### Scenario: Milestone badge trigger
-- **GIVEN** user crosses configured milestone threshold
-- **WHEN** milestone evaluation runs
-- **THEN** badge event SHOULD be emitted with milestone id and timestamp
+#### Scenario: Milestone badge trigger evaluation
+- **GIVEN** active profile has canonical inventory tagged with `set:<id>`
+- **AND** request includes `set_id` and `total_count`
+- **WHEN** client calls `POST /api/integrations/pokemon/milestone-evaluate` with `{"set_id":"<id>","total_count":<n>}`
+- **THEN** API MUST return `200` with fields `set_id`, `owned_count`, `completion_percent`, and `events`
+- **AND** each entry in `events` MUST include `milestone_id`, `threshold_pct`, and `triggered_at`
+- **AND** milestone ids MUST be deterministic using thresholds `25`, `50`, `75`, and `100` (`milestone-25`, `milestone-50`, `milestone-75`, `milestone-100`)
+- **AND** only thresholds less than or equal to `completion_percent` MUST be returned
+
+#### Scenario: Missing set identifier is rejected deterministically
+- **GIVEN** request omits `set_id`
+- **WHEN** client calls `POST /api/integrations/pokemon/milestone-evaluate`
+- **THEN** API MUST return `400` with error envelope `{"error":"missing_set_id"}`
 
 ### Requirement POKEMON-COMP-010: Goal bundle presets SHOULD support collector objective workflows
 Cabinet SHOULD provide objective presets that create grouped filters/actions for common collector goals.
