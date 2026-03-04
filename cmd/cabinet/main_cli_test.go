@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestResolveBrowserLaunch(t *testing.T) {
 	t.Parallel()
@@ -59,5 +62,26 @@ func TestResolveBrowserLaunch(t *testing.T) {
 				t.Fatalf("resolveBrowserLaunch(...).DisableNote empty=%v, want note=%v", got.DisableNote == "", tc.wantNote)
 			}
 		})
+	}
+}
+
+func TestRuntimeAttachLogLineIncludesURLPIDAndResolvedPort(t *testing.T) {
+	t.Parallel()
+
+	line := runtimeAttachLogLine(runtimeAttachDecision{
+		Attach: true,
+		URL:    "http://127.0.0.1:19090",
+		PID:    4242,
+	}, "C:/cabinet/data")
+	for _, token := range []string{
+		"CABINET_RUNTIME_ATTACH",
+		"url=http://127.0.0.1:19090",
+		"pid=4242",
+		"data_dir=C:/cabinet/data",
+		"resolved_port=19090",
+	} {
+		if !strings.Contains(line, token) {
+			t.Fatalf("expected token %q in line %q", token, line)
+		}
 	}
 }

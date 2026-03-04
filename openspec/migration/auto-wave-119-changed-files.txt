@@ -1,0 +1,7 @@
+cmd/cabinet/main.go
+cmd/cabinet/main_cli_test.go
+cmd/cabinet/runtime_attach.go
+cmd/cabinet/runtime_attach_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-119-summary.md

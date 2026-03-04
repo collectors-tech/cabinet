@@ -122,3 +122,18 @@ When requested runtime port is already in use, startup MUST bind deterministical
 - **THEN** runtime MUST attempt fallback ports (`requested_port+1 ... requested_port+N`) and bind first available address
 - **AND** startup output MUST preserve `requested_port` and report actual `resolved_port`
 - **AND** resolved `/healthz` endpoint on fallback URL MUST return `200`
+
+### Requirement RUNTIME-CORE-012: Runtime startup SHALL use PID-only lock file and attach to running endpoint from setup metadata
+Runtime startup MUST keep `cabinet.pid` as PID-only lock signal and MUST resolve attach/open target from runtime setup metadata (`cabinet.json`) instead of storing endpoint metadata in PID file.
+
+#### Scenario: Attach to already-running runtime in same data directory
+- **GIVEN** startup data directory contains `cabinet.pid` with alive PID and `cabinet.json` runtime metadata (`runtime.resolvedUrl` or `meta.currentUrl`) for a healthy endpoint
+- **WHEN** Cabinet launcher starts again for the same data directory
+- **THEN** startup MUST attach to existing runtime URL and open/attach browser target without starting a second server process
+- **AND** runtime logs MUST emit deterministic attach line containing `url`, `pid`, `data_dir`, and resolved port
+
+#### Scenario: Stale PID recovery
+- **GIVEN** startup data directory contains stale `cabinet.pid` or metadata endpoint health check fails
+- **WHEN** attach resolution executes
+- **THEN** runtime MUST remove stale PID file and continue with fresh startup
+- **AND** no attach/open action MUST occur for stale lock state

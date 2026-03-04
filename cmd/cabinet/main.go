@@ -35,14 +35,30 @@ func main() {
 	applyStartupOverrides(overrides)
 
 	cfg := config.Load()
+	openBrowserValue, openBrowserSet := os.LookupEnv("CABINET_OPEN_BROWSER")
 	log.Printf("%s", buildEffectiveStartupConfigLine(cfg))
+	browserLaunch := resolveBrowserLaunch(os.Args[1:], openBrowserValue, openBrowserSet)
+	attachDecision, attachErr := resolveRunningRuntimeAttach(cfg.DataDir, isRuntimeProcessAlive, isRuntimeEndpointHealthy)
+	if attachErr != nil {
+		log.Printf("runtime attach check skipped: %v", attachErr)
+	} else if attachDecision.Attach {
+		log.Printf("%s", runtimeAttachLogLine(attachDecision, cfg.DataDir))
+		if !browserLaunch.Enabled {
+			if strings.TrimSpace(browserLaunch.DisableNote) != "" {
+				log.Printf("%s", browserLaunch.DisableNote)
+			}
+			return
+		}
+		if err := launcher.OpenBrowser(attachDecision.URL); err != nil {
+			log.Printf("browser attach launch skipped: %v", err)
+		}
+		return
+	}
 
 	a, err := app.New(cfg)
 	if err != nil {
 		log.Fatalf("startup failed: %v", err)
 	}
-	openBrowserValue, openBrowserSet := os.LookupEnv("CABINET_OPEN_BROWSER")
-	browserLaunch := resolveBrowserLaunch(os.Args[1:], openBrowserValue, openBrowserSet)
 	if !browserLaunch.Enabled && strings.TrimSpace(browserLaunch.DisableNote) != "" {
 		log.Printf("%s", browserLaunch.DisableNote)
 	}
