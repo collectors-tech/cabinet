@@ -66,6 +66,19 @@ Integrations screen SHALL derive provider cards exclusively from `GET /api/provi
 ### Requirement UI-SCREEN-INTEGRATIONS-007: Provider detail panel SHALL expose health and action controls
 Integrations screen SHALL expose provider health and actionable controls from detail panel.
 
+### Requirement UI-SCREEN-INTEGRATIONS-009: Integrations UI SHALL display provider API family support mapping
+Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algolia/custom) in cards and detail panel.
+
+#### Scenario: API family badges in provider cards
+- **GIVEN** provider registry payload includes `api_family` mapping
+- **WHEN** integrations cards render
+- **THEN** each card MUST show API family badge/label derived from registry field
+
+#### Scenario: API support details in provider panel
+- **GIVEN** provider detail panel is opened
+- **WHEN** panel renders support metadata
+- **THEN** panel MUST show `api_family` and `api_support_profile` values with deterministic formatting
+
 #### Scenario: Open provider detail panel from card
 - **GIVEN** provider card is visible on integrations route
 - **WHEN** user clicks `Connect` or `Edit`
@@ -93,3 +106,5 @@ Integrations screen SHALL expose provider health and actionable controls from de
 | UC-INT-UI-07 | Provider detail actions visible | Validate/Sync/Save controls appear with health/last-run | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
 | UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-type-selector-filters-list` |
 | UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-rows-cards-toggle` |
+| UC-INT-UI-10 | Provider API family badge display | Cards show API family labels from registry mapping | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-provider-api-family-badges` |
+| UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-provider-api-support-detail` |

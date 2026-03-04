@@ -13,6 +13,8 @@ Cabinet SHALL maintain a provider registry with stable provider IDs, display met
   - `display_name` (string)
   - `base_domain` (string)
   - `integration_mode` (`official_api|web_ingestion|program_api`)
+  - `api_family` (`woo_store_api|boost_shopify|algolia|custom`)
+  - `api_support_profile` (string, e.g. `v1`, `store_v1`, `boost_v2`)
   - `auth_mode` (`none|oauth|api_key|hybrid`)
   - `capabilities.search` (boolean)
   - `capabilities.stock_observation` (boolean)
@@ -73,6 +75,15 @@ Cabinet SHALL expose provider health and last-run metadata required by integrati
 
 ### Requirement INTEGRATION-023: Provider registry MUST expose setup guidance and credential-presence signal
 Cabinet SHALL expose registry fields needed for safe credential UX and guided setup.
+
+### Requirement INTEGRATION-024: Provider registry MUST expose provider-to-API-spec support mapping
+Registry entries SHALL declare API family mapping so Integrations UI can display how each provider is implemented (Woo/Boost/Algolia/custom).
+
+#### Scenario: Provider API mapping available in registry
+- **GIVEN** integrations UI requests provider registry
+- **WHEN** payload is returned
+- **THEN** each provider entry MUST include `api_family` and `api_support_profile`
+- **AND** mapping MUST correspond to published provider API family contracts
 
 #### Scenario: Registry payload supports credential-safe integrations UI
 - **GIVEN** active profile settings and provider registry are loaded
