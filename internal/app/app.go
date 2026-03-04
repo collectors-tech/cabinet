@@ -1222,6 +1222,161 @@ func New(cfg config.Config) (*App, error) {
 			"share_visibility": "private",
 		})
 	})
+	mux.HandleFunc("/api/integrations/pokemon/graded-overrides", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+			if itemID == "" {
+				http.Error(w, `{"error":"missing_item_id"}`, http.StatusBadRequest)
+				return
+			}
+			active, _ := profiles.GetActiveProfile(r.Context())
+			profileID := strings.TrimSpace(active.ID)
+			var payload struct {
+				ItemID                  string  `json:"item_id"`
+				Grader                  string  `json:"grader"`
+				GradeNumeric            float64 `json:"grade_numeric"`
+				CertNumber              string  `json:"cert_number"`
+				SlabState               string  `json:"slab_state"`
+				ValuationOverrideAmount float64 `json:"valuation_override_amount"`
+				Currency                string  `json:"currency"`
+				SourceNote              string  `json:"source_note"`
+				OverriddenAt            string  `json:"overridden_at"`
+			}
+			err := conn.QueryRowContext(r.Context(), `
+				SELECT item_id, grader, grade_numeric, cert_number, slab_state, valuation_override_amount, currency, source_note, overridden_at
+				FROM pokemon_graded_overrides
+				WHERE item_id = ? AND (? = '' OR profile_id = ?)
+			`, itemID, profileID, profileID).Scan(
+				&payload.ItemID,
+				&payload.Grader,
+				&payload.GradeNumeric,
+				&payload.CertNumber,
+				&payload.SlabState,
+				&payload.ValuationOverrideAmount,
+				&payload.Currency,
+				&payload.SourceNote,
+				&payload.OverriddenAt,
+			)
+			if err == sql.ErrNoRows {
+				http.Error(w, `{"error":"graded_override_not_found"}`, http.StatusNotFound)
+				return
+			}
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_load_graded_override"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(payload)
+		case http.MethodPost:
+			var req struct {
+				ItemID                  string  `json:"item_id"`
+				Grader                  string  `json:"grader"`
+				GradeNumeric            float64 `json:"grade_numeric"`
+				CertNumber              string  `json:"cert_number"`
+				SlabState               string  `json:"slab_state"`
+				ValuationOverrideAmount float64 `json:"valuation_override_amount"`
+				Currency                string  `json:"currency"`
+				SourceNote              string  `json:"source_note"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			itemID := strings.TrimSpace(req.ItemID)
+			if itemID == "" {
+				http.Error(w, `{"error":"missing_item_id"}`, http.StatusBadRequest)
+				return
+			}
+			active, _ := profiles.GetActiveProfile(r.Context())
+			profileID := strings.TrimSpace(active.ID)
+			var itemExists int
+			if err := conn.QueryRowContext(r.Context(), `
+				SELECT COUNT(1)
+				FROM canonical_items
+				WHERE id = ? AND (? = '' OR profile_id = ?)
+			`, itemID, profileID, profileID).Scan(&itemExists); err != nil || itemExists == 0 {
+				http.Error(w, `{"error":"item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			grader := strings.TrimSpace(req.Grader)
+			certNumber := strings.TrimSpace(req.CertNumber)
+			slabState := strings.TrimSpace(req.SlabState)
+			currency := strings.ToUpper(strings.TrimSpace(req.Currency))
+			if currency == "" {
+				currency = "AUD"
+			}
+			sourceNote := strings.TrimSpace(req.SourceNote)
+			_, err := conn.ExecContext(r.Context(), `
+				INSERT INTO pokemon_graded_overrides(
+					item_id, profile_id, grader, grade_numeric, cert_number, slab_state, valuation_override_amount, currency, source_note, overridden_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+				ON CONFLICT(item_id) DO UPDATE SET
+					profile_id = excluded.profile_id,
+					grader = excluded.grader,
+					grade_numeric = excluded.grade_numeric,
+					cert_number = excluded.cert_number,
+					slab_state = excluded.slab_state,
+					valuation_override_amount = excluded.valuation_override_amount,
+					currency = excluded.currency,
+					source_note = excluded.source_note,
+					overridden_at = CURRENT_TIMESTAMP,
+					updated_at = CURRENT_TIMESTAMP
+			`, itemID, profileID, grader, req.GradeNumeric, certNumber, slabState, req.ValuationOverrideAmount, currency, sourceNote)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_save_graded_override"}`, http.StatusBadRequest)
+				return
+			}
+
+			slabbed := 0
+			if slabState != "" && !strings.EqualFold(slabState, "unslabbed") {
+				slabbed = 1
+			}
+			_, _ = conn.ExecContext(r.Context(), `
+				UPDATE canonical_items
+				SET grading_status = 'graded',
+					grader = ?,
+					grade_numeric = ?,
+					slabbed = ?,
+					updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND (? = '' OR profile_id = ?)
+			`, grader, req.GradeNumeric, slabbed, itemID, profileID, profileID)
+
+			var payload struct {
+				ItemID                  string  `json:"item_id"`
+				Grader                  string  `json:"grader"`
+				GradeNumeric            float64 `json:"grade_numeric"`
+				CertNumber              string  `json:"cert_number"`
+				SlabState               string  `json:"slab_state"`
+				ValuationOverrideAmount float64 `json:"valuation_override_amount"`
+				Currency                string  `json:"currency"`
+				SourceNote              string  `json:"source_note"`
+				OverriddenAt            string  `json:"overridden_at"`
+			}
+			err = conn.QueryRowContext(r.Context(), `
+				SELECT item_id, grader, grade_numeric, cert_number, slab_state, valuation_override_amount, currency, source_note, overridden_at
+				FROM pokemon_graded_overrides
+				WHERE item_id = ? AND (? = '' OR profile_id = ?)
+			`, itemID, profileID, profileID).Scan(
+				&payload.ItemID,
+				&payload.Grader,
+				&payload.GradeNumeric,
+				&payload.CertNumber,
+				&payload.SlabState,
+				&payload.ValuationOverrideAmount,
+				&payload.Currency,
+				&payload.SourceNote,
+				&payload.OverriddenAt,
+			)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_load_graded_override"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(payload)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {

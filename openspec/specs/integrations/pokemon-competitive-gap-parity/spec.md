@@ -101,9 +101,16 @@ Cabinet SHALL support reusable list templates for wishlist, trade binder, and wa
 Cabinet SHALL support graded-card metadata fields (grader, grade, cert number, slab state) and optional valuation override with source attribution.
 
 #### Scenario: Graded card valuation override
-- **GIVEN** graded instance has grader + numeric grade + certificate data
-- **WHEN** user saves valuation override
-- **THEN** record MUST persist override amount, currency, timestamp, and override source note
+- **GIVEN** canonical item exists and belongs to active profile
+- **WHEN** client calls `POST /api/integrations/pokemon/graded-overrides` with `item_id`, `grader`, `grade_numeric`, `cert_number`, `slab_state`, `valuation_override_amount`, `currency`, and `source_note`
+- **THEN** API MUST return `200` and persist override metadata with deterministic `overridden_at` timestamp
+- **AND** subsequent `GET /api/integrations/pokemon/graded-overrides?item_id=<id>` MUST return fields `item_id`, `grader`, `grade_numeric`, `cert_number`, `slab_state`, `valuation_override_amount`, `currency`, `source_note`, and `overridden_at`
+- **AND** canonical item grading fields MUST be updated to reflect graded slab metadata (`grading_status`, `grader`, `grade_numeric`, `slabbed`)
+
+#### Scenario: Missing item id is rejected deterministically
+- **GIVEN** request omits `item_id`
+- **WHEN** client calls `POST /api/integrations/pokemon/graded-overrides`
+- **THEN** API MUST return `400` with error envelope `{"error":"missing_item_id"}`
 
 ### Requirement POKEMON-COMP-008: Social sharing hooks SHOULD support progress snapshots
 Cabinet SHOULD provide share-ready progress snapshots for selected lists/sets.

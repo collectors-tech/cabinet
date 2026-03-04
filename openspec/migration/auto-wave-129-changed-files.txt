@@ -1,0 +1,7 @@
+internal/app/app.go
+internal/app/pokemon_graded_overrides_api_test.go
+internal/db/sqlite.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-129-summary.md
+openspec/migration/auto-wave-129-changed-files.txt

@@ -351,6 +351,21 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_events_entity_timeline ON audit_events(entity_type, entity_id, created_at);`,
+		`CREATE TABLE IF NOT EXISTS pokemon_graded_overrides (
+			item_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			grader TEXT NOT NULL DEFAULT '',
+			grade_numeric REAL NOT NULL DEFAULT 0,
+			cert_number TEXT NOT NULL DEFAULT '',
+			slab_state TEXT NOT NULL DEFAULT '',
+			valuation_override_amount REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'AUD',
+			source_note TEXT NOT NULL DEFAULT '',
+			overridden_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_pokemon_graded_overrides_profile_id ON pokemon_graded_overrides(profile_id);`,
 	}
 
 	for _, q := range queries {
