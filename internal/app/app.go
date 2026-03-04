@@ -1132,6 +1132,96 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 	})
+	type pokemonListTemplate struct {
+		ID             string         `json:"id"`
+		Label          string         `json:"label"`
+		DefaultFields  []string       `json:"default_fields"`
+		DefaultFilters map[string]any `json:"default_filters"`
+		SortOrder      []string       `json:"sort_order"`
+	}
+	pokemonTemplates := map[string]pokemonListTemplate{
+		"wishlist": {
+			ID:            "wishlist",
+			Label:         "Wishlist",
+			DefaultFields: []string{"thumbnail", "part_number", "title", "priority", "target_price"},
+			DefaultFilters: map[string]any{
+				"status": []string{"wishlist"},
+			},
+			SortOrder: []string{"priority:desc", "updated_at:desc"},
+		},
+		"trade_binder": {
+			ID:            "trade_binder",
+			Label:         "Trade Binder",
+			DefaultFields: []string{"thumbnail", "part_number", "title", "grader", "grade_numeric", "collector_classification"},
+			DefaultFilters: map[string]any{
+				"status":         []string{"active"},
+				"grading_status": []string{"graded"},
+			},
+			SortOrder: []string{"grade_numeric:desc", "updated_at:desc"},
+		},
+		"watchlist": {
+			ID:            "watchlist",
+			Label:         "Watchlist",
+			DefaultFields: []string{"thumbnail", "part_number", "title", "status", "priority"},
+			DefaultFilters: map[string]any{
+				"status": []string{"discovered", "wishlist"},
+			},
+			SortOrder: []string{"updated_at:desc"},
+		},
+	}
+	mux.HandleFunc("/api/integrations/pokemon/list-templates", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		templates := make([]pokemonListTemplate, 0, len(pokemonTemplates))
+		for _, template := range pokemonTemplates {
+			templates = append(templates, template)
+		}
+		sort.Slice(templates, func(i, j int) bool {
+			return templates[i].ID < templates[j].ID
+		})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"templates": templates,
+		})
+	})
+	mux.HandleFunc("/api/integrations/pokemon/list-templates/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			TemplateID string `json:"template_id"`
+			ListName   string `json:"list_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		templateID := strings.TrimSpace(strings.ToLower(req.TemplateID))
+		template, ok := pokemonTemplates[templateID]
+		if !ok {
+			http.Error(w, `{"error":"invalid_template_id"}`, http.StatusBadRequest)
+			return
+		}
+		listName := strings.TrimSpace(req.ListName)
+		if listName == "" {
+			listName = template.Label
+		}
+		listID := fmt.Sprintf("%s-%d", templateID, time.Now().UnixNano())
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"list_id":          listID,
+			"list_name":        listName,
+			"template_id":      template.ID,
+			"default_fields":   template.DefaultFields,
+			"default_filters":  template.DefaultFilters,
+			"sort_order":       template.SortOrder,
+			"share_visibility": "private",
+		})
+	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {

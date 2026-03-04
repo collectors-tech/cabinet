@@ -1,0 +1,7 @@
+internal/app/app.go
+internal/app/pokemon_dynamic_list_templates_api_test.go
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+openspec/traceability.md
+ui.web/cypress/e2e/integrations/pokemon-competitive-gap-parity/dynamic-list-templates.cy.ts
+openspec/migration/auto-wave-128-summary.md
+openspec/migration/auto-wave-128-changed-files.txt

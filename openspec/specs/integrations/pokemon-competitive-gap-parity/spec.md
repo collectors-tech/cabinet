@@ -80,9 +80,22 @@ Cabinet SHALL support deterministic visibility controls (`private`, `shared_link
 Cabinet SHALL support reusable list templates for wishlist, trade binder, and watchlist views with saved filters and sort order.
 
 #### Scenario: Template-based list creation
+- **GIVEN** template catalog includes `wishlist`, `trade_binder`, and `watchlist`
+- **WHEN** client requests `GET /api/integrations/pokemon/list-templates`
+- **THEN** API MUST return `200` with `templates` array
+- **AND** each template MUST expose `id`, `label`, `default_fields`, `default_filters`, and `sort_order`
+
+#### Scenario: Apply template to create dynamic list definition
 - **GIVEN** user selects `trade_binder` template
-- **WHEN** list is created
-- **THEN** list MUST preload template fields, default filters, and saved sort order
+- **WHEN** client calls `POST /api/integrations/pokemon/list-templates/apply` with `{"template_id":"trade_binder","list_name":"Trade Binder"}`
+- **THEN** API MUST return `201` with payload fields `list_id`, `list_name`, `template_id`, `default_fields`, `default_filters`, and `sort_order`
+- **AND** `default_fields` MUST include grading-centric fields (`grader`, `grade_numeric`, `collector_classification`)
+- **AND** `default_filters` MUST include at least one deterministic status filter
+
+#### Scenario: Unknown template is rejected deterministically
+- **GIVEN** `template_id` is not a known template
+- **WHEN** client calls `POST /api/integrations/pokemon/list-templates/apply`
+- **THEN** API MUST return `400` with `{"error":"invalid_template_id"}`
 
 ### Requirement POKEMON-COMP-007: Graded workflow MUST capture slab metadata with valuation overrides
 Cabinet SHALL support graded-card metadata fields (grader, grade, cert number, slab state) and optional valuation override with source attribution.
