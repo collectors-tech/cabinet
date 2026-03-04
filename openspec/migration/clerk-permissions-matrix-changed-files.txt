@@ -1,0 +1,5 @@
+internal/app/app.go
+internal/app/auth_permissions_matrix_api_test.go
+openspec/specs/general/auth-permissions-test-matrix/spec.md
+openspec/traceability.md
+openspec/migration/clerk-permissions-matrix-summary.md

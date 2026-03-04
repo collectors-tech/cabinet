@@ -3431,6 +3431,13 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		email := strings.TrimSpace(claimAsString(claims, "email"))
+		role := strings.TrimSpace(strings.ToLower(claimAsString(claims, "role")))
+		if role == "" {
+			role = strings.TrimSpace(strings.ToLower(claimAsString(claims, "cabinet_role")))
+		}
+		if role == "" {
+			role = "member"
+		}
 		plan := strings.TrimSpace(strings.ToLower(claimAsString(claims, "plan")))
 		entitlementSource := "billing"
 		if plan == "" {
@@ -3446,13 +3453,45 @@ func New(cfg config.Config) (*App, error) {
 		}
 		features := entitlementFeaturesFromPlan(plan)
 		_ = persistCloudPlan(r.Context(), conn, userID, plan)
+		_ = persistCloudSessionContext(r.Context(), conn, userID, email, role)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"provider":           "clerk",
 			"user_id":            userID,
 			"email":              email,
+			"role":               role,
 			"plan":               plan,
 			"features":           features,
 			"entitlement_source": entitlementSource,
+		})
+	})
+	mux.HandleFunc("/api/auth/cloud/session/effective", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		plan, _ := currentCloudPlanFromState(r.Context(), conn)
+		if strings.TrimSpace(plan) == "" {
+			plan = "free"
+		}
+		userID := ""
+		email := ""
+		role := ""
+		if conn != nil {
+			userID, _ = appStateValue(r.Context(), conn, "cloud.user_id")
+			email, _ = appStateValue(r.Context(), conn, "cloud.email")
+			role, _ = appStateValue(r.Context(), conn, "cloud.role")
+		}
+		if strings.TrimSpace(role) == "" {
+			role = "member"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "clerk",
+			"user_id":  strings.TrimSpace(userID),
+			"email":    strings.TrimSpace(email),
+			"role":     strings.TrimSpace(strings.ToLower(role)),
+			"plan":     strings.TrimSpace(strings.ToLower(plan)),
+			"features": entitlementFeaturesFromPlan(plan),
 		})
 	})
 	mux.HandleFunc("/api/auth/cloud/clerk/webhook", func(w http.ResponseWriter, r *http.Request) {
@@ -4516,6 +4555,35 @@ func persistCloudPlan(ctx context.Context, conn *sql.DB, userID, plan string) er
 	return nil
 }
 
+func persistCloudSessionContext(ctx context.Context, conn *sql.DB, userID, email, role string) error {
+	updates := map[string]string{
+		"cloud.user_id": strings.TrimSpace(userID),
+		"cloud.email":   strings.TrimSpace(strings.ToLower(email)),
+		"cloud.role":    strings.TrimSpace(strings.ToLower(role)),
+	}
+	for k, v := range updates {
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO app_state(key, value, updated_at)
+			VALUES(?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+		`, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appStateValue(ctx context.Context, conn *sql.DB, key string) (string, bool) {
+	if conn == nil {
+		return "", false
+	}
+	var value string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, strings.TrimSpace(key)).Scan(&value); err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(value), true
+}
+
 func currentCloudPlanFromState(ctx context.Context, conn *sql.DB) (string, bool) {
 	var plan string
 	if err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = 'cloud.plan'`).Scan(&plan); err != nil {
@@ -4530,7 +4598,7 @@ func currentCloudPlanFromState(ctx context.Context, conn *sql.DB) (string, bool)
 
 func hasProFeatureAccess(ctx context.Context, conn *sql.DB, licenseSvc *licensing.Service, cfg config.Config, profileID, feature string) bool {
 	if cloudPlan, ok := currentCloudPlanFromState(ctx, conn); ok {
-		return cloudPlan == "pro"
+		return cloudPlanHasFeature(cloudPlan, feature)
 	}
 	if strings.TrimSpace(cfg.UpdatePublicKey) != "" {
 		allowed, _ := licenseSvc.Allow(ctx, profileID, feature)
@@ -4691,11 +4759,28 @@ func firstProviderInScope(scope []string) string {
 
 func entitlementFeaturesFromPlan(plan string) []string {
 	switch strings.TrimSpace(strings.ToLower(plan)) {
-	case "pro", "paid", "plus":
+	case "teams", "pro", "paid", "plus":
 		return []string{"collection_core", "ai_assist", "price_tracking", "scanner_automation"}
+	case "creator":
+		return []string{"collection_core", "ai_assist", "scanner_automation"}
+	case "mvp":
+		return []string{"collection_core"}
 	default:
 		return []string{"collection_core"}
 	}
+}
+
+func cloudPlanHasFeature(plan, feature string) bool {
+	target := strings.TrimSpace(strings.ToLower(feature))
+	if target == "" {
+		return true
+	}
+	for _, entry := range entitlementFeaturesFromPlan(plan) {
+		if strings.TrimSpace(strings.ToLower(entry)) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {

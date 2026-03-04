@@ -398,8 +398,8 @@
 
 | PROVIDER-WORKFLOW-FULL-ASSESSMENT | openspec/migration/provider-workflow-full-assessment.md | cross-provider workflow completeness | planned: execution issues per provider + stage evidence | partial |
 
-| AUTH-PERM-001 | openspec/specs/general/auth-permissions-test-matrix/spec.md | Clerk auth mode initialization | planned: auth integration contract tests | partial |
-| AUTH-PERM-002 | openspec/specs/general/auth-permissions-test-matrix/spec.md | plan->capability resolution | planned: entitlement mapping tests | partial |
-| AUTH-PERM-003 | openspec/specs/general/auth-permissions-test-matrix/spec.md | seeded multi-plan account matrix | planned: seed + login matrix tests | partial |
-| AUTH-PERM-004 | openspec/specs/general/auth-permissions-test-matrix/spec.md | UI/API gate validation by account level | planned: cypress plan-matrix + api gate suites | partial |
-| AUTH-PERM-005 | openspec/specs/general/auth-permissions-test-matrix/spec.md | effective permissions diagnostics | planned: diagnostics endpoint/ui tests | partial |
+| AUTH-PERM-001 | openspec/specs/general/auth-permissions-test-matrix/spec.md | Clerk auth mode initialization | `TestAuthProviderOptionsReturnsIdentityModeAndProviders`, `TestAuthProviderOptionsRespectsAppStateOverrides` (`internal/app/auth_provider_options_api_test.go`) | implemented |
+| AUTH-PERM-002 | openspec/specs/general/auth-permissions-test-matrix/spec.md | plan->capability resolution | `TestAuthPermissionsPlanCapabilityMatrix` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
+| AUTH-PERM-003 | openspec/specs/general/auth-permissions-test-matrix/spec.md | seeded multi-plan account matrix | `TestAuthPermissionsPlanCapabilityMatrix` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
+| AUTH-PERM-004 | openspec/specs/general/auth-permissions-test-matrix/spec.md | UI/API gate validation by account level | `TestAuthPermissionsFeatureGateMatrixFromCloudPlan` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
+| AUTH-PERM-005 | openspec/specs/general/auth-permissions-test-matrix/spec.md | effective permissions diagnostics | `TestAuthPermissionsEffectiveDiagnosticsContract` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |

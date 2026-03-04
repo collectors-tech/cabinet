@@ -14,9 +14,12 @@ Runtime SHALL support explicit Clerk integration mode and deterministic fallback
 Plan/subscription levels MUST resolve to explicit capability permissions consumed by API and UI gates.
 
 #### Scenario: Resolve plan capabilities
-- **GIVEN** account has active plan (`MVP`, `Creator`, `Teams`)
-- **WHEN** permissions are resolved
-- **THEN** runtime MUST return deterministic capability set used by feature gates
+- **GIVEN** cloud bootstrap is called with a Clerk token containing `plan` (`mvp`, `creator`, or `teams`)
+- **WHEN** `/api/auth/cloud/session/bootstrap` succeeds with `200`
+- **THEN** response `features` MUST resolve deterministically as:
+  - `mvp` -> `["collection_core"]`
+  - `creator` -> `["collection_core","ai_assist","scanner_automation"]`
+  - `teams` -> `["collection_core","ai_assist","price_tracking","scanner_automation"]`
 
 ### Requirement AUTH-PERM-003: Test environment SHALL support multiple seeded accounts across plan levels
 System SHALL provide seeded test accounts for each plan/permission level to validate feature gating end-to-end.
@@ -30,14 +33,15 @@ System SHALL provide seeded test accounts for each plan/permission level to vali
 All plan-gated features MUST be verified using matrix accounts through UI and API assertions.
 
 #### Scenario: Validate gated feature by account level
-- **GIVEN** feature is plan-gated
-- **WHEN** tests run with each seeded account
-- **THEN** ineligible accounts MUST be blocked deterministically and eligible accounts MUST succeed
+- **GIVEN** `cloud.plan` is resolved for the active session
+- **WHEN** feature gate checks run for `scanner_automation`, `price_tracking`, and `ai_assist`
+- **THEN** ineligible plans MUST be denied and eligible plans MUST be allowed deterministically
+- **AND** API gates MUST evaluate the same capability mapping used by UI permission payloads
 
 ### Requirement AUTH-PERM-005: Permissions audit diagnostics SHALL expose effective role/plan/capabilities for current session
 Runtime SHALL expose inspectable effective permissions to simplify debugging and release checks.
 
 #### Scenario: Inspect effective permissions
-- **GIVEN** authenticated session exists
-- **WHEN** diagnostics endpoint/panel is opened
-- **THEN** effective role, plan, and capability set MUST be viewable for current user/session
+- **GIVEN** cloud session bootstrap has persisted current user auth state
+- **WHEN** `/api/auth/cloud/session/effective` is requested with `GET`
+- **THEN** response `200` MUST include `provider`, `user_id`, `role`, `plan`, and `features`
