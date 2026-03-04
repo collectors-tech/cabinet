@@ -1,0 +1,6 @@
+cmd/cabinet/main.go
+cmd/cabinet/startup_flags.go
+cmd/cabinet/startup_flags_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-cli-startup-summary.md

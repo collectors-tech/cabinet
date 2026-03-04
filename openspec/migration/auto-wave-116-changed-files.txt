@@ -1,0 +1,9 @@
+cmd/cabinet/main.go
+cmd/cabinet/startup_flags.go
+cmd/cabinet/startup_flags_test.go
+openspec/specs/general/runtime-core/spec.md
+openspec/traceability.md
+openspec/migration/runtime-cli-startup-summary.md
+openspec/migration/runtime-cli-startup-changed-files.txt
+openspec/migration/auto-wave-116-summary.md
+openspec/migration/auto-wave-116-changed-files.txt

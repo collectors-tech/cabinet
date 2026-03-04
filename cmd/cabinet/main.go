@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -20,7 +22,21 @@ type browserLaunchSettings struct {
 }
 
 func main() {
+	overrides, err := parseStartupArgs(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
+		log.Fatalf("invalid startup args: %v", err)
+	}
+	if err := validateStartupOverrides(overrides); err != nil {
+		log.Fatalf("invalid startup args: %v", err)
+	}
+	applyStartupOverrides(overrides)
+
 	cfg := config.Load()
+	log.Printf("%s", buildEffectiveStartupConfigLine(cfg))
+
 	a, err := app.New(cfg)
 	if err != nil {
 		log.Fatalf("startup failed: %v", err)

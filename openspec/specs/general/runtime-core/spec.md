@@ -83,3 +83,22 @@ Runtime CLI SHALL provide a flag to suppress browser auto-open on startup (e.g.,
 - **THEN** output MUST include exactly one line prefixed `CABINET_STARTUP_JSON `
 - **AND** the JSON payload MUST include keys `url`, `requested_addr`, `resolved_addr`, `instance`, `profile`, `data_dir`, `requested_port`, and `resolved_port`
 - **AND** existing key-value startup line `CABINET_STARTUP ...` MUST remain present for backwards compatibility
+
+### Requirement RUNTIME-CORE-008: Runtime CLI SHALL support deterministic startup parameter overrides
+Runtime startup SHALL support explicit CLI overrides for address/port, data path, profile context, auth mode, base URL, parallel guard, and log level.
+
+#### Scenario: Launch with explicit startup overrides
+- **GIVEN** operator launches Cabinet with `--port`, `--data-dir`, `--profile` (or `--instance-name`), `--auth-mode`, `--base-url`, `--allow-parallel`, and `--log-level`
+- **WHEN** startup arguments are parsed before runtime config load
+- **THEN** CLI values MUST override process/env defaults deterministically for that process launch
+- **AND** runtime MUST reject invalid values with actionable startup validation errors
+- **AND** conflicting `--port` and `--listen` values MUST fail fast with deterministic conflict error
+
+### Requirement RUNTIME-CORE-009: Runtime startup SHALL print effective resolved configuration snapshot
+After CLI/env resolution and before service run, startup output MUST emit a deterministic effective configuration line.
+
+#### Scenario: Effective startup config line
+- **GIVEN** runtime has resolved startup configuration from CLI + environment
+- **WHEN** startup output is emitted
+- **THEN** output MUST include one line prefixed `CABINET_EFFECTIVE_CONFIG`
+- **AND** the line MUST include `addr`, `host`, `port`, `data_dir`, `profile`, `auth_mode`, `base_url`, `allow_parallel`, and `log_level`
