@@ -1427,6 +1427,162 @@ func New(cfg config.Config) (*App, error) {
 			"warning":       warning,
 		})
 	})
+	mux.HandleFunc("/api/providers/doofinder/discovery", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			AssetURL          string   `json:"asset_url"`
+			FallbackAssetURLs []string `json:"fallback_asset_urls"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.AssetURL = strings.TrimSpace(req.AssetURL)
+		if req.AssetURL == "" {
+			http.Error(w, `{"error":"missing_asset_url"}`, http.StatusBadRequest)
+			return
+		}
+		config, fallbackUsed, warning, err := discoverDoofinderConfig(
+			r.Context(),
+			conn,
+			http.DefaultClient,
+			req.AssetURL,
+			req.FallbackAssetURLs,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_discover_doofinder_config"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"config":        config,
+			"fallback_used": fallbackUsed,
+			"warning":       warning,
+		})
+	})
+	mux.HandleFunc("/api/providers/doofinder/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID      string   `json:"query_set_id"`
+			AssetURL        string   `json:"asset_url"`
+			SearchURL       string   `json:"search_url"`
+			ProviderDomain  string   `json:"provider_domain"`
+			FallbackAssetURLs []string `json:"fallback_asset_urls"`
+			Page            int      `json:"page"`
+			PageSize        int      `json:"page_size"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		providerDomain := strings.TrimSpace(strings.ToLower(req.ProviderDomain))
+		if providerDomain == "" {
+			providerDomain = "mrtoys.com.au"
+		}
+		baseURL := strings.TrimSpace(settings["integration."+strings.ReplaceAll(providerDomain, ".", "-")+".base_url"])
+		if baseURL == "" {
+			baseURL = "https://" + providerDomain
+		}
+		discoveryAssetURL := strings.TrimSpace(req.AssetURL)
+		if discoveryAssetURL == "" {
+			discoveryAssetURL = strings.TrimRight(baseURL, "/") + "/assets/doofinder.js"
+		}
+		config, fallbackUsed, warning, err := discoverDoofinderConfig(
+			r.Context(),
+			conn,
+			http.DefaultClient,
+			discoveryAssetURL,
+			req.FallbackAssetURLs,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_discover_doofinder_config"}`, http.StatusBadRequest)
+			return
+		}
+		page := req.Page
+		if page <= 0 {
+			page = 1
+		}
+		pageSize := req.PageSize
+		if pageSize <= 0 {
+			pageSize = 24
+		}
+		if pageSize > 50 {
+			pageSize = 50
+		}
+		query := strings.TrimSpace(qs.Name)
+		if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+			query = strings.TrimSpace(qs.Keywords[0])
+		}
+		if query == "" {
+			query = "collectible"
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = strings.TrimRight(config.APIBase, "/") + "/5/search"
+		}
+		candidates, total, runErr := runDoofinderSearch(
+			r.Context(),
+			http.DefaultClient,
+			searchURL,
+			query,
+			page,
+			pageSize,
+			config.HashID,
+			baseURL,
+			providerDomain,
+		)
+		if runErr != nil {
+			http.Error(w, `{"error":"failed_to_run_doofinder_provider"}`, http.StatusBadRequest)
+			return
+		}
+		if fallbackUsed && strings.TrimSpace(warning) == "" {
+			warning = "doofinder discovery used cached config"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id":    qs.ID,
+			"page":            page,
+			"page_size":       pageSize,
+			"total":           total,
+			"candidate_count": len(candidates),
+			"candidates":      candidates,
+			"warning":         warning,
+			"discovery": map[string]any{
+				"store":   config.Store,
+				"zone":    config.Zone,
+				"hashid":  config.HashID,
+				"source":  config.Source,
+				"api_base": config.APIBase,
+			},
+		})
+	})
 	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4565,6 +4721,16 @@ type frontlineAlgoliaConfig struct {
 	DiscoveredAt  string   `json:"discovered_at"`
 }
 
+type doofinderConfig struct {
+	Store        string `json:"store"`
+	Zone         string `json:"zone"`
+	HashID       string `json:"hashid"`
+	APIBase      string `json:"api_base"`
+	Source       string `json:"source"`
+	ConfigHash   string `json:"config_hash"`
+	DiscoveredAt string `json:"discovered_at"`
+}
+
 type hobbytechBoostConfig struct {
 	Shop         string `json:"shop"`
 	SID          string `json:"sid"`
@@ -4594,6 +4760,7 @@ type bonzaSearchResult struct {
 
 const frontlineAlgoliaCacheKey = "frontline_algolia_last_known_good"
 const hobbytechBoostCacheKey = "hobbytech_boost_last_known_good"
+const doofinderCacheKey = "doofinder_last_known_good"
 
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -4745,6 +4912,210 @@ func readFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB) (frontlineAlgo
 		return frontlineAlgoliaConfig{}, fmt.Errorf("frontline cache config is incomplete")
 	}
 	return config, nil
+}
+
+func discoverDoofinderConfig(
+	ctx context.Context,
+	conn *sql.DB,
+	client *http.Client,
+	assetURL string,
+	fallbackAssetURLs []string,
+) (doofinderConfig, bool, string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	candidates := make([]string, 0, len(fallbackAssetURLs)+1)
+	candidates = append(candidates, strings.TrimSpace(assetURL))
+	for _, value := range fallbackAssetURLs {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			candidates = append(candidates, trimmed)
+		}
+	}
+	var discoveryErr error
+	for _, urlValue := range candidates {
+		if urlValue == "" {
+			continue
+		}
+		script, fetchErr := fetchProviderAsset(ctx, client, urlValue)
+		if fetchErr != nil {
+			discoveryErr = fetchErr
+			continue
+		}
+		config, parseErr := parseDoofinderConfig(script, urlValue)
+		if parseErr != nil {
+			discoveryErr = parseErr
+			continue
+		}
+		if persistErr := persistDoofinderCache(ctx, conn, config); persistErr != nil {
+			discoveryErr = persistErr
+			continue
+		}
+		return config, false, "", nil
+	}
+	cached, cacheErr := readDoofinderCache(ctx, conn)
+	if cacheErr == nil {
+		warning := "doofinder discovery fallback used cached config"
+		if discoveryErr != nil {
+			warning = fmt.Sprintf("%s: %s", warning, strings.TrimSpace(discoveryErr.Error()))
+		}
+		return cached, true, warning, nil
+	}
+	if discoveryErr != nil {
+		return doofinderConfig{}, false, "", discoveryErr
+	}
+	return doofinderConfig{}, false, "", cacheErr
+}
+
+func parseDoofinderConfig(script, source string) (doofinderConfig, error) {
+	patterns := map[string]*regexp.Regexp{
+		"store":  regexp.MustCompile(`(?i)store\s*[:=]\s*['"]([^'"]+)['"]`),
+		"zone":   regexp.MustCompile(`(?i)zone\s*[:=]\s*['"]([^'"]+)['"]`),
+		"hashid": regexp.MustCompile(`(?i)hashid\s*[:=]\s*['"]([^'"]+)['"]`),
+	}
+	values := map[string]string{}
+	for key, pattern := range patterns {
+		match := pattern.FindStringSubmatch(script)
+		if len(match) >= 2 {
+			values[key] = strings.TrimSpace(match[1])
+		}
+	}
+	if values["store"] == "" || values["zone"] == "" || values["hashid"] == "" {
+		return doofinderConfig{}, fmt.Errorf("missing doofinder store/zone/hashid config")
+	}
+	apiBase := "https://" + values["zone"] + "-search.doofinder.com"
+	hash := sha256.Sum256([]byte(script))
+	return doofinderConfig{
+		Store:        values["store"],
+		Zone:         values["zone"],
+		HashID:       values["hashid"],
+		APIBase:      apiBase,
+		Source:       strings.TrimSpace(source),
+		ConfigHash:   fmt.Sprintf("%x", hash[:]),
+		DiscoveredAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func persistDoofinderCache(ctx context.Context, conn *sql.DB, config doofinderConfig) error {
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal doofinder cache config: %w", err)
+	}
+	_, execErr := conn.ExecContext(ctx, `
+		INSERT INTO app_state(key, value, updated_at)
+		VALUES(?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, doofinderCacheKey, string(raw))
+	if execErr != nil {
+		return fmt.Errorf("persist doofinder cache config: %w", execErr)
+	}
+	return nil
+}
+
+func readDoofinderCache(ctx context.Context, conn *sql.DB) (doofinderConfig, error) {
+	var raw string
+	err := conn.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key = ?`, doofinderCacheKey).Scan(&raw)
+	if err != nil {
+		return doofinderConfig{}, fmt.Errorf("load doofinder cache config: %w", err)
+	}
+	var config doofinderConfig
+	if decodeErr := json.Unmarshal([]byte(raw), &config); decodeErr != nil {
+		return doofinderConfig{}, fmt.Errorf("decode doofinder cache config: %w", decodeErr)
+	}
+	if strings.TrimSpace(config.Store) == "" || strings.TrimSpace(config.Zone) == "" || strings.TrimSpace(config.HashID) == "" {
+		return doofinderConfig{}, fmt.Errorf("doofinder cache config is incomplete")
+	}
+	return config, nil
+}
+
+func runDoofinderSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL, query string,
+	page, pageSize int,
+	hashID, baseURL, providerDomain string,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, 0, fmt.Errorf("doofinder search url is required")
+	}
+	searchParsed, err := url.Parse(strings.TrimSpace(searchURL))
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse doofinder search url: %w", err)
+	}
+	params := searchParsed.Query()
+	params.Set("hashid", strings.TrimSpace(hashID))
+	params.Set("query", strings.TrimSpace(query))
+	params.Set("page", strconv.Itoa(page))
+	params.Set("rpp", strconv.Itoa(pageSize))
+	searchParsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchParsed.String(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("build doofinder search request: %w", err)
+	}
+	origin := strings.TrimSpace(baseURL)
+	if origin == "" {
+		origin = "https://" + strings.TrimSpace(providerDomain)
+	}
+	origin = strings.TrimRight(origin, "/")
+	if strings.TrimSpace(providerDomain) == "" {
+		if parsed, parseErr := url.Parse(origin); parseErr == nil {
+			providerDomain = parsed.Hostname()
+		}
+	}
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Referer", origin+"/")
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech/cabinet)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("run doofinder search request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("doofinder search returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, 0, fmt.Errorf("read doofinder search response: %w", err)
+	}
+	var payload struct {
+		Results []map[string]any `json:"results"`
+		Meta    struct {
+			Total int `json:"total"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, 0, fmt.Errorf("decode doofinder response: %w", err)
+	}
+	if providerDomain == "" {
+		providerDomain = "unknown"
+	}
+	candidates := make([]map[string]any, 0, len(payload.Results))
+	for _, result := range payload.Results {
+		id := strings.TrimSpace(fmt.Sprintf("%v", result["id"]))
+		if id == "" {
+			continue
+		}
+		title := strings.TrimSpace(fmt.Sprintf("%v", result["title"]))
+		link := strings.TrimSpace(fmt.Sprintf("%v", result["link"]))
+		price := strings.TrimSpace(fmt.Sprintf("%v", result["price"]))
+		image := strings.TrimSpace(fmt.Sprintf("%v", result["image_link"]))
+		candidates = append(candidates, map[string]any{
+			"listing_id": "doofinder-" + id,
+			"title":      title,
+			"url":        link,
+			"price":      price,
+			"image":      image,
+			"source":     providerDomain,
+			"seller":     providerDomain,
+		})
+	}
+	return candidates, payload.Meta.Total, nil
 }
 
 func discoverHobbytechBoostConfig(

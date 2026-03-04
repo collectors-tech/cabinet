@@ -1,0 +1,4 @@
+internal/app/app.go
+internal/app/provider_doofinder_api_test.go
+openspec/traceability.md
+openspec/migration/auto-wave-97-summary.md
