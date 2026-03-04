@@ -1,0 +1,4 @@
+openspec/traceability.md
+tests/live_ui_audit_traceability_contract_test.go
+openspec/migration/auto-wave-110-summary.md
+openspec/migration/auto-wave-110-changed-files.txt

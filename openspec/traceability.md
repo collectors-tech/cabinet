@@ -361,6 +361,17 @@
 | UI-SCREEN-SETTINGS-APPEARANCE-002 | openspec/specs/settings/appearance/spec.md | language selector options (English, Chinese, Japanese) | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (switch language to zh/ja and persist) | partial |
 | UI-SCREEN-SETTINGS-APPEARANCE-003 | openspec/specs/settings/appearance/spec.md | i18n fallback behavior | planned: ui.web/cypress/e2e/settings/ui-screen-settings/spec.cy.ts (missing key falls back without layout break) | partial |
 
+## Live UI Audit Issue Bindings (New-User Wave 2026-03-03)
+
+- `#239` -> `UI-SCREEN-CHAT-COPILOT-006` (`openspec/specs/chats/ui-screen-chat-copilot/spec.md`)
+- `#258` -> `UI-SCREEN-SETTINGS-005`, `UI-SCREEN-USERS-005` (active-profile bootstrap/fallback behavior across modules)
+- `#259` -> `UI-SCREEN-WISHLIST-007`, `UI-SCREEN-INVENTORY-ITEMS-001` (inventory/wishlist semantic data model parity)
+- `#260` -> `UI-SCREEN-SETTINGS-004` (settings storage nav parity)
+- `#261` -> `UI-SCREEN-SETTINGS-006`, `UI-SCREEN-SETTINGS-007` (operations/billing nav parity)
+- `#262` -> `UI-SCREEN-USERS-005` (users list fallback when profile context missing)
+- `#263` -> `UI-SCREEN-ONBOARDING-AUTH-010` (sign-in create-account CTA path)
+- `#264` -> `UI-SCREEN-SETTINGS-005` (settings controls blocked during `active_profile_404`)
+
 | UI-SCREEN-USERS-004 | openspec/specs/users/ui-screen-users/spec.md | users add/invite entitlement gating by plan | planned: ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts (Add User visible for Creator/Teams only) | partial |
 
 | UI-SCREEN-DISCOVERIES-004 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | discoveries missing-item detection vs local inventory | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (provider results classified missing vs owned) | partial |
