@@ -19,6 +19,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `onboarding-starter-data` -> `openspec/specs/general/onboarding-starter-data/spec.md`
 - `runtime-config-env` -> `openspec/specs/general/runtime-config-env/spec.md`
 - `runtime-core` -> `openspec/specs/general/runtime-core/spec.md`
+- `runtime-multi-instance` -> `openspec/specs/general/runtime-multi-instance/spec.md`
 - `runtime-network-lan` -> `openspec/specs/general/runtime-network-lan/spec.md`
 - `security` -> `openspec/specs/general/security/spec.md`
 - `ui-data-contract-parity` -> `openspec/specs/general/ui-data-contract-parity/spec.md`
@@ -59,6 +60,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `ONBOARDING-STARTER-DATA-*`
 - `RUNTIME-CONFIG-ENV-*`
 - `RUNTIME-CORE-*`
+- `RUNTIME-MULTI-*`
 - `RUNTIME-NETWORK-LAN-*`
 - `SECURITY-*`
 - `UI-DATA-CONTRACT-PARITY-*`

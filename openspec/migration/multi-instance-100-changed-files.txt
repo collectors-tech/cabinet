@@ -1,0 +1,6 @@
+scripts/runtime/multi-instance-stress.ps1
+openspec/specs/general/runtime-multi-instance/spec.md
+openspec/specs/general/README.md
+openspec/traceability.md
+openspec/migration/multi-instance-100-report.md
+openspec/migration/multi-instance-100-summary.md
