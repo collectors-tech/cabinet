@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -957,6 +958,129 @@ func New(cfg config.Config) (*App, error) {
 				"language": languageBreakdown,
 				"graded":  gradedBreakdown,
 			},
+		})
+	})
+	mux.HandleFunc("/api/integrations/pokemon/price-alerts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		setID := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("set_id")))
+		if setID == "" {
+			http.Error(w, `{"error":"missing_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		dropThreshold := 10.0
+		if raw := strings.TrimSpace(r.URL.Query().Get("drop_threshold_pct")); raw != "" {
+			value, err := strconv.ParseFloat(raw, 64)
+			if err != nil || value < 0 {
+				http.Error(w, `{"error":"invalid_drop_threshold_pct"}`, http.StatusBadRequest)
+				return
+			}
+			dropThreshold = value
+		}
+
+		items, err := collectionRepo.ListItems(r.Context())
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+			items, err = collectionRepo.ListItemsByProfile(r.Context(), active.ID)
+		}
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_items"}`, http.StatusInternalServerError)
+			return
+		}
+
+		type sourceStats struct {
+			Source   string  `json:"source"`
+			MinPrice float64 `json:"min_price"`
+			Median   float64 `json:"median_price"`
+			Latest   float64 `json:"latest_price"`
+		}
+		type alertRecord struct {
+			ItemID       string  `json:"item_id"`
+			Source       string  `json:"source"`
+			ChangePct    float64 `json:"change_pct"`
+			ThresholdPct float64 `json:"threshold_pct"`
+		}
+
+		sourceLatestPrices := map[string][]float64{}
+		alerts := make([]alertRecord, 0)
+		consideredItemIDs := make([]string, 0)
+		for _, item := range items {
+			if strings.TrimSpace(strings.ToLower(item.Status)) == "deleted" || strings.TrimSpace(strings.ToLower(item.Status)) == "recycle" {
+				continue
+			}
+			itemSet, _, _ := parsePokemonSetProgressTags(item.Tags)
+			if itemSet != setID {
+				continue
+			}
+			consideredItemIDs = append(consideredItemIDs, item.ID)
+			history, historyErr := pricingSvc.History(r.Context(), item.ID)
+			if historyErr != nil {
+				http.Error(w, `{"error":"failed_to_load_price_history"}`, http.StatusInternalServerError)
+				return
+			}
+			bySource := map[string][]pricing.Snapshot{}
+			for _, snap := range history {
+				source := strings.TrimSpace(strings.ToLower(snap.Source))
+				if source == "" {
+					source = "unknown"
+				}
+				bySource[source] = append(bySource[source], snap)
+			}
+			for source, snapshots := range bySource {
+				if len(snapshots) == 0 {
+					continue
+				}
+				latest := snapshots[len(snapshots)-1]
+				sourceLatestPrices[source] = append(sourceLatestPrices[source], latest.LatestPrice)
+				if len(snapshots) < 2 {
+					continue
+				}
+				previous := snapshots[len(snapshots)-2]
+				if previous.LatestPrice <= 0 {
+					continue
+				}
+				changePct := roundTo2(((latest.LatestPrice - previous.LatestPrice) / previous.LatestPrice) * 100)
+				if changePct <= -dropThreshold {
+					alerts = append(alerts, alertRecord{
+						ItemID:       item.ID,
+						Source:       source,
+						ChangePct:    changePct,
+						ThresholdPct: dropThreshold,
+					})
+				}
+			}
+		}
+
+		sources := make([]sourceStats, 0, len(sourceLatestPrices))
+		for source, prices := range sourceLatestPrices {
+			if len(prices) == 0 {
+				continue
+			}
+			sort.Float64s(prices)
+			sources = append(sources, sourceStats{
+				Source:   source,
+				MinPrice: roundTo2(prices[0]),
+				Median:   roundTo2(prices[len(prices)/2]),
+				Latest:   roundTo2(prices[len(prices)-1]),
+			})
+		}
+		sort.Slice(sources, func(i, j int) bool {
+			return sources[i].Source < sources[j].Source
+		})
+		sort.Slice(alerts, func(i, j int) bool {
+			if alerts[i].ItemID == alerts[j].ItemID {
+				return alerts[i].Source < alerts[j].Source
+			}
+			return alerts[i].ItemID < alerts[j].ItemID
+		})
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"set_id": setID,
+			"items":  consideredItemIDs,
+			"sources": sources,
+			"alerts": alerts,
 		})
 	})
 	mux.HandleFunc("/api/items", func(w http.ResponseWriter, r *http.Request) {

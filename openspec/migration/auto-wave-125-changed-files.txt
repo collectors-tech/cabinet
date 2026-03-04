@@ -1,0 +1,6 @@
+openspec/specs/integrations/pokemon-competitive-gap-parity/spec.md
+internal/app/pokemon_price_alerts_api_test.go
+internal/app/app.go
+openspec/traceability.md
+openspec/migration/auto-wave-125-summary.md
+openspec/migration/auto-wave-125-changed-files.txt

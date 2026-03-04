@@ -31,9 +31,17 @@ Cabinet SHALL model set completion across card variants, language, and graded st
 Cabinet SHALL aggregate pricing snapshots across configured providers and expose trend deltas with threshold alert rules.
 
 #### Scenario: Trend and alert evaluation
-- **GIVEN** tracked items have daily pricing snapshots from at least two sources
-- **WHEN** alert evaluation runs
-- **THEN** system MUST persist min/median/latest by source and emit alert events for crossed thresholds
+- **GIVEN** tracked Pokemon items in the same set have daily snapshots across at least two sources
+- **WHEN** client requests `GET /api/integrations/pokemon/price-alerts?set_id=<id>&drop_threshold_pct=<n>`
+- **THEN** API MUST return `200` with fields `set_id`, `sources`, `items`, and `alerts`
+- **AND** each `sources` entry MUST include `source`, `min_price`, `median_price`, and `latest_price`
+- **AND** each alert in `alerts` MUST include `item_id`, `source`, `change_pct`, and `threshold_pct`
+- **AND** only crossed-threshold records (negative change at or beyond threshold) MUST appear in `alerts`
+
+#### Scenario: Missing set identifier is rejected deterministically
+- **GIVEN** request omits `set_id`
+- **WHEN** client requests `GET /api/integrations/pokemon/price-alerts`
+- **THEN** API MUST return `400` with error envelope field `error` set to `missing_set_id`
 
 ### Requirement POKEMON-COMP-004: Discovery handoff MUST preserve marketplace decision metadata
 Cabinet SHALL include seller reputation, stock signal, and direct buy-link context when handing candidates to wishlist/discovery actions.
