@@ -1,0 +1,5 @@
+openspec/specs/general/ui-foundation-interactions/spec.md
+openspec/traceability.md
+openspec/migration/auto-wave-136-summary.md
+openspec/migration/auto-wave-136-changed-files.txt
+ui.web/cypress/e2e/general/ui-foundation-interactions/spec.cy.ts

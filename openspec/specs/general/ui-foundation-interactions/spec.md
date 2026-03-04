@@ -6,22 +6,24 @@ Define cross-screen row, selection, and modal interaction behavior.
 Cabinet SHALL open details on non-interactive row click and reserve thumbnail click for media lightbox where applicable.
 
 #### Scenario: Row click details
-- **GIVEN** data row contains non-interactive surface area
-- **WHEN** user clicks row surface
-- **THEN** details drawer or modal SHALL open for selected record
+- **GIVEN** inventory rows are rendered in rows view and a non-interactive row cell is focused
+- **WHEN** user single-clicks the row surface cell
+- **THEN** row details modal/drawer SHALL open for the selected record
 
 #### Scenario: Thumbnail lightbox
-- **GIVEN** media-bearing row contains thumbnail
-- **WHEN** user clicks thumbnail
-- **THEN** lightbox SHALL open with previous/next navigation in active result order
+- **GIVEN** inventory photos are available for the selected record
+- **WHEN** user clicks a photo thumbnail
+- **THEN** fullscreen lightbox SHALL open
+- **AND** previous/next actions SHALL navigate within the active photo result order
 
 ### Requirement UI-FOUNDATION-INTERACTIONS-002: Bulk mode SHALL be explicit and checkbox-driven
 Cabinet SHALL use checkbox controls for selection and SHALL not overload row-click with selection toggles.
 
 #### Scenario: Bulk selection mode
-- **GIVEN** row checkboxes are visible
-- **WHEN** user selects one or more checkboxes
-- **THEN** selection state SHALL update and bulk action controls SHALL appear
+- **GIVEN** a rows view exposes a checkbox column
+- **WHEN** user selects one or more row checkboxes
+- **THEN** bulk actions toolbar SHALL appear with selected count
+- **AND** row cell click SHALL NOT implicitly toggle checkbox selection state
 
 ### Requirement UI-FOUNDATION-INTERACTIONS-003: Row and media interactions SHALL support drawer/lightbox/modal model
 Cabinet SHALL use split interaction behavior across inventory and integrations workspaces.

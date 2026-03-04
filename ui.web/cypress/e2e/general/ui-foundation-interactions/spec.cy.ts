@@ -43,6 +43,84 @@ describe('ui-foundation-interactions', () => {
     cy.contains('Error').should('not.exist')
   })
 
+  it('UI-FOUNDATION-INTERACTIONS-001 keeps row-click detail behavior and thumbnail lightbox behavior distinct', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-interactions-1',
+            part_number: 'PN-INTERACT-1',
+            title: 'Interaction Inventory Row',
+            status: 'todo',
+            category: 'feature',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-interactions-1/photos', {
+      statusCode: 200,
+      body: {
+        photos: [
+          { id: 'photo-1', filename: 'photo-1.jpg', is_primary: true },
+          { id: 'photo-2', filename: 'photo-2.jpg', is_primary: false },
+        ],
+      },
+    }).as('photos')
+    cy.intercept('GET', '/api/items/item-interactions-1/photos/*/file*', {
+      statusCode: 200,
+      headers: { 'content-type': 'image/jpeg' },
+      body: 'test-image',
+    })
+
+    signInWithRedirect('/inventory/', 'e2e-interactions-001@example.com')
+    cy.wait('@items')
+    cy.wait('@photos')
+
+    cy.get('button[aria-label="Switch to rows view"]').click()
+    cy.get('tbody tr').eq(0).find('td').eq(1).click()
+    cy.get('[data-testid="row-details-modal"]').should('be.visible')
+    cy.get('body').type('{esc}')
+
+    cy.get('[data-testid="inventory-photo-thumb"]').first().click()
+    cy.get('[data-testid="inventory-photo-fullscreen"]').should('be.visible')
+    cy.get('[data-testid="inventory-photo-next"]').click()
+    cy.get('[data-testid="inventory-photo-prev"]').click()
+    cy.get('[data-testid="inventory-photo-fullscreen-close"]').click()
+    cy.get('[data-testid="inventory-photo-fullscreen"]').should('not.exist')
+  })
+
+  it('UI-FOUNDATION-INTERACTIONS-002 uses explicit checkbox selection for bulk mode', () => {
+    cy.intercept('GET', '/api/users*', {
+      statusCode: 200,
+      body: {
+        users: [
+          {
+            id: 'user-interactions-2',
+            firstName: 'Bulk',
+            lastName: 'Mode',
+            username: 'bulk.mode',
+            email: 'bulk.mode@example.com',
+            phoneCode: '+61',
+            phoneNumber: '123456789',
+            role: 'view',
+            status: 'active',
+          },
+        ],
+      },
+    }).as('users')
+
+    signInWithRedirect('/users/', 'e2e-interactions-002@example.com')
+    cy.wait('@users')
+
+    cy.get('tbody tr').first().find('[role="checkbox"]').first().click({ force: true })
+    cy.get('[role="toolbar"]').should('be.visible')
+    cy.contains('[role="toolbar"]', 'selected').should('be.visible')
+
+    cy.get('tbody tr').eq(0).find('td').eq(1).click()
+    cy.get('[role="toolbar"]').should('be.visible')
+  })
+
   it('UI-FOUNDATION-INTERACTIONS-003 keeps selection context stable for users and integrations rows', () => {
     cy.intercept('GET', '/api/users*', {
       statusCode: 200,
