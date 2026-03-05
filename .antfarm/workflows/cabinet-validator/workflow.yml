@@ -51,7 +51,10 @@ steps:
 
       For failures/spec gaps:
       - create focused GitHub issues via gh issue create
-      - include required fields: Screen/route, Control/field type, Expected intent, Actual result, Repro, Evidence, Spec ID/SPEC_GAP, Suggested fix path
+      - issue body MUST use `.antfarm/templates/ISSUE_BODY_TEMPLATE.md` sections (no one-liners)
+      - mandatory sections: Outcome, Why, Scope, OpenSpec binding, Acceptance criteria, Test evidence required, Deliverables, Failure Detail
+      - include Failure Detail fields: Screen/route, Control/field type, Expected intent, Actual result, Repro, Evidence, Spec ID/SPEC_GAP, Suggested fix path
+      - if any section is missing, treat issue as invalid and return STATUS: retry
 
       Reply with:
       STATUS: done
