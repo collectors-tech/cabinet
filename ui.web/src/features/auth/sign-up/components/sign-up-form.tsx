@@ -2,8 +2,12 @@ import { useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useNavigate } from '@tanstack/react-router'
+import { Loader2, UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
 import { IconFacebook, IconGithub } from '@/assets/brand-icons'
-import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
+import { sleep, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -38,6 +42,8 @@ export function SignUpForm({
   ...props
 }: React.HTMLAttributes<HTMLFormElement>) {
   const [isLoading, setIsLoading] = useState(false)
+  const navigate = useNavigate()
+  const { auth } = useAuthStore()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -50,12 +56,30 @@ export function SignUpForm({
 
   function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)
-    // eslint-disable-next-line no-console
-    console.log(data)
 
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 3000)
+    toast.promise(sleep(1200), {
+      loading: 'Creating account...',
+      success: () => {
+        setIsLoading(false)
+
+        const mockUser = {
+          accountNo: 'ACC001',
+          email: data.email,
+          role: ['user'],
+          exp: Date.now() + 24 * 60 * 60 * 1000,
+        }
+
+        auth.setUser(mockUser)
+        auth.setAccessToken('mock-signup-access-token')
+        navigate({ to: '/', replace: true })
+
+        return `Account created for ${data.email}`
+      },
+      error: () => {
+        setIsLoading(false)
+        return 'Unable to create account. Please retry.'
+      },
+    })
   }
 
   return (
@@ -104,7 +128,8 @@ export function SignUpForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        <Button className='mt-2' type='submit' disabled={isLoading}>
+          {isLoading ? <Loader2 className='animate-spin' /> : <UserPlus />}
           Create Account
         </Button>
 
