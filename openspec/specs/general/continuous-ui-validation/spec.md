@@ -29,6 +29,30 @@ Failed actions MUST be linked to focused issues with expected vs actual behavior
 ### Requirement CONT-UI-CAB-004: Scheduled validation SHALL maintain OpenSpec + commit traceability
 Validation outputs MUST update OpenSpec/traceability when contracts are missing and commit changes with issue-linked messages.
 
+### Requirement CONT-UI-CAB-005: Validation SHALL verify control intent outcomes, not click-only execution
+For each interactive control, validation SHALL assert intended outcome (route/state/data/error feedback), not merely that click action executed.
+
+#### Scenario: Intent verification per control
+- **GIVEN** an interactive control is discovered in audit inventory
+- **WHEN** control is executed
+- **THEN** run output MUST record expected vs actual intent outcome and pass/fail status
+
+### Requirement CONT-UI-CAB-006: Validation SHALL include full form-field behavior contract checks
+Validation SHALL enumerate and test form fields (required/optional, valid/invalid input handling, error messages, submit/save behavior, keyboard accessibility).
+
+#### Scenario: Form field validation contract
+- **GIVEN** a form is present on audited screen
+- **WHEN** field interactions and submissions are executed
+- **THEN** run output MUST include field-level validation outcomes and any failures/backlog issue links
+
+### Requirement CONT-UI-CAB-007: Validator exploration runtime SHALL preflight required Node dependencies
+Before running exploratory UI scripts, validator runtime SHALL ensure required Node dependencies (including `playwright`) are installed and importable.
+
+#### Scenario: Exploration preflight checks dependencies
+- **GIVEN** validator is about to run `node scripts/cabinet_ui_cycle.mjs`
+- **WHEN** dependency preflight executes
+- **THEN** missing dependencies SHALL be installed or reported with actionable remediation prior to exploration execution
+
 #### Scenario: Spec gap discovered
 - **GIVEN** action exists without explicit requirement coverage
 - **WHEN** validation run reconciles action-to-spec mapping
