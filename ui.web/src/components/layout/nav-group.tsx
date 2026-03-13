@@ -74,18 +74,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
       >
-        <Link
-          to={item.url}
-          onClick={(event) => {
-            setOpenMobile(false)
-            if (item.url === '/dashboard') {
-              event.preventDefault()
-              if (window.location.pathname !== '/dashboard') {
-                window.location.assign('/dashboard')
-              }
-            }
-          }}
-        >
+        <Link to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
           <span>{item.title}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}

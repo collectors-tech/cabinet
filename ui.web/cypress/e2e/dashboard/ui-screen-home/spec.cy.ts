@@ -1,5 +1,12 @@
 describe("UI-SCREEN-HOME", () => {
   function signInToHome(redirectPath = "/dashboard") {
+    cy.request("POST", "/api/test/reset", {})
+    cy.request("POST", "/api/profiles", { name: "E2E Local" }).then((createResp) => {
+      expect(createResp.status).to.eq(201)
+      const profileId = createResp.body.id as string
+      cy.request("PUT", "/api/profiles/active", { profile_id: profileId }).its("status").should("eq", 200)
+    })
+
     cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
     cy.get('input[name="email"]').clear().type("e2e-home@example.com")
     cy.get('input[name="password"]').clear().type("password123")
@@ -141,6 +148,8 @@ describe("UI-SCREEN-HOME", () => {
     cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
 
     cy.visit("/inventory")
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
+    cy.get('[data-testid="active-profile-name"]', { timeout: 15000 }).should("contain", "E2E Local")
     cy.get('[data-testid="sidebar-nav-link-dashboard"]').click()
     cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
 
