@@ -4,7 +4,7 @@ describe('settings/profile', () => {
     cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/?$/)
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
   }
 
   beforeEach(() => {

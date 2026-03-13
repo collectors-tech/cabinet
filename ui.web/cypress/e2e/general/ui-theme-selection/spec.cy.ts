@@ -27,7 +27,7 @@ describe('ui-theme-selection', () => {
     cy.getCookie('vite-ui-theme').its('value').should('eq', 'dark')
 
     cy.visit('/settings')
-    cy.location('pathname').should('match', /^\/settings\/?$/)
+    cy.location('pathname').should('match', /^\/settings\/profile\/?$/)
     cy.get('html').should('have.class', 'dark')
 
     openThemeMenu()
