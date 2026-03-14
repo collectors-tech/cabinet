@@ -143,6 +143,8 @@ export function Reports() {
     )
   }, [data])
 
+  const exportDisabled = loading || Boolean(error) || !data
+
   const exportReport = async () => {
     setExportMessage(null)
     try {
@@ -188,7 +190,7 @@ export function Reports() {
             <Button
               data-testid='reports-export-button'
               onClick={() => void exportReport()}
-              disabled={loading}
+              disabled={exportDisabled}
             >
               Export CSV
             </Button>
