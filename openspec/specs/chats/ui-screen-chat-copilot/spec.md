@@ -36,6 +36,16 @@ Chat SHALL support loading, empty, error, and ready states for threads/messages.
 - **WHEN** thread/message API fails
 - **THEN** chat SHALL show actionable error state with retry
 
+### Requirement UI-SCREEN-CHAT-COPILOT-009: Chat Copilot SHALL disable contradictory thread-creation controls while bootstrap context is unavailable
+When active profile or bootstrap chat context is unavailable, Chats SHALL not present enabled thread-creation controls that imply usable chat state.
+
+#### Scenario: Active profile bootstrap failure blocks thread creation
+- **GIVEN** user opens `/chats` and active profile bootstrap fails (for example `active_profile_404`)
+- **WHEN** unavailable state renders
+- **THEN** UI MUST show the unavailable/retry state
+- **AND** `New thread title` input MUST be disabled
+- **AND** `Create` MUST remain disabled until chat context recovers
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-004: Chat Copilot SHALL support AI-enabled photo analysis conversations
 When AI is enabled, chat SHALL support photo-driven analysis prompts and return structured suggestions linked to media assets.
 
@@ -115,3 +125,4 @@ Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (n
 | UC-CHAT-05 | Chat API failure | Error + retry appears | planned: `cypress/e2e/ui/chat.cy.ts` `chat-error-state` |
 | UC-CHAT-06 | Upload attachment | `Upload` links file to chat context | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-upload-attachment` |
 | UC-CHAT-07 | Preview action | `Preview Action` renders dry-run output before apply | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-preview-action` |
+| UC-CHAT-08 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |

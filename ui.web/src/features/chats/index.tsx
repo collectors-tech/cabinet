@@ -107,6 +107,8 @@ export function Chats() {
     [selectedThreadId, threads]
   )
 
+  const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
+
   const loadMessages = useCallback(async (profileID: string, threadID: string) => {
     if (!profileID || !threadID) {
       setMessages([])
@@ -375,11 +377,12 @@ export function Chats() {
                 placeholder='New thread title'
                 value={threadTitle}
                 onChange={(event) => setThreadTitle(event.target.value)}
+                disabled={threadCreationDisabled}
               />
               <Button
                 data-testid='chat-create-thread-button'
                 onClick={() => void createThread()}
-                disabled={!threadTitle.trim() || loading}
+                disabled={threadCreationDisabled || !threadTitle.trim()}
               >
                 Create
               </Button>

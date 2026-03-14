@@ -1,4 +1,12 @@
 describe('chats/ui-screen-chat-copilot', () => {
+  function signInToChats() {
+    cy.visit('/sign-in?redirect=%2Fchats%2F')
+    cy.get('input[name="email"]').clear().type('e2e-chats@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
+  }
+
   function openInventory() {
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -39,6 +47,31 @@ describe('chats/ui-screen-chat-copilot', () => {
       cy.get('[data-testid="shell-chat-rail"]').should('not.exist')
       cy.location('pathname').should('eq', initialPathname)
     })
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-009 disables thread creation while chat service is unavailable', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+    cy.intercept('POST', '/api/chat/threads', {
+      statusCode: 200,
+      body: {
+        id: 'should-not-create',
+        profile_id: 'missing-profile',
+        title: 'Should not create',
+        created_at: '2026-03-14T00:00:00Z',
+        updated_at: '2026-03-14T00:00:00Z',
+      },
+    }).as('createThread')
+
+    signInToChats()
+    cy.wait('@activeProfileMissing')
+    cy.get('[data-testid="chat-bootstrap-error"]').should('be.visible')
+    cy.contains('active_profile_404').should('be.visible')
+    cy.get('[data-testid="chat-new-thread-input"]').should('be.disabled')
+    cy.get('[data-testid="chat-create-thread-button"]').should('be.disabled')
+    cy.get('@createThread.all').should('have.length', 0)
   })
 
   it('UI-SCREEN-CHAT-COPILOT-007 supports confirm-before-apply for inventory and wishlist mutations', () => {
