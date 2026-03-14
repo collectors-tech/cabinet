@@ -21,3 +21,7 @@ tmp/
 .antfarm/artifacts/
 .antfarm/logs/
 progress-*.txt
+
+node_modules/
+review/
+workdocs/
