@@ -14,6 +14,7 @@ Contains provider registry/contracts, scanner contracts, integration UI behavior
 - `provider-registry` -> `openspec/specs/integrations/provider-registry/spec.md`
 - `provider-shop-catalog` -> `openspec/specs/integrations/provider-shop-catalog/spec.md`
 - `provider-openai` -> `openspec/specs/integrations/provider-openai/spec.md`
+- `provider-openai-chatgpt-ux` -> `openspec/specs/integrations/provider-openai-chatgpt-ux/spec.md`
 - `provider-gemini` -> `openspec/specs/integrations/provider-gemini/spec.md`
 - `provider-claude` -> `openspec/specs/integrations/provider-claude/spec.md`
 - `provider-workflow-template` -> `openspec/specs/integrations/provider-workflow-template/spec.md`
@@ -32,6 +33,7 @@ Contains provider registry/contracts, scanner contracts, integration UI behavior
 - `UI-SCREEN-INTEGRATIONS-*`
 - `AI-GATEWAY-*`
 - `PROVIDER-OPENAI-*`
+- `PROVIDER-OPENAI-UX-*`
 - `PROVIDER-GEMINI-*`
 - `PROVIDER-CLAUDE-*`
 - `PROVIDER-FAMILY-*`
