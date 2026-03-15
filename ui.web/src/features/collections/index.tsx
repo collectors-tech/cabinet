@@ -26,6 +26,7 @@ export function Collections() {
   } = useWorkspaceCollections()
   const [newCollectionName, setNewCollectionName] = useState('')
   const [createPanelOpen, setCreatePanelOpen] = useState(false)
+  const [createValidationMessage, setCreateValidationMessage] = useState('')
 
   return (
     <>
@@ -54,7 +55,10 @@ export function Collections() {
                 <Button
                   type='button'
                   data-testid='collections-new-action'
-                  onClick={() => setCreatePanelOpen(true)}
+                  onClick={() => {
+                    setCreateValidationMessage('')
+                    setCreatePanelOpen(true)
+                  }}
                 >
                   New
                 </Button>
@@ -71,7 +75,10 @@ export function Collections() {
                   <DropdownMenuContent align='end'>
                     <DropdownMenuItem
                       data-testid='collections-create-menu-new'
-                      onClick={() => setCreatePanelOpen(true)}
+                      onClick={() => {
+                        setCreateValidationMessage('')
+                        setCreatePanelOpen(true)
+                      }}
                     >
                       New Collection
                     </DropdownMenuItem>
@@ -102,13 +109,24 @@ export function Collections() {
                   <Input
                     data-testid='collections-new-input'
                     placeholder='Collection name'
+                    aria-invalid={createValidationMessage ? 'true' : 'false'}
                     value={newCollectionName}
-                    onChange={(event) => setNewCollectionName(event.target.value)}
+                    onChange={(event) => {
+                      setNewCollectionName(event.target.value)
+                      if (createValidationMessage) {
+                        setCreateValidationMessage('')
+                      }
+                    }}
                   />
                   <Button
                     data-testid='collections-new-save'
                     onClick={() => {
-                      addCollection(newCollectionName)
+                      const created = addCollection(newCollectionName)
+                      if (!created) {
+                        setCreateValidationMessage('Collection name is required.')
+                        return
+                      }
+                      setCreateValidationMessage('')
                       setNewCollectionName('')
                       setCreatePanelOpen(false)
                     }}
@@ -121,11 +139,21 @@ export function Collections() {
                     onClick={() => {
                       setCreatePanelOpen(false)
                       setNewCollectionName('')
+                      setCreateValidationMessage('')
                     }}
                   >
                     Cancel
                   </Button>
                 </div>
+                {createValidationMessage ? (
+                  <p
+                    className='mt-2 text-sm text-destructive'
+                    data-testid='collections-new-validation'
+                    role='alert'
+                  >
+                    {createValidationMessage}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>

@@ -70,3 +70,10 @@ Collection creation entry points SHALL make their behavior obvious and communica
 - **WHEN** user uses `New` or `Create`
 - **THEN** the resulting workflow/options MUST be obvious from the page state
 - **AND** success, validation, and failure outcomes MUST be communicated with visible feedback
+
+#### Scenario: Blank collection-name submission shows inline validation
+- **GIVEN** collections section inline create panel is open
+- **WHEN** user clicks `Save` with an empty `Collection name`
+- **THEN** the inline create panel MUST remain open
+- **AND** the screen MUST show visible required-field guidance
+- **AND** only `Cancel` MAY silently dismiss the inline create panel without validation feedback
