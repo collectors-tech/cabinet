@@ -60,7 +60,8 @@ Wishlist rows/cards MUST be sourced from `/api/wishlist` + `/api/items` contract
 - **WHEN** user opens wishlist rows view
 - **THEN** rendered IDs MUST align to wishlist `item_id` values
 - **AND** row titles MUST align to canonical item title/part number
-- **AND** UI MUST NOT render `TASK-*` seeded IDs or task workflow labels such as `Backlog`
+- **AND** rows header semantics MUST render `Item ID`, `Title`, `Watch Status`, and `Target Priority`
+- **AND** UI MUST NOT render generic task-template headers such as `Task` or task workflow labels such as `Backlog`
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |

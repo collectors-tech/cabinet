@@ -43,9 +43,7 @@ import {
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { tasksColumns as columns } from './tasks-columns'
-
-type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+import { getTasksColumns, type TasksRoutePath } from './tasks-columns'
 
 type DataTableProps = {
   data: Task[]
@@ -68,6 +66,7 @@ export function TasksTable({ data, routePath }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const columns = useMemo(() => getTasksColumns({ routePath }), [routePath])
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') {
       return 'rows'
@@ -252,16 +251,32 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder='Filter by title or ID...'
+        searchPlaceholder={
+          routePath === '/_authenticated/wishlist/'
+            ? 'Filter by title or item ID...'
+            : 'Filter by title or ID...'
+        }
         filters={[
           {
             columnId: 'status',
-            title: 'Status',
-            options: statuses,
+            title:
+              routePath === '/_authenticated/wishlist/'
+                ? 'Watch status'
+                : 'Status',
+            options:
+              routePath === '/_authenticated/wishlist/'
+                ? [
+                    { label: 'Watching', value: 'wishlist' },
+                    { label: 'Below target', value: 'discovered' },
+                  ]
+                : statuses,
           },
           {
             columnId: 'priority',
-            title: 'Priority',
+            title:
+              routePath === '/_authenticated/wishlist/'
+                ? 'Target priority'
+                : 'Priority',
             options: priorities,
           },
         ]}

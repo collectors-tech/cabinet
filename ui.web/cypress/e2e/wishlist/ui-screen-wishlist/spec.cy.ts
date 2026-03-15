@@ -116,8 +116,15 @@ describe("ui-screen-wishlist", () => {
     signInToWishlist();
 
     cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("th", "Item ID").should("be.visible");
+    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Watch Status").should("be.visible");
+    cy.contains("th", "Target Priority").should("be.visible");
+    cy.contains("th", "Task").should("not.exist");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("item-collector-1").should("be.visible");
+    cy.contains("Watching").should("be.visible");
+    cy.contains("Below target").should("be.visible");
     cy.contains(/TASK-\d+/).should("not.exist");
     cy.contains("Backlog").should("not.exist");
   });
