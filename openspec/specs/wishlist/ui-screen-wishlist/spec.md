@@ -52,6 +52,13 @@ Wishlist detail collection picker MUST support `+ New Collection` inline create.
 - **WHEN** user creates a new collection from picker
 - **THEN** collection MUST be created and selected without leaving wishlist edit flow
 
+#### Scenario: Blank inline collection submission shows validation
+- **GIVEN** wishlist inline collection create state is open
+- **WHEN** user clicks `Save` with an empty `Collection name`
+- **THEN** the inline create state MUST remain open
+- **AND** the screen MUST show visible required-field guidance
+- **AND** only an explicit cancel/dismiss action MAY close the inline create state without a create result
+
 ### Requirement UI-SCREEN-WISHLIST-007: Wishlist rows SHALL use collection semantics and MUST NOT leak task seed labels
 Wishlist rows/cards MUST be sourced from `/api/wishlist` + `/api/items` contracts and MUST NOT render generic task IDs or task taxonomy labels.
 
