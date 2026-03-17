@@ -112,6 +112,22 @@ describe("ui-screen-wishlist", () => {
     );
   });
 
+  it("UI-SCREEN-WISHLIST-005 keeps inline create open and shows validation on blank save", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-inline-add-new"]').click();
+    cy.get('[data-testid="wishlist-inline-save"]').click();
+    cy.get('[data-testid="wishlist-inline-new-name"]').should(
+      "have.attr",
+      "aria-invalid",
+      "true"
+    );
+    cy.get('[data-testid="wishlist-inline-validation"]')
+      .should("be.visible")
+      .and("contain", "Collection name is required.");
+    cy.get('[data-testid="wishlist-inline-new-name"]').should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-007 renders wishlist collection semantics instead of task seed rows", () => {
     signInToWishlist();
 
