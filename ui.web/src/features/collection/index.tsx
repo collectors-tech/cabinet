@@ -1,4 +1,5 @@
 import {
+  type FocusEvent,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -175,6 +176,53 @@ function addChildFolder(
   })
 }
 
+function removeFolderNode(
+  nodes: FolderNode[],
+  targetID: string
+): { removed: FolderNode | null; next: FolderNode[] } {
+  let removed: FolderNode | null = null
+  const next = nodes.flatMap((node) => {
+    if (node.id === targetID) {
+      removed = node
+      return []
+    }
+    if (node.children?.length) {
+      const result = removeFolderNode(node.children, targetID)
+      if (result.removed) {
+        removed = result.removed
+        return [{ ...node, children: result.next }]
+      }
+    }
+    return [node]
+  })
+  return { removed, next }
+}
+
+function folderNodeContainsID(node: FolderNode, targetID: string): boolean {
+  if (node.id === targetID) {
+    return true
+  }
+  return (node.children ?? []).some((child) => folderNodeContainsID(child, targetID))
+}
+
+function moveFolderNode(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string
+): FolderNode[] {
+  if (draggedID === targetID) {
+    return nodes
+  }
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  if (folderNodeContainsID(removed, targetID)) {
+    return nodes
+  }
+  return addChildFolder(next, targetID, removed)
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -193,6 +241,8 @@ export function Collection({
     null
   )
   const [folderCreateName, setFolderCreateName] = useState('')
+  const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
+  const [dragOverFolderID, setDragOverFolderID] = useState<string | null>(null)
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -379,6 +429,21 @@ export function Collection({
     [expandedNodeIDs, focusTreeItemByOffset, toggleNodeExpanded]
   )
 
+  const handleTreeFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    const activeNode = visibleTreeNodes.find((node) => node.name === activeFolder)
+    const fallbackNode = visibleTreeNodes[0]
+    const targetID = activeNode?.id ?? fallbackNode?.id
+    if (!targetID) {
+      return
+    }
+    requestAnimationFrame(() => {
+      treeItemRefs.current[targetID]?.focus()
+    })
+  }, [activeFolder, visibleTreeNodes])
+
   const renderFolderTree = useCallback(
     (nodes: FolderNode[], level = 1) =>
       nodes.map((node) => {
@@ -387,16 +452,13 @@ export function Collection({
         const isActive = activeFolder === node.name
         return (
           <div key={node.id} role='none' className='relative'>
-            <div
-              className='group relative flex items-center gap-1'
-              style={{ paddingInlineStart: `${(level - 1) * 1}rem` }}
-            >
+            <div className='group relative flex items-center gap-1'>
               {hasChildren ? (
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon'
-                  className='h-7 w-7 shrink-0 rounded-sm text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-foreground'
+                  className='h-6 w-6 shrink-0 rounded-sm text-accent-foreground/50 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
@@ -408,7 +470,7 @@ export function Collection({
                   />
                 </Button>
               ) : (
-                <span className='h-7 w-7 shrink-0' />
+                <span className='h-6 w-6 shrink-0' />
               )}
               <button
                 ref={(element) => {
@@ -425,13 +487,59 @@ export function Collection({
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 className={cn(
-                  'relative flex w-full min-w-0 items-center rounded-md px-2 py-2 text-left text-sm text-foreground/90 transition-colors',
+                  'relative flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
-                  'before:absolute before:left-0 before:-z-10 before:h-8 before:w-full before:rounded-md before:bg-accent/70 before:opacity-0 before:transition-opacity',
                   isActive
-                    ? 'font-medium text-foreground before:opacity-100'
-                    : 'hover:text-foreground hover:before:opacity-100'
+                    ? 'bg-accent text-accent-foreground font-medium shadow-sm'
+                    : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
+                  dragOverFolderID === node.id && 'bg-primary/20 text-primary'
                 )}
+                draggable={node.id !== 'all-items'}
+                onDragStart={(event) => {
+                  if (node.id === 'all-items') {
+                    event.preventDefault()
+                    return
+                  }
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', node.id)
+                  setDraggedFolderID(node.id)
+                }}
+                onDragEnter={(event) => {
+                  if (draggedFolderID && draggedFolderID !== node.id) {
+                    event.preventDefault()
+                    setDragOverFolderID(node.id)
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (draggedFolderID && draggedFolderID !== node.id) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    setDragOverFolderID(node.id)
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverFolderID === node.id) {
+                    setDragOverFolderID(null)
+                  }
+                }}
+                onDragEnd={() => {
+                  setDraggedFolderID(null)
+                  setDragOverFolderID(null)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
+                  setDragOverFolderID(null)
+                  if (droppedID && droppedID !== node.id) {
+                    setFolderTree((previous) => moveFolderNode(previous, droppedID, node.id))
+                    setExpandedNodeIDs((previous) => {
+                      const next = new Set(previous)
+                      next.add(node.id)
+                      return next
+                    })
+                  }
+                  setDraggedFolderID(null)
+                }}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
@@ -446,7 +554,7 @@ export function Collection({
                 type='button'
                 variant='ghost'
                 size='icon'
-                className='h-7 w-7 shrink-0 rounded-sm text-muted-foreground/70 opacity-0 transition-all hover:bg-transparent hover:text-foreground group-hover:opacity-100'
+                className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 opacity-0 transition-all hover:bg-transparent hover:text-foreground group-hover:opacity-100'
                 data-testid={`folder-tree-add-child-${node.id}`}
                 aria-label={`Add child folder under ${node.name}`}
                 onClick={() => {
@@ -842,7 +950,7 @@ export function Collection({
         </div>
       </Header>
 
-      <Main className='space-y-4'>
+      <Main className='flex min-h-0 flex-1 flex-col space-y-4'>
         <div className='flex flex-wrap items-end justify-between gap-3'>
           <div className='space-y-2'>
             <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
@@ -886,15 +994,15 @@ export function Collection({
           </div>
         </div>
 
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-3 min-h-0'>
+        <div className='grid min-h-[34rem] grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch'>
+          <Card className='lg:col-span-3 min-h-0 h-full flex flex-col'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
                 Browse folders before drilling into results.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2 min-h-0'>
+            <CardContent className='space-y-2 min-h-0 flex flex-1 flex-col'>
               <div className='flex justify-end'>
                 <Button
                   type='button'
@@ -906,8 +1014,9 @@ export function Collection({
                     setFolderCreateName('')
                     setFolderCreateOpen(true)
                   }}
+                  aria-label='Add root folder'
                 >
-                  Add Root Folder
+                  +
                 </Button>
               </div>
               <div
@@ -915,7 +1024,8 @@ export function Collection({
                 tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
-                className='h-[26rem] max-h-[26rem] overflow-x-auto overflow-y-auto rounded-md border p-2'
+                className='min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
+                onFocus={handleTreeFocus}
               >
                 <div
                   className='min-w-full w-max space-y-2'

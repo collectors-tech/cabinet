@@ -10,13 +10,19 @@ Inventory folder navigation MUST use a hierarchical tree control (expand/collaps
 - **WHEN** user expands or collapses nodes
 - **THEN** tree MUST render deterministic parent/child relationships and preserve current selection context
 
-### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-002: Tree control SHALL support keyboard and accessibility semantics
-Tree MUST expose standard treeview semantics and keyboard interactions.
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-002: Tree control SHALL support keyboard and accessibility semantics matching the intended reference behavior
+Tree MUST expose standard treeview semantics and keyboard interactions, including correct tab-entry behavior, roving focus inside the tree, and visible selected/focused row treatment.
 
 #### Scenario: Keyboard tree navigation
 - **GIVEN** folder tree has focus
 - **WHEN** user uses arrow keys and Enter/Space
 - **THEN** tree MUST support navigate/expand/collapse/select with accessible roles (`tree`, `treeitem`, `group`) and focus visibility
+
+#### Scenario: Tab into and out of the tree
+- **GIVEN** the user tabs through the inventory screen
+- **WHEN** focus enters the tree from outside
+- **THEN** focus MUST land on the expected active/current row in the same way as the reference component rather than on arbitrary extra controls
+- **AND** subsequent tab behavior MUST exit the tree predictably instead of breaking the internal tree navigation model
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-003: Tree selection SHALL drive inventory filtering deterministically
 Selecting a folder node MUST update inventory content view to that folder scope.
@@ -34,13 +40,18 @@ Tree rendering MUST remain responsive for large folder sets.
 - **WHEN** user expands/collapses and selects nodes
 - **THEN** interactions MUST remain responsive and avoid blocking UI thread
 
-### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-005: Tree pane SHALL be independently scrollable and MUST NOT expand whole page layout
-Expanding tree nodes MUST not force global page growth; tree pane shall handle its own overflow.
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-005: Tree pane SHALL fill the available workspace height and remain independently scrollable
+Expanding tree nodes MUST not force global page growth; the tree pane must occupy the available panel height and handle its own overflow internally.
 
 #### Scenario: Vertical overflow in tree pane
 - **GIVEN** tree has more nodes than visible pane height
 - **WHEN** user expands branches
 - **THEN** tree pane MUST provide internal vertical scrolling and page layout height MUST remain stable
+
+#### Scenario: Tree fills its available panel
+- **GIVEN** the inventory workspace allocates vertical space for the tree pane
+- **WHEN** the tree renders with normal content or sparse content
+- **THEN** the tree region MUST stretch to fill the available panel height instead of collapsing into a small inner box
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-006: Tree pane SHALL support horizontal overflow for deep indentation
 Deeply nested nodes MUST remain accessible via internal horizontal scrolling or equivalent overflow handling.
@@ -58,13 +69,14 @@ Each folder node SHALL provide a subtle `+` affordance to create a child folder 
 - **WHEN** user clicks node-level `+` affordance and submits valid name
 - **THEN** new folder MUST be created as child of selected node and rendered in expanded tree context
 
-### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-008: Tree SHALL provide explicit root node for top-level folder creation
-Tree control SHALL expose a root context that allows creating top-level folders.
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-008: Tree SHALL provide a compact root-level add affordance for top-level folder creation
+Tree control SHALL expose a root context that allows creating top-level folders through a compact `+` affordance rather than an unnecessarily verbose root-action button.
 
 #### Scenario: Create top-level folder at root
 - **GIVEN** user is in folder tree view
-- **WHEN** user chooses `Add Root Folder` action
+- **WHEN** user chooses the root `+` action
 - **THEN** new folder MUST be created at root level and appear as top-level node
+- **AND** the root action MUST render as a compact `+` affordance consistent with the reference component style
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-009: Tree visuals SHALL include connector lines for hierarchy clarity
 Tree view SHALL render visual connector lines/indent guides to make parent-child hierarchy clear.
@@ -112,13 +124,14 @@ The tree MUST support custom row rendering for inventory context such as counts,
 - **WHEN** the tree renders rows
 - **THEN** rows MUST be able to display that metadata in a structured way without breaking hierarchy readability or keyboard accessibility
 
-### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-014: Tree SHALL support hierarchy re-organization through drag-drop or equivalent move workflow
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-014: Tree SHALL support working hierarchy re-organization through drag-drop or equivalent move workflow
 Users MUST be able to reorganize the folder hierarchy without rebuilding it manually from scratch.
 
 #### Scenario: Move folder within the hierarchy
 - **GIVEN** user wants to re-parent or reorder a folder within the tree
-- **WHEN** they perform the supported move interaction
+- **WHEN** they drag and drop a folder using the supported move interaction
 - **THEN** the tree MUST provide a deterministic move workflow with clear feedback, valid drop/move constraints, and correct hierarchy updates after completion
+- **AND** the drag interaction MUST be actually usable in the live UI, not just visually implied by approximate row chrome
 
 ## Implementation recommendation
 Preferred component strategy:
