@@ -122,4 +122,34 @@ describe('inventory-folder-tree-control', () => {
       .should('be.visible')
       .and('have.class', 'border-l')
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-010 separates disclosure from selection and clarifies branch vs leaf cues', () => {
+    cy.get('[data-testid="folder-tree-item-all-items"]')
+      .should('have.attr', 'aria-selected', 'true')
+      .and('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="folder-tree-active-indicator-all-items"]').should('be.visible')
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]')
+      .should('have.attr', 'data-state', 'collapsed')
+      .click()
+      .should('have.attr', 'data-state', 'expanded')
+
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="folder-tree-node-icon-warehouses"]')
+      .should('have.attr', 'data-node-kind', 'branch')
+      .and('have.attr', 'data-node-expanded', 'true')
+
+    cy.get('[data-testid="folder-tree-node-icon-store-1"]')
+      .should('have.attr', 'data-node-kind', 'leaf')
+    cy.get('[data-testid="folder-tree-leaf-marker-store-1"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-toggle-store-1"]').should('not.exist')
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .should('have.attr', 'aria-selected', 'true')
+      .and('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="folder-tree-active-indicator-store-1"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-all-items"]').should('have.attr', 'data-active', 'false')
+  })
 })

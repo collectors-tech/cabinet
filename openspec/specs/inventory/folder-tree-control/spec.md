@@ -75,13 +75,15 @@ Tree view SHALL render visual connector lines/indent guides to make parent-child
 - **THEN** UI MUST show clear hierarchical line/guide cues between parent and child nodes
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-010: Tree rows SHALL provide clear disclosure, iconography, and hierarchy cues
-The tree MUST make hierarchy and current state obvious at a glance with dedicated disclosure affordances and node/leaf icon treatment beyond bare text rows.
+The tree MUST make hierarchy and current state obvious at a glance with dedicated disclosure affordances and node/leaf icon treatment beyond bare text rows, while keeping selection visually clear without flattening the surrounding hierarchy.
 
 #### Scenario: Scan and understand tree structure quickly
 - **GIVEN** user opens the inventory tree with mixed parent and leaf nodes
 - **WHEN** they scan the visible hierarchy without interacting deeply
 - **THEN** parent rows MUST expose a clear disclosure affordance distinct from selection
+- **AND** disclosure activation MUST expand/collapse without implicitly changing the selected folder context
 - **AND** rows MUST show node/leaf visual treatment that communicates expandable vs terminal state
+- **AND** mixed parent and leaf rows MUST preserve consistent alignment cues that improve quick scanning
 - **AND** the active selection MUST be visually distinct without overwhelming the rest of the tree
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-011: Tree SHALL support contextual row actions without crowding the primary selection flow
