@@ -45,7 +45,7 @@ import {
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Circle, Folder, FolderOpen, Plus } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -386,26 +386,17 @@ export function Collection({
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
         const isActive = activeFolder === node.name
         return (
-          <div key={node.id} role='none'>
+          <div key={node.id} role='none' className='relative'>
             <div
-              className='flex items-center gap-2'
-              style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}
+              className='group relative flex items-center gap-1'
+              style={{ paddingInlineStart: `${(level - 1) * 1}rem` }}
             >
-              <span
-                aria-hidden='true'
-                data-testid={`folder-tree-connector-${node.id}`}
-                className='inline-flex h-8 w-2 shrink-0 border-l border-border/70'
-              />
               {hasChildren ? (
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon'
-                  className={cn(
-                    'h-8 w-8 shrink-0 rounded-md border border-border/80 bg-background/80 text-muted-foreground shadow-sm transition-colors',
-                    'hover:border-primary/40 hover:bg-muted/70 hover:text-foreground',
-                    expanded && 'border-primary/40 bg-primary/10 text-primary'
-                  )}
+                  className='h-7 w-7 shrink-0 rounded-sm text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
@@ -417,13 +408,7 @@ export function Collection({
                   />
                 </Button>
               ) : (
-                <span
-                  aria-hidden='true'
-                  data-testid={`folder-tree-leaf-marker-${node.id}`}
-                  className='inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground/45'
-                >
-                  <Circle className='size-2 fill-current stroke-0' />
-                </span>
+                <span className='h-7 w-7 shrink-0' />
               )}
               <button
                 ref={(element) => {
@@ -437,43 +422,22 @@ export function Collection({
                 aria-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 data-testid={`folder-tree-item-${node.id}`}
                 data-active={isActive ? 'true' : 'false'}
+                data-node-kind={hasChildren ? 'branch' : 'leaf'}
+                data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 className={cn(
-                  'flex w-full min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  'relative flex w-full min-w-0 items-center rounded-md px-2 py-2 text-left text-sm text-foreground/90 transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  'before:absolute before:left-0 before:-z-10 before:h-8 before:w-full before:rounded-md before:bg-accent/70 before:opacity-0 before:transition-opacity',
                   isActive
-                    ? 'border-primary/40 bg-primary/10 text-foreground shadow-sm'
-                    : 'border-transparent bg-background/70 text-foreground/90 hover:border-border hover:bg-muted/45'
+                    ? 'font-medium text-foreground before:opacity-100'
+                    : 'hover:text-foreground hover:before:opacity-100'
                 )}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
                 <span
-                  aria-hidden='true'
-                  data-testid={`folder-tree-active-indicator-${node.id}`}
-                  className={cn(
-                    'h-6 w-1 shrink-0 rounded-full bg-primary/75 transition-opacity',
-                    isActive ? 'opacity-100' : 'opacity-0'
-                  )}
-                />
-                <span
-                  aria-hidden='true'
-                  data-testid={`folder-tree-node-icon-${node.id}`}
-                  data-node-kind={hasChildren ? 'branch' : 'leaf'}
-                  data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
-                  className={cn(
-                    'inline-flex size-5 shrink-0 items-center justify-center rounded-md',
-                    hasChildren ? 'bg-primary/10 text-primary/80' : 'text-muted-foreground/70'
-                  )}
-                >
-                  {hasChildren ? (
-                    expanded ? <FolderOpen className='size-4' /> : <Folder className='size-4' />
-                  ) : (
-                    <Circle className='size-3 fill-current stroke-0' />
-                  )}
-                </span>
-                <span
                   data-testid={`collection-folder-${node.id}`}
-                  className={cn('truncate', hasChildren && 'font-medium')}
+                  className='truncate'
                 >
                   {node.name}
                 </span>
@@ -482,7 +446,7 @@ export function Collection({
                 type='button'
                 variant='ghost'
                 size='icon'
-                className='h-8 w-8 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground'
+                className='h-7 w-7 shrink-0 rounded-sm text-muted-foreground/70 opacity-0 transition-all hover:bg-transparent hover:text-foreground group-hover:opacity-100'
                 data-testid={`folder-tree-add-child-${node.id}`}
                 aria-label={`Add child folder under ${node.name}`}
                 onClick={() => {
@@ -498,7 +462,7 @@ export function Collection({
               <div
                 role='group'
                 data-testid={`folder-tree-group-${node.id}`}
-                className='space-y-2'
+                className='ml-4 border-l pl-1'
               >
                 {renderFolderTree(node.children ?? [], level + 1)}
               </div>
