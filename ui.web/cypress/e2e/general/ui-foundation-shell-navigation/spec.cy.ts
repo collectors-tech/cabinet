@@ -435,4 +435,27 @@ describe('ui-foundation-shell-navigation', () => {
     cy.contains('Showcase Seed Two').should('be.visible')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
   })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-011 fills available shell width on wide desktop viewport by default', () => {
+    cy.viewport(1800, 1000)
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    cy.get('[data-slot="sidebar-inset"]').then(($inset) => {
+      const insetRect = $inset[0].getBoundingClientRect()
+
+      visibleByTestId('app-main-content').then(($main) => {
+        const mainRect = $main[0].getBoundingClientRect()
+        const availableWidth = insetRect.width
+        const widthGap = availableWidth - mainRect.width
+
+        expect(mainRect.width, 'main content width').to.be.greaterThan(1450)
+        expect(widthGap, 'remaining unused inset width').to.be.lessThan(80)
+      })
+    })
+
+    cy.get('[data-testid="collection-context-label"]').should('be.visible')
+    cy.contains('Folders').should('be.visible')
+    cy.contains('Items').should('be.visible')
+  })
 })

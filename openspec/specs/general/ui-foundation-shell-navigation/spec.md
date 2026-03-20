@@ -91,3 +91,13 @@ When user reorders items in nav edit mode through move buttons or a drag handle,
 - **THEN** the edit dialog MUST show visible insertion feedback during drag
 - **AND** the list MUST re-render immediately in the dropped order
 - **AND** move up, move down, and hide controls MUST remain available on the same row
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-011: Authenticated shell content SHALL default to full-width workspace fill
+Authenticated shell pages SHALL let the main content region expand to the full available workspace width beside the sidebar unless a screen explicitly opts into a constrained document-style layout.
+
+#### Scenario: Inventory workspace fills available shell width on wide viewport
+- **GIVEN** an authenticated user opens the inventory workspace on a wide desktop viewport with the shell sidebar visible
+- **WHEN** the main content region renders beside the sidebar
+- **THEN** the primary shell content container MUST expand to nearly the full available width beside the sidebar
+- **AND** the shell MUST NOT apply an implicit centered `max-width` cap to the workspace container by default
+- **AND** inventory panels MUST retain their grid structure while using the wider workspace area
