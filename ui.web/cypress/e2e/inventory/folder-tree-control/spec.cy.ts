@@ -189,6 +189,23 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 1')
   })
 
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-012 restores selected folder and expanded branch context after reload', () => {
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-item-warehouse-2"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
+
+    cy.reload()
+    cy.wait('@items')
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]')
+      .should('have.attr', 'aria-expanded', 'true')
+    cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-warehouse-2"]')
+      .should('have.attr', 'aria-selected', 'true')
+      .and('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
+  })
+
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports live drag-drop reparenting with visible feedback', () => {
     const dataTransfer = new DataTransfer()
 

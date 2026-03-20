@@ -97,41 +97,64 @@ function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null 
   return null
 }
 
+const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
+
 const initialFolderTree: FolderNode[] = [
-  { id: 'all-items', name: 'All Items' },
-  { id: 'watch-list', name: 'Watch List' },
-  { id: 'wishlist-focus', name: 'Wishlist Focus' },
-  { id: 'store-1', name: 'Store 1' },
-  { id: 'store-2', name: 'Store 2' },
-  { id: 'store-3', name: 'Store 3' },
-  { id: 'store-4', name: 'Store 4' },
-  { id: 'store-5', name: 'Store 5' },
-  { id: 'store-6', name: 'Store 6' },
-  { id: 'store-7', name: 'Store 7' },
-  { id: 'store-8', name: 'Store 8' },
-  { id: 'store-9', name: 'Store 9' },
-  { id: 'store-10', name: 'Store 10' },
+  {
+    id: 'all-items',
+    name: 'All Items',
+    itemCount: 124,
+    secondaryLabel: 'Entire catalog',
+    statusBadge: 'Live',
+  },
+  {
+    id: 'watch-list',
+    name: 'Watch List',
+    itemCount: 12,
+    secondaryLabel: 'Needs review',
+    statusBadge: 'Watch',
+  },
+  {
+    id: 'wishlist-focus',
+    name: 'Wishlist Focus',
+    itemCount: 7,
+    secondaryLabel: 'Priority targets',
+    statusBadge: 'Goal',
+  },
+  { id: 'store-1', name: 'Store 1', itemCount: 18, secondaryLabel: 'Aisle A' },
+  { id: 'store-2', name: 'Store 2', itemCount: 14, secondaryLabel: 'Aisle B' },
+  { id: 'store-3', name: 'Store 3', itemCount: 11, secondaryLabel: 'Aisle C' },
+  { id: 'store-4', name: 'Store 4', itemCount: 9, secondaryLabel: 'Overflow shelf' },
+  { id: 'store-5', name: 'Store 5', itemCount: 8, secondaryLabel: 'Back room' },
+  { id: 'store-6', name: 'Store 6', itemCount: 10, secondaryLabel: 'Bin 6' },
+  { id: 'store-7', name: 'Store 7', itemCount: 6, secondaryLabel: 'Bin 7' },
+  { id: 'store-8', name: 'Store 8', itemCount: 5, secondaryLabel: 'Bin 8' },
+  { id: 'store-9', name: 'Store 9', itemCount: 4, secondaryLabel: 'Bin 9' },
+  { id: 'store-10', name: 'Store 10', itemCount: 3, secondaryLabel: 'Bin 10' },
   {
     id: 'warehouses',
     name: 'Warehouses',
+    itemCount: 39,
+    secondaryLabel: 'Bulk storage',
+    statusBadge: 'Cold',
     children: [
-      { id: 'warehouse-1', name: 'Warehouse 1' },
-      { id: 'warehouse-2', name: 'Warehouse 2' },
-      { id: 'warehouse-3', name: 'Warehouse 3' },
+      { id: 'warehouse-1', name: 'Warehouse 1', itemCount: 15, secondaryLabel: 'Pallet zone A' },
+      { id: 'warehouse-2', name: 'Warehouse 2', itemCount: 13, secondaryLabel: 'Pallet zone B' },
+      { id: 'warehouse-3', name: 'Warehouse 3', itemCount: 11, secondaryLabel: 'Pallet zone C' },
     ],
   },
-  { id: 'archive-a', name: 'Archive A' },
-  { id: 'archive-b', name: 'Archive B' },
-  { id: 'archive-c', name: 'Archive C' },
-  { id: 'archive-d', name: 'Archive D' },
-  { id: 'archive-e', name: 'Archive E' },
-  { id: 'archive-f', name: 'Archive F' },
-  { id: 'archive-g', name: 'Archive G' },
-  { id: 'archive-h', name: 'Archive H' },
-  { id: 'archive-i', name: 'Archive I' },
-  { id: 'archive-j', name: 'Archive J' },
-  { id: 'archive-k', name: 'Archive K' },
-  { id: 'archive-l', name: 'Archive L' },
+  { id: 'archive-a', name: 'Archive A', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-b', name: 'Archive B', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-c', name: 'Archive C', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-d', name: 'Archive D', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-e', name: 'Archive E', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-f', name: 'Archive F', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-g', name: 'Archive G', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-h', name: 'Archive H', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-i', name: 'Archive I', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-j', name: 'Archive J', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-k', name: 'Archive K', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-l', name: 'Archive L', itemCount: 1, secondaryLabel: 'Retired stock' },
 ]
 
 function countFolderNodes(nodes: FolderNode[]): number {
@@ -248,6 +271,40 @@ function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNod
   return [...next, removed]
 }
 
+function loadInventoryTreeState() {
+  if (typeof window === 'undefined') {
+    return {
+      activeFolder: 'All Items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+
+  try {
+    const raw = window.localStorage.getItem(inventoryTreeStorageKey)
+    if (!raw) {
+      return {
+        activeFolder: 'All Items',
+        expandedNodeIDs: new Set<string>(),
+      }
+    }
+
+    const parsed = JSON.parse(raw) as {
+      activeFolder?: string
+      expandedNodeIDs?: string[]
+    }
+
+    return {
+      activeFolder: parsed.activeFolder?.trim() || 'All Items',
+      expandedNodeIDs: new Set(parsed.expandedNodeIDs ?? []),
+    }
+  } catch {
+    return {
+      activeFolder: 'All Items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -255,11 +312,11 @@ export function Collection({
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const [folderTree, setFolderTree] = useState<FolderNode[]>(initialFolderTree)
-  const [activeFolder, setActiveFolder] = useState('All Items')
+  const [activeFolder, setActiveFolder] = useState(() => loadInventoryTreeState().activeFolder)
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
-    () => new Set()
+    () => loadInventoryTreeState().expandedNodeIDs
   )
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
@@ -367,6 +424,20 @@ export function Collection({
   useEffect(() => {
     void loadInventoryItems()
   }, [loadInventoryItems])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(
+      inventoryTreeStorageKey,
+      JSON.stringify({
+        activeFolder,
+        expandedNodeIDs: Array.from(expandedNodeIDs),
+      })
+    )
+  }, [activeFolder, expandedNodeIDs])
 
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
