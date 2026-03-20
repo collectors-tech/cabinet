@@ -77,10 +77,17 @@ Cabinet SHALL support a pre-seeded showcase database profile for demos/testing w
 - **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
-When user moves menu items up/down in nav edit mode, edit dialog list order MUST update immediately to match resulting navigation order.
+When user reorders items in nav edit mode through move buttons or a drag handle, edit dialog list order MUST update immediately to match resulting navigation order.
 
 #### Scenario: Move menu item and verify edit list order
 - **GIVEN** navigation edit dialog is open with reorder controls
 - **WHEN** user moves an item up or down
 - **THEN** edit dialog list MUST re-render in new order immediately
 - **AND** resulting saved order MUST match what was shown in edit dialog before save
+
+#### Scenario: Drag nav row from left-side handle and reorder with visible insertion feedback
+- **GIVEN** navigation edit dialog is open with drag handles on the left side of each row label
+- **WHEN** user drags a row by its handle and reorders it within the list
+- **THEN** the edit dialog MUST show visible insertion feedback during drag
+- **AND** the list MUST re-render immediately in the dropped order
+- **AND** move up, move down, and hide controls MUST remain available on the same row

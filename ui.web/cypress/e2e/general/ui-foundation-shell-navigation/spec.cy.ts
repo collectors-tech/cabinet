@@ -222,6 +222,73 @@ describe('ui-foundation-shell-navigation', () => {
       ])
   })
 
+  it('UI-FOUNDATION-SHELL-NAVIGATION-007 supports left-side drag-handle reorder with visible insertion feedback', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    const dataTransfer = new DataTransfer()
+
+    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-edit-panel').should('be.visible')
+
+    visibleByTestId('sidebar-nav-drag-handle-wishlist').should('be.visible')
+
+    cy.get('[data-testid="sidebar-nav-edit-item-inventory"]').then(($target) => {
+      const rect = $target[0].getBoundingClientRect()
+
+      visibleByTestId('sidebar-nav-drag-handle-wishlist').trigger('dragstart', {
+        dataTransfer,
+      })
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('dragover', {
+        dataTransfer,
+        clientY: rect.top + 2,
+      })
+      visibleByTestId('sidebar-nav-drop-indicator-before-inventory').should('be.visible')
+      cy.get('[data-testid="sidebar-nav-edit-dropzone-inventory"]').trigger('drop', {
+        dataTransfer,
+        clientY: rect.top + 2,
+      })
+    })
+
+    visibleByTestId('sidebar-nav-edit-panel').within(() => {
+      cy.get('[data-testid^="sidebar-nav-edit-item-"]')
+        .filter(':visible')
+        .then(($items) => [...$items].map((item) => item.getAttribute('data-testid') || ''))
+        .should('deep.equal', [
+          'sidebar-nav-edit-item-dashboard',
+          'sidebar-nav-edit-item-wishlist',
+          'sidebar-nav-edit-item-inventory',
+          'sidebar-nav-edit-item-collections',
+          'sidebar-nav-edit-item-discoveries',
+          'sidebar-nav-edit-item-market-watch',
+          'sidebar-nav-edit-item-integrations',
+          'sidebar-nav-edit-item-chats',
+          'sidebar-nav-edit-item-users',
+          'sidebar-nav-edit-item-reports',
+        ])
+
+      cy.get('[data-testid="sidebar-nav-move-down-wishlist"]').should('be.visible')
+      cy.get('[data-testid="sidebar-nav-visibility-wishlist"]').should('be.visible')
+    })
+
+    visibleByTestId('sidebar-nav-edit-toggle').click()
+    visibleByTestId('sidebar-nav-group-general')
+      .find('[data-testid^="sidebar-nav-link-"]')
+      .then(($links) => [...$links].map((link) => link.getAttribute('data-testid') || ''))
+      .should('deep.equal', [
+        'sidebar-nav-link-dashboard',
+        'sidebar-nav-link-wishlist',
+        'sidebar-nav-link-inventory',
+        'sidebar-nav-link-collections',
+        'sidebar-nav-link-discoveries',
+        'sidebar-nav-link-market-watch',
+        'sidebar-nav-link-integrations',
+        'sidebar-nav-link-chats',
+        'sidebar-nav-link-users',
+        'sidebar-nav-link-reports',
+      ])
+  })
+
   it('UI-FOUNDATION-SHELL-NAVIGATION-003 updates collection context label when folder selection changes', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
