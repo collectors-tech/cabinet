@@ -109,8 +109,11 @@ describe('inventory-folder-tree-control', () => {
     cy.contains('[role="treeitem"]', 'Store 1 Child').should('be.visible')
   })
 
-  it('UI-SCREEN-INVENTORY-FOLDER-TREE-008 allows explicit root folder creation', () => {
-    cy.get('[data-testid="folder-tree-add-root"]').click()
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-008 allows explicit root folder creation through a compact plus affordance', () => {
+    cy.get('[data-testid="folder-tree-add-root"]')
+      .should('have.text', '+')
+      .and('have.attr', 'aria-label', 'Add root folder')
+      .click()
     cy.get('[data-testid="folder-tree-name-input"]').clear().type('Top Level Added')
     cy.get('[data-testid="folder-tree-create-submit"]').click()
     cy.get('[data-testid="folder-tree-item-top-level-added"]').should('be.visible')
@@ -148,5 +151,28 @@ describe('inventory-folder-tree-control', () => {
       .should('have.attr', 'aria-selected', 'true')
       .and('have.attr', 'data-active', 'true')
     cy.get('[data-testid="folder-tree-item-all-items"]').should('have.attr', 'data-active', 'false')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports live drag-drop reparenting with visible feedback', () => {
+    const dataTransfer = new DataTransfer()
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .trigger('dragstart', { dataTransfer })
+    cy.get('[data-testid="folder-tree-item-warehouses"]')
+      .trigger('dragenter', { dataTransfer })
+      .trigger('dragover', { dataTransfer })
+      .should('have.class', 'bg-primary/20')
+      .trigger('drop', { dataTransfer })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .should('have.attr', 'aria-selected', 'true')
+      .and('have.attr', 'data-active', 'true')
+
+    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
+      .should('exist')
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
   })
 })

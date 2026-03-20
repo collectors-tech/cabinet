@@ -80,6 +80,19 @@ type FolderNode = {
   children?: FolderNode[]
 }
 
+function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node
+    }
+    const childMatch = findFolderNodeByID(node.children ?? [], id)
+    if (childMatch) {
+      return childMatch
+    }
+  }
+  return null
+}
+
 const initialFolderTree: FolderNode[] = [
   { id: 'all-items', name: 'All Items' },
   { id: 'watch-list', name: 'Watch List' },
@@ -221,6 +234,14 @@ function moveFolderNode(
     return nodes
   }
   return addChildFolder(next, targetID, removed)
+}
+
+function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNode[] {
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  return [...next, removed]
 }
 
 export function Collection({
@@ -444,6 +465,32 @@ export function Collection({
     })
   }, [activeFolder, visibleTreeNodes])
 
+  const moveDraggedFolder = useCallback(
+    (draggedID: string, targetID: string | null) => {
+      const draggedNode = findFolderNodeByID(folderTree, draggedID)
+      if (!draggedNode || draggedID === 'all-items') {
+        return
+      }
+
+      if (targetID) {
+        if (draggedID === targetID) {
+          return
+        }
+        setFolderTree((previous) => moveFolderNode(previous, draggedID, targetID))
+        setExpandedNodeIDs((previous) => {
+          const next = new Set(previous)
+          next.add(targetID)
+          return next
+        })
+      } else {
+        setFolderTree((previous) => moveFolderNodeToRoot(previous, draggedID))
+      }
+
+      setActiveFolder(draggedNode.name)
+    },
+    [folderTree]
+  )
+
   const renderFolderTree = useCallback(
     (nodes: FolderNode[], level = 1) =>
       nodes.map((node) => {
@@ -531,12 +578,7 @@ export function Collection({
                   const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
                   setDragOverFolderID(null)
                   if (droppedID && droppedID !== node.id) {
-                    setFolderTree((previous) => moveFolderNode(previous, droppedID, node.id))
-                    setExpandedNodeIDs((previous) => {
-                      const next = new Set(previous)
-                      next.add(node.id)
-                      return next
-                    })
+                    moveDraggedFolder(droppedID, node.id)
                   }
                   setDraggedFolderID(null)
                 }}
@@ -557,7 +599,8 @@ export function Collection({
                 className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 opacity-0 transition-all hover:bg-transparent hover:text-foreground group-hover:opacity-100'
                 data-testid={`folder-tree-add-child-${node.id}`}
                 aria-label={`Add child folder under ${node.name}`}
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation()
                   setFolderCreateParentID(node.id)
                   setFolderCreateName('')
                   setFolderCreateOpen(true)
@@ -578,7 +621,7 @@ export function Collection({
           </div>
         )
       }),
-    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, toggleNodeExpanded]
+    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, moveDraggedFolder, toggleNodeExpanded]
   )
 
   const summary = useMemo(
@@ -1021,18 +1064,28 @@ export function Collection({
               </div>
               <div
                 role='tree'
-                tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
+                tabIndex={0}
                 className='min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
                 onFocus={handleTreeFocus}
+                onDragOver={(event) => {
+                  if (draggedFolderID) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, null)
+                  }
+                  setDraggedFolderID(null)
+                  setDragOverFolderID(null)
+                }}
               >
-                <div
-                  className='min-w-full w-max space-y-2'
-                  data-testid='inventory-folder-tree-scroll-region'
-                >
-                  {renderFolderTree(folderTree)}
-                </div>
+                {renderFolderTree(folderTree)}
               </div>
               <Dialog
                 open={folderCreateOpen}
