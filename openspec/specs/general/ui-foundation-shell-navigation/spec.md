@@ -101,3 +101,13 @@ Authenticated shell pages SHALL let the main content region expand to the full a
 - **THEN** the primary shell content container MUST expand to nearly the full available width beside the sidebar
 - **AND** the shell MUST NOT apply an implicit centered `max-width` cap to the workspace container by default
 - **AND** inventory panels MUST retain their grid structure while using the wider workspace area
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-012: Sidebar count pills SHALL render as trailing nav badges
+Sidebar navigation rows that expose notification or count pills SHALL render them as right-aligned trailing badges using the shell nav badge pattern instead of inline label chips.
+
+#### Scenario: Chats row renders count pill as trailing sidebar badge
+- **GIVEN** the authenticated shell sidebar includes a navigation row with a count pill such as `Chats`
+- **WHEN** the row renders in desktop expanded-sidebar mode
+- **THEN** the label text MUST remain left-aligned in the row body
+- **AND** the count pill MUST render as a trailing right-aligned badge near the row end
+- **AND** the label text MUST NOT collapse into or overlap the badge area

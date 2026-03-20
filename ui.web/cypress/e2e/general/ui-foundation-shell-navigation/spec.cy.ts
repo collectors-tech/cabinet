@@ -458,4 +458,33 @@ describe('ui-foundation-shell-navigation', () => {
     cy.contains('Folders').should('be.visible')
     cy.contains('Items').should('be.visible')
   })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-012 right-aligns sidebar notification badges as trailing affordances', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    cy.get('[data-testid="sidebar-nav-link-chats"]').should('be.visible')
+    cy.get('[data-testid="sidebar-nav-label-chats"]').should('contain', 'Chats')
+    cy.get('[data-testid="sidebar-nav-badge-chats"]').should('contain', '3')
+
+    cy.get('[data-testid="sidebar-nav-link-chats"]').then(($link) => {
+      const linkRect = $link[0].getBoundingClientRect()
+
+      cy.get('[data-testid="sidebar-nav-label-chats"]').then(($label) => {
+        const labelRect = $label[0].getBoundingClientRect()
+
+        cy.get('[data-testid="sidebar-nav-badge-chats"]').then(($badge) => {
+          const badgeRect = $badge[0].getBoundingClientRect()
+
+          expect(badgeRect.left, 'badge sits after label').to.be.greaterThan(
+            labelRect.right + 8
+          )
+          expect(linkRect.right - badgeRect.right, 'badge hugs row end').to.be.lessThan(24)
+          expect(labelRect.right, 'label stays clear of badge area').to.be.lessThan(
+            badgeRect.left - 8
+          )
+        })
+      })
+    })
+  })
 })
