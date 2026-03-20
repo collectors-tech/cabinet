@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Card,
   CardContent,
@@ -77,6 +78,9 @@ type AISuggestion = {
 type FolderNode = {
   id: string
   name: string
+  itemCount?: number
+  secondaryLabel?: string
+  statusBadge?: string
   children?: FolderNode[]
 }
 
@@ -534,7 +538,7 @@ export function Collection({
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 className={cn(
-                  'relative flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                   isActive
                     ? 'bg-accent text-accent-foreground font-medium shadow-sm'
@@ -585,11 +589,40 @@ export function Collection({
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
-                <span
-                  data-testid={`collection-folder-${node.id}`}
-                  className='truncate'
-                >
-                  {node.name}
+                <span className='min-w-0 flex-1'>
+                  <span
+                    data-testid={`collection-folder-${node.id}`}
+                    className='block truncate'
+                  >
+                    {node.name}
+                  </span>
+                  {node.secondaryLabel ? (
+                    <span
+                      data-testid={`folder-tree-secondary-${node.id}`}
+                      className='block truncate text-xs font-normal text-muted-foreground'
+                    >
+                      {node.secondaryLabel}
+                    </span>
+                  ) : null}
+                </span>
+                <span className='flex shrink-0 items-center gap-2 ps-2'>
+                  {typeof node.itemCount === 'number' ? (
+                    <span
+                      data-testid={`folder-tree-count-${node.id}`}
+                      className='text-xs font-medium tabular-nums text-muted-foreground'
+                    >
+                      {node.itemCount}
+                    </span>
+                  ) : null}
+                  {node.statusBadge ? (
+                    <Badge
+                      variant='secondary'
+                      data-testid={`folder-tree-badge-${node.id}`}
+                      className='h-5 rounded-full px-1.5 text-[10px]'
+                    >
+                      {node.statusBadge}
+                    </Badge>
+                  ) : null}
                 </span>
               </button>
               <Button

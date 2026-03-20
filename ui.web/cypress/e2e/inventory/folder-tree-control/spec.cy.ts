@@ -153,6 +153,42 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-item-all-items"]').should('have.attr', 'data-active', 'false')
   })
 
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-013 renders structured metadata without breaking row readability', () => {
+    cy.get('[data-testid="folder-tree-secondary-all-items"]')
+      .should('be.visible')
+      .and('have.text', 'Entire catalog')
+    cy.get('[data-testid="folder-tree-count-all-items"]')
+      .should('be.visible')
+      .and('have.text', '124')
+    cy.get('[data-testid="folder-tree-badge-all-items"]')
+      .should('be.visible')
+      .and('have.text', 'Live')
+
+    cy.get('[data-testid="folder-tree-item-all-items"]').then(($row) => {
+      const rowRect = $row[0].getBoundingClientRect()
+
+      cy.get('[data-testid="collection-folder-all-items"]').then(($label) => {
+        const labelRect = $label[0].getBoundingClientRect()
+
+        cy.get('[data-testid="folder-tree-count-all-items"]').then(($count) => {
+          const countRect = $count[0].getBoundingClientRect()
+          expect(countRect.left, 'count trails label content').to.be.greaterThan(labelRect.right + 8)
+          expect(rowRect.right - countRect.right, 'count remains near row end').to.be.lessThan(80)
+        })
+      })
+    })
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-secondary-warehouse-1"]')
+      .should('be.visible')
+      .and('have.text', 'Pallet zone A')
+    cy.get('[data-testid="folder-tree-count-warehouse-1"]').should('have.text', '15')
+    cy.get('[data-testid="folder-tree-item-warehouse-1"]')
+      .should('have.attr', 'role', 'treeitem')
+      .click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 1')
+  })
+
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports live drag-drop reparenting with visible feedback', () => {
     const dataTransfer = new DataTransfer()
 
