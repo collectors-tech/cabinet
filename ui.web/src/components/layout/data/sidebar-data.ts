@@ -16,6 +16,7 @@ import {
   MessagesSquare,
   Database,
   ChartColumn,
+  Tag,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -49,7 +50,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Collections',
           url: '/collections',
-          icon: ListChecks,
+          icon: Tag,
         },
         {
           title: 'Wishlist',

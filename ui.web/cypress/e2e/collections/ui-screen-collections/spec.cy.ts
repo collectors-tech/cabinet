@@ -40,4 +40,16 @@ describe("ui-screen-collections", () => {
       .should("be.visible")
       .and("have.attr", "data-state", "active");
   });
+
+  it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="sidebar-nav-link-collections"]').should("be.visible");
+    cy.get('[data-testid="collections-page-icon"]').should("be.visible");
+
+    cy.get('[data-testid="sidebar-nav-link-collections"] svg')
+      .should("have.attr", "data-lucide", "tag");
+    cy.get('[data-testid="collections-page-icon"]')
+      .should("have.attr", "data-lucide", "tag");
+  });
 });

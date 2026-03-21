@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { collectionKey, useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
+import { Tag } from 'lucide-react'
 import { useState } from 'react'
 
 export function Collections() {
@@ -41,7 +42,10 @@ export function Collections() {
 
       <Main className='space-y-4'>
         <div className='space-y-1'>
-          <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
+          <div className='flex items-center gap-2'>
+            <Tag data-testid='collections-page-icon' className='h-5 w-5 text-muted-foreground' />
+            <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
+          </div>
           <p className='text-muted-foreground'>
             Manage workspace collections outside of sidebar chrome.
           </p>

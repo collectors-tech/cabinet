@@ -70,3 +70,13 @@ Collection creation entry points SHALL make their behavior obvious and communica
 - **WHEN** user uses `New` or `Create`
 - **THEN** the resulting workflow/options MUST be obvious from the page state
 - **AND** success, validation, and failure outcomes MUST be communicated with visible feedback
+
+### Requirement UI-SCREEN-COLLECTIONS-009: Collections affordances SHALL use tag iconography consistently
+Cabinet SHALL use a tag icon for the primary Collections affordance so sidebar navigation and dedicated Collections screen entry reinforce the same metaphor.
+
+#### Scenario: Open collections from authenticated navigation
+- **GIVEN** an authenticated user views the sidebar and the dedicated Collections screen
+- **WHEN** the Collections affordance renders in navigation and page context
+- **THEN** the sidebar Collections entry MUST use a tag icon
+- **AND** the dedicated Collections screen header MUST use matching tag iconography
+- **AND** icon sizing/alignment MUST remain visually consistent with surrounding controls and headings
