@@ -47,7 +47,7 @@ import {
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus } from 'lucide-react'
+import { ChevronRight, Ellipsis, Plus } from 'lucide-react'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -782,22 +782,64 @@ export function Collection({
                   ) : null}
                 </span>
               </button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 opacity-0 transition-all hover:bg-transparent hover:text-foreground group-hover:opacity-100'
-                data-testid={`folder-tree-add-child-${node.id}`}
-                aria-label={`Add child folder under ${node.name}`}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setFolderCreateParentID(node.id)
-                  setFolderCreateName('')
-                  setFolderCreateOpen(true)
-                }}
-              >
-                <Plus className='size-4' />
-              </Button>
+              <div className='flex shrink-0 items-center gap-1 opacity-0 transition-all group-hover:opacity-100 focus-within:opacity-100'>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                  data-testid={`folder-tree-add-child-${node.id}`}
+                  aria-label={`Add child folder under ${node.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setFolderCreateParentID(node.id)
+                    setFolderCreateName('')
+                    setFolderCreateOpen(true)
+                  }}
+                >
+                  <Plus className='size-4' />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                      data-testid={`folder-tree-row-actions-${node.id}`}
+                      aria-label={`Open folder actions for ${node.name}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Ellipsis className='size-4' />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align='end'
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-select-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setActiveFolder(node.name)
+                      }}
+                    >
+                      Select folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-add-child-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setFolderCreateParentID(node.id)
+                        setFolderCreateName('')
+                        setFolderCreateOpen(true)
+                      }}
+                    >
+                      Add child folder
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
             {draggedFolderID ? (
               <div

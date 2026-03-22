@@ -153,6 +153,30 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-item-all-items"]').should('have.attr', 'data-active', 'false')
   })
 
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-011 provides structured row actions without stealing selection', () => {
+    cy.get('[data-testid="folder-tree-item-all-items"]')
+      .should('have.attr', 'data-active', 'true')
+
+    cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
+    cy.get('[data-testid="folder-tree-item-all-items"]')
+      .should('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .should('have.attr', 'data-active', 'false')
+
+    cy.get('[data-testid="folder-tree-row-action-add-child-store-1"]').click()
+    cy.contains('[role="dialog"]', 'Add Child Folder').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-all-items"]')
+      .should('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="folder-tree-create-cancel"]').click()
+
+    cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
+    cy.get('[data-testid="folder-tree-row-action-select-store-1"]').click()
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .should('have.attr', 'data-active', 'true')
+      .and('have.attr', 'aria-selected', 'true')
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+  })
+
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-013 renders structured metadata without breaking row readability', () => {
     cy.get('[data-testid="folder-tree-secondary-all-items"]')
       .should('be.visible')
