@@ -127,6 +127,30 @@ The tree MUST support custom row rendering for inventory context such as counts,
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-014: Tree SHALL support working hierarchy re-organization through drag-drop or equivalent move workflow
 Users MUST be able to reorganize the folder hierarchy without rebuilding it manually from scratch.
 
+#### Scenario: Drop folder onto another node to create parent-child relationship
+- **GIVEN** user drags a folder over another valid folder node
+- **WHEN** they drop directly onto that node target
+- **THEN** the dragged folder MUST become a child of the target node
+- **AND** the target row MUST show clear child-drop feedback while dragging so the outcome is not ambiguous
+
+#### Scenario: Drop folder between rows to change sibling order
+- **GIVEN** user drags a folder between visible rows in the tree
+- **WHEN** the pointer is positioned at an insertion target between siblings
+- **THEN** the tree MUST show a visible insertion line or equivalent reorder indicator
+- **AND** dropping there MUST deterministically update sibling ordering at that insertion position
+
+#### Scenario: Drop folder in blank/root tree space
+- **GIVEN** user drags a folder into non-row tree space such as the blank root area or left-side tree gutter
+- **WHEN** they drop outside a node target but inside the tree drop region
+- **THEN** the tree MUST apply the supported root-level placement behavior deterministically
+- **AND** that root/outside-node behavior MUST be visually distinguishable from dropping onto a row as a child target
+
+#### Scenario: Invalid moves are blocked clearly
+- **GIVEN** user drags a folder onto itself or into one of its descendants
+- **WHEN** the proposed move would create an invalid hierarchy
+- **THEN** the tree MUST reject the move
+- **AND** drag feedback MUST make it clear that the target is invalid
+
 #### Scenario: Move folder within the hierarchy
 - **GIVEN** user wants to re-parent or reorder a folder within the tree
 - **WHEN** they drag and drop a folder using the supported move interaction

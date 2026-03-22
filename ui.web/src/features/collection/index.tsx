@@ -84,6 +84,12 @@ type FolderNode = {
   children?: FolderNode[]
 }
 
+type FolderDropTarget =
+  | { kind: 'child'; nodeID: string }
+  | { kind: 'before'; nodeID: string }
+  | { kind: 'after'; nodeID: string }
+  | { kind: 'root' }
+
 function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null {
   for (const node of nodes) {
     if (node.id === id) {
@@ -263,6 +269,47 @@ function moveFolderNode(
   return addChildFolder(next, targetID, removed)
 }
 
+function insertFolderNodeRelative(
+  nodes: FolderNode[],
+  targetID: string,
+  nodeToInsert: FolderNode,
+  position: 'before' | 'after'
+): FolderNode[] {
+  return nodes.flatMap((node) => {
+    if (node.id === targetID) {
+      return position === 'before' ? [nodeToInsert, node] : [node, nodeToInsert]
+    }
+    if (node.children?.length) {
+      return [
+        {
+          ...node,
+          children: insertFolderNodeRelative(node.children, targetID, nodeToInsert, position),
+        },
+      ]
+    }
+    return [node]
+  })
+}
+
+function moveFolderNodeRelative(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string,
+  position: 'before' | 'after'
+): FolderNode[] {
+  if (draggedID === targetID) {
+    return nodes
+  }
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  if (folderNodeContainsID(removed, targetID)) {
+    return nodes
+  }
+  return insertFolderNodeRelative(next, targetID, removed, position)
+}
+
 function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNode[] {
   const { removed, next } = removeFolderNode(nodes, draggedID)
   if (!removed) {
@@ -324,7 +371,7 @@ export function Collection({
   )
   const [folderCreateName, setFolderCreateName] = useState('')
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
-  const [dragOverFolderID, setDragOverFolderID] = useState<string | null>(null)
+  const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -541,22 +588,29 @@ export function Collection({
   }, [activeFolder, visibleTreeNodes])
 
   const moveDraggedFolder = useCallback(
-    (draggedID: string, targetID: string | null) => {
+    (draggedID: string, target: FolderDropTarget | null) => {
       const draggedNode = findFolderNodeByID(folderTree, draggedID)
-      if (!draggedNode || draggedID === 'all-items') {
+      if (!draggedNode || draggedID === 'all-items' || !target) {
         return
       }
 
-      if (targetID) {
-        if (draggedID === targetID) {
+      if (target.kind === 'child') {
+        if (draggedID === target.nodeID) {
           return
         }
-        setFolderTree((previous) => moveFolderNode(previous, draggedID, targetID))
+        setFolderTree((previous) => moveFolderNode(previous, draggedID, target.nodeID))
         setExpandedNodeIDs((previous) => {
           const next = new Set(previous)
-          next.add(targetID)
+          next.add(target.nodeID)
           return next
         })
+      } else if (target.kind === 'before' || target.kind === 'after') {
+        if (draggedID === target.nodeID) {
+          return
+        }
+        setFolderTree((previous) =>
+          moveFolderNodeRelative(previous, draggedID, target.nodeID, target.kind)
+        )
       } else {
         setFolderTree((previous) => moveFolderNodeToRoot(previous, draggedID))
       }
@@ -572,8 +626,40 @@ export function Collection({
         const hasChildren = Boolean(node.children?.length)
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
         const isActive = activeFolder === node.name
+        const isChildDropTarget = dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
+        const isBeforeDropTarget = dragTarget?.kind === 'before' && dragTarget.nodeID === node.id
+        const isAfterDropTarget = dragTarget?.kind === 'after' && dragTarget.nodeID === node.id
+        const canAcceptChildDrop = node.id !== 'all-items'
         return (
           <div key={node.id} role='none' className='relative'>
+            {draggedFolderID ? (
+              <div
+                role='presentation'
+                data-testid={`folder-tree-drop-before-${node.id}`}
+                className={cn(
+                  'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
+                  isBeforeDropTarget ? 'border-primary bg-primary/25' : 'border-transparent bg-transparent'
+                )}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setDragTarget({ kind: 'before', nodeID: node.id })
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragTarget({ kind: 'before', nodeID: node.id })
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, { kind: 'before', nodeID: node.id })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
+              />
+            ) : null}
             <div className='group relative flex items-center gap-1'>
               {hasChildren ? (
                 <Button
@@ -614,7 +700,7 @@ export function Collection({
                   isActive
                     ? 'bg-accent text-accent-foreground font-medium shadow-sm'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
-                  dragOverFolderID === node.id && 'bg-primary/20 text-primary'
+                  isChildDropTarget && 'bg-primary/20 text-primary'
                 )}
                 draggable={node.id !== 'all-items'}
                 onDragStart={(event) => {
@@ -627,35 +713,35 @@ export function Collection({
                   setDraggedFolderID(node.id)
                 }}
                 onDragEnter={(event) => {
-                  if (draggedFolderID && draggedFolderID !== node.id) {
+                  if (draggedFolderID && draggedFolderID !== node.id && canAcceptChildDrop) {
                     event.preventDefault()
-                    setDragOverFolderID(node.id)
+                    setDragTarget({ kind: 'child', nodeID: node.id })
                   }
                 }}
                 onDragOver={(event) => {
-                  if (draggedFolderID && draggedFolderID !== node.id) {
+                  if (draggedFolderID && draggedFolderID !== node.id && canAcceptChildDrop) {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
-                    setDragOverFolderID(node.id)
+                    setDragTarget({ kind: 'child', nodeID: node.id })
                   }
                 }}
                 onDragLeave={() => {
-                  if (dragOverFolderID === node.id) {
-                    setDragOverFolderID(null)
+                  if (isChildDropTarget) {
+                    setDragTarget(null)
                   }
                 }}
                 onDragEnd={() => {
                   setDraggedFolderID(null)
-                  setDragOverFolderID(null)
+                  setDragTarget(null)
                 }}
                 onDrop={(event) => {
                   event.preventDefault()
                   const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
-                  setDragOverFolderID(null)
-                  if (droppedID && droppedID !== node.id) {
-                    moveDraggedFolder(droppedID, node.id)
+                  if (droppedID && droppedID !== node.id && canAcceptChildDrop) {
+                    moveDraggedFolder(droppedID, { kind: 'child', nodeID: node.id })
                   }
                   setDraggedFolderID(null)
+                  setDragTarget(null)
                 }}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
@@ -713,6 +799,34 @@ export function Collection({
                 <Plus className='size-4' />
               </Button>
             </div>
+            {draggedFolderID ? (
+              <div
+                role='presentation'
+                data-testid={`folder-tree-drop-after-${node.id}`}
+                className={cn(
+                  'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
+                  isAfterDropTarget ? 'border-primary bg-primary/25' : 'border-transparent bg-transparent'
+                )}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setDragTarget({ kind: 'after', nodeID: node.id })
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragTarget({ kind: 'after', nodeID: node.id })
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, { kind: 'after', nodeID: node.id })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
+              />
+            ) : null}
             {hasChildren && expanded ? (
               <div
                 role='group'
@@ -725,7 +839,15 @@ export function Collection({
           </div>
         )
       }),
-    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, moveDraggedFolder, toggleNodeExpanded]
+    [
+      activeFolder,
+      dragTarget,
+      draggedFolderID,
+      expandedNodeIDs,
+      handleTreeItemKeyDown,
+      moveDraggedFolder,
+      toggleNodeExpanded,
+    ]
   )
 
   const summary = useMemo(
@@ -1171,25 +1293,63 @@ export function Collection({
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
                 tabIndex={0}
-                className='min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
+                className={cn(
+                  'min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2',
+                  dragTarget?.kind === 'root' && 'border-primary bg-primary/5'
+                )}
                 onFocus={handleTreeFocus}
                 onDragOver={(event) => {
                   if (draggedFolderID) {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
+                    if (event.target === event.currentTarget) {
+                      setDragTarget({ kind: 'root' })
+                    }
                   }
                 }}
                 onDrop={(event) => {
                   event.preventDefault()
                   const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
                   if (droppedID) {
-                    moveDraggedFolder(droppedID, null)
+                    moveDraggedFolder(droppedID, { kind: 'root' })
                   }
                   setDraggedFolderID(null)
-                  setDragOverFolderID(null)
+                  setDragTarget(null)
                 }}
               >
                 {renderFolderTree(folderTree)}
+                {draggedFolderID ? (
+                  <div
+                    role='presentation'
+                    data-testid='folder-tree-root-drop-zone'
+                    className={cn(
+                      'mt-2 flex min-h-10 items-center justify-center rounded-md border border-dashed px-3 text-xs text-muted-foreground transition-colors',
+                      dragTarget?.kind === 'root'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border/70'
+                    )}
+                    onDragEnter={(event) => {
+                      event.preventDefault()
+                      setDragTarget({ kind: 'root' })
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'move'
+                      setDragTarget({ kind: 'root' })
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const droppedID = event.dataTransfer.getData('text/plain') || draggedFolderID
+                      if (droppedID) {
+                        moveDraggedFolder(droppedID, { kind: 'root' })
+                      }
+                      setDraggedFolderID(null)
+                      setDragTarget(null)
+                    }}
+                  >
+                    Drop here to move folder to the root level
+                  </div>
+                ) : null}
               </div>
               <Dialog
                 open={folderCreateOpen}

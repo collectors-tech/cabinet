@@ -206,26 +206,50 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
   })
 
-  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports live drag-drop reparenting with visible feedback', () => {
-    const dataTransfer = new DataTransfer()
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, and root-drop feedback', () => {
+    const childTransfer = new DataTransfer()
 
     cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
     cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
 
-    cy.get('[data-testid="folder-tree-item-store-1"]')
-      .trigger('dragstart', { dataTransfer })
+    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
     cy.get('[data-testid="folder-tree-item-warehouses"]')
-      .trigger('dragenter', { dataTransfer })
-      .trigger('dragover', { dataTransfer })
+      .trigger('dragenter', { dataTransfer: childTransfer })
+      .trigger('dragover', { dataTransfer: childTransfer })
       .should('have.class', 'bg-primary/20')
-      .trigger('drop', { dataTransfer })
-
-    cy.get('[data-testid="folder-tree-item-store-1"]')
-      .should('have.attr', 'aria-selected', 'true')
-      .and('have.attr', 'data-active', 'true')
+      .trigger('drop', { dataTransfer: childTransfer })
 
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('exist')
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+
+    const reorderTransfer = new DataTransfer()
+    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: reorderTransfer })
+    cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]')
+      .trigger('dragenter', { dataTransfer: reorderTransfer })
+      .trigger('dragover', { dataTransfer: reorderTransfer })
+      .should('have.class', 'bg-primary/25')
+      .trigger('drop', { dataTransfer: reorderTransfer })
+
+    cy.get('[data-testid="folder-tree-group-warehouses"] > [role="none"]').then(($rows) => {
+      const labels = [...$rows].map((row) => row.textContent ?? '')
+      expect(labels[0]).to.contain('Store 1')
+      expect(labels[1]).to.contain('Warehouse 1')
+    })
+
+    const rootTransfer = new DataTransfer()
+    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: rootTransfer })
+    cy.get('[data-testid="folder-tree-root-drop-zone"]')
+      .trigger('dragenter', { dataTransfer: rootTransfer })
+      .trigger('dragover', { dataTransfer: rootTransfer })
+      .should('contain.text', 'Drop here to move folder to the root level')
+      .and('have.class', 'bg-primary/10')
+      .trigger('drop', { dataTransfer: rootTransfer })
+
+    cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-store-1"]')
+      .first()
+      .should('be.visible')
+    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
+      .should('not.exist')
   })
 })
