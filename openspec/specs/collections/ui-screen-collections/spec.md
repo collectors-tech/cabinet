@@ -36,6 +36,7 @@ The dedicated Collections screen SHALL let users understand which collection is 
 - **WHEN** user selects a different collection entry
 - **THEN** the newly active collection MUST be visually distinguished on the page
 - **AND** the active context change MUST be communicated with explicit on-screen state and persistence semantics
+- **AND** returning to the screen MUST reflect the persisted active collection without requiring reselection
 
 ### Requirement UI-SCREEN-COLLECTIONS-005: Collections screen SHALL support rename and remove management actions
 The dedicated Collections screen SHALL provide direct management actions for existing collections beyond creation and activation.

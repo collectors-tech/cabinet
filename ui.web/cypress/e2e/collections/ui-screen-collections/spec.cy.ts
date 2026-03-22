@@ -134,6 +134,30 @@ describe("ui-screen-collections", () => {
     cy.get('[data-testid="collections-item-store-2-prime"]').should("not.exist");
   });
 
+  it("UI-SCREEN-COLLECTIONS-004 shows active collection context changes and persistence semantics", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-active-context-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "All Items");
+    cy.get('[data-testid="collections-active-context-persistence"]')
+      .should("contain.text", "Persists for this signed-in profile");
+
+    cy.get('[data-testid="collections-item-watch-list"] button').first().click();
+    cy.get('[data-testid="collections-item-watch-list"]')
+      .should("have.attr", "data-state", "active");
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "Watch List");
+    cy.get('[data-testid="collections-active-context-message"]')
+      .should("contain.text", "Active collection is Watch List")
+
+    cy.reload();
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "Watch List");
+    cy.get('[data-testid="collections-item-watch-list"]')
+      .should("have.attr", "data-state", "active");
+  });
+
   it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {
     signInToCollections();
 

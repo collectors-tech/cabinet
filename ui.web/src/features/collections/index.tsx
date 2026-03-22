@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { ArrowDownAZ, ArrowUpAZ, Pencil, Tag, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type CollectionFilterMode = 'all' | 'active-lanes' | 'storage' | 'custom'
 type CollectionSortMode = 'name-asc' | 'name-desc' | 'items-desc'
@@ -50,6 +50,7 @@ export function Collections() {
   const [editingCollectionName, setEditingCollectionName] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingRemoveName, setPendingRemoveName] = useState<string | null>(null)
+  const [activeContextMessage, setActiveContextMessage] = useState('')
 
   const availableCreateActions = useMemo(
     () => [
@@ -66,6 +67,22 @@ export function Collections() {
     ],
     []
   )
+
+  const activeCollectionSummary = useMemo(
+    () =>
+      collectionSummaries.find((collection) => collection.name === activeWorkspaceCollection) ??
+      collectionSummaries[0],
+    [activeWorkspaceCollection, collectionSummaries]
+  )
+
+  useEffect(() => {
+    if (!activeCollectionSummary) {
+      return
+    }
+    setActiveContextMessage(
+      `Active collection is ${activeCollectionSummary.name}. This choice persists for the current signed-in profile.`
+    )
+  }, [activeCollectionSummary])
 
   const filteredCollections = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -302,6 +319,36 @@ export function Collections() {
                 Showing {filteredCollections.length} of {collectionSummaries.length} collections.
               </p>
             </div>
+            {activeCollectionSummary ? (
+              <div
+                className='rounded-md border border-primary/30 bg-primary/5 px-3 py-3 text-sm'
+                data-testid='collections-active-context-panel'
+              >
+                <div className='flex flex-wrap items-start justify-between gap-3'>
+                  <div>
+                    <p className='font-medium'>Current active collection</p>
+                    <p
+                      className='mt-1 text-base font-semibold text-foreground'
+                      data-testid='collections-active-context-name'
+                    >
+                      {activeCollectionSummary.name}
+                    </p>
+                    <p
+                      className='mt-1 text-muted-foreground'
+                      data-testid='collections-active-context-message'
+                    >
+                      {activeContextMessage}
+                    </p>
+                  </div>
+                  <div
+                    className='rounded-full border border-primary/30 px-2 py-1 text-xs text-primary'
+                    data-testid='collections-active-context-persistence'
+                  >
+                    Persists for this signed-in profile
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {createOutcome ? (
               <div
                 className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm'
@@ -489,14 +536,19 @@ export function Collections() {
                 return (
                   <div
                     key={collection.name}
-                    className='rounded-md border px-3 py-3'
+                    className={isActive ? 'rounded-md border-2 border-primary bg-primary/5 px-3 py-3' : 'rounded-md border px-3 py-3'}
                     data-testid={`collections-item-${collection.key}`}
                     data-state={isActive ? 'active' : 'inactive'}
                   >
                     <button
                       type='button'
                       className='w-full text-left hover:bg-muted/40'
-                      onClick={() => setActiveWorkspaceCollection(collection.name)}
+                      onClick={() => {
+                        setActiveWorkspaceCollection(collection.name)
+                        setActiveContextMessage(
+                          `Active collection switched to ${collection.name}. This choice persists for the current signed-in profile.`
+                        )
+                      }}
                     >
                       <div className='flex items-start justify-between gap-3'>
                         <div className='min-w-0'>
