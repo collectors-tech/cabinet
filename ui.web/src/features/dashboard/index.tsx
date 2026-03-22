@@ -198,11 +198,15 @@ export function Dashboard() {
               ) : summary?.recently_added?.length ? (
                 <ul className='space-y-2'>
                   {summary.recently_added.map((item) => (
-                    <li
-                      key={item}
-                      className='truncate rounded-md border px-3 py-2 text-sm'
-                    >
-                      {item}
+                    <li key={item}>
+                      <a
+                        href='/inventory'
+                        data-testid={`dashboard-recent-item-${item.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                        className='flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted'
+                      >
+                        <span className='truncate'>{item}</span>
+                        <span className='text-xs text-muted-foreground'>Open inventory</span>
+                      </a>
                     </li>
                   ))}
                 </ul>
