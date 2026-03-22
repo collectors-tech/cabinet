@@ -370,6 +370,9 @@ export function Collection({
     null
   )
   const [folderCreateName, setFolderCreateName] = useState('')
+  const [itemCreateOpen, setItemCreateOpen] = useState(false)
+  const [itemCreateTitle, setItemCreateTitle] = useState('')
+  const [itemCreatePartNumber, setItemCreatePartNumber] = useState('')
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -485,6 +488,12 @@ export function Collection({
       })
     )
   }, [activeFolder, expandedNodeIDs])
+
+  const openCreateItemDialog = useCallback(() => {
+    setItemCreateTitle('')
+    setItemCreatePartNumber('')
+    setItemCreateOpen(true)
+  }, [])
 
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
@@ -1277,6 +1286,7 @@ export function Collection({
             <Button
               type='button'
               data-testid='inventory-new-action'
+              onClick={openCreateItemDialog}
             >
               New
             </Button>
@@ -1291,7 +1301,10 @@ export function Collection({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
-                <DropdownMenuItem data-testid='inventory-create-menu-item'>
+                <DropdownMenuItem
+                  data-testid='inventory-create-menu-item'
+                  onClick={openCreateItemDialog}
+                >
                   New Item
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -1393,6 +1406,79 @@ export function Collection({
                   </div>
                 ) : null}
               </div>
+              <Dialog
+                open={itemCreateOpen}
+                onOpenChange={(open) => {
+                  setItemCreateOpen(open)
+                  if (!open) {
+                    setItemCreateTitle('')
+                    setItemCreatePartNumber('')
+                  }
+                }}
+              >
+                <DialogContent data-testid='inventory-item-create-dialog'>
+                  <DialogHeader>
+                    <DialogTitle>Create Item</DialogTitle>
+                  </DialogHeader>
+                  <div className='grid gap-3'>
+                    <Input
+                      data-testid='inventory-item-create-title'
+                      placeholder='Item title'
+                      value={itemCreateTitle}
+                      onChange={(event) => setItemCreateTitle(event.target.value)}
+                    />
+                    <Input
+                      data-testid='inventory-item-create-part-number'
+                      placeholder='Part number or SKU'
+                      value={itemCreatePartNumber}
+                      onChange={(event) => setItemCreatePartNumber(event.target.value)}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='inventory-item-create-cancel'
+                      onClick={() => {
+                        setItemCreateOpen(false)
+                        setItemCreateTitle('')
+                        setItemCreatePartNumber('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='inventory-item-create-submit'
+                      onClick={() => {
+                        const title = itemCreateTitle.trim()
+                        const partNumber = itemCreatePartNumber.trim()
+                        if (title === '') {
+                          return
+                        }
+                        const nextID = partNumber || `ITEM-${tableData.length + 1}`
+                        setTableData((previous) => [
+                          {
+                            id: nextID,
+                            title,
+                            status: 'todo',
+                            label: activeFolder,
+                            priority: 'medium',
+                          },
+                          ...previous,
+                        ])
+                        setSelectedItemID(nextID)
+                        setSelectedItemLabel(nextID)
+                        setItemCreateOpen(false)
+                        setItemCreateTitle('')
+                        setItemCreatePartNumber('')
+                      }}
+                    >
+                      Create Item
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <Dialog
                 open={folderCreateOpen}
                 onOpenChange={(open) => {
