@@ -42,6 +42,13 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function normalizeDashboardLink(link: string) {
+  if (link === '/pricing') {
+    return '/wishlist'
+  }
+  return link
+}
+
 export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -175,7 +182,12 @@ export function Dashboard() {
                       </div>
                     </div>
                     <Button asChild variant='outline' size='sm'>
-                      <a href={card.link}>Open</a>
+                      <a
+                        href={normalizeDashboardLink(card.link)}
+                        data-testid={`dashboard-card-link-${card.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      >
+                        Open
+                      </a>
                     </Button>
                   </div>
                 ))
