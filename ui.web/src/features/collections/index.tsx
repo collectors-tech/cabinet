@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
-import { ArrowDownAZ, ArrowUpAZ, Tag } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Pencil, Tag, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 type CollectionFilterMode = 'all' | 'active-lanes' | 'storage' | 'custom'
@@ -37,6 +37,8 @@ export function Collections() {
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
     addCollection,
+    renameCollection,
+    removeCollection,
   } = useWorkspaceCollections()
   const [newCollectionName, setNewCollectionName] = useState('')
   const [createPanelOpen, setCreatePanelOpen] = useState(false)
@@ -45,6 +47,9 @@ export function Collections() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMode, setFilterMode] = useState<CollectionFilterMode>('all')
   const [sortMode, setSortMode] = useState<CollectionSortMode>('name-asc')
+  const [editingCollectionName, setEditingCollectionName] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [pendingRemoveName, setPendingRemoveName] = useState<string | null>(null)
 
   const availableCreateActions = useMemo(
     () => [
@@ -354,6 +359,8 @@ export function Collections() {
                         addCollection(trimmedName)
                         setNewCollectionName('')
                         setCreatePanelOpen(false)
+                        setEditingCollectionName(null)
+                        setPendingRemoveName(null)
                         setCreateError(null)
                         setCreateOutcome(
                           `${trimmedName} created and set as the active collection.`
@@ -378,55 +385,191 @@ export function Collections() {
                 </div>
               </div>
             ) : null}
+            {editingCollectionName ? (
+              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-rename-panel'>
+                <div className='space-y-3'>
+                  <div>
+                    <p className='font-medium'>Rename collection</p>
+                    <p className='text-sm text-muted-foreground'>
+                      Rename updates the collection label in place and preserves active context when applicable.
+                    </p>
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    <Input
+                      data-testid='collections-rename-input'
+                      value={renameValue}
+                      onChange={(event) => {
+                        setRenameValue(event.target.value)
+                        if (createError) {
+                          setCreateError(null)
+                        }
+                      }}
+                    />
+                    <Button
+                      data-testid='collections-rename-save'
+                      onClick={() => {
+                        const renamed = renameCollection(editingCollectionName, renameValue)
+                        if (!renamed) {
+                          setCreateError('Enter a new collection name before saving rename.')
+                          setCreateOutcome(null)
+                          return
+                        }
+                        setEditingCollectionName(null)
+                        setRenameValue('')
+                        setCreateError(null)
+                        setCreateOutcome(`${editingCollectionName} renamed to ${renamed}.`)
+                      }}
+                    >
+                      Save rename
+                    </Button>
+                    <Button
+                      variant='outline'
+                      data-testid='collections-rename-cancel'
+                      onClick={() => {
+                        setEditingCollectionName(null)
+                        setRenameValue('')
+                        setCreateError(null)
+                        setCreateOutcome('Collection rename cancelled. No changes were made.')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {pendingRemoveName ? (
+              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-remove-panel'>
+                <div className='space-y-3'>
+                  <div>
+                    <p className='font-medium'>Remove collection</p>
+                    <p className='text-sm text-muted-foreground'>
+                      Confirm removal of {pendingRemoveName}. Active context falls back to All Items if needed.
+                    </p>
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      variant='destructive'
+                      data-testid='collections-remove-confirm'
+                      onClick={() => {
+                        const removed = removeCollection(pendingRemoveName)
+                        if (!removed) {
+                          setCreateError('Collection removal could not be completed.')
+                          setCreateOutcome(null)
+                          return
+                        }
+                        const removedName = pendingRemoveName
+                        setPendingRemoveName(null)
+                        setEditingCollectionName(null)
+                        setRenameValue('')
+                        setCreateError(null)
+                        setCreateOutcome(`${removedName} removed from workspace collections.`)
+                      }}
+                    >
+                      Confirm remove
+                    </Button>
+                    <Button
+                      variant='outline'
+                      data-testid='collections-remove-cancel'
+                      onClick={() => {
+                        setPendingRemoveName(null)
+                        setCreateOutcome('Collection removal cancelled. No collection was removed.')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
               {filteredCollections.length ? filteredCollections.map((collection) => {
                 const isActive = activeWorkspaceCollection === collection.name
+                const isProtected = collection.name === 'All Items'
                 return (
-                  <button
+                  <div
                     key={collection.name}
-                    type='button'
-                    className='rounded-md border px-3 py-3 text-left hover:bg-muted'
+                    className='rounded-md border px-3 py-3'
                     data-testid={`collections-item-${collection.key}`}
                     data-state={isActive ? 'active' : 'inactive'}
-                    onClick={() => setActiveWorkspaceCollection(collection.name)}
                   >
-                    <div className='flex items-start justify-between gap-3'>
-                      <div className='min-w-0'>
-                        <div
-                          className='font-medium'
-                          data-testid={`collections-item-title-${collection.key}`}
-                        >
-                          {collection.name}
+                    <button
+                      type='button'
+                      className='w-full text-left hover:bg-muted/40'
+                      onClick={() => setActiveWorkspaceCollection(collection.name)}
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div className='min-w-0'>
+                          <div
+                            className='font-medium'
+                            data-testid={`collections-item-title-${collection.key}`}
+                          >
+                            {collection.name}
+                          </div>
+                          <div
+                            className='mt-1 text-sm text-muted-foreground'
+                            data-testid={`collections-item-description-${collection.key}`}
+                          >
+                            {collection.description}
+                          </div>
                         </div>
                         <div
-                          className='mt-1 text-sm text-muted-foreground'
-                          data-testid={`collections-item-description-${collection.key}`}
+                          className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
+                          data-testid={`collections-item-status-${collection.key}`}
                         >
-                          {collection.description}
+                          {collection.statusLabel}
                         </div>
                       </div>
                       <div
-                        className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
-                        data-testid={`collections-item-status-${collection.key}`}
+                        className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
+                        data-testid={`collections-item-metadata-${collection.key}`}
                       >
-                        {collection.statusLabel}
+                        <span data-testid={`collections-item-count-${collection.key}`}>
+                          {collection.itemCount} items
+                        </span>
+                        <span data-testid={`collections-item-scope-${collection.key}`}>
+                          {collection.scopeLabel}
+                        </span>
+                        <span data-testid={`collections-item-updated-${collection.key}`}>
+                          {collection.updatedLabel}
+                        </span>
                       </div>
+                    </button>
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={`collections-rename-trigger-${collection.key}`}
+                        disabled={isProtected}
+                        onClick={() => {
+                          setEditingCollectionName(collection.name)
+                          setRenameValue(collection.name)
+                          setPendingRemoveName(null)
+                          setCreateError(null)
+                          setCreateOutcome(null)
+                        }}
+                      >
+                        <Pencil className='mr-1 size-4' /> Rename
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={`collections-remove-trigger-${collection.key}`}
+                        disabled={isProtected}
+                        onClick={() => {
+                          setPendingRemoveName(collection.name)
+                          setEditingCollectionName(null)
+                          setRenameValue('')
+                          setCreateError(null)
+                          setCreateOutcome(null)
+                        }}
+                      >
+                        <Trash2 className='mr-1 size-4' /> Remove
+                      </Button>
                     </div>
-                    <div
-                      className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
-                      data-testid={`collections-item-metadata-${collection.key}`}
-                    >
-                      <span data-testid={`collections-item-count-${collection.key}`}>
-                        {collection.itemCount} items
-                      </span>
-                      <span data-testid={`collections-item-scope-${collection.key}`}>
-                        {collection.scopeLabel}
-                      </span>
-                      <span data-testid={`collections-item-updated-${collection.key}`}>
-                        {collection.updatedLabel}
-                      </span>
-                    </div>
-                  </button>
+                  </div>
                 )
               }) : (
                 <div

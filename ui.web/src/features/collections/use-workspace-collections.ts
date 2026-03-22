@@ -166,6 +166,47 @@ export function useWorkspaceCollections() {
     return trimmed
   }
 
+  const renameCollection = (currentName: string, nextName: string) => {
+    const normalizedCurrent = normalizeCollectionName(currentName)
+    const normalizedNext = normalizeCollectionName(nextName)
+    if (!normalizedCurrent || !normalizedNext) {
+      return null
+    }
+    const target = workspaceCollections.find((value) => value === normalizedCurrent)
+    if (!target || normalizedCurrent === 'All Items') {
+      return null
+    }
+    const existing = workspaceCollections.find(
+      (value) => value.toLowerCase() === normalizedNext.toLowerCase()
+    )
+    if (existing && existing !== normalizedCurrent) {
+      return existing
+    }
+    setWorkspaceCollections((current) =>
+      current.map((value) => (value === normalizedCurrent ? normalizedNext : value))
+    )
+    if (activeWorkspaceCollection === normalizedCurrent) {
+      setActiveWorkspaceCollection(normalizedNext)
+    }
+    return normalizedNext
+  }
+
+  const removeCollection = (name: string) => {
+    const normalized = normalizeCollectionName(name)
+    if (!normalized || normalized === 'All Items') {
+      return false
+    }
+    const exists = workspaceCollections.includes(normalized)
+    if (!exists) {
+      return false
+    }
+    setWorkspaceCollections((current) => current.filter((value) => value !== normalized))
+    if (activeWorkspaceCollection === normalized) {
+      setActiveWorkspaceCollection('All Items')
+    }
+    return true
+  }
+
   const collectionSummaries = useMemo(
     () => workspaceCollections.map((name, index) => deriveCollectionSummary(name, index)),
     [workspaceCollections]
@@ -177,5 +218,7 @@ export function useWorkspaceCollections() {
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
     addCollection,
+    renameCollection,
+    removeCollection,
   }
 }

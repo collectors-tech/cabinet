@@ -45,6 +45,7 @@ The dedicated Collections screen SHALL provide direct management actions for exi
 - **WHEN** user chooses rename or remove for that collection
 - **THEN** the screen MUST expose the corresponding action
 - **AND** the action MUST complete through a clear confirmation/edit flow with deterministic result messaging
+- **AND** protected/default collections MUST not expose destructive completion for removal
 
 ### Requirement UI-SCREEN-COLLECTIONS-006: Collections screen SHALL expose collection details and metadata summaries
 Users SHALL be able to understand what a collection represents before choosing it.

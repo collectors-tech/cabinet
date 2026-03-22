@@ -114,6 +114,26 @@ describe("ui-screen-collections", () => {
     });
   });
 
+  it("UI-SCREEN-COLLECTIONS-005 supports rename and remove actions with visible outcomes", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-rename-trigger-store-2"]').click();
+    cy.get('[data-testid="collections-rename-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-rename-input"]').clear().type("Store 2 Prime");
+    cy.get('[data-testid="collections-rename-save"]').click();
+    cy.get('[data-testid="collections-create-outcome"]')
+      .should("contain.text", "Store 2 renamed to Store 2 Prime.");
+    cy.get('[data-testid="collections-item-store-2-prime"]').should("be.visible");
+    cy.get('[data-testid="collections-item-store-2"]').should("not.exist");
+
+    cy.get('[data-testid="collections-remove-trigger-store-2-prime"]').click();
+    cy.get('[data-testid="collections-remove-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-remove-confirm"]').click();
+    cy.get('[data-testid="collections-create-outcome"]')
+      .should("contain.text", "Store 2 Prime removed from workspace collections.");
+    cy.get('[data-testid="collections-item-store-2-prime"]').should("not.exist");
+  });
+
   it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {
     signInToCollections();
 
