@@ -70,6 +70,7 @@ Collection creation entry points SHALL make their behavior obvious and communica
 - **WHEN** user uses `New` or `Create`
 - **THEN** the resulting workflow/options MUST be obvious from the page state
 - **AND** success, validation, and failure outcomes MUST be communicated with visible feedback
+- **AND** the page MUST explain the difference between the primary `New` flow and alternate `Create` actions before mutation occurs
 
 ### Requirement UI-SCREEN-COLLECTIONS-009: Collections affordances SHALL use tag iconography consistently
 Cabinet SHALL use a tag icon for the primary Collections affordance so sidebar navigation and dedicated Collections screen entry reinforce the same metaphor.

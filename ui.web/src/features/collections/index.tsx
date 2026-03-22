@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { collectionKey, useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { Tag } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 export function Collections() {
   const {
@@ -27,6 +27,24 @@ export function Collections() {
   } = useWorkspaceCollections()
   const [newCollectionName, setNewCollectionName] = useState('')
   const [createPanelOpen, setCreatePanelOpen] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createOutcome, setCreateOutcome] = useState<string | null>(null)
+
+  const availableCreateActions = useMemo(
+    () => [
+      {
+        id: 'new-collection',
+        label: 'New Collection',
+        description: 'Open the primary create flow and name a collection explicitly.',
+      },
+      {
+        id: 'starter-collections',
+        label: 'Add Starter Collections',
+        description: 'Seed a couple of ready-to-use collections for quick workspace setup.',
+      },
+    ],
+    []
+  )
 
   return (
     <>
@@ -58,7 +76,11 @@ export function Collections() {
                 <Button
                   type='button'
                   data-testid='collections-new-action'
-                  onClick={() => setCreatePanelOpen(true)}
+                  onClick={() => {
+                    setCreatePanelOpen(true)
+                    setCreateError(null)
+                    setCreateOutcome('New opens the primary create flow for a named collection.')
+                  }}
                 >
                   New
                 </Button>
@@ -75,7 +97,11 @@ export function Collections() {
                   <DropdownMenuContent align='end'>
                     <DropdownMenuItem
                       data-testid='collections-create-menu-new'
-                      onClick={() => setCreatePanelOpen(true)}
+                      onClick={() => {
+                        setCreatePanelOpen(true)
+                        setCreateError(null)
+                        setCreateOutcome('Create → New Collection opens the full naming flow on this page.')
+                      }}
                     >
                       New Collection
                     </DropdownMenuItem>
@@ -84,6 +110,11 @@ export function Collections() {
                       onClick={() => {
                         addCollection('New Arrivals')
                         addCollection('Recently Graded')
+                        setCreatePanelOpen(false)
+                        setCreateError(null)
+                        setCreateOutcome(
+                          'Starter collections added. New Arrivals is now available as an active collection choice.'
+                        )
                       }}
                     >
                       Add Starter Collections
@@ -95,40 +126,100 @@ export function Collections() {
             <CardDescription>
               Create, list, and switch active collection context.
             </CardDescription>
+            <div
+              className='rounded-md border border-border/60 bg-muted/20 p-3 text-sm'
+              data-testid='collections-create-guidance'
+            >
+              <p className='font-medium'>How creation works here</p>
+              <ul className='mt-2 space-y-1 text-muted-foreground'>
+                {availableCreateActions.map((action) => (
+                  <li key={action.id} data-testid={`collections-create-guidance-${action.id}`}>
+                    <span className='font-medium text-foreground'>{action.label}:</span>{' '}
+                    {action.description}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </CardHeader>
           <CardContent className='space-y-3'>
+            {createOutcome ? (
+              <div
+                className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm'
+                data-testid='collections-create-outcome'
+              >
+                {createOutcome}
+              </div>
+            ) : null}
+            {createError ? (
+              <div
+                className='rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
+                data-testid='collections-create-error'
+              >
+                {createError}
+              </div>
+            ) : null}
             {createPanelOpen ? (
               <div
                 className='rounded-md border bg-muted/20 p-3'
                 data-testid='collections-create-panel'
               >
-                <div className='flex flex-wrap gap-2'>
-                  <Input
-                    data-testid='collections-new-input'
-                    placeholder='Collection name'
-                    value={newCollectionName}
-                    onChange={(event) => setNewCollectionName(event.target.value)}
-                  />
-                  <Button
-                    data-testid='collections-new-save'
-                    onClick={() => {
-                      addCollection(newCollectionName)
-                      setNewCollectionName('')
-                      setCreatePanelOpen(false)
-                    }}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    variant='outline'
-                    data-testid='collections-new-cancel'
-                    onClick={() => {
-                      setCreatePanelOpen(false)
-                      setNewCollectionName('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
+                <div className='space-y-3'>
+                  <div>
+                    <p className='font-medium' data-testid='collections-create-panel-title'>
+                      Create a collection
+                    </p>
+                    <p
+                      className='text-sm text-muted-foreground'
+                      data-testid='collections-create-panel-description'
+                    >
+                      Saving creates the collection immediately, closes this panel, and makes the new collection active.
+                    </p>
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    <Input
+                      data-testid='collections-new-input'
+                      placeholder='Collection name'
+                      value={newCollectionName}
+                      onChange={(event) => {
+                        setNewCollectionName(event.target.value)
+                        if (createError) {
+                          setCreateError(null)
+                        }
+                      }}
+                    />
+                    <Button
+                      data-testid='collections-new-save'
+                      onClick={() => {
+                        const trimmedName = newCollectionName.trim()
+                        if (!trimmedName) {
+                          setCreateError('Enter a collection name before saving.')
+                          setCreateOutcome(null)
+                          return
+                        }
+                        addCollection(trimmedName)
+                        setNewCollectionName('')
+                        setCreatePanelOpen(false)
+                        setCreateError(null)
+                        setCreateOutcome(
+                          `${trimmedName} created and set as the active collection.`
+                        )
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant='outline'
+                      data-testid='collections-new-cancel'
+                      onClick={() => {
+                        setCreatePanelOpen(false)
+                        setNewCollectionName('')
+                        setCreateError(null)
+                        setCreateOutcome('Collection creation cancelled. No collection was added.')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : null}
