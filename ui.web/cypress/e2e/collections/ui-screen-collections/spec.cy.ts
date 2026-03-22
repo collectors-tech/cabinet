@@ -47,26 +47,26 @@ describe("ui-screen-collections", () => {
       .should("be.visible")
       .and("have.attr", "data-state", "active");
   });
-+
-+  it("UI-SCREEN-COLLECTIONS-008 makes create outcomes and validation visible", () => {
-+    signInToCollections();
-+
-+    cy.get('[data-testid="collections-new-action"]').click();
-+    cy.get('[data-testid="collections-new-save"]').click();
-+    cy.get('[data-testid="collections-create-error"]')
-+      .should("contain.text", "Enter a collection name before saving.")
-+
-+    cy.get('[data-testid="collections-new-input"]').type("Collections Visible Beta");
-+    cy.get('[data-testid="collections-new-save"]').click();
-+    cy.get('[data-testid="collections-create-error"]').should("not.exist");
-+    cy.get('[data-testid="collections-create-outcome"]')
-+      .should("contain.text", "Collections Visible Beta created and set as the active collection.")
-+
-+    cy.get('[data-testid="collections-create-menu-trigger"]').click();
-+    cy.get('[data-testid="collections-create-menu-starter"]').click();
-+    cy.get('[data-testid="collections-create-outcome"]')
-+      .should("contain.text", "Starter collections added.")
-+  });
+
+  it("UI-SCREEN-COLLECTIONS-008 makes create outcomes and validation visible", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-new-action"]').click();
+    cy.get('[data-testid="collections-new-save"]').click();
+    cy.get('[data-testid="collections-create-error"]')
+      .should("contain.text", "Enter a collection name before saving.")
+
+    cy.get('[data-testid="collections-new-input"]').type("Collections Visible Beta");
+    cy.get('[data-testid="collections-new-save"]').click();
+    cy.get('[data-testid="collections-create-error"]').should("not.exist");
+    cy.get('[data-testid="collections-create-outcome"]')
+      .should("contain.text", "Collections Visible Beta created and set as the active collection.")
+
+    cy.get('[data-testid="collections-create-menu-trigger"]').click();
+    cy.get('[data-testid="collections-create-menu-starter"]').click();
+    cy.get('[data-testid="collections-create-outcome"]')
+      .should("contain.text", "Starter collections added.")
+  });
 
   it("UI-SCREEN-COLLECTIONS-006 exposes collection details and metadata summaries before selection", () => {
     signInToCollections();
@@ -86,6 +86,32 @@ describe("ui-screen-collections", () => {
       .should("contain.text", "Fast-moving")
     cy.get('[data-testid="collections-item-status-watch-list"]')
       .should("contain.text", "Needs review")
+  });
+
+  it("UI-SCREEN-COLLECTIONS-007 supports search, filtering, and ordering tools", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-management-tools"]').should("be.visible");
+    cy.get('[data-testid="collections-management-summary"]')
+      .should("contain.text", "Showing 6 of 6 collections.")
+
+    cy.get('[data-testid="collections-search-input"]').type("watch");
+    cy.get('[data-testid="collections-item-watch-list"]').should("be.visible");
+    cy.get('[data-testid="collections-item-all-items"]').should("not.exist");
+    cy.get('[data-testid="collections-management-summary"]')
+      .should("contain.text", "Showing 1 of 6 collections.")
+
+    cy.get('[data-testid="collections-search-input"]').clear();
+    cy.get('[data-testid="collections-filter-storage"]').click();
+    cy.get('[data-testid="collections-item-warehouse-1"]').should("be.visible");
+    cy.get('[data-testid="collections-item-store-1"]').should("not.exist");
+
+    cy.get('[data-testid="collections-filter-all"]').click();
+    cy.get('[data-testid="collections-sort-items-desc"]').click();
+    cy.get('[data-testid^="collections-item-"]').then(($items) => {
+      const first = $items.first().attr('data-testid');
+      expect(first).to.eq('collections-item-all-items');
+    });
   });
 
   it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {

@@ -15,8 +15,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
-import { Tag } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Tag } from 'lucide-react'
 import { useMemo, useState } from 'react'
+
+type CollectionFilterMode = 'all' | 'active-lanes' | 'storage' | 'custom'
+type CollectionSortMode = 'name-asc' | 'name-desc' | 'items-desc'
+
+function isSystemCollection(collection: { name: string; scopeLabel: string }) {
+  return (
+    collection.name === 'All Items' ||
+    collection.scopeLabel === 'Monitoring set' ||
+    collection.scopeLabel === 'Intent shortlist' ||
+    collection.scopeLabel === 'Storage location' ||
+    collection.scopeLabel === 'Retail lane'
+  )
+}
 
 export function Collections() {
   const {
@@ -29,6 +42,9 @@ export function Collections() {
   const [createPanelOpen, setCreatePanelOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createOutcome, setCreateOutcome] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterMode, setFilterMode] = useState<CollectionFilterMode>('all')
+  const [sortMode, setSortMode] = useState<CollectionSortMode>('name-asc')
 
   const availableCreateActions = useMemo(
     () => [
@@ -45,6 +61,48 @@ export function Collections() {
     ],
     []
   )
+
+  const filteredCollections = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    const visible = collectionSummaries
+      .filter((collection) => {
+        if (!normalizedSearch) {
+          return true
+        }
+        return [
+          collection.name,
+          collection.description,
+          collection.scopeLabel,
+          collection.statusLabel,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedSearch)
+      })
+      .filter((collection) => {
+        if (filterMode === 'all') {
+          return true
+        }
+        if (filterMode === 'active-lanes') {
+          return collection.scopeLabel === 'Retail lane' || collection.scopeLabel === 'Monitoring set'
+        }
+        if (filterMode === 'storage') {
+          return collection.scopeLabel === 'Storage location'
+        }
+        return !isSystemCollection(collection)
+      })
+
+    return [...visible].sort((left, right) => {
+      if (sortMode === 'items-desc') {
+        return right.itemCount - left.itemCount || left.name.localeCompare(right.name)
+      }
+      if (sortMode === 'name-desc') {
+        return right.name.localeCompare(left.name)
+      }
+      return left.name.localeCompare(right.name)
+    })
+  }, [collectionSummaries, filterMode, searchTerm, sortMode])
 
   return (
     <>
@@ -142,6 +200,103 @@ export function Collections() {
             </div>
           </CardHeader>
           <CardContent className='space-y-3'>
+            <div
+              className='rounded-md border border-border/60 bg-muted/10 p-3'
+              data-testid='collections-management-tools'
+            >
+              <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
+                <div className='flex flex-1 flex-col gap-3 md:flex-row'>
+                  <div className='flex-1'>
+                    <p className='mb-1 text-sm font-medium'>Find a collection</p>
+                    <Input
+                      data-testid='collections-search-input'
+                      placeholder='Search collections...'
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <p className='mb-1 text-sm font-medium'>Filter</p>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={filterMode === 'all' ? 'default' : 'outline'}
+                        data-testid='collections-filter-all'
+                        onClick={() => setFilterMode('all')}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={filterMode === 'active-lanes' ? 'default' : 'outline'}
+                        data-testid='collections-filter-active-lanes'
+                        onClick={() => setFilterMode('active-lanes')}
+                      >
+                        Active lanes
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={filterMode === 'storage' ? 'default' : 'outline'}
+                        data-testid='collections-filter-storage'
+                        onClick={() => setFilterMode('storage')}
+                      >
+                        Storage
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={filterMode === 'custom' ? 'default' : 'outline'}
+                        data-testid='collections-filter-custom'
+                        onClick={() => setFilterMode('custom')}
+                      >
+                        Custom
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <p className='mb-1 text-sm font-medium'>Order</p>
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant={sortMode === 'name-asc' ? 'default' : 'outline'}
+                      data-testid='collections-sort-name-asc'
+                      onClick={() => setSortMode('name-asc')}
+                    >
+                      <ArrowUpAZ className='mr-1 size-4' /> A–Z
+                    </Button>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant={sortMode === 'name-desc' ? 'default' : 'outline'}
+                      data-testid='collections-sort-name-desc'
+                      onClick={() => setSortMode('name-desc')}
+                    >
+                      <ArrowDownAZ className='mr-1 size-4' /> Z–A
+                    </Button>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant={sortMode === 'items-desc' ? 'default' : 'outline'}
+                      data-testid='collections-sort-items-desc'
+                      onClick={() => setSortMode('items-desc')}
+                    >
+                      Largest first
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <p
+                className='mt-3 text-xs text-muted-foreground'
+                data-testid='collections-management-summary'
+              >
+                Showing {filteredCollections.length} of {collectionSummaries.length} collections.
+              </p>
+            </div>
             {createOutcome ? (
               <div
                 className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm'
@@ -224,7 +379,7 @@ export function Collections() {
               </div>
             ) : null}
             <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-              {collectionSummaries.map((collection) => {
+              {filteredCollections.length ? filteredCollections.map((collection) => {
                 const isActive = activeWorkspaceCollection === collection.name
                 return (
                   <button
@@ -273,7 +428,14 @@ export function Collections() {
                     </div>
                   </button>
                 )
-              })}
+              }) : (
+                <div
+                  className='rounded-md border border-dashed px-3 py-6 text-sm text-muted-foreground'
+                  data-testid='collections-empty-state'
+                >
+                  No collections match the current search/filter combination.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

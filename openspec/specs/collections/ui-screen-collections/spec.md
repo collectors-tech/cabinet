@@ -62,6 +62,7 @@ When multiple collections exist, the dedicated management surface SHALL help use
 - **GIVEN** collections section contains many entries
 - **WHEN** user needs to find or organize a specific collection
 - **THEN** the screen MUST provide supported search/filtering and ordering controls for collection management workflows
+- **AND** visible result counts/state MUST make the current search/filter/order effect obvious to the user
 
 ### Requirement UI-SCREEN-COLLECTIONS-008: Collections screen SHALL communicate create-action outcomes and available create paths clearly
 Collection creation entry points SHALL make their behavior obvious and communicate whether creation succeeded, failed, or requires additional input.
