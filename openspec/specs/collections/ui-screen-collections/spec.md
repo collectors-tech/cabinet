@@ -53,6 +53,7 @@ Users SHALL be able to understand what a collection represents before choosing i
 - **GIVEN** collections section is open
 - **WHEN** user scans or opens a collection entry
 - **THEN** the UI MUST expose useful metadata for that collection such as summary/details/counts/status as defined by the product contract
+- **AND** each visible collection entry MUST surface enough detail to distinguish broad workspace scope, active operational lanes, and storage/archive groupings before selection
 
 ### Requirement UI-SCREEN-COLLECTIONS-007: Collections screen SHALL support search, filtering, and ordering tools for collection management
 When multiple collections exist, the dedicated management surface SHALL help users find and organize them efficiently.

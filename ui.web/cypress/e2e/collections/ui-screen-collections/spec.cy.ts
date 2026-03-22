@@ -68,6 +68,26 @@ describe("ui-screen-collections", () => {
 +      .should("contain.text", "Starter collections added.")
 +  });
 
+  it("UI-SCREEN-COLLECTIONS-006 exposes collection details and metadata summaries before selection", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-item-title-all-items"]')
+      .should("contain.text", "All Items")
+    cy.get('[data-testid="collections-item-description-all-items"]')
+      .should("contain.text", "Everything currently tracked")
+    cy.get('[data-testid="collections-item-metadata-all-items"]')
+      .should("contain.text", "248 items")
+      .and("contain.text", "Workspace default")
+      .and("contain.text", "Updated 5m ago")
+    cy.get('[data-testid="collections-item-status-all-items"]')
+      .should("contain.text", "Broadest scope")
+
+    cy.get('[data-testid="collections-item-description-watch-list"]')
+      .should("contain.text", "Fast-moving")
+    cy.get('[data-testid="collections-item-status-watch-list"]')
+      .should("contain.text", "Needs review")
+  });
+
   it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {
     signInToCollections();
 

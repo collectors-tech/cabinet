@@ -14,13 +14,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { collectionKey, useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
+import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { Tag } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 export function Collections() {
   const {
-    workspaceCollections,
+    collectionSummaries,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
     addCollection,
@@ -224,19 +224,53 @@ export function Collections() {
               </div>
             ) : null}
             <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-              {workspaceCollections.map((name) => {
-                const key = collectionKey(name)
-                const isActive = activeWorkspaceCollection === name
+              {collectionSummaries.map((collection) => {
+                const isActive = activeWorkspaceCollection === collection.name
                 return (
                   <button
-                    key={name}
+                    key={collection.name}
                     type='button'
-                    className='rounded-md border px-3 py-2 text-left hover:bg-muted'
-                    data-testid={`collections-item-${key}`}
+                    className='rounded-md border px-3 py-3 text-left hover:bg-muted'
+                    data-testid={`collections-item-${collection.key}`}
                     data-state={isActive ? 'active' : 'inactive'}
-                    onClick={() => setActiveWorkspaceCollection(name)}
+                    onClick={() => setActiveWorkspaceCollection(collection.name)}
                   >
-                    {name}
+                    <div className='flex items-start justify-between gap-3'>
+                      <div className='min-w-0'>
+                        <div
+                          className='font-medium'
+                          data-testid={`collections-item-title-${collection.key}`}
+                        >
+                          {collection.name}
+                        </div>
+                        <div
+                          className='mt-1 text-sm text-muted-foreground'
+                          data-testid={`collections-item-description-${collection.key}`}
+                        >
+                          {collection.description}
+                        </div>
+                      </div>
+                      <div
+                        className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
+                        data-testid={`collections-item-status-${collection.key}`}
+                      >
+                        {collection.statusLabel}
+                      </div>
+                    </div>
+                    <div
+                      className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
+                      data-testid={`collections-item-metadata-${collection.key}`}
+                    >
+                      <span data-testid={`collections-item-count-${collection.key}`}>
+                        {collection.itemCount} items
+                      </span>
+                      <span data-testid={`collections-item-scope-${collection.key}`}>
+                        {collection.scopeLabel}
+                      </span>
+                      <span data-testid={`collections-item-updated-${collection.key}`}>
+                        {collection.updatedLabel}
+                      </span>
+                    </div>
                   </button>
                 )
               })}
