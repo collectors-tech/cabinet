@@ -44,10 +44,7 @@ describe("ui-login-session", () => {
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
 
-    cy.location("pathname", { timeout: 15000 }).should(
-      "match",
-      /^(\/|\/inventory\/?|\/_authenticated\/?)$/
-    );
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
   });
 
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {

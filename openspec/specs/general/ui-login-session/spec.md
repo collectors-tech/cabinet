@@ -41,7 +41,7 @@ Cabinet SHALL avoid attaching a redundant `redirect=%2F` query when an unauthent
 - **GIVEN** user is unauthenticated and requests the base app URL `/`
 - **WHEN** router resolves the unauthenticated entry redirect
 - **THEN** UI MUST land on `/sign-in` without a redundant `redirect=%2F` query
-- **AND** sign-in from that entry MUST still continue to the default post-login destination
+- **AND** sign-in from that entry MUST continue to the canonical dashboard destination `/dashboard`
 
 #### Scenario: Protected deep link still preserves return target
 - **GIVEN** user is unauthenticated and requests a protected deep link such as `/inventory/`
