@@ -184,10 +184,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.contains('button', 'Create Account').click();
 
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/);
     cy.contains('Home').should('be.visible');
   });
 });

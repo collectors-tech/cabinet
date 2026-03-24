@@ -71,7 +71,7 @@ export function SignUpForm({
 
         auth.setUser(mockUser)
         auth.setAccessToken('mock-signup-access-token')
-        navigate({ to: '/', replace: true })
+        navigate({ to: '/dashboard', replace: true })
 
         return `Account created for ${data.email}`
       },

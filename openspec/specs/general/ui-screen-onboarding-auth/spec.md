@@ -84,7 +84,7 @@ Sign-up flow SHALL provide a deterministic outcome after valid submission so fir
 - **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
 - **WHEN** user activates `Create Account`
 - **THEN** UI MUST show in-progress state while submitting
-- **AND** on success MUST authenticate the new user session and navigate to authenticated shell (`/`)
+- **AND** on success MUST authenticate the new user session and navigate to the canonical authenticated dashboard destination (`/dashboard`)
 
 #### Scenario: Failed sign-up completion
 - **GIVEN** user submits valid sign-up payload and backend returns failure
