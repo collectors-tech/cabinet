@@ -647,7 +647,9 @@ export function Collection({
                 data-testid={`folder-tree-drop-before-${node.id}`}
                 className={cn(
                   'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
-                  isBeforeDropTarget ? 'border-primary bg-primary/25' : 'border-transparent bg-transparent'
+                  isBeforeDropTarget
+                    ? 'border-primary bg-primary/25'
+                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault()
@@ -709,7 +711,8 @@ export function Collection({
                   isActive
                     ? 'border-primary/45 bg-primary/18 text-accent-foreground font-semibold shadow-sm ring-1 ring-primary/25 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-primary before:content-["\"]'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
-                  isChildDropTarget && 'bg-primary/20 text-primary'
+                  draggedFolderID && node.id !== 'all-items' && draggedFolderID !== node.id && 'border-dashed border-border/40',
+                  isChildDropTarget && 'border-primary bg-primary/20 text-primary ring-1 ring-primary/25'
                 )}
                 draggable={node.id !== 'all-items'}
                 onDragStart={(event) => {
@@ -858,7 +861,9 @@ export function Collection({
                 data-testid={`folder-tree-drop-after-${node.id}`}
                 className={cn(
                   'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
-                  isAfterDropTarget ? 'border-primary bg-primary/25' : 'border-transparent bg-transparent'
+                  isAfterDropTarget
+                    ? 'border-primary bg-primary/25'
+                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault()
