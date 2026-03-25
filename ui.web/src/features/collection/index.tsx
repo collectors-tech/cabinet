@@ -704,10 +704,10 @@ export function Collection({
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 className={cn(
-                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 text-left text-sm transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                   isActive
-                    ? 'bg-accent text-accent-foreground font-medium shadow-sm'
+                    ? 'border-primary/25 bg-accent text-accent-foreground font-medium shadow-sm ring-1 ring-primary/10'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
                   isChildDropTarget && 'bg-primary/20 text-primary'
                 )}
@@ -796,6 +796,7 @@ export function Collection({
                   type='button'
                   variant='ghost'
                   size='icon'
+                  tabIndex={-1}
                   className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-add-child-${node.id}`}
                   aria-label={`Add child folder under ${node.name}`}
@@ -814,6 +815,7 @@ export function Collection({
                       type='button'
                       variant='ghost'
                       size='icon'
+                      tabIndex={-1}
                       className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
                       data-testid={`folder-tree-row-actions-${node.id}`}
                       aria-label={`Open folder actions for ${node.name}`}

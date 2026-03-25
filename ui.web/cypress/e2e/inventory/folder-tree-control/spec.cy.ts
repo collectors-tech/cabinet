@@ -7,6 +7,41 @@ describe('inventory-folder-tree-control', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function getFocusableElements(doc: Document) {
+    return Array.from(
+      doc.querySelectorAll<HTMLElement>(
+        'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]'
+      )
+    ).filter((element) => {
+      if (element.hasAttribute('disabled') || element.getAttribute('aria-hidden') === 'true') {
+        return false
+      }
+
+      const tabIndexValue = element.getAttribute('tabindex')
+      if (tabIndexValue !== null && Number(tabIndexValue) < 0) {
+        return false
+      }
+
+      const styles = element.ownerDocument.defaultView?.getComputedStyle(element)
+      if (!styles || styles.display === 'none' || styles.visibility === 'hidden') {
+        return false
+      }
+
+      return element.getClientRects().length > 0
+    })
+  }
+
+  function getNextFocusableElement(doc: Document, current: HTMLElement) {
+    const focusableElements = getFocusableElements(doc)
+    const currentIndex = focusableElements.indexOf(current)
+
+    expect(currentIndex, `${current.dataset.testid ?? current.tagName} is tabbable`).to.be.greaterThan(
+      -1
+    )
+
+    return focusableElements[currentIndex + 1] ?? null
+  }
+
   beforeEach(() => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
@@ -41,7 +76,32 @@ describe('inventory-folder-tree-control', () => {
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-002 supports keyboard tree semantics with accessible roles', () => {
-    cy.get('[data-testid="inventory-folder-tree"][role="tree"]').focus()
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-item-warehouse-1"]').click()
+
+    cy.document().then((doc) => {
+      const rootAddButton = doc.querySelector<HTMLElement>('[data-testid="folder-tree-add-root"]')
+      const activeRow = doc.querySelector<HTMLElement>('[data-testid="folder-tree-item-warehouse-1"]')
+
+      expect(rootAddButton, 'root add affordance exists').to.not.equal(null)
+      expect(activeRow, 'selected tree row exists').to.not.equal(null)
+
+      const nextAfterRoot = getNextFocusableElement(doc, rootAddButton as HTMLElement)
+      expect(nextAfterRoot, 'tab entry lands on the active row').to.equal(activeRow)
+
+      const addChildButton = doc.querySelector<HTMLElement>('[data-testid="folder-tree-add-child-warehouse-1"]')
+      const rowActionsButton = doc.querySelector<HTMLElement>('[data-testid="folder-tree-row-actions-warehouse-1"]')
+
+      expect(addChildButton?.getAttribute('tabindex'), 'inline add-child control is removed from normal tab order').to.equal('-1')
+      expect(rowActionsButton?.getAttribute('tabindex'), 'row actions trigger is removed from normal tab order').to.equal('-1')
+
+      const nextAfterActiveRow = getNextFocusableElement(doc, activeRow as HTMLElement)
+      expect(
+        nextAfterActiveRow?.closest('[data-testid="inventory-folder-tree"]') ?? null,
+        'tab exits the tree instead of drifting through inline controls'
+      ).to.equal(null)
+    })
+
     cy.get('[data-testid="folder-tree-item-watch-list"]').focus().type('{rightarrow}')
     cy.get('[data-testid="folder-tree-item-watch-list"]').should('have.attr', 'aria-selected', 'true')
     cy.get('[data-testid="folder-tree-item-watch-list"]').type('{enter}')
