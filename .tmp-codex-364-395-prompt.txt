@@ -1,0 +1,41 @@
+You are fixing Cabinet issue #364 in repo C:\projects\collectors-tech\cabinet.
+
+Read and follow these local docs first before changing anything:
+- C:\Users\maxbarrass\.openclaw\workspace\DEVELOPMENT-EXPLORATION-LOOP-cabinet-go.md
+- START.md if present
+- RESUME.md if present
+
+Context from Max's latest live review (authoritative):
+1) Folder Properties save does NOT persist; after refresh it reverts to the old value.
+2) Adding a new folder does NOT persist after refresh.
+3) Drag and drop for items still does NOT work in the live build.
+
+Your task:
+- Fix #364 so folder Properties edits persist across refresh.
+- Fix new-folder creation so it persists across refresh.
+- Fix item drag/drop so it works end-to-end in the live Cabinet build.
+- Revalidate with the required focused/spec/project checks.
+- Rebuild/recycle the demo2 lane on port 17882 using the project-local executable.
+- Update issue #364 with concise evidence if and only if the fixes are truly validated.
+- Then begin the next ready issue: #395 (inventory tree root-level sort control A/Z to the left of the root + button), but ONLY after #364 is genuinely fixed, validated, committed, pushed, and demo2 updated.
+
+Hard rules:
+- Use Issue -> Spec -> Validate -> Commit.
+- One focused change per issue/commit whenever possible.
+- Do not claim done without proof.
+- Do not stop at UI-only illusions: verify real persistence/state outcomes.
+- For #364, do not close it unless Max's reported blockers are actually fixed in the running build.
+- Use the project-local executable path first; log it in checkpoints.
+- Keep working autonomously until blocked or until #364 is fixed and #395 has been started.
+
+Expected outputs while you work:
+- Make the necessary code/spec/test changes.
+- Run validation commands.
+- Commit with issue-prefixed messages.
+- Push to origin.
+- Restart/recycle demo2 on 17882.
+
+When completely finished with #364 or if you hit a real blocker, run this command:
+openclaw system event --text "Cabinet #364 update: [brief real status/evidence]" --mode now
+
+If you finish #364 and start #395, also send a second event when #395 begins.

@@ -1,12 +1,4 @@
 describe('inventory-folder-tree-control', () => {
-  function signIn() {
-    cy.visit('/sign-in?redirect=%2Finventory%2F')
-    cy.get('input[name="email"]').clear().type('e2e-folder-tree@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-  }
-
   function getFocusableElements(doc: Document) {
     return Array.from(
       doc.querySelectorAll<HTMLElement>(
@@ -43,21 +35,33 @@ describe('inventory-folder-tree-control', () => {
   }
 
   beforeEach(() => {
+    cy.visit('about:blank')
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    cy.e2eReset()
+    cy.e2eBootstrap()
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
       body: {
         items: [
           {
-            id: 'item-tree-1',
+            id: 'e2e-item-001',
             part_number: 'PN-TREE-1',
             title: 'Tree Item 1',
+            status: 'todo',
+            category: 'feature',
+          },
+          {
+            id: 'e2e-item-002',
+            part_number: 'PN-TREE-2',
+            title: 'Tree Item 2',
             status: 'todo',
             category: 'feature',
           },
         ],
       },
     }).as('items')
-    signIn()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
     cy.wait('@items')
   })
 
@@ -290,11 +294,49 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
   })
 
-  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, and root-drop feedback', () => {
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-015 persists created folders and folder property edits after reload', () => {
+    cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
+    cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click()
+    cy.get('[data-testid="folder-properties-name-input"]').clear().type('Store 1 Persisted')
+    cy.get('[data-testid="folder-properties-category-select"]').select('Warehouse')
+    cy.get('[data-testid="folder-properties-secondary-label-input"]').clear().type('Aisle B')
+    cy.get('[data-testid="folder-properties-status-badge-input"]').clear().type('Cold')
+    cy.get('[data-testid="folder-properties-save"]').click()
+
+    cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
+    cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
+    cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
+
+    cy.get('[data-testid="folder-tree-add-root"]').click()
+    cy.get('[data-testid="folder-tree-name-input"]').clear().type('Refresh Persisted')
+    cy.get('[data-testid="folder-tree-create-submit"]').click()
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+
+    cy.reload()
+    cy.wait('@items')
+
+    cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
+    cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
+    cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+
+    cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
+    cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click()
+    cy.get('[data-testid="folder-properties-name-input"]').should('have.value', 'Store 1 Persisted')
+    cy.get('[data-testid="folder-properties-category-select"]').should('have.value', 'Warehouse')
+    cy.get('[data-testid="folder-properties-secondary-label-input"]').should('have.value', 'Aisle B')
+    cy.get('[data-testid="folder-properties-status-badge-input"]').should('have.value', 'Cold')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, root-drop feedback, and row drag affordance coverage', () => {
     const childTransfer = new DataTransfer()
 
     cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
     cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .should('have.attr', 'aria-selected', 'false')
+      .and('have.attr', 'data-draggable-row', 'true')
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').should('be.visible')
 
     cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
     cy.get('[data-testid="folder-tree-item-warehouses"]')
@@ -335,5 +377,32 @@ describe('inventory-folder-tree-control', () => {
       .should('be.visible')
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('not.exist')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-016 persists inventory item folder assignment after drag drop and reload', () => {
+    const transfer = new DataTransfer()
+
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]')
+      .trigger('dragstart', { dataTransfer: transfer })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .trigger('dragenter', { dataTransfer: transfer })
+      .trigger('dragover', { dataTransfer: transfer })
+      .trigger('drop', { dataTransfer: transfer })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]').should('be.visible')
+    cy.contains('Tree Item 1').should('be.visible')
+    cy.contains('Tree Item 2').should('not.exist')
+
+    cy.reload()
+    cy.wait('@items')
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]').should('be.visible')
+    cy.contains('Tree Item 1').should('be.visible')
+    cy.contains('Tree Item 2').should('not.exist')
   })
 })

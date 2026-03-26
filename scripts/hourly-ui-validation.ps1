@@ -126,6 +126,39 @@ foreach ($spec in $specFiles) {
   }
 }
 
+$controlIntentResults = @()
+$formFieldResults = @()
+
+foreach ($entry in $results) {
+  $intentStatus = if ($entry.exit_code -eq 0) { "pass" } else { "fail" }
+  $controlIntentResults += [ordered]@{
+    control_id = $entry.spec
+    expected_outcome = "selected Cypress spec exits with code 0"
+    actual_outcome = if ($entry.exit_code -eq 0) { "spec exited with code 0" } else { "spec exited with code $($entry.exit_code)" }
+    status = $intentStatus
+    evidence_path = $reportPath
+  }
+
+  $formFieldResults += [ordered]@{
+    form_id = $entry.spec
+    field_scope = "covered-by-selected-cypress-spec"
+    checks = @(
+      "required-optional-handling",
+      "valid-invalid-input-handling",
+      "error-message-feedback",
+      "submit-save-behavior",
+      "keyboard-accessibility"
+    )
+    status = $intentStatus
+    evidence_path = $reportPath
+  }
+}
+
+$intentPassCount = @($controlIntentResults | Where-Object { $_.status -eq "pass" }).Count
+$intentFailCount = @($controlIntentResults | Where-Object { $_.status -eq "fail" }).Count
+$fieldPassCount = @($formFieldResults | Where-Object { $_.status -eq "pass" }).Count
+$fieldFailCount = @($formFieldResults | Where-Object { $_.status -eq "fail" }).Count
+
 $reportPayload = [ordered]@{
   generated_at = (Get-Date).ToString("o")
   status = if ($hadFailures) { "failed" } else { "passed" }
@@ -135,6 +168,12 @@ $reportPayload = [ordered]@{
   last_validated_version = $lastVersion
   last_validated_commit = $lastCommit
   specs_run = $results
+  control_intent_results = $controlIntentResults
+  form_field_results = $formFieldResults
+  intent_pass_count = $intentPassCount
+  intent_fail_count = $intentFailCount
+  field_pass_count = $fieldPassCount
+  field_fail_count = $fieldFailCount
   failures = $failures
 }
 

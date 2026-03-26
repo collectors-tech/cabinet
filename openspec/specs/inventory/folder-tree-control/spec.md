@@ -155,7 +155,33 @@ Users MUST be able to reorganize the folder hierarchy without rebuilding it manu
 - **GIVEN** user wants to re-parent or reorder a folder within the tree
 - **WHEN** they drag and drop a folder using the supported move interaction
 - **THEN** the tree MUST provide a deterministic move workflow with clear feedback, valid drop/move constraints, and correct hierarchy updates after completion
-- **AND** the drag interaction MUST be actually usable in the live UI, not just visually implied by approximate row chrome
+- **AND** each draggable folder row MUST expose a clear row-end drag affordance so drag capability is discoverable
+- **AND** drag initiation MUST work reliably from the practical row grab area for both selected and non-selected rows, not only from a narrow or accidental hit target
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-015: Folder structure edits SHALL persist for the active profile across refresh
+Folder create and folder-properties workflows MUST save the resulting tree state so the same user sees the edited structure again after refresh within the supported live runtime.
+
+#### Scenario: Save folder properties and refresh
+- **GIVEN** user updates a folder's visible properties such as name, category, secondary label/tag, or status badge
+- **WHEN** they save the folder properties and refresh the inventory workspace
+- **THEN** the edited folder MUST keep the saved values after reload
+- **AND** secondary label/tag and status badge edits MUST re-render in the tree after reload without requiring folder recreation
+- **AND** the saved folder MUST still be addressable by its stable folder ID in the UI
+
+#### Scenario: Create folder and refresh
+- **GIVEN** user creates a new root or child folder in the tree
+- **WHEN** the creation succeeds and they refresh the inventory workspace
+- **THEN** the new folder MUST still exist in the same hierarchy after reload
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-016: Tree SHALL support persisted inventory item assignment through direct drag-drop
+Users MUST be able to drag inventory items onto folder rows and have the assignment survive refresh in the live runtime.
+
+#### Scenario: Drop inventory item onto folder and refresh
+- **GIVEN** an inventory item is visible in the inventory workspace
+- **WHEN** user drags that item onto a valid folder row
+- **THEN** the item MUST become assigned to that folder's scope
+- **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
+- **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
 
 ## Implementation recommendation
 Preferred component strategy:
