@@ -12,8 +12,14 @@ type TasksColumnsOptions = {
   routePath: TasksRoutePath
 }
 
+const wishlistStatusLabels: Record<string, string> = {
+  wishlist: 'Watching',
+  discovered: 'Below target',
+}
+
 export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<Task>[] {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
 
   return [
     {
@@ -45,7 +51,7 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Part #' : 'Task'}
+          title={isInventoryRoute ? 'Part #' : isWishlistRoute ? 'Item ID' : 'Task'}
         />
       ),
       cell: ({ row }) => <div className='w-[120px]'>{row.getValue('id')}</div>,
@@ -66,7 +72,7 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
 
         return (
           <div className='flex space-x-2'>
-            {!isInventoryRoute && label ? <Badge variant='outline'>{label.label}</Badge> : null}
+            {!isInventoryRoute && !isWishlistRoute && label ? <Badge variant='outline'>{label.label}</Badge> : null}
             <span className='truncate font-medium'>{row.getValue('title')}</span>
           </div>
         )
@@ -77,7 +83,7 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Condition' : 'Status'}
+          title={isInventoryRoute ? 'Condition' : isWishlistRoute ? 'Watch Status' : 'Status'}
         />
       ),
       meta: { className: 'ps-1', tdClassName: 'ps-4' },
@@ -86,6 +92,14 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
           return (
             <div className='flex min-w-[100px] items-center gap-2'>
               <span className='capitalize'>{String(row.getValue('status'))}</span>
+            </div>
+          )
+        }
+
+        if (isWishlistRoute) {
+          return (
+            <div className='flex min-w-[120px] items-center gap-2'>
+              <span>{wishlistStatusLabels[row.original.status] ?? row.original.status}</span>
             </div>
           )
         }
@@ -116,7 +130,7 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Category' : 'Priority'}
+          title={isInventoryRoute ? 'Category' : isWishlistRoute ? 'Target Priority' : 'Priority'}
         />
       ),
       meta: { className: 'ps-1', tdClassName: 'ps-3' },

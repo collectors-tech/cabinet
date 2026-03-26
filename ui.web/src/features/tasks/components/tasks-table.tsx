@@ -254,7 +254,9 @@ export function TasksTable({ data, routePath }: DataTableProps) {
         searchPlaceholder={
           routePath === '/_authenticated/inventory/'
             ? 'Filter by title or part number...'
-            : 'Filter by title or ID...'
+            : routePath === '/_authenticated/wishlist/'
+              ? 'Filter by title or item ID...'
+              : 'Filter by title or ID...'
         }
         filters={[
           {
@@ -262,15 +264,25 @@ export function TasksTable({ data, routePath }: DataTableProps) {
             title:
               routePath === '/_authenticated/inventory/'
                 ? 'Condition'
-                : 'Status',
-            options: statuses,
+                : routePath === '/_authenticated/wishlist/'
+                  ? 'Watch status'
+                  : 'Status',
+            options:
+              routePath === '/_authenticated/wishlist/'
+                ? [
+                    { label: 'Watching', value: 'wishlist' },
+                    { label: 'Below target', value: 'discovered' },
+                  ]
+                : statuses,
           },
           {
             columnId: 'priority',
             title:
               routePath === '/_authenticated/inventory/'
                 ? 'Category'
-                : 'Priority',
+                : routePath === '/_authenticated/wishlist/'
+                  ? 'Target priority'
+                  : 'Priority',
             options:
               routePath === '/_authenticated/inventory/'
                 ? [
