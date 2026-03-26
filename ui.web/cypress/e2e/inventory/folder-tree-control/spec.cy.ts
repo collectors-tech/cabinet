@@ -336,7 +336,10 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-item-store-1"]')
       .should('have.attr', 'aria-selected', 'false')
       .and('have.attr', 'data-draggable-row', 'true')
+      .and('have.css', 'cursor', 'grab')
     cy.get('[data-testid="folder-tree-drag-handle-store-1"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-inline-actions-store-1"]')
+      .should('have.css', 'pointer-events', 'none')
 
     cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
     cy.get('[data-testid="folder-tree-item-warehouses"]')

@@ -1075,7 +1075,7 @@ export function Collection({
                 }}
               />
             ) : null}
-            <div className='group relative flex items-center gap-1'>
+            <div className='group relative flex min-w-0 items-center gap-1'>
               {hasChildren ? (
                 <Button
                   type='button'
@@ -1110,7 +1110,7 @@ export function Collection({
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
                 className={cn(
-                  'relative flex w-full min-w-0 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 text-left text-sm transition-colors',
+                  'relative flex flex-1 min-w-0 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 pr-14 text-left text-sm transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                   isActive
                     ? 'border-primary/45 bg-primary/18 text-accent-foreground font-semibold shadow-sm ring-1 ring-primary/25 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-primary before:content-["\"]'
@@ -1120,7 +1120,8 @@ export function Collection({
                     draggedFolderID !== node.id &&
                     'border-dashed border-border/40',
                   (isChildDropTarget || isItemDropTarget) &&
-                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25'
+                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25',
+                  node.id !== 'all-items' && 'cursor-grab active:cursor-grabbing'
                 )}
                 draggable={node.id !== 'all-items'}
                 onDragStart={(event) => {
@@ -1248,7 +1249,10 @@ export function Collection({
                   ) : null}
                 </span>
               </div>
-              <div className='flex shrink-0 items-center gap-1 opacity-0 transition-all group-hover:opacity-100 focus-within:opacity-100'>
+              <div
+                data-testid={`folder-tree-inline-actions-${node.id}`}
+                className='pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+              >
                 <Button
                   type='button'
                   variant='ghost'
