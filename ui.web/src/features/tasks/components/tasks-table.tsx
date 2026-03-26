@@ -43,9 +43,7 @@ import {
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { tasksColumns as columns } from './tasks-columns'
-
-type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+import { getTasksColumns, type TasksRoutePath } from './tasks-columns'
 
 type DataTableProps = {
   data: Task[]
@@ -68,6 +66,7 @@ export function TasksTable({ data, routePath }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const columns = useMemo(() => getTasksColumns({ routePath }), [routePath])
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') {
       return 'rows'
@@ -252,17 +251,34 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder='Filter by title or ID...'
+        searchPlaceholder={
+          routePath === '/_authenticated/inventory/'
+            ? 'Filter by title or part number...'
+            : 'Filter by title or ID...'
+        }
         filters={[
           {
             columnId: 'status',
-            title: 'Status',
+            title:
+              routePath === '/_authenticated/inventory/'
+                ? 'Condition'
+                : 'Status',
             options: statuses,
           },
           {
             columnId: 'priority',
-            title: 'Priority',
-            options: priorities,
+            title:
+              routePath === '/_authenticated/inventory/'
+                ? 'Category'
+                : 'Priority',
+            options:
+              routePath === '/_authenticated/inventory/'
+                ? [
+                    { label: 'Feature', value: 'feature' },
+                    { label: 'Bug', value: 'bug' },
+                    { label: 'Documentation', value: 'documentation' },
+                  ]
+                : priorities,
           },
         ]}
       />

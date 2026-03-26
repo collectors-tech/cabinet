@@ -22,6 +22,13 @@ describe("inventory-management", () => {
             status: "todo",
             category: "feature",
           },
+          {
+            id: "item-2",
+            part_number: "PN-002",
+            title: "Second Item",
+            status: "used",
+            category: "documentation",
+          },
         ],
       },
     }).as("items");
@@ -40,8 +47,17 @@ describe("inventory-management", () => {
 
     cy.contains("button", "Rows").click();
     cy.get("table").should("be.visible");
+    cy.contains("th", "Part #").should("be.visible");
+    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Condition").should("be.visible");
+    cy.contains("th", "Category").should("be.visible");
+    cy.contains("th", "Task").should("not.exist");
+    cy.contains("th", "Priority").should("not.exist");
+    cy.contains("PN-001").should("be.visible");
+    cy.contains("todo").should("be.visible");
+    cy.contains("feature").should("be.visible");
 
-    cy.get('input[placeholder="Filter by title or ID..."]').type(
+    cy.get('input[placeholder="Filter by title or part number..."]').type(
       "no-matching-task-xyz"
     );
     cy.contains("No results.").should("be.visible");
@@ -156,7 +172,7 @@ describe("inventory-management", () => {
           .should("be.visible")
           .then(($summary) => {
             const summaryTop = $summary[0].getBoundingClientRect().top;
-            cy.get('input[placeholder="Filter by title or ID..."]')
+            cy.get('input[placeholder="Filter by title or part number..."]')
               .should("be.visible")
               .then(($input) => {
                 const inputTop = $input[0].getBoundingClientRect().top;
