@@ -137,3 +137,23 @@ Runtime startup MUST keep `cabinet.pid` as PID-only lock signal and MUST resolve
 - **WHEN** attach resolution executes
 - **THEN** runtime MUST remove stale PID file and continue with fresh startup
 - **AND** no attach/open action MUST occur for stale lock state
+
+### Requirement RUNTIME-CORE-013: Runtime SHALL persist lifecycle metadata in `cabinet.json` after setup configuration exists
+When runtime setup config exists, Cabinet MUST enrich `cabinet.json` with last-known lifecycle provenance for startup and shutdown without over-claiming current liveness.
+
+#### Scenario: Lifecycle metadata after clean run
+- **GIVEN** `cabinet.json` already exists for the runtime data directory
+- **WHEN** Cabinet starts, serves requests, and shuts down cleanly
+- **THEN** `cabinet.json` MUST persist `startedAt`, `startedBy`, `launchSource`, `lastKnownPid`, `lastKnownUrl`, `lastHeartbeatAt`, `lastShutdownAt`, `lastShutdownReason`, and `lastRunClean`
+- **AND** `lastRunClean` MUST be `true` after clean shutdown
+- **AND** metadata MUST be treated as last-known run facts, not proof of live process state
+
+### Requirement RUNTIME-CORE-014: Runtime SHALL write structured durable runtime/access/error logs under the active data directory
+Cabinet MUST write machine-readable JSONL log files for runtime lifecycle, request access, and runtime/server errors.
+
+#### Scenario: Structured runtime log files during local execution
+- **GIVEN** Cabinet starts successfully with writable data directory
+- **WHEN** runtime lifecycle events occur and HTTP requests are served
+- **THEN** Cabinet MUST append JSONL entries under the active data directory for runtime, access, and error streams
+- **AND** runtime log entries MUST include timestamp, level, event/type, and process/runtime context
+- **AND** access log entries MUST include method, path, status, and duration

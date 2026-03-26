@@ -184,10 +184,20 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.contains('button', 'Create Account').click();
 
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/);
     cy.contains('Home').should('be.visible');
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/forgot-password');
+    cy.get('input[name="email"]').type('valid.user@example.com');
+    cy.contains('button', 'Continue').click();
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/otp\/?$/);
+    cy.contains(/please enter your email/i).should('not.exist');
   });
 });

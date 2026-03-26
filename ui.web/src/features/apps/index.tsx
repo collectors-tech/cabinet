@@ -82,6 +82,11 @@ type IntegrationForm = {
   itemsPerPage: string
 }
 
+type ProfileOption = {
+  id: string
+  name: string
+}
+
 type AppsProps = {
   title?: string
   description?: string
@@ -140,6 +145,22 @@ function bootstrapErrorMessage(error: unknown) {
   return 'Failed to bootstrap integrations workspace.'
 }
 
+async function loadProfilesForRecovery() {
+  const profilesResp = await fetch('/api/profiles')
+  if (!profilesResp.ok) {
+    throw new Error(`profiles_${profilesResp.status}`)
+  }
+  const payload = (await profilesResp.json()) as {
+    profiles?: Array<{ id?: string; name?: string }>
+  }
+  return (payload.profiles ?? [])
+    .map((profile) => ({
+      id: profile.id?.trim() ?? '',
+      name: profile.name?.trim() ?? '',
+    }))
+    .filter((profile): profile is ProfileOption => Boolean(profile.id && profile.name))
+}
+
 export function Apps({
   title = 'Integrations',
   description = 'Configure provider credentials, health checks, and sync actions.',
@@ -161,6 +182,10 @@ export function Apps({
   const [providers, setProviders] = useState<ProviderRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const [availableProfiles, setAvailableProfiles] = useState<ProfileOption[]>([])
+  const [profileRecoveryLoading, setProfileRecoveryLoading] = useState(false)
+  const [createProfileName, setCreateProfileName] = useState('')
+  const [profileRecoveryError, setProfileRecoveryError] = useState<string | null>(null)
   const [editingProviderID, setEditingProviderID] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -183,6 +208,7 @@ export function Apps({
     setLoading(true)
     setBootstrapError(null)
     setActionMessage(null)
+    setProfileRecoveryError(null)
     try {
       const activeResp = await fetch('/api/profiles/active')
       if (!activeResp.ok) {
@@ -194,6 +220,7 @@ export function Apps({
         throw new Error('active_profile_missing')
       }
       setActiveProfileId(profileID)
+      setAvailableProfiles([])
 
       const registryResp = await fetch('/api/providers/registry')
       if (!registryResp.ok) {
@@ -213,6 +240,13 @@ export function Apps({
       }
       setSettings(settingsPayload.settings ?? {})
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith('active_profile_')) {
+        try {
+          setAvailableProfiles(await loadProfilesForRecovery())
+        } catch {
+          setAvailableProfiles([])
+        }
+      }
       setBootstrapError(bootstrapErrorMessage(error))
     } finally {
       setLoading(false)
@@ -266,6 +300,69 @@ export function Apps({
       }),
     })
   }
+
+  const recoverWithProfile = useCallback(
+    async (profileID: string) => {
+      setProfileRecoveryLoading(true)
+      setProfileRecoveryError(null)
+      try {
+        const response = await fetch('/api/profiles/active', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile_id: profileID }),
+        })
+        if (!response.ok) {
+          throw new Error(`set_active_profile_${response.status}`)
+        }
+        await loadBootstrap()
+      } catch (error) {
+        setProfileRecoveryError(
+          error instanceof Error
+            ? 'Could not activate the selected profile. Retry or create a new profile.'
+            : 'Could not activate the selected profile.'
+        )
+      } finally {
+        setProfileRecoveryLoading(false)
+      }
+    },
+    [loadBootstrap]
+  )
+
+  const createProfileInline = useCallback(async () => {
+    const trimmedName = createProfileName.trim()
+    if (!trimmedName) {
+      setProfileRecoveryError('Enter a profile name before creating one.')
+      return
+    }
+
+    setProfileRecoveryLoading(true)
+    setProfileRecoveryError(null)
+    try {
+      const createResp = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName }),
+      })
+      if (!createResp.ok) {
+        throw new Error(`create_profile_${createResp.status}`)
+      }
+      const created = (await createResp.json()) as { id?: string; name?: string }
+      const createdProfileID = created.id?.trim() ?? ''
+      if (!createdProfileID) {
+        throw new Error('created_profile_missing')
+      }
+      setCreateProfileName('')
+      await recoverWithProfile(createdProfileID)
+    } catch (error) {
+      setProfileRecoveryError(
+        error instanceof Error
+          ? 'Could not create a profile inline. Retry and check runtime state.'
+          : 'Could not create a profile inline.'
+      )
+    } finally {
+      setProfileRecoveryLoading(false)
+    }
+  }, [createProfileName, recoverWithProfile])
 
   const handleTypeChange = (value: AppType) => {
     setAppType(value)
@@ -517,9 +614,76 @@ export function Apps({
           >
             <p className='font-medium'>Integrations bootstrap failed</p>
             <p className='mt-1 text-muted-foreground'>{bootstrapError}</p>
-            <Button className='mt-3' size='sm' variant='outline' onClick={() => void loadBootstrap()}>
-              Retry
-            </Button>
+            <div className='mt-3 flex flex-wrap gap-2'>
+              <Button size='sm' variant='outline' onClick={() => void loadBootstrap()}>
+                Retry
+              </Button>
+            </div>
+
+            {bootstrapError.includes('active profile') ? (
+              <div
+                className='mt-4 rounded-md border border-border/60 bg-background/70 p-3'
+                data-testid='integrations-profile-recovery'
+              >
+                <p className='font-medium'>Recover profile context in this route</p>
+                <p className='mt-1 text-muted-foreground'>
+                  Pick an existing profile or create one here, then reload the provider catalog in place.
+                </p>
+
+                {availableProfiles.length ? (
+                  <div className='mt-3 flex flex-wrap gap-2'>
+                    {availableProfiles.map((profile) => (
+                      <Button
+                        key={profile.id}
+                        type='button'
+                        size='sm'
+                        variant='secondary'
+                        data-testid={`integrations-recovery-profile-${profile.id}`}
+                        disabled={profileRecoveryLoading}
+                        onClick={() => void recoverWithProfile(profile.id)}
+                      >
+                        Use {profile.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p
+                    className='mt-3 text-muted-foreground'
+                    data-testid='integrations-recovery-no-profiles'
+                  >
+                    No selectable profiles were found. Create one below.
+                  </p>
+                )}
+
+                <div className='mt-3 flex flex-col gap-2 sm:flex-row'>
+                  <Input
+                    value={createProfileName}
+                    onChange={(event) => setCreateProfileName(event.target.value)}
+                    placeholder='New profile name'
+                    data-testid='integrations-recovery-create-input'
+                    disabled={profileRecoveryLoading}
+                  />
+                  <Button
+                    type='button'
+                    size='sm'
+                    data-testid='integrations-recovery-create-submit'
+                    disabled={profileRecoveryLoading}
+                    onClick={() => void createProfileInline()}
+                  >
+                    Create profile
+                  </Button>
+                </div>
+
+                {profileRecoveryError ? (
+                  <p
+                    className='mt-2 text-destructive'
+                    data-testid='integrations-recovery-error'
+                  >
+                    {profileRecoveryError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

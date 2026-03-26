@@ -42,6 +42,13 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function normalizeDashboardLink(link: string) {
+  if (link === '/pricing') {
+    return '/wishlist'
+  }
+  return link
+}
+
 export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -175,7 +182,12 @@ export function Dashboard() {
                       </div>
                     </div>
                     <Button asChild variant='outline' size='sm'>
-                      <a href={card.link}>Open</a>
+                      <a
+                        href={normalizeDashboardLink(card.link)}
+                        data-testid={`dashboard-card-link-${card.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      >
+                        Open
+                      </a>
                     </Button>
                   </div>
                 ))
@@ -198,11 +210,15 @@ export function Dashboard() {
               ) : summary?.recently_added?.length ? (
                 <ul className='space-y-2'>
                   {summary.recently_added.map((item) => (
-                    <li
-                      key={item}
-                      className='truncate rounded-md border px-3 py-2 text-sm'
-                    >
-                      {item}
+                    <li key={item}>
+                      <a
+                        href='/inventory'
+                        data-testid={`dashboard-recent-item-${item.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                        className='flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted'
+                      >
+                        <span className='truncate'>{item}</span>
+                        <span className='text-xs text-muted-foreground'>Open inventory</span>
+                      </a>
                     </li>
                   ))}
                 </ul>

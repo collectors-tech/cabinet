@@ -84,12 +84,27 @@ Sign-up flow SHALL provide a deterministic outcome after valid submission so fir
 - **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
 - **WHEN** user activates `Create Account`
 - **THEN** UI MUST show in-progress state while submitting
-- **AND** on success MUST authenticate the new user session and navigate to authenticated shell (`/`)
+- **AND** on success MUST authenticate the new user session and navigate to the canonical authenticated dashboard destination (`/dashboard`)
 
 #### Scenario: Failed sign-up completion
 - **GIVEN** user submits valid sign-up payload and backend returns failure
 - **WHEN** submission fails
 - **THEN** UI MUST show actionable error feedback and remain recoverable on `/sign-up`
+
+### Requirement UI-SCREEN-ONBOARDING-AUTH-012: Forgot-password submit SHALL provide deterministic recovery handoff
+Forgot-password flow SHALL provide a deterministic next-step outcome after valid email submission so users are never left on a cleared form with no recovery guidance.
+
+#### Scenario: Successful forgot-password handoff
+- **GIVEN** user is on `/forgot-password` with a valid email value
+- **WHEN** user activates `Continue`
+- **THEN** UI MUST show in-progress state while submitting
+- **AND** on success MUST navigate to `/otp` as the recovery verification step
+- **AND** MUST NOT replace the successful submit outcome with a fresh empty-field validation error on `/forgot-password`
+
+#### Scenario: Failed forgot-password handoff
+- **GIVEN** user submits a valid forgot-password payload and backend returns failure
+- **WHEN** submission fails
+- **THEN** UI MUST show actionable error feedback and remain recoverable on `/forgot-password`
 
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
@@ -112,3 +127,4 @@ Sign-up flow SHALL provide a deterministic outcome after valid submission so fir
 | UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
+| UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |

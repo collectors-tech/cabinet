@@ -1,0 +1,174 @@
+describe('inventory-folder-tree-persistence', () => {
+  const folderTreeSettingsKey = 'inventory.folder-tree.v1'
+  const itemAssignmentsSettingsKey = 'inventory.folder-item-assignments.v1'
+
+  function findNode(
+    nodes: Array<{
+      id?: string
+      name?: string
+      category?: string
+      secondaryLabel?: string
+      statusBadge?: string
+      children?: unknown
+    }>,
+    id: string
+  ): {
+    id?: string
+    name?: string
+    category?: string
+    secondaryLabel?: string
+    statusBadge?: string
+    children?: unknown
+  } | null {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return node
+      }
+
+      if (Array.isArray(node.children)) {
+        const childMatch = findNode(
+          node.children as Array<{
+            id?: string
+            name?: string
+            category?: string
+            secondaryLabel?: string
+            statusBadge?: string
+            children?: unknown
+          }>,
+          id
+        )
+        if (childMatch) {
+          return childMatch
+        }
+      }
+    }
+
+    return null
+  }
+
+  beforeEach(() => {
+    cy.visit('about:blank')
+    cy.clearCookies()
+    cy.clearLocalStorage()
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'e2e-item-001',
+            part_number: 'PN-TREE-1',
+            title: 'Tree Item 1',
+            status: 'todo',
+            category: 'feature',
+          },
+          {
+            id: 'e2e-item-002',
+            part_number: 'PN-TREE-2',
+            title: 'Tree Item 2',
+            status: 'todo',
+            category: 'feature',
+          },
+        ],
+      },
+    }).as('items')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
+    cy.wait('@items')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveSettings')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-015 persists folder edits and new folders to profile settings and across refresh', () => {
+    cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
+    cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click()
+    cy.get('[data-testid="folder-properties-name-input"]').clear().type('Store 1 Persisted')
+    cy.get('[data-testid="folder-properties-category-select"]').select('Warehouse')
+    cy.get('[data-testid="folder-properties-secondary-label-input"]').clear().type('Aisle B')
+    cy.get('[data-testid="folder-properties-status-badge-input"]').clear().type('Cold')
+    cy.get('[data-testid="folder-properties-save"]').click()
+    cy.wait('@saveSettings')
+
+    cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
+
+    cy.get('[data-testid="folder-tree-add-root"]').click()
+    cy.get('[data-testid="folder-tree-name-input"]').clear().type('Refresh Persisted')
+    cy.get('[data-testid="folder-tree-create-submit"]').click()
+    cy.wait('@saveSettings')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persistedTree = JSON.parse(settings[folderTreeSettingsKey] ?? '[]') as Array<{
+        id?: string
+        name?: string
+        category?: string
+        secondaryLabel?: string
+        statusBadge?: string
+        children?: unknown
+      }>
+
+      const storeOne = findNode(persistedTree, 'store-1')
+      expect(storeOne?.name).to.equal('Store 1 Persisted')
+      expect(storeOne?.category).to.equal('Warehouse')
+      expect(storeOne?.secondaryLabel).to.equal('Aisle B')
+      expect(storeOne?.statusBadge).to.equal('Cold')
+      expect(findNode(persistedTree, 'refresh-persisted')).to.not.equal(null)
+    })
+
+    cy.reload()
+    cy.wait('@items')
+
+    cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
+    cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
+    cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-016 persists inventory item folder assignment to profile settings and across refresh', () => {
+    const transfer = new DataTransfer()
+
+    cy.get('[data-testid="inventory-item-row-e2e-item-001"]').trigger('dragstart', {
+      dataTransfer: transfer,
+    })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .trigger('dragenter', { dataTransfer: transfer })
+      .trigger('dragover', { dataTransfer: transfer })
+      .trigger('drop', { dataTransfer: transfer })
+
+    cy.wait('@saveSettings')
+
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const assignments = JSON.parse(settings[itemAssignmentsSettingsKey] ?? '{}') as Record<
+        string,
+        string
+      >
+
+      expect(assignments['e2e-item-001']).to.equal('store-1')
+    })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.contains('Tree Item 1').should('be.visible')
+    cy.contains('Tree Item 2').should('not.exist')
+
+    cy.reload()
+    cy.wait('@items')
+
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const assignments = JSON.parse(settings[itemAssignmentsSettingsKey] ?? '{}') as Record<
+        string,
+        string
+      >
+
+      expect(assignments['e2e-item-001']).to.equal('store-1')
+    })
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click()
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+    cy.contains('Tree Item 1').should('be.visible')
+    cy.contains('Tree Item 2').should('not.exist')
+  })
+})

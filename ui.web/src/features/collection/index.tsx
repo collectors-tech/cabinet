@@ -1,4 +1,6 @@
 import {
+  type DragEvent,
+  type FocusEvent,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -7,6 +9,7 @@ import {
   useState,
 } from 'react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Card,
   CardContent,
@@ -35,6 +38,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
@@ -44,13 +55,14 @@ import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
+import { cn } from '@/lib/utils'
+import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
 
 type CollectionWorkspaceProps = {
   title?: string
   description?: string
   routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 }
-
 type InventoryPhoto = {
   id: string
   filename: string
@@ -75,44 +87,100 @@ type AISuggestion = {
 type FolderNode = {
   id: string
   name: string
+  category?: string
+  itemCount?: number
+  secondaryLabel?: string
+  statusBadge?: string
   children?: FolderNode[]
 }
 
+type FolderDropTarget =
+  | { kind: 'child'; nodeID: string }
+  | { kind: 'before'; nodeID: string }
+  | { kind: 'after'; nodeID: string }
+  | { kind: 'root' }
+
+function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node
+    }
+    const childMatch = findFolderNodeByID(node.children ?? [], id)
+    if (childMatch) {
+      return childMatch
+    }
+  }
+  return null
+}
+
+const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
+const inventoryFolderTreeSettingsKey = 'inventory.folder-tree.v1'
+const inventoryItemAssignmentsSettingsKey = 'inventory.folder-item-assignments.v1'
+const inventoryWorkspaceSettingsStorageKeyPrefix =
+  'cabinet.inventory.workspace-settings.v1.'
+const folderDragMimeType = 'application/x-cabinet-folder-id'
+const itemDragMimeType = 'application/x-cabinet-item-id'
+
 const initialFolderTree: FolderNode[] = [
-  { id: 'all-items', name: 'All Items' },
-  { id: 'watch-list', name: 'Watch List' },
-  { id: 'wishlist-focus', name: 'Wishlist Focus' },
-  { id: 'store-1', name: 'Store 1' },
-  { id: 'store-2', name: 'Store 2' },
-  { id: 'store-3', name: 'Store 3' },
-  { id: 'store-4', name: 'Store 4' },
-  { id: 'store-5', name: 'Store 5' },
-  { id: 'store-6', name: 'Store 6' },
-  { id: 'store-7', name: 'Store 7' },
-  { id: 'store-8', name: 'Store 8' },
-  { id: 'store-9', name: 'Store 9' },
-  { id: 'store-10', name: 'Store 10' },
+  {
+    id: 'all-items',
+    name: 'All Items',
+    category: 'Catalog',
+    itemCount: 124,
+    secondaryLabel: 'Entire catalog',
+    statusBadge: 'Live',
+  },
+  {
+    id: 'watch-list',
+    name: 'Watch List',
+    category: 'Watch',
+    itemCount: 12,
+    secondaryLabel: 'Needs review',
+    statusBadge: 'Watch',
+  },
+  {
+    id: 'wishlist-focus',
+    name: 'Wishlist Focus',
+    category: 'Wishlist',
+    itemCount: 7,
+    secondaryLabel: 'Priority targets',
+    statusBadge: 'Goal',
+  },
+  { id: 'store-1', name: 'Store 1', category: 'Store', itemCount: 18, secondaryLabel: 'Aisle A' },
+  { id: 'store-2', name: 'Store 2', category: 'Store', itemCount: 14, secondaryLabel: 'Aisle B' },
+  { id: 'store-3', name: 'Store 3', category: 'Store', itemCount: 11, secondaryLabel: 'Aisle C' },
+  { id: 'store-4', name: 'Store 4', category: 'Store', itemCount: 9, secondaryLabel: 'Overflow shelf' },
+  { id: 'store-5', name: 'Store 5', category: 'Store', itemCount: 8, secondaryLabel: 'Back room' },
+  { id: 'store-6', name: 'Store 6', category: 'Store', itemCount: 10, secondaryLabel: 'Bin 6' },
+  { id: 'store-7', name: 'Store 7', category: 'Store', itemCount: 6, secondaryLabel: 'Bin 7' },
+  { id: 'store-8', name: 'Store 8', category: 'Store', itemCount: 5, secondaryLabel: 'Bin 8' },
+  { id: 'store-9', name: 'Store 9', category: 'Store', itemCount: 4, secondaryLabel: 'Bin 9' },
+  { id: 'store-10', name: 'Store 10', category: 'Store', itemCount: 3, secondaryLabel: 'Bin 10' },
   {
     id: 'warehouses',
     name: 'Warehouses',
+    category: 'Warehouse',
+    itemCount: 39,
+    secondaryLabel: 'Bulk storage',
+    statusBadge: 'Cold',
     children: [
-      { id: 'warehouse-1', name: 'Warehouse 1' },
-      { id: 'warehouse-2', name: 'Warehouse 2' },
-      { id: 'warehouse-3', name: 'Warehouse 3' },
+      { id: 'warehouse-1', name: 'Warehouse 1', category: 'Warehouse', itemCount: 15, secondaryLabel: 'Pallet zone A' },
+      { id: 'warehouse-2', name: 'Warehouse 2', category: 'Warehouse', itemCount: 13, secondaryLabel: 'Pallet zone B' },
+      { id: 'warehouse-3', name: 'Warehouse 3', category: 'Warehouse', itemCount: 11, secondaryLabel: 'Pallet zone C' },
     ],
   },
-  { id: 'archive-a', name: 'Archive A' },
-  { id: 'archive-b', name: 'Archive B' },
-  { id: 'archive-c', name: 'Archive C' },
-  { id: 'archive-d', name: 'Archive D' },
-  { id: 'archive-e', name: 'Archive E' },
-  { id: 'archive-f', name: 'Archive F' },
-  { id: 'archive-g', name: 'Archive G' },
-  { id: 'archive-h', name: 'Archive H' },
-  { id: 'archive-i', name: 'Archive I' },
-  { id: 'archive-j', name: 'Archive J' },
-  { id: 'archive-k', name: 'Archive K' },
-  { id: 'archive-l', name: 'Archive L' },
+  { id: 'archive-a', name: 'Archive A', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-b', name: 'Archive B', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-c', name: 'Archive C', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-d', name: 'Archive D', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-e', name: 'Archive E', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-f', name: 'Archive F', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-g', name: 'Archive G', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-h', name: 'Archive H', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-i', name: 'Archive I', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-j', name: 'Archive J', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-k', name: 'Archive K', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-l', name: 'Archive L', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
 ]
 
 function countFolderNodes(nodes: FolderNode[]): number {
@@ -174,6 +242,375 @@ function addChildFolder(
   })
 }
 
+function removeFolderNode(
+  nodes: FolderNode[],
+  targetID: string
+): { removed: FolderNode | null; next: FolderNode[] } {
+  let removed: FolderNode | null = null
+  const next = nodes.flatMap((node) => {
+    if (node.id === targetID) {
+      removed = node
+      return []
+    }
+    if (node.children?.length) {
+      const result = removeFolderNode(node.children, targetID)
+      if (result.removed) {
+        removed = result.removed
+        return [{ ...node, children: result.next }]
+      }
+    }
+    return [node]
+  })
+  return { removed, next }
+}
+
+function folderNodeContainsID(node: FolderNode, targetID: string): boolean {
+  if (node.id === targetID) {
+    return true
+  }
+  return (node.children ?? []).some((child) => folderNodeContainsID(child, targetID))
+}
+
+function moveFolderNode(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string
+): FolderNode[] {
+  if (draggedID === targetID) {
+    return nodes
+  }
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  if (folderNodeContainsID(removed, targetID)) {
+    return nodes
+  }
+  return addChildFolder(next, targetID, removed)
+}
+
+function insertFolderNodeRelative(
+  nodes: FolderNode[],
+  targetID: string,
+  nodeToInsert: FolderNode,
+  position: 'before' | 'after'
+): FolderNode[] {
+  return nodes.flatMap((node) => {
+    if (node.id === targetID) {
+      return position === 'before' ? [nodeToInsert, node] : [node, nodeToInsert]
+    }
+    if (node.children?.length) {
+      return [
+        {
+          ...node,
+          children: insertFolderNodeRelative(node.children, targetID, nodeToInsert, position),
+        },
+      ]
+    }
+    return [node]
+  })
+}
+
+function moveFolderNodeRelative(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string,
+  position: 'before' | 'after'
+): FolderNode[] {
+  if (draggedID === targetID) {
+    return nodes
+  }
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  if (folderNodeContainsID(removed, targetID)) {
+    return nodes
+  }
+  return insertFolderNodeRelative(next, targetID, removed, position)
+}
+
+function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNode[] {
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  return [...next, removed]
+}
+
+function updateFolderNodeByID(
+  nodes: FolderNode[],
+  targetID: string,
+  updater: (node: FolderNode) => FolderNode
+): FolderNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetID) {
+      return updater(node)
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: updateFolderNodeByID(node.children, targetID, updater),
+      }
+    }
+    return node
+  })
+}
+
+function deleteFolderNode(nodes: FolderNode[], targetID: string): FolderNode[] {
+  return removeFolderNode(nodes, targetID).next
+}
+
+function flattenFolderNodes(nodes: FolderNode[]): FolderNode[] {
+  return nodes.flatMap((node) => [node, ...flattenFolderNodes(node.children ?? [])])
+}
+
+function normalizeFolderLabel(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function sanitizeFolderNodes(
+  value: unknown,
+  seenNodeIDs: Set<string> = new Set<string>()
+): FolderNode[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const sanitized: FolderNode[] = []
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return
+    }
+
+    const candidate = entry as Record<string, unknown>
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : ''
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+    if (id === '' || name === '' || seenNodeIDs.has(id)) {
+      return
+    }
+
+    seenNodeIDs.add(id)
+    const children = sanitizeFolderNodes(candidate.children, seenNodeIDs)
+    const itemCount =
+      typeof candidate.itemCount === 'number' && Number.isFinite(candidate.itemCount)
+        ? candidate.itemCount
+        : undefined
+
+    sanitized.push({
+      id,
+      name,
+      category:
+        typeof candidate.category === 'string' && candidate.category.trim() !== ''
+          ? candidate.category.trim()
+          : undefined,
+      itemCount,
+      secondaryLabel:
+        typeof candidate.secondaryLabel === 'string' &&
+        candidate.secondaryLabel.trim() !== ''
+          ? candidate.secondaryLabel.trim()
+          : undefined,
+      statusBadge:
+        typeof candidate.statusBadge === 'string' && candidate.statusBadge.trim() !== ''
+          ? candidate.statusBadge.trim()
+          : undefined,
+      children: children.length > 0 ? children : undefined,
+    })
+  })
+
+  return sanitized
+}
+
+function parsePersistedFolderTree(value: string | undefined): FolderNode[] | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    const sanitized = sanitizeFolderNodes(parsed)
+    if (!findFolderNodeByID(sanitized, 'all-items')) {
+      return null
+    }
+    return sanitized.length > 0 ? sanitized : null
+  } catch {
+    return null
+  }
+}
+
+function parsePersistedItemAssignments(
+  value: string | undefined,
+  nodes: FolderNode[]
+): Record<string, string> {
+  if (!value) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    const validFolderIDs = new Set(flattenFolderNodes(nodes).map((node) => node.id))
+    return Object.entries(parsed).reduce<Record<string, string>>(
+      (nextAssignments, [recordID, folderID]) => {
+        const normalizedRecordID = recordID.trim()
+        const normalizedFolderID =
+          typeof folderID === 'string' ? folderID.trim() : ''
+        if (
+          normalizedRecordID !== '' &&
+          normalizedFolderID !== '' &&
+          validFolderIDs.has(normalizedFolderID)
+        ) {
+          nextAssignments[normalizedRecordID] = normalizedFolderID
+        }
+        return nextAssignments
+      },
+      {}
+    )
+  } catch {
+    return {}
+  }
+}
+
+function inventoryWorkspaceSettingsStorageKey(profileID: string): string {
+  return `${inventoryWorkspaceSettingsStorageKeyPrefix}${profileID.trim()}`
+}
+
+function parsePersistedWorkspaceSnapshot(
+  value: string | null
+): { folderTree: FolderNode[]; itemAssignments: Record<string, string> } | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      folderTree?: unknown
+      itemAssignments?: unknown
+    }
+    const folderTree = sanitizeFolderNodes(parsed.folderTree)
+    if (!findFolderNodeByID(folderTree, 'all-items')) {
+      return null
+    }
+
+    return {
+      folderTree,
+      itemAssignments: parsePersistedItemAssignments(
+        JSON.stringify(parsed.itemAssignments ?? {}),
+        folderTree
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+function loadPersistedWorkspaceSnapshot(
+  profileID: string
+): { folderTree: FolderNode[]; itemAssignments: Record<string, string> } | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return null
+  }
+
+  return parsePersistedWorkspaceSnapshot(
+    window.localStorage.getItem(
+      inventoryWorkspaceSettingsStorageKey(normalizedProfileID)
+    )
+  )
+}
+
+function savePersistedWorkspaceSnapshot(
+  profileID: string,
+  folderTree: FolderNode[],
+  itemAssignments: Record<string, string>
+) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return
+  }
+
+  window.localStorage.setItem(
+    inventoryWorkspaceSettingsStorageKey(normalizedProfileID),
+    JSON.stringify({
+      folderTree,
+      itemAssignments,
+    })
+  )
+}
+
+function resolveTaskFolderID(
+  task: Task,
+  nodes: FolderNode[],
+  itemAssignments: Record<string, string>
+): string | null {
+  const recordID = task.recordID?.trim() || ''
+  const assignedFolderID = recordID ? itemAssignments[recordID]?.trim() || '' : ''
+  if (assignedFolderID && findFolderNodeByID(nodes, assignedFolderID)) {
+    return assignedFolderID
+  }
+
+  const normalizedLabel = normalizeFolderLabel(task.label)
+  if (normalizedLabel === '') {
+    return null
+  }
+
+  const matchedNode = flattenFolderNodes(nodes).find(
+    (node) => normalizeFolderLabel(node.name) === normalizedLabel
+  )
+  return matchedNode?.id ?? null
+}
+
+function loadInventoryTreeState() {
+  if (typeof window === 'undefined') {
+    return {
+      activeFolderID: 'all-items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+
+  try {
+    const raw = window.localStorage.getItem(inventoryTreeStorageKey)
+    if (!raw) {
+      return {
+        activeFolderID: 'all-items',
+        expandedNodeIDs: new Set<string>(),
+      }
+    }
+
+    const parsed = JSON.parse(raw) as {
+      activeFolderID?: string
+      activeFolder?: string
+      expandedNodeIDs?: string[]
+    }
+
+    const legacyActiveFolderID = parsed.activeFolder?.trim()
+      ? findFolderNodeByID(
+          initialFolderTree,
+          flattenFolderNodes(initialFolderTree).find(
+            (node) => node.name === parsed.activeFolder?.trim()
+          )?.id ?? 'all-items'
+        )?.id
+      : undefined
+
+    return {
+      activeFolderID: parsed.activeFolderID?.trim() || legacyActiveFolderID || 'all-items',
+      expandedNodeIDs: new Set(parsed.expandedNodeIDs ?? []),
+    }
+  } catch {
+    return {
+      activeFolderID: 'all-items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -181,18 +618,39 @@ export function Collection({
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const [folderTree, setFolderTree] = useState<FolderNode[]>(initialFolderTree)
-  const [activeFolder, setActiveFolder] = useState('All Items')
+  const [itemFolderAssignments, setItemFolderAssignments] = useState<
+    Record<string, string>
+  >({})
+  const [activeFolderID, setActiveFolderID] = useState(
+    () => loadInventoryTreeState().activeFolderID
+  )
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
-    () => new Set()
+    () => loadInventoryTreeState().expandedNodeIDs
   )
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
     null
   )
   const [folderCreateName, setFolderCreateName] = useState('')
-  const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [folderPropertiesOpen, setFolderPropertiesOpen] = useState(false)
+  const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(null)
+  const [folderPropertiesName, setFolderPropertiesName] = useState('')
+  const [folderPropertiesCategory, setFolderPropertiesCategory] = useState('General')
+  const [folderPropertiesSecondaryLabel, setFolderPropertiesSecondaryLabel] = useState('')
+  const [folderPropertiesStatusBadge, setFolderPropertiesStatusBadge] = useState('')
+  const [folderDeleteID, setFolderDeleteID] = useState<string | null>(null)
+  const [itemCreateOpen, setItemCreateOpen] = useState(false)
+  const [itemCreateTitle, setItemCreateTitle] = useState('')
+  const [itemCreatePartNumber, setItemCreatePartNumber] = useState('')
+  const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
+  const [draggedItemID, setDraggedItemID] = useState<string | null>(null)
+  const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
+  const [itemDropTargetFolderID, setItemDropTargetFolderID] = useState<string | null>(
+    null
+  )
+  const treeItemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -202,6 +660,7 @@ export function Collection({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
+  const [workspaceSettingsLoaded, setWorkspaceSettingsLoaded] = useState(false)
   const [selectedItemID, setSelectedItemID] = useState('')
   const [selectedItemLabel, setSelectedItemLabel] = useState('')
   const [barcodeAddInput, setBarcodeAddInput] = useState('')
@@ -234,6 +693,30 @@ export function Collection({
     setActiveWorkspaceCollection,
     addCollection,
   } = useWorkspaceCollections()
+  const activeFolderNode = useMemo(
+    () => findFolderNodeByID(folderTree, activeFolderID) ?? findFolderNodeByID(folderTree, 'all-items'),
+    [activeFolderID, folderTree]
+  )
+  const activeFolderName = activeFolderNode?.name ?? 'All Items'
+  const visibleTableData = useMemo(() => {
+    if (activeFolderID === 'all-items') {
+      return tableData
+    }
+
+    return tableData.filter(
+      (task) =>
+        resolveTaskFolderID(task, folderTree, itemFolderAssignments) === activeFolderID
+    )
+  }, [activeFolderID, folderTree, itemFolderAssignments, tableData])
+  const folderCategoryOptions = useMemo(() => {
+    const categories = new Set<string>(['General'])
+    flattenFolderNodes(folderTree).forEach((node) => {
+      if (node.category?.trim()) {
+        categories.add(node.category.trim())
+      }
+    })
+    return Array.from(categories)
+  }, [folderTree])
 
   const loadInventoryItems = useCallback(async () => {
     if (routePath !== '/_authenticated/inventory/') {
@@ -261,6 +744,7 @@ export function Collection({
       }
       const mapped: Task[] = (payload.items ?? []).map((item, index) => ({
         id: item.part_number?.trim() || item.id?.trim() || `ITEM-${index + 1}`,
+        recordID: item.id?.trim() || `item-record-${index + 1}`,
         title: item.title?.trim() || 'Untitled item',
         status: item.status?.trim() || 'todo',
         label: item.category?.trim() || 'feature',
@@ -291,6 +775,119 @@ export function Collection({
   useEffect(() => {
     void loadInventoryItems()
   }, [loadInventoryItems])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(
+      inventoryTreeStorageKey,
+      JSON.stringify({
+        activeFolderID,
+        expandedNodeIDs: Array.from(expandedNodeIDs),
+      })
+    )
+  }, [activeFolderID, expandedNodeIDs])
+
+  const openCreateItemDialog = useCallback(() => {
+    setItemCreateTitle('')
+    setItemCreatePartNumber('')
+    setItemCreateOpen(true)
+  }, [])
+
+  const assignItemToFolder = useCallback(
+    (recordID: string, folderID: string | null) => {
+      const normalizedRecordID = recordID.trim()
+      const normalizedFolderID = folderID?.trim() ?? ''
+      if (normalizedRecordID === '') {
+        return
+      }
+
+      setItemFolderAssignments((previous) => {
+        const nextAssignments = { ...previous }
+        if (
+          normalizedFolderID !== '' &&
+          normalizedFolderID !== 'all-items' &&
+          findFolderNodeByID(folderTree, normalizedFolderID)
+        ) {
+          nextAssignments[normalizedRecordID] = normalizedFolderID
+        } else {
+          delete nextAssignments[normalizedRecordID]
+        }
+        return nextAssignments
+      })
+    },
+    [folderTree]
+  )
+
+  const readDraggedFolderID = useCallback(
+    (event: DragEvent<HTMLElement>) => {
+      const folderID = event.dataTransfer.getData(folderDragMimeType).trim()
+      if (folderID !== '') {
+        return folderID
+      }
+
+      if ((draggedItemID ?? '').trim() !== '') {
+        return ''
+      }
+
+      const dragTypes = Array.from(event.dataTransfer.types ?? [])
+      const plainTextID = event.dataTransfer.getData('text/plain').trim()
+      if (plainTextID !== '' && !dragTypes.includes(itemDragMimeType)) {
+        return plainTextID
+      }
+
+      return (draggedFolderID ?? '').trim()
+    },
+    [draggedFolderID, draggedItemID]
+  )
+
+  const readDraggedItemID = useCallback(
+    (event: DragEvent<HTMLElement>) => {
+      const itemID = event.dataTransfer.getData(itemDragMimeType).trim()
+      if (itemID !== '') {
+        return itemID
+      }
+
+      if ((draggedFolderID ?? '').trim() !== '') {
+        return ''
+      }
+
+      const dragTypes = Array.from(event.dataTransfer.types ?? [])
+      const plainTextID = event.dataTransfer.getData('text/plain').trim()
+      if (plainTextID !== '' && !dragTypes.includes(folderDragMimeType)) {
+        return plainTextID
+      }
+
+      return (draggedItemID ?? '').trim()
+    },
+    [draggedFolderID, draggedItemID]
+  )
+
+  const handleItemRowDragStart = useCallback(
+    (task: Task, event: DragEvent<HTMLElement>) => {
+      const recordID = task.recordID?.trim() ?? ''
+      if (recordID === '') {
+        event.preventDefault()
+        return
+      }
+
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData(itemDragMimeType, recordID)
+      event.dataTransfer.setData('text/plain', recordID)
+      setDraggedFolderID(null)
+      setDragTarget(null)
+      setDraggedItemID(recordID)
+      setItemDropTargetFolderID(null)
+    },
+    []
+  )
+
+  const handleItemRowDragEnd = useCallback(() => {
+    setDraggedItemID(null)
+    setItemDropTargetFolderID(null)
+  }, [])
 
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
@@ -344,13 +941,13 @@ export function Collection({
   }, [])
 
   const handleTreeItemKeyDown = useCallback(
-    (node: FolderNode, event: KeyboardEvent<HTMLButtonElement>) => {
+    (node: FolderNode, event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'ArrowRight') {
         event.preventDefault()
         if (node.children?.length && !expandedNodeIDs.has(node.id)) {
           toggleNodeExpanded(node.id)
         }
-        setActiveFolder(node.name)
+        setActiveFolderID(node.id)
         return
       }
       if (event.key === 'ArrowLeft') {
@@ -372,82 +969,406 @@ export function Collection({
       }
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
-        setActiveFolder(node.name)
+        setActiveFolderID(node.id)
       }
     },
     [expandedNodeIDs, focusTreeItemByOffset, toggleNodeExpanded]
   )
+
+  const handleTreeFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    const activeNode = visibleTreeNodes.find((node) => node.id === activeFolderID)
+    const fallbackNode = visibleTreeNodes[0]
+    const targetID = activeNode?.id ?? fallbackNode?.id
+    if (!targetID) {
+      return
+    }
+    requestAnimationFrame(() => {
+      treeItemRefs.current[targetID]?.focus()
+    })
+  }, [activeFolderID, visibleTreeNodes])
+
+  const moveDraggedFolder = useCallback(
+    (draggedID: string, target: FolderDropTarget | null) => {
+      const draggedNode = findFolderNodeByID(folderTree, draggedID)
+      if (!draggedNode || draggedID === 'all-items' || !target) {
+        return
+      }
+
+      if (target.kind === 'child') {
+        if (draggedID === target.nodeID) {
+          return
+        }
+        setFolderTree((previous) => moveFolderNode(previous, draggedID, target.nodeID))
+        setExpandedNodeIDs((previous) => {
+          const next = new Set(previous)
+          next.add(target.nodeID)
+          return next
+        })
+      } else if (target.kind === 'before' || target.kind === 'after') {
+        if (draggedID === target.nodeID) {
+          return
+        }
+        setFolderTree((previous) =>
+          moveFolderNodeRelative(previous, draggedID, target.nodeID, target.kind)
+        )
+      } else {
+        setFolderTree((previous) => moveFolderNodeToRoot(previous, draggedID))
+      }
+
+      setActiveFolderID(draggedNode.id)
+    },
+    [folderTree]
+  )
+
+  const openFolderProperties = useCallback((node: FolderNode) => {
+    setFolderPropertiesID(node.id)
+    setFolderPropertiesName(node.name)
+    setFolderPropertiesCategory(node.category?.trim() || 'General')
+    setFolderPropertiesSecondaryLabel(node.secondaryLabel?.trim() || '')
+    setFolderPropertiesStatusBadge(node.statusBadge?.trim() || '')
+    setFolderPropertiesOpen(true)
+  }, [])
 
   const renderFolderTree = useCallback(
     (nodes: FolderNode[], level = 1) =>
       nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        const isActive = activeFolderID === node.id
+        const isChildDropTarget = dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
+        const isBeforeDropTarget = dragTarget?.kind === 'before' && dragTarget.nodeID === node.id
+        const isAfterDropTarget = dragTarget?.kind === 'after' && dragTarget.nodeID === node.id
+        const isItemDropTarget = itemDropTargetFolderID === node.id
+        const canAcceptChildDrop = node.id !== 'all-items'
         return (
-          <div key={node.id} role='none'>
-            <div
-              className='flex items-center gap-2'
-              style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}
-            >
-              <span
-                aria-hidden='true'
-                data-testid={`folder-tree-connector-${node.id}`}
-                className='inline-flex h-7 w-2 shrink-0 border-l border-border/70'
+          <div key={node.id} role='none' className='relative'>
+            {draggedFolderID ? (
+              <div
+                role='presentation'
+                data-testid={`folder-tree-drop-before-${node.id}`}
+                className={cn(
+                  'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
+                  isBeforeDropTarget
+                    ? 'border-primary bg-primary/25'
+                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
+                )}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setDragTarget({ kind: 'before', nodeID: node.id })
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragTarget({ kind: 'before', nodeID: node.id })
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = readDraggedFolderID(event)
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, { kind: 'before', nodeID: node.id })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
               />
+            ) : null}
+            <div className='group relative flex min-w-0 items-center gap-1'>
               {hasChildren ? (
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon'
-                  className='h-7 w-7'
+                  className='h-6 w-6 shrink-0 rounded-sm text-accent-foreground/50 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
+                  data-state={expanded ? 'expanded' : 'collapsed'}
                   onClick={() => toggleNodeExpanded(node.id)}
                 >
-                  {expanded ? '−' : '+'}
+                  <ChevronRight
+                    className={cn('size-4 transition-transform duration-200', expanded && 'rotate-90')}
+                  />
                 </Button>
               ) : (
-                <span className='inline-flex h-7 w-7 shrink-0' />
+                <span className='h-6 w-6 shrink-0' />
               )}
-              <button
+              <div
                 ref={(element) => {
                   treeItemRefs.current[node.id] = element
                 }}
-                type='button'
                 role='treeitem'
-                tabIndex={activeFolder === node.name ? 0 : -1}
+                tabIndex={isActive ? 0 : -1}
                 aria-level={level}
-                aria-selected={activeFolder === node.name ? 'true' : 'false'}
+                aria-selected={isActive ? 'true' : 'false'}
                 aria-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 data-testid={`folder-tree-item-${node.id}`}
-                className={`w-full rounded-md px-3 py-2 text-left text-sm ${activeFolder === node.name ? 'bg-primary text-primary-foreground' : 'bg-muted/30 hover:bg-muted/60'}`}
-                onClick={() => setActiveFolder(node.name)}
+                data-active={isActive ? 'true' : 'false'}
+                data-node-kind={hasChildren ? 'branch' : 'leaf'}
+                data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
+                className={cn(
+                  'relative flex flex-1 min-w-0 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 pr-14 text-left text-sm transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  isActive
+                    ? 'border-primary/45 bg-primary/18 text-accent-foreground font-semibold shadow-sm ring-1 ring-primary/25 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-primary before:content-["\"]'
+                    : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
+                  draggedFolderID &&
+                    node.id !== 'all-items' &&
+                    draggedFolderID !== node.id &&
+                    'border-dashed border-border/40',
+                  (isChildDropTarget || isItemDropTarget) &&
+                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25',
+                  node.id !== 'all-items' && 'cursor-grab active:cursor-grabbing'
+                )}
+                draggable={node.id !== 'all-items'}
+                onDragStart={(event) => {
+                  if (node.id === 'all-items') {
+                    event.preventDefault()
+                    return
+                  }
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData(folderDragMimeType, node.id)
+                  event.dataTransfer.setData('text/plain', node.id)
+                  setDraggedItemID(null)
+                  setItemDropTargetFolderID(null)
+                  setDraggedFolderID(node.id)
+                }}
+                onDragEnter={(event) => {
+                  const draggedRecordID = readDraggedItemID(event)
+                  if (draggedRecordID) {
+                    event.preventDefault()
+                    setItemDropTargetFolderID(node.id)
+                    return
+                  }
+
+                  const droppedFolderID = readDraggedFolderID(event)
+                  if (droppedFolderID && droppedFolderID !== node.id && canAcceptChildDrop) {
+                    event.preventDefault()
+                    setDragTarget({ kind: 'child', nodeID: node.id })
+                  }
+                }}
+                onDragOver={(event) => {
+                  const draggedRecordID = readDraggedItemID(event)
+                  if (draggedRecordID) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    setItemDropTargetFolderID(node.id)
+                    return
+                  }
+
+                  const droppedFolderID = readDraggedFolderID(event)
+                  if (droppedFolderID && droppedFolderID !== node.id && canAcceptChildDrop) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    setDragTarget({ kind: 'child', nodeID: node.id })
+                  }
+                }}
+                onDragLeave={() => {
+                  if (isChildDropTarget) {
+                    setDragTarget(null)
+                  }
+                  if (isItemDropTarget) {
+                    setItemDropTargetFolderID(null)
+                  }
+                }}
+                onDragEnd={() => {
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                  setDraggedItemID(null)
+                  setItemDropTargetFolderID(null)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+
+                  const draggedRecordID = readDraggedItemID(event)
+                  if (draggedRecordID) {
+                    assignItemToFolder(
+                      draggedRecordID,
+                      node.id === 'all-items' ? null : node.id
+                    )
+                    setDraggedItemID(null)
+                    setItemDropTargetFolderID(null)
+                    return
+                  }
+
+                  const droppedID = readDraggedFolderID(event)
+                  if (droppedID && droppedID !== node.id && canAcceptChildDrop) {
+                    moveDraggedFolder(droppedID, { kind: 'child', nodeID: node.id })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
+                onClick={() => setActiveFolderID(node.id)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
-                <span data-testid={`collection-folder-${node.id}`}>{node.name}</span>
-              </button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                className='h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground'
-                data-testid={`folder-tree-add-child-${node.id}`}
-                aria-label={`Add child folder under ${node.name}`}
-                onClick={() => {
-                  setFolderCreateParentID(node.id)
-                  setFolderCreateName('')
-                  setFolderCreateOpen(true)
-                }}
+                <span className='min-w-0 flex-1'>
+                  <span
+                    data-testid={`collection-folder-${node.id}`}
+                    className='block truncate'
+                  >
+                    {node.name}
+                  </span>
+                  {node.secondaryLabel ? (
+                    <span
+                      data-testid={`folder-tree-secondary-${node.id}`}
+                      className='block truncate text-xs font-normal text-muted-foreground'
+                    >
+                      {node.secondaryLabel}
+                    </span>
+                  ) : null}
+                </span>
+                <span className='flex shrink-0 items-center gap-2 ps-2'>
+                  {typeof node.itemCount === 'number' ? (
+                    <span
+                      data-testid={`folder-tree-count-${node.id}`}
+                      className='text-xs font-medium tabular-nums text-muted-foreground'
+                    >
+                      {node.itemCount}
+                    </span>
+                  ) : null}
+                  {node.statusBadge ? (
+                    <Badge
+                      variant='secondary'
+                      data-testid={`folder-tree-badge-${node.id}`}
+                      className='h-5 rounded-full px-1.5 text-[10px]'
+                    >
+                      {node.statusBadge}
+                    </Badge>
+                  ) : null}
+                  {node.id !== 'all-items' ? (
+                    <span
+                      aria-hidden='true'
+                      data-testid={`folder-tree-drag-handle-${node.id}`}
+                      className='inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground'
+                    >
+                      <GripVertical className='size-3.5' />
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div
+                data-testid={`folder-tree-inline-actions-${node.id}`}
+                className='pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
               >
-                +
-              </Button>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  tabIndex={-1}
+                  className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                  data-testid={`folder-tree-add-child-${node.id}`}
+                  aria-label={`Add child folder under ${node.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setFolderCreateParentID(node.id)
+                    setFolderCreateName('')
+                    setFolderCreateOpen(true)
+                  }}
+                >
+                  <Plus className='size-4' />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      tabIndex={-1}
+                      className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                      data-testid={`folder-tree-row-actions-${node.id}`}
+                      aria-label={`Open folder actions for ${node.name}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Ellipsis className='size-4' />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align='end'
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-select-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setActiveFolderID(node.id)
+                      }}
+                    >
+                      Select folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-properties-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openFolderProperties(node)
+                      }}
+                    >
+                      Properties
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-add-child-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setFolderCreateParentID(node.id)
+                        setFolderCreateName('')
+                        setFolderCreateOpen(true)
+                      }}
+                    >
+                      Add child folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-delete-${node.id}`}
+                      disabled={node.id === 'all-items'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (node.id !== 'all-items') {
+                          setFolderDeleteID(node.id)
+                        }
+                      }}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
+            {draggedFolderID ? (
+              <div
+                role='presentation'
+                data-testid={`folder-tree-drop-after-${node.id}`}
+                className={cn(
+                  'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
+                  isAfterDropTarget
+                    ? 'border-primary bg-primary/25'
+                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
+                )}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setDragTarget({ kind: 'after', nodeID: node.id })
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragTarget({ kind: 'after', nodeID: node.id })
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID = readDraggedFolderID(event)
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, { kind: 'after', nodeID: node.id })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
+              />
+            ) : null}
             {hasChildren && expanded ? (
               <div
                 role='group'
                 data-testid={`folder-tree-group-${node.id}`}
-                className='space-y-2'
+                className='ml-4 border-l pl-1'
               >
                 {renderFolderTree(node.children ?? [], level + 1)}
               </div>
@@ -455,18 +1376,37 @@ export function Collection({
           </div>
         )
       }),
-    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, toggleNodeExpanded]
+    [
+      activeFolderID,
+      assignItemToFolder,
+      dragTarget,
+      draggedFolderID,
+      draggedItemID,
+      expandedNodeIDs,
+      handleTreeItemKeyDown,
+      itemDropTargetFolderID,
+      moveDraggedFolder,
+      openFolderProperties,
+      readDraggedFolderID,
+      readDraggedItemID,
+      toggleNodeExpanded,
+    ]
   )
 
   const summary = useMemo(
     () => ({
       folders: countFolderNodes(folderTree),
-      items: tableData.length,
+      items: visibleTableData.length,
       activeBrand: 'All',
-      activeCategory: 'All',
-      activeContext: activeFolder,
+      activeCategory: activeFolderNode?.category ?? 'All',
+      activeContext: activeFolderName,
     }),
-    [activeFolder, folderTree, tableData.length]
+    [
+      activeFolderName,
+      activeFolderNode?.category,
+      folderTree,
+      visibleTableData.length,
+    ]
   )
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
@@ -475,9 +1415,14 @@ export function Collection({
 
   useEffect(() => {
     if (activeWorkspaceCollection) {
-      setActiveFolder(activeWorkspaceCollection)
+      const matchingNode = flattenFolderNodes(folderTree).find(
+        (node) => node.name === activeWorkspaceCollection
+      )
+      if (matchingNode) {
+        setActiveFolderID(matchingNode.id)
+      }
     }
-  }, [activeWorkspaceCollection])
+  }, [activeWorkspaceCollection, folderTree])
 
   const loadInventoryPhotos = useCallback(async () => {
     if (!isInventoryRoute) {
@@ -562,6 +1507,140 @@ export function Collection({
       cancelled = true
     }
   }, [isInventoryRoute])
+
+  useEffect(() => {
+    if (
+      isInventoryRoute &&
+      activeProfileID.trim() !== '' &&
+      !workspaceSettingsLoaded
+    ) {
+      return
+    }
+
+    if (!findFolderNodeByID(folderTree, activeFolderID)) {
+      setActiveFolderID('all-items')
+    }
+  }, [
+    activeFolderID,
+    activeProfileID,
+    folderTree,
+    isInventoryRoute,
+    workspaceSettingsLoaded,
+  ])
+
+  useEffect(() => {
+    const normalizedProfileID = activeProfileID.trim()
+    if (!isInventoryRoute || normalizedProfileID === '') {
+      setWorkspaceSettingsLoaded(false)
+      return
+    }
+
+    let cancelled = false
+    const cachedWorkspaceSettings =
+      loadPersistedWorkspaceSnapshot(normalizedProfileID)
+
+    if (cachedWorkspaceSettings) {
+      setFolderTree(cachedWorkspaceSettings.folderTree)
+      setItemFolderAssignments(cachedWorkspaceSettings.itemAssignments)
+      setWorkspaceSettingsLoaded(true)
+    } else {
+      setWorkspaceSettingsLoaded(false)
+    }
+
+    const loadWorkspaceSettings = async () => {
+      try {
+        const response = await fetch(
+          `/api/profiles/${encodeURIComponent(normalizedProfileID)}/settings`
+        )
+        if (!response.ok) {
+          throw new Error(`profile_settings_${response.status}`)
+        }
+
+        const payload = (await response.json()) as {
+          settings?: Record<string, string>
+        }
+        const persistedTree =
+          parsePersistedFolderTree(
+            payload.settings?.[inventoryFolderTreeSettingsKey]
+          ) ?? initialFolderTree
+        const persistedAssignments = parsePersistedItemAssignments(
+          payload.settings?.[inventoryItemAssignmentsSettingsKey],
+          persistedTree
+        )
+
+        if (!cancelled && !cachedWorkspaceSettings) {
+          setFolderTree(persistedTree)
+          setItemFolderAssignments(persistedAssignments)
+        }
+      } catch {
+        if (!cancelled && !cachedWorkspaceSettings) {
+          setFolderTree(initialFolderTree)
+          setItemFolderAssignments({})
+        }
+      } finally {
+        if (!cancelled) {
+          setWorkspaceSettingsLoaded(true)
+        }
+      }
+    }
+
+    void loadWorkspaceSettings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeProfileID, isInventoryRoute])
+
+  useEffect(() => {
+    if (
+      !isInventoryRoute ||
+      activeProfileID.trim() === '' ||
+      !workspaceSettingsLoaded
+    ) {
+      return
+    }
+
+    savePersistedWorkspaceSnapshot(
+      activeProfileID,
+      folderTree,
+      itemFolderAssignments
+    )
+
+    const persistWorkspaceSettings = async () => {
+      try {
+        const response = await fetch(
+          `/api/profiles/${encodeURIComponent(activeProfileID)}/settings`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              settings: {
+                [inventoryFolderTreeSettingsKey]: JSON.stringify(folderTree),
+                [inventoryItemAssignmentsSettingsKey]: JSON.stringify(
+                  itemFolderAssignments
+                ),
+              },
+            }),
+          }
+        )
+        if (!response.ok) {
+          return
+        }
+      } catch {
+        return
+      }
+    }
+
+    void persistWorkspaceSettings()
+  }, [
+    activeProfileID,
+    folderTree,
+    isInventoryRoute,
+    itemFolderAssignments,
+    workspaceSettingsLoaded,
+  ])
 
   const handlePhotoUpload = useCallback(
     async (file: File | null) => {
@@ -827,7 +1906,7 @@ export function Collection({
         </div>
       </Header>
 
-      <Main className='space-y-4'>
+      <Main className='flex min-h-0 flex-1 flex-col space-y-4'>
         <div className='flex flex-wrap items-end justify-between gap-3'>
           <div className='space-y-2'>
             <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
@@ -836,13 +1915,14 @@ export function Collection({
               className='text-xs text-muted-foreground'
               data-testid='collection-context-label'
             >
-              Collection context: {activeFolder}
+              Collection context: {activeFolderName}
             </p>
           </div>
           <div className='flex gap-2'>
             <Button
               type='button'
               data-testid='inventory-new-action'
+              onClick={openCreateItemDialog}
             >
               New
             </Button>
@@ -857,7 +1937,10 @@ export function Collection({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
-                <DropdownMenuItem data-testid='inventory-create-menu-item'>
+                <DropdownMenuItem
+                  data-testid='inventory-create-menu-item'
+                  onClick={openCreateItemDialog}
+                >
                   New Item
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -871,15 +1954,15 @@ export function Collection({
           </div>
         </div>
 
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-3 min-h-0'>
+        <div className='grid min-h-[34rem] grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch'>
+          <Card className='lg:col-span-3 min-h-0 h-full flex flex-col'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
                 Browse folders before drilling into results.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2 min-h-0'>
+            <CardContent className='space-y-2 min-h-0 flex flex-1 flex-col'>
               <div className='flex justify-end'>
                 <Button
                   type='button'
@@ -891,24 +1974,193 @@ export function Collection({
                     setFolderCreateName('')
                     setFolderCreateOpen(true)
                   }}
+                  aria-label='Add root folder'
                 >
-                  Add Root Folder
+                  +
                 </Button>
               </div>
               <div
                 role='tree'
-                tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
-                className='h-[26rem] max-h-[26rem] overflow-x-auto overflow-y-auto rounded-md border p-2'
+                tabIndex={0}
+                className={cn(
+                  'min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2',
+                  (dragTarget?.kind === 'root' ||
+                    itemDropTargetFolderID === 'all-items') &&
+                    'border-primary bg-primary/5'
+                )}
+                onFocus={handleTreeFocus}
+                onDragOver={(event) => {
+                  const draggedRecordID = readDraggedItemID(event)
+                  if (draggedRecordID) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    if (event.target === event.currentTarget) {
+                      setItemDropTargetFolderID('all-items')
+                    }
+                    return
+                  }
+
+                  const droppedFolderID = readDraggedFolderID(event)
+                  if (droppedFolderID) {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    if (event.target === event.currentTarget) {
+                      setDragTarget({ kind: 'root' })
+                    }
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+
+                  const draggedRecordID = readDraggedItemID(event)
+                  if (draggedRecordID && event.target === event.currentTarget) {
+                    assignItemToFolder(draggedRecordID, null)
+                    setDraggedItemID(null)
+                    setItemDropTargetFolderID(null)
+                    return
+                  }
+
+                  const droppedID = readDraggedFolderID(event)
+                  if (droppedID) {
+                    moveDraggedFolder(droppedID, { kind: 'root' })
+                  }
+                  setDraggedFolderID(null)
+                  setDragTarget(null)
+                }}
               >
-                <div
-                  className='min-w-full w-max space-y-2'
-                  data-testid='inventory-folder-tree-scroll-region'
-                >
-                  {renderFolderTree(folderTree)}
-                </div>
+                {renderFolderTree(folderTree)}
+                {draggedFolderID || draggedItemID ? (
+                  <div
+                    role='presentation'
+                    data-testid='folder-tree-root-drop-zone'
+                    className={cn(
+                      'mt-2 flex min-h-10 items-center justify-center rounded-md border border-dashed px-3 text-xs text-muted-foreground transition-colors',
+                      dragTarget?.kind === 'root' || itemDropTargetFolderID === 'all-items'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border/70'
+                    )}
+                    onDragEnter={(event) => {
+                      event.preventDefault()
+                      if (readDraggedItemID(event)) {
+                        setItemDropTargetFolderID('all-items')
+                        return
+                      }
+                      setDragTarget({ kind: 'root' })
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'move'
+                      if (readDraggedItemID(event)) {
+                        setItemDropTargetFolderID('all-items')
+                        return
+                      }
+                      setDragTarget({ kind: 'root' })
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+
+                      const draggedRecordID = readDraggedItemID(event)
+                      if (draggedRecordID) {
+                        assignItemToFolder(draggedRecordID, null)
+                        setDraggedItemID(null)
+                        setItemDropTargetFolderID(null)
+                        return
+                      }
+
+                      const droppedID = readDraggedFolderID(event)
+                      if (droppedID) {
+                        moveDraggedFolder(droppedID, { kind: 'root' })
+                      }
+                      setDraggedFolderID(null)
+                      setDragTarget(null)
+                    }}
+                  >
+                    {draggedItemID
+                      ? 'Drop here to move item back to All Items'
+                      : 'Drop here to move folder to the root level'}
+                  </div>
+                ) : null}
               </div>
+              <Dialog
+                open={itemCreateOpen}
+                onOpenChange={(open) => {
+                  setItemCreateOpen(open)
+                  if (!open) {
+                    setItemCreateTitle('')
+                    setItemCreatePartNumber('')
+                  }
+                }}
+              >
+                <DialogContent data-testid='inventory-item-create-dialog'>
+                  <DialogHeader>
+                    <DialogTitle>Create Item</DialogTitle>
+                  </DialogHeader>
+                  <div className='grid gap-3'>
+                    <Input
+                      data-testid='inventory-item-create-title'
+                      placeholder='Item title'
+                      value={itemCreateTitle}
+                      onChange={(event) => setItemCreateTitle(event.target.value)}
+                    />
+                    <Input
+                      data-testid='inventory-item-create-part-number'
+                      placeholder='Part number or SKU'
+                      value={itemCreatePartNumber}
+                      onChange={(event) => setItemCreatePartNumber(event.target.value)}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='inventory-item-create-cancel'
+                      onClick={() => {
+                        setItemCreateOpen(false)
+                        setItemCreateTitle('')
+                        setItemCreatePartNumber('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='inventory-item-create-submit'
+                      onClick={() => {
+                        const title = itemCreateTitle.trim()
+                        const partNumber = itemCreatePartNumber.trim()
+                        if (title === '') {
+                          return
+                        }
+                        const nextID = partNumber || `ITEM-${tableData.length + 1}`
+                        setTableData((previous) => [
+                          {
+                            id: nextID,
+                            recordID: nextID,
+                            title,
+                            status: 'todo',
+                            label: activeFolderName,
+                            priority: 'medium',
+                          },
+                          ...previous,
+                        ])
+                        assignItemToFolder(
+                          nextID,
+                          activeFolderID === 'all-items' ? null : activeFolderID
+                        )
+                        setSelectedItemID(nextID)
+                        setSelectedItemLabel(nextID)
+                        setItemCreateOpen(false)
+                        setItemCreateTitle('')
+                        setItemCreatePartNumber('')
+                      }}
+                    >
+                      Create Item
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <Dialog
                 open={folderCreateOpen}
                 onOpenChange={(open) => {
@@ -952,10 +2204,12 @@ export function Collection({
                         if (name === '') {
                           return
                         }
+                        const newFolderID = buildUniqueFolderID(name, folderTree)
                         setFolderTree((previous) => {
                           const newNode: FolderNode = {
-                            id: buildUniqueFolderID(name, previous),
+                            id: newFolderID,
                             name,
+                            category: folderCreateParentID ? 'General' : 'Collection',
                           }
                           if (!folderCreateParentID) {
                             return [...previous, newNode]
@@ -969,13 +2223,177 @@ export function Collection({
                             return next
                           })
                         }
-                        setActiveFolder(name)
+                        setActiveFolderID(newFolderID)
                         setFolderCreateOpen(false)
                         setFolderCreateName('')
                         setFolderCreateParentID(null)
                       }}
                     >
                       Create
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Sheet
+                open={folderPropertiesOpen}
+                onOpenChange={(open) => {
+                  setFolderPropertiesOpen(open)
+                  if (!open) {
+                    setFolderPropertiesID(null)
+                    setFolderPropertiesName('')
+                    setFolderPropertiesCategory('General')
+                    setFolderPropertiesSecondaryLabel('')
+                    setFolderPropertiesStatusBadge('')
+                  }
+                }}
+              >
+                <SheetContent className='flex flex-col'>
+                  <SheetHeader className='text-start'>
+                    <SheetTitle>Folder Properties</SheetTitle>
+                    <SheetDescription>
+                      Update the selected folder title, category, secondary label, and status badge using its stable folder ID.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className='grid gap-4 py-4'>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-name'>
+                        Title
+                      </label>
+                      <Input
+                        id='folder-properties-name'
+                        data-testid='folder-properties-name-input'
+                        value={folderPropertiesName}
+                        onChange={(event) => setFolderPropertiesName(event.target.value)}
+                      />
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-category'>
+                        Category
+                      </label>
+                      <select
+                        id='folder-properties-category'
+                        data-testid='folder-properties-category-select'
+                        className='h-9 rounded-md border bg-background px-2 text-sm'
+                        value={folderPropertiesCategory}
+                        onChange={(event) => setFolderPropertiesCategory(event.target.value)}
+                      >
+                        {folderCategoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-secondary-label'>
+                        Secondary label
+                      </label>
+                      <Input
+                        id='folder-properties-secondary-label'
+                        data-testid='folder-properties-secondary-label-input'
+                        placeholder='Aisle B'
+                        value={folderPropertiesSecondaryLabel}
+                        onChange={(event) =>
+                          setFolderPropertiesSecondaryLabel(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-status-badge'>
+                        Status badge
+                      </label>
+                      <Input
+                        id='folder-properties-status-badge'
+                        data-testid='folder-properties-status-badge-input'
+                        placeholder='Cold'
+                        value={folderPropertiesStatusBadge}
+                        onChange={(event) => setFolderPropertiesStatusBadge(event.target.value)}
+                      />
+                    </div>
+                    {folderPropertiesID ? (
+                      <p
+                        className='text-xs text-muted-foreground'
+                        data-testid='folder-properties-id'
+                      >
+                        Folder ID: {folderPropertiesID}
+                      </p>
+                    ) : null}
+                  </div>
+                  <SheetFooter className='gap-2'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='folder-properties-cancel'
+                      onClick={() => setFolderPropertiesOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='folder-properties-save'
+                      onClick={() => {
+                        const name = folderPropertiesName.trim()
+                        if (!folderPropertiesID || name === '') {
+                          return
+                        }
+                        setFolderTree((previous) =>
+                          updateFolderNodeByID(previous, folderPropertiesID, (node) => ({
+                            ...node,
+                            name,
+                            category: folderPropertiesCategory.trim() || 'General',
+                            secondaryLabel:
+                              folderPropertiesSecondaryLabel.trim() || undefined,
+                            statusBadge: folderPropertiesStatusBadge.trim() || undefined,
+                          }))
+                        )
+                        setActiveFolderID(folderPropertiesID)
+                        setFolderPropertiesOpen(false)
+                      }}
+                    >
+                      Save Properties
+                    </Button>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+              <Dialog
+                open={folderDeleteID !== null}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setFolderDeleteID(null)
+                  }
+                }}
+              >
+                <DialogContent data-testid='folder-delete-dialog'>
+                  <DialogHeader>
+                    <DialogTitle>Delete Folder</DialogTitle>
+                  </DialogHeader>
+                  <p className='text-sm text-muted-foreground'>
+                    Delete this folder from the current profile tree.
+                  </p>
+                  <DialogFooter>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='folder-delete-cancel'
+                      onClick={() => setFolderDeleteID(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='folder-delete-confirm'
+                      onClick={() => {
+                        if (!folderDeleteID) {
+                          return
+                        }
+                        setFolderTree((previous) => deleteFolderNode(previous, folderDeleteID))
+                        if (activeFolderID === folderDeleteID) {
+                          setActiveFolderID('all-items')
+                        }
+                        setFolderDeleteID(null)
+                      }}
+                    >
+                      Delete Folder
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -1016,7 +2434,12 @@ export function Collection({
                     onChange={(event) => {
                       const selected = event.target.value
                       setActiveWorkspaceCollection(selected)
-                      setActiveFolder(selected)
+                      const matchingNode = flattenFolderNodes(folderTree).find(
+                        (node) => node.name === selected
+                      )
+                      if (matchingNode) {
+                        setActiveFolderID(matchingNode.id)
+                      }
                     }}
                   >
                     {workspaceCollections.map((collection) => (
@@ -1058,7 +2481,12 @@ export function Collection({
                       onClick={() => {
                         const created = addCollection(inlineCollectionName)
                         if (created) {
-                          setActiveFolder(created)
+                          const existing = flattenFolderNodes(folderTree).find(
+                            (node) => node.name === created
+                          )
+                          if (existing) {
+                            setActiveFolderID(existing.id)
+                          }
                         }
                         setInlineCollectionName('')
                         setInlineCollectionInputOpen(false)
@@ -1094,7 +2522,17 @@ export function Collection({
                   </Button>
                 </div>
               ) : null}
-              <TasksTable data={tableData} routePath={routePath} />
+              <TasksTable
+                data={visibleTableData}
+                routePath={routePath}
+                getRowTestId={(record) =>
+                  record.recordID?.trim()
+                    ? `inventory-item-row-${record.recordID.trim()}`
+                    : undefined
+                }
+                onRowDragStart={isInventoryRoute ? handleItemRowDragStart : undefined}
+                onRowDragEnd={isInventoryRoute ? handleItemRowDragEnd : undefined}
+              />
               {isInventoryRoute ? (
                 <>
                   <section

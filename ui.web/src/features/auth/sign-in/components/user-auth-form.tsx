@@ -90,8 +90,8 @@ export function UserAuthForm({
         auth.setUser(mockUser)
         auth.setAccessToken('mock-access-token')
 
-        // Redirect to the stored location or default to dashboard
-        const targetPath = redirectTo || '/'
+        // Redirect to the stored location or default to canonical dashboard
+        const targetPath = redirectTo || '/dashboard'
         navigate({ to: targetPath, replace: true })
 
         return `Welcome back, ${data.email}!`
@@ -136,7 +136,7 @@ export function UserAuthForm({
 
       auth.setUser(mockUser)
       auth.setAccessToken('mock-passkey-access-token')
-      const targetPath = redirectTo || '/'
+      const targetPath = redirectTo || '/dashboard'
       navigate({ to: targetPath, replace: true })
     } catch (error) {
       setPasskeyError(

@@ -36,6 +36,7 @@ The dedicated Collections screen SHALL let users understand which collection is 
 - **WHEN** user selects a different collection entry
 - **THEN** the newly active collection MUST be visually distinguished on the page
 - **AND** the active context change MUST be communicated with explicit on-screen state and persistence semantics
+- **AND** returning to the screen MUST reflect the persisted active collection without requiring reselection
 
 ### Requirement UI-SCREEN-COLLECTIONS-005: Collections screen SHALL support rename and remove management actions
 The dedicated Collections screen SHALL provide direct management actions for existing collections beyond creation and activation.
@@ -45,6 +46,7 @@ The dedicated Collections screen SHALL provide direct management actions for exi
 - **WHEN** user chooses rename or remove for that collection
 - **THEN** the screen MUST expose the corresponding action
 - **AND** the action MUST complete through a clear confirmation/edit flow with deterministic result messaging
+- **AND** protected/default collections MUST not expose destructive completion for removal
 
 ### Requirement UI-SCREEN-COLLECTIONS-006: Collections screen SHALL expose collection details and metadata summaries
 Users SHALL be able to understand what a collection represents before choosing it.
@@ -53,6 +55,7 @@ Users SHALL be able to understand what a collection represents before choosing i
 - **GIVEN** collections section is open
 - **WHEN** user scans or opens a collection entry
 - **THEN** the UI MUST expose useful metadata for that collection such as summary/details/counts/status as defined by the product contract
+- **AND** each visible collection entry MUST surface enough detail to distinguish broad workspace scope, active operational lanes, and storage/archive groupings before selection
 
 ### Requirement UI-SCREEN-COLLECTIONS-007: Collections screen SHALL support search, filtering, and ordering tools for collection management
 When multiple collections exist, the dedicated management surface SHALL help users find and organize them efficiently.
@@ -61,6 +64,7 @@ When multiple collections exist, the dedicated management surface SHALL help use
 - **GIVEN** collections section contains many entries
 - **WHEN** user needs to find or organize a specific collection
 - **THEN** the screen MUST provide supported search/filtering and ordering controls for collection management workflows
+- **AND** visible result counts/state MUST make the current search/filter/order effect obvious to the user
 
 ### Requirement UI-SCREEN-COLLECTIONS-008: Collections screen SHALL communicate create-action outcomes and available create paths clearly
 Collection creation entry points SHALL make their behavior obvious and communicate whether creation succeeded, failed, or requires additional input.
@@ -70,10 +74,14 @@ Collection creation entry points SHALL make their behavior obvious and communica
 - **WHEN** user uses `New` or `Create`
 - **THEN** the resulting workflow/options MUST be obvious from the page state
 - **AND** success, validation, and failure outcomes MUST be communicated with visible feedback
+- **AND** the page MUST explain the difference between the primary `New` flow and alternate `Create` actions before mutation occurs
 
-#### Scenario: Blank collection-name submission shows inline validation
-- **GIVEN** collections section inline create panel is open
-- **WHEN** user clicks `Save` with an empty `Collection name`
-- **THEN** the inline create panel MUST remain open
-- **AND** the screen MUST show visible required-field guidance
-- **AND** only `Cancel` MAY silently dismiss the inline create panel without validation feedback
+### Requirement UI-SCREEN-COLLECTIONS-009: Collections affordances SHALL use tag iconography consistently
+Cabinet SHALL use a tag icon for the primary Collections affordance so sidebar navigation and dedicated Collections screen entry reinforce the same metaphor.
+
+#### Scenario: Open collections from authenticated navigation
+- **GIVEN** an authenticated user views the sidebar and the dedicated Collections screen
+- **WHEN** the Collections affordance renders in navigation and page context
+- **THEN** the sidebar Collections entry MUST use a tag icon
+- **AND** the dedicated Collections screen header MUST use matching tag iconography
+- **AND** icon sizing/alignment MUST remain visually consistent with surrounding controls and headings

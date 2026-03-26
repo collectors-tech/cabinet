@@ -44,10 +44,7 @@ describe("ui-login-session", () => {
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
 
-    cy.location("pathname", { timeout: 15000 }).should(
-      "match",
-      /^(\/|\/inventory\/?|\/_authenticated\/?)$/
-    );
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
   });
 
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {
@@ -125,5 +122,27 @@ describe("ui-login-session", () => {
       );
       cy.contains(/active_profile_404|active_profile_not_set/i).should("not.exist");
     });
+  });
+
+  it("UI-LOGIN-SESSION-005 redirects base unauthenticated entry to clean sign-in while preserving deep-link redirects", () => {
+    cy.clearCookies();
+    cy.clearLocalStorage();
+
+    cy.visit("/");
+    cy.location("pathname").should("eq", "/sign-in");
+    cy.location("search").should("eq", "");
+
+    cy.get('input[name="email"]').type("e2e-clean-root-entry@example.com");
+    cy.get('input[name="password"]').type("password123");
+    cy.contains("button", "Sign in").click();
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
+
+    cy.clearCookies();
+    cy.clearLocalStorage();
+
+    cy.visit("/inventory/");
+    cy.location("pathname").should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=");
+    cy.location("search").should("include", "%2Finventory%2F");
   });
 });

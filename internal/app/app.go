@@ -60,6 +60,7 @@ type App struct {
 	backupSvc     *backup.Service
 	authService   *auth.Service
 	openapiSpec   []byte
+	runtimeLogs   *runtimeLogManager
 	startupNotice func(string)
 	startupIsTTY  func() bool
 }
@@ -127,6 +128,7 @@ func New(cfg config.Config) (*App, error) {
 			VALUES('recovery_required', '1', CURRENT_TIMESTAMP)
 			ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP
 		`)
+		_ = syncRuntimeLifecycleUncleanRecovery(cfg)
 	}
 	_, _ = conn.ExecContext(ctx, `
 		INSERT INTO app_state(key, value, updated_at)
@@ -286,6 +288,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
 			return
 		}
+		resolvedURL := strings.TrimSpace(payload.Runtime.ResolvedURL)
+		if resolvedURL == "" {
+			resolvedURL = runtimeResolvedURLFromConfig(cfg)
+		}
+		_ = syncRuntimeLifecycleStartup(cfg, resolvedURL, cfg.Addr, os.Getpid())
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":             true,
 			"setup_required": false,
@@ -4400,10 +4407,17 @@ func New(cfg config.Config) (*App, error) {
 		http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
 	})
 
+	runtimeLogs, err := newRuntimeLogManager(cfg)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("init runtime logs: %w", err)
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           protectedMux,
+		Handler:           runtimeLogs.wrapHandler(protectedMux),
 		ReadHeaderTimeout: 10 * time.Second,
+		ErrorLog:          log.New(runtimeLogs.errorWriter(), "", 0),
 	}
 
 	a := &App{
@@ -4413,6 +4427,7 @@ func New(cfg config.Config) (*App, error) {
 		backupSvc:   backupSvc,
 		authService: authService,
 		openapiSpec: openapiSpec,
+		runtimeLogs: runtimeLogs,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
@@ -4499,10 +4514,19 @@ type runtimeSetupFeaturesConfig struct {
 }
 
 type runtimeSetupMetaConfig struct {
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
-	WizardVersion string `json:"wizardVersion"`
-	CurrentURL    string `json:"currentUrl"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
+	WizardVersion      string `json:"wizardVersion"`
+	CurrentURL         string `json:"currentUrl"`
+	StartedAt          string `json:"startedAt,omitempty"`
+	StartedBy          string `json:"startedBy,omitempty"`
+	LaunchSource       string `json:"launchSource,omitempty"`
+	LastKnownPID       int    `json:"lastKnownPid,omitempty"`
+	LastKnownURL       string `json:"lastKnownUrl,omitempty"`
+	LastHeartbeatAt    string `json:"lastHeartbeatAt,omitempty"`
+	LastShutdownAt     string `json:"lastShutdownAt,omitempty"`
+	LastShutdownReason string `json:"lastShutdownReason,omitempty"`
+	LastRunClean       bool   `json:"lastRunClean"`
 }
 
 func runtimeSetupConfigPath(cfg config.Config) string {
@@ -7044,7 +7068,8 @@ func (a *App) Run(ctx context.Context) error {
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
 	}
-	if err := writeRuntimePIDFile(a.cfg, os.Getpid()); err != nil {
+	pid := os.Getpid()
+	if err := writeRuntimePIDFile(a.cfg, pid); err != nil {
 		return fmt.Errorf("write runtime pid file: %w", err)
 	}
 	defer func() {
@@ -7052,12 +7077,20 @@ func (a *App) Run(ctx context.Context) error {
 	}()
 	listener, err := listenWithPortFallback(a.srv.Addr, 50)
 	if err != nil {
-		_ = a.close()
+		_ = a.closeRuntime(false, "listen_error", "")
 		return err
 	}
 	resolvedAddr := listener.Addr().String()
 	resolvedURL := startupURLFromResolvedAddr(resolvedAddr)
 	_ = syncRuntimeSetupCurrentURLWithURL(a.cfg, resolvedURL)
+	_ = syncRuntimeLifecycleStartup(a.cfg, resolvedURL, resolvedAddr, pid)
+	if a.runtimeLogs != nil {
+		a.runtimeLogs.writeRuntimeEvent("info", "startup", "runtime started", map[string]any{
+			"url":           resolvedURL,
+			"requestedAddr": strings.TrimSpace(a.cfg.Addr),
+			"resolvedAddr":  strings.TrimSpace(resolvedAddr),
+		})
+	}
 	if a.startupNotice != nil {
 		for _, line := range buildStartupConsoleLines(a.cfg, resolvedAddr, a.isTTYRuntimeOutput()) {
 			a.startupNotice(line)
@@ -7074,12 +7107,15 @@ func (a *App) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = a.srv.Shutdown(shutdownCtx)
-		return a.close()
+		return a.closeRuntime(true, "shutdown", resolvedURL)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
-			return a.close()
+			return a.closeRuntime(true, "server_closed", resolvedURL)
 		}
-		_ = a.close()
+		if a.runtimeLogs != nil {
+			a.runtimeLogs.writeErrorEvent("serve_error", err.Error(), map[string]any{"url": resolvedURL})
+		}
+		_ = a.closeRuntime(false, "serve_error", resolvedURL)
 		return err
 	}
 }
@@ -7260,10 +7296,50 @@ func (a *App) isTTYRuntimeOutput() bool {
 	return a.startupIsTTY()
 }
 
-func (a *App) close() error {
+func (a *App) closeRuntime(clean bool, reason, resolvedURL string) error {
+	if a.runtimeLogs != nil {
+		level := "info"
+		event := "shutdown"
+		message := "runtime stopped"
+		if !clean {
+			level = "error"
+			event = "shutdown_unclean"
+			message = "runtime stopped unexpectedly"
+		}
+		a.runtimeLogs.writeRuntimeEvent(level, event, message, map[string]any{
+			"reason": cleanReason(reason),
+			"url":    strings.TrimSpace(resolvedURL),
+		})
+	}
+	_ = syncRuntimeLifecycleShutdown(a.cfg, resolvedURL, cleanReason(reason), clean)
 	if a.db == nil {
+		if a.runtimeLogs != nil {
+			_ = a.runtimeLogs.Close()
+		}
 		return nil
 	}
-	_, _ = a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('clean_shutdown','1',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP`)
-	return a.db.Close()
+	cleanValue := "0"
+	if clean {
+		cleanValue = "1"
+	}
+	_, _ = a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('clean_shutdown', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`, cleanValue)
+	err := a.db.Close()
+	if a.runtimeLogs != nil {
+		if closeErr := a.runtimeLogs.Close(); err == nil {
+			err = closeErr
+		}
+	}
+	return err
+}
+
+func cleanReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "shutdown"
+	}
+	return reason
+}
+
+func (a *App) close() error {
+	return a.closeRuntime(true, "shutdown", "")
 }

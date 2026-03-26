@@ -44,6 +44,10 @@ describe("UI-SCREEN-HOME", () => {
     cy.contains("Open pricing drops").should("be.visible")
     cy.contains("Recently added").should("be.visible")
     cy.contains("AFX Camaro").should("be.visible")
+    cy.get('[data-testid="dashboard-card-link-open-pricing-drops"]')
+      .should("have.attr", "href", "/wishlist")
+    cy.get('[data-testid="dashboard-recent-item-afx-camaro"]')
+      .should("have.attr", "href", "/inventory")
   })
 
   it("UI-SCREEN-HOME-002 renders deterministic loading and empty states", () => {
@@ -116,6 +120,34 @@ describe("UI-SCREEN-HOME", () => {
       })
 
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/discoveries\/?$/)
+  })
+
+  it("UI-SCREEN-HOME-003 routes dashboard action links to live Cabinet destinations", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 0,
+        wishlist_hits: 0,
+        price_drops: 1,
+        low_stock_discoveries: 0,
+        restocks: 0,
+        recently_added: ["Route Fix Item"],
+        total_items: 1,
+        total_instances: 1,
+        estimated_value: 99,
+        cards: [{ title: "Open pricing drops", value: 1, link: "/pricing" }],
+      },
+    }).as("dashboardRecentRoute")
+
+    signInToHome()
+    cy.wait("@dashboardRecentRoute")
+
+    cy.get('[data-testid="dashboard-card-link-open-pricing-drops"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/wishlist\/?$/)
+
+    cy.visit("/dashboard")
+    cy.get('[data-testid="dashboard-recent-item-route-fix-item"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
   })
 
   it("UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability", () => {

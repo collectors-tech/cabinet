@@ -1,4 +1,5 @@
 import {
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   useEffect,
@@ -48,11 +49,20 @@ import { getTasksColumns, type TasksRoutePath } from './tasks-columns'
 type DataTableProps = {
   data: Task[]
   routePath: TasksRoutePath
+  getRowTestId?: (record: Task) => string | undefined
+  onRowDragStart?: (record: Task, event: DragEvent<HTMLElement>) => void
+  onRowDragEnd?: (record: Task, event: DragEvent<HTMLElement>) => void
 }
 
 type ViewMode = 'rows' | 'cards'
 
-export function TasksTable({ data, routePath }: DataTableProps) {
+export function TasksTable({
+  data,
+  routePath,
+  getRowTestId,
+  onRowDragStart,
+  onRowDragEnd,
+}: DataTableProps) {
   const route =
     routePath === '/_authenticated/inventory/'
       ? getRouteApi('/_authenticated/inventory/')
@@ -349,7 +359,11 @@ export function TasksTable({ data, routePath }: DataTableProps) {
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
+                    data-testid={getRowTestId?.(row.original)}
                     data-state={row.getIsSelected() && 'selected'}
+                    draggable={Boolean(onRowDragStart && row.original.recordID)}
+                    onDragStart={(event) => onRowDragStart?.(row.original, event)}
+                    onDragEnd={(event) => onRowDragEnd?.(row.original, event)}
                     onClick={(event) => handleRowClick(row.original.id, event)}
                     onDoubleClick={(event) =>
                       handleRowDoubleClick(row.original.id, event)
@@ -391,7 +405,11 @@ export function TasksTable({ data, routePath }: DataTableProps) {
               <div
                 key={row.id}
                 className='space-y-2 rounded-md border p-4'
+                data-testid={getRowTestId?.(row.original)}
                 data-state={row.getIsSelected() && 'selected'}
+                draggable={Boolean(onRowDragStart && row.original.recordID)}
+                onDragStart={(event) => onRowDragStart?.(row.original, event)}
+                onDragEnd={(event) => onRowDragEnd?.(row.original, event)}
               >
                 <div className='flex items-start justify-between gap-2'>
                   <div className='space-y-1'>

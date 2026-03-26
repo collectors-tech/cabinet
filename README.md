@@ -59,6 +59,10 @@ This repo is configured to run through Antfarm with issue-fed workflow execution
 - `http://127.0.0.1:17880/healthz`
 - `http://127.0.0.1:17880/api/runtime`
 
+### Isolated demo / helper instance
+- Runbook: `docs/demo-instance-plan.md`
+- One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
+
 ## Frontend Development
 - Frontend source: `ui.web/` (shadcn-admin aligned)
 - Embedded output served by Go: `internal/ui/static/`

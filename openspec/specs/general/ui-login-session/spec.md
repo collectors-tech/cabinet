@@ -33,3 +33,17 @@ First-run signed-in sessions SHALL resolve a usable active profile context so co
 - **GIVEN** a newly signed-in first-run user and no previously selected active profile context
 - **WHEN** user navigates core routes (`/settings/display`, `/chats`, `/integrations`, `/reports`, `/users`)
 - **THEN** routes MUST render usable states without surfacing raw `active_profile_404` or `active_profile_not_set` errors
+
+### Requirement UI-LOGIN-SESSION-005: Root unauthenticated entry SHALL use a clean sign-in route while preserving deep-link returns
+Cabinet SHALL avoid attaching a redundant `redirect=%2F` query when an unauthenticated user opens the base app entry, while still preserving redirect targets for protected deep links.
+
+#### Scenario: Root entry redirects cleanly to sign-in
+- **GIVEN** user is unauthenticated and requests the base app URL `/`
+- **WHEN** router resolves the unauthenticated entry redirect
+- **THEN** UI MUST land on `/sign-in` without a redundant `redirect=%2F` query
+- **AND** sign-in from that entry MUST continue to the canonical dashboard destination `/dashboard`
+
+#### Scenario: Protected deep link still preserves return target
+- **GIVEN** user is unauthenticated and requests a protected deep link such as `/inventory/`
+- **WHEN** router resolves the unauthenticated entry redirect
+- **THEN** UI MUST land on `/sign-in` with the intended protected return target preserved in search state

@@ -193,14 +193,39 @@ describe("inventory-management", () => {
 
     cy.get('[data-testid="inventory-new-action"]')
       .should("be.visible")
-      .and("contain", "New");
+      .and("contain", "New")
+      .click();
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-create-cancel"]').click();
+
     cy.get('[data-testid="inventory-create-menu-trigger"]')
       .should("be.visible")
       .and("contain", "Create")
       .click();
-    cy.get('[data-testid="inventory-create-menu-item"]').should("be.visible");
-    cy.get('[data-testid="inventory-create-menu-folder"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-menu-item"]').should("be.visible").click();
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-menu-folder"]').should("not.exist");
   });
++
++  it("UI-SCREEN-INVENTORY-ITEMS-007 opens create-item workflow from toolbar", () => {
++    cy.intercept("GET", "/api/items", {
++      statusCode: 200,
++      body: { items: [] },
++    }).as("itemsCreate");
++
++    signIn();
++    cy.wait("@itemsCreate");
++
++    cy.get('[data-testid="inventory-create-menu-trigger"]').click();
++    cy.get('[data-testid="inventory-create-menu-item"]').click();
++    cy.get('[data-testid="inventory-item-create-title"]').type("Inline Created Item");
++    cy.get('[data-testid="inventory-item-create-part-number"]').type("PN-CREATE-1");
++    cy.get('[data-testid="inventory-item-create-submit"]').click();
++
++    cy.get('[data-testid="inventory-item-create-dialog"]').should("not.exist");
++    cy.contains("Inline Created Item").should("be.visible");
++    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
++  });
 
   it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection inline and auto-selects it", () => {
     cy.intercept("GET", "/api/items", {

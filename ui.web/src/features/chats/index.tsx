@@ -346,8 +346,11 @@ export function Chats() {
           <h1 className='text-2xl font-bold tracking-tight'>Chats</h1>
           <MessagesSquare className='h-5 w-5 text-muted-foreground' />
         </div>
-        <p className='text-muted-foreground'>
+        <p className='text-muted-foreground' data-testid='chat-workspace-description'>
           Persistent profile-scoped conversation threads backed by Cabinet runtime.
+        </p>
+        <p className='text-sm text-muted-foreground' data-testid='chat-workspace-boundary-note'>
+          Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.
         </p>
         <Separator className='my-4' />
 

@@ -55,6 +55,11 @@ Integrations screen SHALL show explicit loading and actionable error states for 
 - **WHEN** `GET /api/providers/registry` returns non-`200` or network failure
 - **THEN** screen MUST show user-visible error state with retry control and MUST avoid silent failure
 
+#### Scenario: Active-profile bootstrap recovery in route
+- **GIVEN** integrations route loads without an active profile context but profile listing is still available
+- **WHEN** active profile bootstrap fails with `active_profile_*`
+- **THEN** screen MUST expose an in-route recovery path to either select an existing profile or create a new profile and continue bootstrap in place
+
 ### Requirement UI-SCREEN-INTEGRATIONS-006: Integrations screen SHALL use provider-registry endpoint as list source-of-truth
 Integrations screen SHALL derive provider cards exclusively from `GET /api/providers/registry` response.
 
