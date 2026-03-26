@@ -40,4 +40,23 @@ describe("ui-screen-collections", () => {
       .should("be.visible")
       .and("have.attr", "data-state", "active");
   });
+
+  it("UI-SCREEN-COLLECTIONS-008 keeps create panel open and shows validation on blank save", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-new-action"]').click();
+    cy.get('[data-testid="collections-create-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-new-save"]').click();
+    cy.get('[data-testid="collections-create-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-new-validation"]')
+      .should("be.visible")
+      .and("contain", "Collection name is required.");
+    cy.get('[data-testid="collections-new-input"]').should(
+      "have.attr",
+      "aria-invalid",
+      "true"
+    );
+    cy.get('[data-testid="collections-new-cancel"]').click();
+    cy.get('[data-testid="collections-create-panel"]').should("not.exist");
+  });
 });
