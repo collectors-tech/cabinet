@@ -5,6 +5,7 @@ ui.web/playwright-report/
 ui.web/test-results/
 ui.web/cypress/artifacts/
 bin/
+.idea/
 dist/
 cabinet.exe
 *.tmp

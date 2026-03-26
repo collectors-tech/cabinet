@@ -63,6 +63,14 @@ This repo is configured to run through Antfarm with issue-fed workflow execution
 - Runbook: `docs/demo-instance-plan.md`
 - One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
 
+## Branch / Demo Promotion Workflow
+- Create one focused branch per issue/fix.
+- Validate on that issue branch first.
+- Merge validated issue branches into `develop`.
+- Deploy demo/review lanes from `develop`, not from ad hoc branch heads or dirty working trees.
+- Every demo checkpoint should state the deployed branch and commit hash.
+- Merge `develop` into `main` only after Max explicitly says testing is complete and approves the merge.
+
 ## Frontend Development
 - Frontend source: `ui.web/` (shadcn-admin aligned)
 - Embedded output served by Go: `internal/ui/static/`
