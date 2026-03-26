@@ -1,10 +1,17 @@
 describe("UI-SCREEN-HOME", () => {
-  function signInToHome() {
-    cy.visit("/sign-in?redirect=%2F")
+  function signInToHome(redirectPath = "/dashboard") {
+    cy.request("POST", "/api/test/reset", {})
+    cy.request("POST", "/api/profiles", { name: "E2E Local" }).then((createResp) => {
+      expect(createResp.status).to.eq(201)
+      const profileId = createResp.body.id as string
+      cy.request("PUT", "/api/profiles/active", { profile_id: profileId }).its("status").should("eq", 200)
+    })
+
+    cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
     cy.get('input[name="email"]').clear().type("e2e-home@example.com")
     cy.get('input[name="password"]').clear().type("password123")
     cy.contains("button", "Sign in").click()
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/?$/)
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
   }
 
   it("UI-SCREEN-HOME-001 renders actionable priority cards with direct actions", () => {
@@ -109,5 +116,44 @@ describe("UI-SCREEN-HOME", () => {
       })
 
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/discoveries\/?$/)
+  })
+
+  it("UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 2,
+        wishlist_hits: 1,
+        price_drops: 0,
+        low_stock_discoveries: 0,
+        restocks: 0,
+        recently_added: ["Canonical Route Item"],
+        total_items: 2,
+        total_instances: 2,
+        estimated_value: 200,
+        cards: [{ title: "Review discoveries", value: 2, link: "/discoveries" }],
+      },
+    }).as("dashboardCanonical")
+
+    signInToHome("/")
+    cy.wait("@dashboardCanonical")
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should(
+      "have.attr",
+      "href",
+      "/dashboard"
+    )
+
+    cy.visit("/")
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+
+    cy.visit("/inventory")
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
+    cy.get('[data-testid="active-profile-name"]', { timeout: 15000 }).should("contain", "E2E Local")
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+
+    cy.reload()
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
   })
 })

@@ -77,6 +77,20 @@ Sign-in screen SHALL include a first-time-user CTA that routes deterministically
 - **THEN** UI MUST show visible `Create account` link/button
 - **AND** control MUST navigate to `/sign-up`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011: Sign-up submit SHALL provide deterministic completion feedback
+Sign-up flow SHALL provide a deterministic outcome after valid submission so first-time users are never left on a dead-end state.
+
+#### Scenario: Successful sign-up completion
+- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
+- **WHEN** user activates `Create Account`
+- **THEN** UI MUST show in-progress state while submitting
+- **AND** on success MUST authenticate the new user session and navigate to authenticated shell (`/`)
+
+#### Scenario: Failed sign-up completion
+- **GIVEN** user submits valid sign-up payload and backend returns failure
+- **WHEN** submission fails
+- **THEN** UI MUST show actionable error feedback and remain recoverable on `/sign-up`
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -97,3 +111,4 @@ Sign-in screen SHALL include a first-time-user CTA that routes deterministically
 | UC-ONB-07 | Identity mode resolution | Identity mode and provider enablement resolve from runtime config | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config` |
 | UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
+| UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |

@@ -74,8 +74,53 @@ Tree view SHALL render visual connector lines/indent guides to make parent-child
 - **WHEN** tree renders nodes
 - **THEN** UI MUST show clear hierarchical line/guide cues between parent and child nodes
 
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-010: Tree rows SHALL provide clear disclosure, iconography, and hierarchy cues
+The tree MUST make hierarchy and current state obvious at a glance with dedicated disclosure affordances and node/leaf icon treatment beyond bare text rows.
+
+#### Scenario: Scan and understand tree structure quickly
+- **GIVEN** user opens the inventory tree with mixed parent and leaf nodes
+- **WHEN** they scan the visible hierarchy without interacting deeply
+- **THEN** parent rows MUST expose a clear disclosure affordance distinct from selection
+- **AND** rows MUST show node/leaf visual treatment that communicates expandable vs terminal state
+- **AND** the active selection MUST be visually distinct without overwhelming the rest of the tree
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-011: Tree SHALL support contextual row actions without crowding the primary selection flow
+Tree rows MUST support secondary actions in a way that does not force the user to choose between selection and management.
+
+#### Scenario: Invoke row-level management actions
+- **GIVEN** user is browsing folders in the tree
+- **WHEN** they need to manage a specific node
+- **THEN** the row MUST expose contextual actions such as add child and future management affordances through inline or overflow actions
+- **AND** invoking those actions MUST NOT accidentally change the primary selected context unless the action explicitly requires it
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-012: Tree SHALL preserve and restore navigation context predictably
+Tree exploration state MUST survive normal in-app navigation and keep users oriented when returning to the tree.
+
+#### Scenario: Return to previously explored branch
+- **GIVEN** user has expanded branches and selected a deep node
+- **WHEN** they navigate away and return to the inventory workspace or refresh within supported persistence scope
+- **THEN** the tree MUST restore the selected node and expanded ancestor path according to product persistence rules
+- **AND** if the active node is not visible, the tree MUST reveal it by expanding required ancestors
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-013: Tree rows SHALL support richer metadata rendering for inventory context
+The tree MUST support custom row rendering for inventory context such as counts, status badges, or secondary labels when available.
+
+#### Scenario: Review folder context from the tree alone
+- **GIVEN** inventory folders have useful secondary metadata such as item counts or status indicators
+- **WHEN** the tree renders rows
+- **THEN** rows MUST be able to display that metadata in a structured way without breaking hierarchy readability or keyboard accessibility
+
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-014: Tree SHALL support hierarchy re-organization through drag-drop or equivalent move workflow
+Users MUST be able to reorganize the folder hierarchy without rebuilding it manually from scratch.
+
+#### Scenario: Move folder within the hierarchy
+- **GIVEN** user wants to re-parent or reorder a folder within the tree
+- **WHEN** they perform the supported move interaction
+- **THEN** the tree MUST provide a deterministic move workflow with clear feedback, valid drop/move constraints, and correct hierarchy updates after completion
+
 ## Implementation recommendation
 Preferred component strategy:
 - `@react-aria/tree` + `@react-stately/tree` for accessible tree semantics
 - optional virtualization for large trees (`@tanstack/react-virtual`)
-- optional drag/reorder later via `dnd-kit` (out of scope for initial tree contract)
+- drag/reorder via `dnd-kit` or equivalent once move semantics are specified
+- use a row-renderer model that supports node icons, badges/counts, and contextual actions without breaking tree semantics

@@ -66,6 +66,17 @@ Authenticated Home route SHALL not include starter setup wizard cards or control
 - **WHEN** Home renders dashboard content
 - **THEN** labels and controls `Starter Onboarding`, `Start Setup`, `Import Existing Collection`, and `Use Sample Data` MUST NOT be present
 
+### Requirement UI-SCREEN-HOME-007: Home SHALL use `/dashboard` as the canonical route
+Authenticated Home SHALL load on `/dashboard`, while `/` SHALL redirect deterministically to `/dashboard` without route drift.
+
+#### Scenario: Canonical dashboard route and redirect
+- **GIVEN** an authenticated actor opens the app shell from a direct deep link, root entry, sidebar navigation, refresh, or browser history interaction
+- **WHEN** Home route resolution occurs
+- **THEN** `/dashboard` SHALL render the Home screen directly
+- **AND** `/` SHALL redirect to `/dashboard`
+- **AND** primary Dashboard navigation SHALL target `/dashboard`
+- **AND** refresh/back-forward behavior on `/dashboard` SHALL remain stable without falling into 404
+
 ## Acceptance Criteria
 - Every Home critical flow has UC ID and deterministic expected outcome.
 - E2E mapping exists for command-center render and quick actions.
@@ -85,3 +96,4 @@ Authenticated Home route SHALL not include starter setup wizard cards or control
 | UC-HOME-05 | Authenticated Home setup exclusion | Setup wizard actions are not shown in Home | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until sign-in then unlocks redirect target` |
 | UC-HOME-06 | Click Refresh Dashboard | Home data re-fetches without route transition | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `home-refresh-dashboard` |
 | UC-HOME-07 | Home renders without legacy onboarding controls | Legacy setup step controls absent from authenticated shell | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until sign-in then unlocks redirect target` |
+| UC-HOME-08 | Resolve Home via canonical route and shell nav | `/dashboard` loads directly, `/` redirects to `/dashboard`, and Dashboard nav targets canonical path | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability` |

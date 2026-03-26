@@ -119,7 +119,7 @@ describe('general/ui-data-contract-parity', () => {
     cy.get('input[placeholder="cabinet-user"]').clear().type('parity-user')
     cy.contains('button', 'Update profile').click()
     cy.wait('@saveProfileSettings')
-    cy.location('pathname').should('match', /^\/settings\/?$/)
+    cy.location('pathname').should('match', /^\/settings\/profile\/?$/)
     cy.contains('profile_settings_save_500').should('be.visible')
   })
 

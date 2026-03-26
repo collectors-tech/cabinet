@@ -12,16 +12,28 @@ describe('ui-screen-help-center', () => {
     cy.clearLocalStorage()
   })
 
-  it('UI-SCREEN-HELP-CENTER-001 renders deterministic placeholder state on help-center route', () => {
+  it('UI-SCREEN-HELP-CENTER-001 renders article library on help-center route', () => {
     signInToHelpCenter()
 
     cy.contains('h1', 'Help Center').should('be.visible')
-    cy.get('[data-testid="help-center-placeholder"]').should('be.visible')
-    cy.contains('Documentation is being organized').should('be.visible')
+    cy.get('[data-testid="help-center-article-library"]').should('be.visible')
+    cy.get('[data-testid="help-center-library-summary"]').should('contain.text', 'Articles available')
+    cy.get('[data-testid="help-center-article-link-getting-started-login-database-setup"]').should('be.visible')
+    cy.get('[data-testid="help-center-article-link-section-inventory"]').should('be.visible')
     cy.contains('Oops! Something went wrong').should('not.exist')
   })
 
-  it('UI-SCREEN-HELP-CENTER-002 preserves shell controls on help-center route', () => {
+  it('UI-SCREEN-HELP-CENTER-002 renders selected article content in-app', () => {
+    signInToHelpCenter()
+
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Login and Database Setup')
+    cy.get('[data-testid="help-center-article-link-section-inventory"]').click()
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Inventory')
+    cy.get('[data-testid="help-center-article-viewer"]').should('contain.text', 'Managing owned items')
+    cy.get('[data-testid="help-center-article-content-section-inventory"]').should('contain.text', 'Photos, barcodes, AI assist')
+  })
+
+  it('UI-SCREEN-HELP-CENTER-003 preserves shell controls on help-center route', () => {
     signInToHelpCenter()
 
     cy.contains('button', /Search/i).should('be.visible')

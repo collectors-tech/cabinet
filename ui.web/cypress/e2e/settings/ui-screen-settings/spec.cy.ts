@@ -4,7 +4,7 @@ describe('ui-screen-settings', () => {
     cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/?$/)
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
   }
 
   beforeEach(() => {
@@ -15,7 +15,7 @@ describe('ui-screen-settings', () => {
 
   it('UI-SCREEN-SETTINGS-001 resolves direct section URLs to the matching settings section', () => {
     const routes: Array<{ path: string; title: string }> = [
-      { path: '/settings/', title: 'Profile' },
+      { path: '/settings/profile', title: 'Profile' },
       { path: '/settings/account', title: 'Account' },
       { path: '/settings/appearance', title: 'Appearance' },
       { path: '/settings/notifications', title: 'Notifications' },
@@ -34,7 +34,7 @@ describe('ui-screen-settings', () => {
 
   it('UI-SCREEN-SETTINGS-002 renders canonical settings section labels with stable route links', () => {
     const sections = [
-      ['Profile', '/settings'],
+      ['Profile', '/settings/profile'],
       ['Account', '/settings/account'],
       ['Appearance', '/settings/appearance'],
       ['Notifications', '/settings/notifications'],
@@ -92,7 +92,7 @@ describe('ui-screen-settings', () => {
     cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/?$/)
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
     cy.wait('@activeProfileMissing')
     cy.get('[data-testid="settings-profile-context-blocked"]').should(
       'be.visible'

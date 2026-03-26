@@ -171,4 +171,23 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       );
     cy.contains('button', 'Sign in').should('be.visible');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-up');
+    cy.get('input[name="email"]').type('e2e-signup@example.com');
+    cy.get('input[name="password"]').type('password123');
+    cy.get('input[name="confirmPassword"]').type('password123');
+
+    cy.contains('button', 'Create Account').click();
+
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^(\/|\/_authenticated\/?)$/
+    );
+    cy.contains('Home').should('be.visible');
+  });
 });

@@ -2,11 +2,17 @@
 Define Settings shell behavior: section navigation, deep-link routing, and shared deterministic state handling.
 
 ## Requirements
-### Requirement UI-SCREEN-SETTINGS-001: Settings shell SHALL expose section-based navigation with deep-link URLs
-Settings SHALL support direct navigation to section routes.
+### Requirement UI-SCREEN-SETTINGS-001: Settings shell SHALL expose canonical section-based navigation with deep-link URLs
+Settings SHALL support direct navigation to canonical section routes, with `/settings/profile` treated as the canonical Profile route and `/settings` treated as the entry route that redirects into it. All visible Profile navigation affordances within settings and profile menus MUST target `/settings/profile`.
 
-#### Scenario: Open section via URL
-- **GIVEN** user opens a direct settings URL (`/settings`, `/settings/account`, `/settings/appearance`, `/settings/notifications`, `/settings/display`, `/settings/storage`, `/settings/operations`, `/settings/billing`)
+#### Scenario: Open settings entry route
+- **GIVEN** user opens `/settings`
+- **WHEN** route resolves
+- **THEN** runtime MUST redirect to `/settings/profile`
+- **AND** Profile section MUST render with sidebar navigation reflecting active Profile state
+
+#### Scenario: Open section via canonical URL
+- **GIVEN** user opens a canonical settings URL (`/settings/profile`, `/settings/account`, `/settings/appearance`, `/settings/notifications`, `/settings/display`, `/settings/storage`, `/settings/operations`, `/settings/billing`)
 - **WHEN** route resolves
 - **THEN** corresponding section MUST render and sidebar navigation MUST reflect active section
 

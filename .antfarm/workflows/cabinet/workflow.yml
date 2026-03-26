@@ -149,7 +149,8 @@ steps:
       4. Ensure .gitignore exists — if missing, create one appropriate for the detected stack (must include .env, node_modules/, *.key, *.pem at minimum)
       5. Run the build to establish a baseline
       6. Run the tests to establish a baseline
-      7. Report what you found
+      7. Write handoff file `.antfarm/state/run-{{run_id}}-context.md` with REPO, BRANCH, BUILD_CMD, TEST_CMD, and baseline notes.
+      8. Report what you found
 
       Reply with:
       STATUS: done
@@ -198,6 +199,7 @@ steps:
 
       Instructions:
       1. Read progress-{{run_id}}.txt — especially the Codebase Patterns section
+      1b. Read `.antfarm/state/run-{{run_id}}-context.md` for canonical REPO/BRANCH/BUILD_CMD/TEST_CMD handoff; if missing, create it from current inputs before continuing
       2. Pull latest on the branch
       3. Implement this story only
       4. Follow mandatory flow: Issue -> Spec -> Validate -> Commit
@@ -241,6 +243,8 @@ steps:
       PROGRESS LOG:
       {{progress}}
 
+      Before checks: read `.antfarm/state/run-{{run_id}}-context.md`; if missing, fail with explicit handoff blocker.
+
       Check:
       1. Code exists (not just TODOs or placeholders)
       2. Each acceptance criterion for the story is met
@@ -279,15 +283,15 @@ steps:
       STATUS: retry
       ISSUES:
       - What's missing or incomplete
-      ISSUE_FIELDS_REQUIRED:
-      - Screen/route
-      - Control/field type
-      - Expected intent
-      - Actual result
-      - Repro steps
-      - Evidence links
-      - Spec link/ID (or SPEC_GAP)
-      - Suggested fix path/module
+      ISSUE_FIELDS_REQUIRED (no one-liners; use `.antfarm/templates/ISSUE_BODY_TEMPLATE.md`):
+      - Outcome
+      - Why
+      - Scope (in/out)
+      - OpenSpec binding (IDs + paths)
+      - Acceptance criteria
+      - Test evidence required
+      - Deliverables
+      - Failure Detail: Screen/route, Control/field type, Expected intent, Actual result, Repro steps, Evidence links, Spec link/ID (or SPEC_GAP), Suggested fix path/module
     expects: "STATUS: done"
     on_fail:
       retry_step: implement
@@ -311,6 +315,8 @@ steps:
 
       PROGRESS LOG:
       {{progress}}
+
+      Read `.antfarm/state/run-{{run_id}}-context.md` first; treat it as canonical run handoff.
 
       Your job (integration/E2E testing — unit tests were already written per-story):
       1. Run the full test suite ({{test_cmd}}) to confirm everything passes together
@@ -336,15 +342,15 @@ steps:
       STATUS: retry
       FAILURES:
       - Specific test failures or bugs found
-      ISSUE_FIELDS_REQUIRED:
-      - Screen/route
-      - Control/field type
-      - Expected intent
-      - Actual result
-      - Repro steps
-      - Evidence links
-      - Spec link/ID (or SPEC_GAP)
-      - Suggested fix path/module
+      ISSUE_FIELDS_REQUIRED (no one-liners; use `.antfarm/templates/ISSUE_BODY_TEMPLATE.md`):
+      - Outcome
+      - Why
+      - Scope (in/out)
+      - OpenSpec binding (IDs + paths)
+      - Acceptance criteria
+      - Test evidence required
+      - Deliverables
+      - Failure Detail: Screen/route, Control/field type, Expected intent, Actual result, Repro steps, Evidence links, Spec link/ID (or SPEC_GAP), Suggested fix path/module
     expects: "STATUS: done"
     on_fail:
       retry_step: implement
@@ -367,6 +373,8 @@ steps:
 
       PROGRESS LOG:
       {{progress}}
+
+      Read `.antfarm/state/run-{{run_id}}-context.md` first; if missing, return retry with handoff blocker.
 
       Create a PR with:
       - Clear title summarizing the change
@@ -394,6 +402,8 @@ steps:
 
       PROGRESS LOG:
       {{progress}}
+
+      Read `.antfarm/state/run-{{run_id}}-context.md` first; if missing, return retry with handoff blocker.
 
       Review for:
       - Code quality and clarity

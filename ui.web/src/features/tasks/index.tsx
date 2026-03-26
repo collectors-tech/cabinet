@@ -43,6 +43,8 @@ export function Tasks({
   } = useWorkspaceCollections()
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
+  const [inlineCollectionValidationMessage, setInlineCollectionValidationMessage] =
+    useState('')
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
 
@@ -161,7 +163,10 @@ export function Tasks({
                 {isWishlistRoute ? (
                   <DropdownMenuItem
                     data-testid='wishlist-create-menu-collection'
-                    onClick={() => setInlineCollectionInputOpen(true)}
+                    onClick={() => {
+                      setInlineCollectionValidationMessage('')
+                      setInlineCollectionInputOpen(true)
+                    }}
                   >
                     New Collection
                   </DropdownMenuItem>
@@ -203,33 +208,60 @@ export function Tasks({
                 type='button'
                 variant='outline'
                 data-testid='wishlist-inline-add-new'
-                onClick={() => setInlineCollectionInputOpen((open) => !open)}
+                onClick={() => {
+                  setInlineCollectionValidationMessage('')
+                  setInlineCollectionInputOpen((open) => !open)
+                }}
               >
                 + New Collection
               </Button>
             </div>
             {inlineCollectionInputOpen ? (
-              <div className='mt-2 flex gap-2'>
-                <Input
-                  data-testid='wishlist-inline-new-name'
-                  placeholder='Collection name'
-                  value={inlineCollectionName}
-                  onChange={(event) => setInlineCollectionName(event.target.value)}
-                />
-                <Button
-                  type='button'
-                  data-testid='wishlist-inline-save'
-                  onClick={() => {
-                    const created = addCollection(inlineCollectionName)
-                    if (created) {
-                      setActiveWorkspaceCollection(created)
+              <div className='mt-2'>
+                <div className='flex gap-2'>
+                  <Input
+                    data-testid='wishlist-inline-new-name'
+                    placeholder='Collection name'
+                    aria-invalid={
+                      inlineCollectionValidationMessage ? 'true' : 'false'
                     }
-                    setInlineCollectionName('')
-                    setInlineCollectionInputOpen(false)
-                  }}
-                >
-                  Save
-                </Button>
+                    value={inlineCollectionName}
+                    onChange={(event) => {
+                      setInlineCollectionName(event.target.value)
+                      if (inlineCollectionValidationMessage) {
+                        setInlineCollectionValidationMessage('')
+                      }
+                    }}
+                  />
+                  <Button
+                    type='button'
+                    data-testid='wishlist-inline-save'
+                    onClick={() => {
+                      const created = addCollection(inlineCollectionName)
+                      if (!created) {
+                        setInlineCollectionValidationMessage(
+                          'Collection name is required.'
+                        )
+                        return
+                      }
+                      setInlineCollectionValidationMessage('')
+                      setActiveWorkspaceCollection(created)
+                      setInlineCollectionName('')
+                      setInlineCollectionInputOpen(false)
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+                {inlineCollectionValidationMessage ? (
+                  <p
+                    className='mt-2 text-sm text-destructive'
+                    data-testid='wishlist-inline-validation'
+                    role='alert'
+                  >
+                    {inlineCollectionValidationMessage}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>

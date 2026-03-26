@@ -1,0 +1,9 @@
+{
+  "name": "cabinet-validator-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "devDependencies": {
+    "playwright": "^1.54.2"
+  }
+}
