@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "title": "首页",
+    "subtitle": "查看当前集合中需要优先处理的内容。",
+    "refresh": "刷新仪表板",
+    "refreshing": "正在刷新...",
+    "unavailable": "仪表板不可用",
+    "attentionTitle": "当前需要关注的事项",
+    "attentionDescription": "新发现、关注命中和价格变动。",
+    "loadingActivity": "正在加载活动信号...",
+    "pending": "待处理",
+    "openInventory": "打开库存",
+    "open": "打开",
+    "noActionItems": "当前没有待处理事项。",
+    "recentlyAdded": "最近添加",
+    "recentlyAddedDescription": "最近添加到库存的条目。",
+    "loadingItems": "正在加载条目...",
+    "noRecentlyAdded": "还没有最近添加的条目。",
+    "metrics": {
+      "inventoryItems": "库存项目",
+      "inventoryUnits": "库存数量",
+      "wishlistHits": "心愿单命中",
+      "estimatedValue": "估算价值"
+    }
+  },
+  "inventory": {
+    "title": "库存",
+    "description": "管理收藏项目、评级状态、包装和媒体。"
+  },
+  "wishlist": {
+    "title": "心愿单",
+    "description": "跟踪发现的项目、目标条目和优先级安排。"
+  },
+  "integrations": {
+    "title": "集成",
+    "description": "配置提供商、凭据和连接器操作。"
+  },
+  "settings": {
+    "profile": {
+      "title": "个人资料",
+      "description": "其他人会以这种方式在站点上看到你。"
+    },
+    "account": {
+      "title": "账户",
+      "description": "更新账户设置并管理登录方式。"
+    },
+    "appearance": {
+      "title": "外观",
+      "description": "自定义应用外观，并在白天与夜间主题之间自动切换。"
+    },
+    "notifications": {
+      "title": "通知",
+      "description": "配置哪些更新会提醒你，以及提醒方式。"
+    },
+    "display": {
+      "title": "显示",
+      "description": "打开或关闭项目以控制应用中的显示内容。"
+    },
+    "storage": {
+      "title": "存储",
+      "description": "查看和管理当前工作区的存储位置与使用情况。"
+    },
+    "billing": {
+      "title": "账单",
+      "description": "查看订阅、费用和账单偏好。"
+    },
+    "operations": {
+      "title": "操作",
+      "description": "管理后台任务、导入导出和运行时操作。"
+    }
+  }
+}

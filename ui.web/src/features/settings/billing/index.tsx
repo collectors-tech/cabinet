@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
+import { useTranslation } from 'react-i18next'
 import { ContentSection } from '../components/content-section'
 
 export function SettingsBilling() {
+  const { t } = useTranslation('pages')
+
   return (
     <ContentSection
-      title='Billing'
-      desc='Review subscription status and entitlement configuration.'
+      title={t('settings.billing.title')}
+      desc={t('settings.billing.description')}
     >
       <div className='space-y-4 text-sm'>
         <div className='rounded-md border p-3'>

@@ -14,6 +14,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { useTranslation } from 'react-i18next'
 
 type DashboardCard = {
   title: string
@@ -50,6 +51,7 @@ function normalizeDashboardLink(link: string) {
 }
 
 export function Dashboard() {
+  const { t } = useTranslation('pages')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -82,12 +84,12 @@ export function Dashboard() {
       return []
     }
     return [
-      { title: 'Inventory Items', value: `${summary.total_items}` },
-      { title: 'Inventory Units', value: `${summary.total_instances}` },
-      { title: 'Wishlist Hits', value: `${summary.wishlist_hits}` },
-      { title: 'Estimated Value', value: formatCurrency(summary.estimated_value) },
+      { title: t('dashboard.metrics.inventoryItems'), value: `${summary.total_items}` },
+      { title: t('dashboard.metrics.inventoryUnits'), value: `${summary.total_instances}` },
+      { title: t('dashboard.metrics.wishlistHits'), value: `${summary.wishlist_hits}` },
+      { title: t('dashboard.metrics.estimatedValue'), value: formatCurrency(summary.estimated_value) },
     ]
-  }, [summary])
+  }, [summary, t])
 
   return (
     <>
@@ -104,25 +106,25 @@ export function Dashboard() {
       <Main className='space-y-6'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Home</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>{t('dashboard.title')}</h1>
             <p className='text-muted-foreground'>
-              What needs action now in your collection.
+              {t('dashboard.subtitle')}
             </p>
           </div>
           <Button onClick={() => void loadDashboard()} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh Dashboard'}
+            {loading ? t('dashboard.refreshing') : t('dashboard.refresh')}
           </Button>
         </div>
 
         {error ? (
           <Card>
             <CardHeader>
-              <CardTitle>Dashboard unavailable</CardTitle>
+              <CardTitle>{t('dashboard.unavailable')}</CardTitle>
               <CardDescription>{error}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button variant='outline' onClick={() => void loadDashboard()}>
-                Retry
+                {t('common:actions.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -134,7 +136,7 @@ export function Dashboard() {
                 <Card key={slot}>
                   <CardHeader className='pb-2'>
                     <CardTitle className='text-sm font-medium'>
-                      Loading...
+                      {t('common:status.loading')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -159,15 +161,15 @@ export function Dashboard() {
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
           <Card className='col-span-1 lg:col-span-4'>
             <CardHeader>
-              <CardTitle>What needs attention now</CardTitle>
+              <CardTitle>{t('dashboard.attentionTitle')}</CardTitle>
               <CardDescription>
-                New discoveries, watch-list hits, and price movement.
+                {t('dashboard.attentionDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-3'>
               {loading ? (
                 <p className='text-sm text-muted-foreground'>
-                  Loading activity signals...
+                  {t('dashboard.loadingActivity')}
                 </p>
               ) : summary?.cards?.length ? (
                 summary.cards.map((card) => (
@@ -178,7 +180,7 @@ export function Dashboard() {
                     <div>
                       <div className='text-sm font-medium'>{card.title}</div>
                       <div className='text-xs text-muted-foreground'>
-                        {card.value} pending
+                        {card.value} {t('dashboard.pending')}
                       </div>
                     </div>
                     <Button asChild variant='outline' size='sm'>
@@ -186,14 +188,14 @@ export function Dashboard() {
                         href={normalizeDashboardLink(card.link)}
                         data-testid={`dashboard-card-link-${card.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                       >
-                        Open
+                        {t('dashboard.open')}
                       </a>
                     </Button>
                   </div>
                 ))
               ) : (
                 <p className='text-sm text-muted-foreground'>
-                  No action items right now.
+                  {t('dashboard.noActionItems')}
                 </p>
               )}
             </CardContent>
@@ -201,12 +203,12 @@ export function Dashboard() {
 
           <Card className='col-span-1 lg:col-span-3'>
             <CardHeader>
-              <CardTitle>Recently added</CardTitle>
-              <CardDescription>Latest items added to inventory.</CardDescription>
+              <CardTitle>{t('dashboard.recentlyAdded')}</CardTitle>
+              <CardDescription>{t('dashboard.recentlyAddedDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className='text-sm text-muted-foreground'>Loading items...</p>
+                <p className='text-sm text-muted-foreground'>{t('dashboard.loadingItems')}</p>
               ) : summary?.recently_added?.length ? (
                 <ul className='space-y-2'>
                   {summary.recently_added.map((item) => (
@@ -217,14 +219,14 @@ export function Dashboard() {
                         className='flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted'
                       >
                         <span className='truncate'>{item}</span>
-                        <span className='text-xs text-muted-foreground'>Open inventory</span>
+                        <span className='text-xs text-muted-foreground'>{t('dashboard.openInventory')}</span>
                       </a>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className='text-sm text-muted-foreground'>
-                  No recently added items yet.
+                  {t('dashboard.noRecentlyAdded')}
                 </p>
               )}
             </CardContent>

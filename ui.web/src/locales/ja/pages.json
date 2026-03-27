@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "title": "ホーム",
+    "subtitle": "コレクションで今対応が必要な内容を確認します。",
+    "refresh": "ダッシュボードを更新",
+    "refreshing": "更新中...",
+    "unavailable": "ダッシュボードを表示できません",
+    "attentionTitle": "今すぐ確認が必要な項目",
+    "attentionDescription": "新しい発見、ウォッチ項目のヒット、価格変動。",
+    "loadingActivity": "アクティビティを読み込み中...",
+    "pending": "保留中",
+    "openInventory": "在庫を開く",
+    "open": "開く",
+    "noActionItems": "現在対応が必要な項目はありません。",
+    "recentlyAdded": "最近追加した項目",
+    "recentlyAddedDescription": "最近在庫に追加された項目です。",
+    "loadingItems": "項目を読み込み中...",
+    "noRecentlyAdded": "最近追加された項目はまだありません。",
+    "metrics": {
+      "inventoryItems": "在庫アイテム",
+      "inventoryUnits": "在庫数量",
+      "wishlistHits": "ウィッシュリスト一致",
+      "estimatedValue": "推定価値"
+    }
+  },
+  "inventory": {
+    "title": "在庫",
+    "description": "コレクション項目、鑑定状況、包装、メディアを管理します。"
+  },
+  "wishlist": {
+    "title": "ウィッシュリスト",
+    "description": "発見した項目、対象エントリー、優先順位を追跡します。"
+  },
+  "integrations": {
+    "title": "連携",
+    "description": "プロバイダー、認証情報、コネクター操作を設定します。"
+  },
+  "settings": {
+    "profile": {
+      "title": "プロフィール",
+      "description": "サイト上で他の人に表示されるあなたの見え方です。"
+    },
+    "account": {
+      "title": "アカウント",
+      "description": "アカウント設定を更新し、サインイン方法を管理します。"
+    },
+    "appearance": {
+      "title": "外観",
+      "description": "アプリの外観をカスタマイズし、昼夜テーマを自動で切り替えます。"
+    },
+    "notifications": {
+      "title": "通知",
+      "description": "どの更新をどの方法で通知するか設定します。"
+    },
+    "display": {
+      "title": "表示",
+      "description": "アプリに表示する内容を制御するため、項目をオン/オフします。"
+    },
+    "storage": {
+      "title": "ストレージ",
+      "description": "現在のワークスペースの保存先と使用状況を確認・管理します。"
+    },
+    "billing": {
+      "title": "請求",
+      "description": "サブスクリプション、料金、請求設定を確認します。"
+    },
+    "operations": {
+      "title": "操作",
+      "description": "バックグラウンド作業、インポート/エクスポート、ランタイム操作を管理します。"
+    }
+  }
+}

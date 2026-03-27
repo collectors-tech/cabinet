@@ -4,8 +4,12 @@ import { initReactI18next } from 'react-i18next'
 import commonEn from '@/locales/en/common.json'
 import commonJa from '@/locales/ja/common.json'
 import navEn from '@/locales/en/nav.json'
+import navJa from '@/locales/ja/nav.json'
 import pagesEn from '@/locales/en/pages.json'
+import pagesJa from '@/locales/ja/pages.json'
 import commonZh from '@/locales/zh/common.json'
+import navZh from '@/locales/zh/nav.json'
+import pagesZh from '@/locales/zh/pages.json'
 
 function applyDocumentLocale(language: string) {
   if (typeof document === 'undefined') {
@@ -34,9 +38,13 @@ void i18next
       },
       zh: {
         common: commonZh,
+        nav: navZh,
+        pages: pagesZh,
       },
       ja: {
         common: commonJa,
+        nav: navJa,
+        pages: pagesJa,
       },
     },
     detection: {
