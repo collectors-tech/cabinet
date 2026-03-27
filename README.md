@@ -20,9 +20,12 @@ This repo is currently worked **direct/manual**.
 5. Validate with the required checks for the touched scope.
 6. Commit with an issue-prefixed message.
 7. Push and update the issue with evidence.
-8. Merge validated issue branches into `develop`.
-9. Deploy demo/review lanes from `develop`.
-10. Merge `develop` into `main` only after Max explicitly approves.
+8. Open a PR from the issue branch into `develop`.
+9. Manually run the local pipeline on the local dev instance, deploy locally, and run the full regression suite.
+10. Comment in the PR with the validation/deploy report and upload the report artifact there.
+11. Merge the PR into `develop`.
+12. Pull/update local `develop` and deploy demo/review lanes from `develop`.
+13. Merge `develop` into `main` only after Max explicitly approves.
 
 ### Workflow policy (enforced)
 - Issue -> Spec -> Validate -> Commit

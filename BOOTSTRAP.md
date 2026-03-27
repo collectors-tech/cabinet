@@ -106,10 +106,13 @@ Do not treat a toast or visual success state as proof of persistence.
    - commands/tests run and results
    - commit hash
    - any focused follow-up issues created
-9. Merge validated issue branches into `develop`.
-10. Deploy/recycle the demo lane from `develop` unless Max explicitly says not to.
-11. Report the deployed branch and commit hash in the checkpoint.
-12. Move the issue to the honest next state:
+9. Open a PR from the issue branch into `develop`.
+10. Before merging that PR, manually run the local pipeline on the local dev instance, deploy locally, and run the full regression suite.
+11. Comment in the PR with the validation/deploy report and upload the report artifact there.
+12. Merge the PR into `develop`.
+13. Pull/update local `develop` and deploy/recycle the demo lane from `develop` unless Max explicitly says not to.
+14. Report the deployed branch and commit hash in the checkpoint.
+15. Move the issue to the honest next state:
    - `Blocked` if progress is blocked
    - `In review` if development/testing is complete and review/verification/merge follow-through is next
    - `Done` once review follow-through is complete and evidence is final
