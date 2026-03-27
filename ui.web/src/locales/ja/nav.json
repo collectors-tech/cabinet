@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "general": "一般",
+    "other": "その他"
+  },
+  "items": {
+    "dashboard": "ホーム",
+    "inventory": "在庫",
+    "wishlist": "ウィッシュリスト",
+    "collections": "コレクション",
+    "discoveries": "発見",
+    "market-watch": "マーケットウォッチ",
+    "integrations": "連携",
+    "chats": "チャット",
+    "users": "ユーザー",
+    "reports": "レポート",
+    "settings": "設定",
+    "profile": "プロフィール",
+    "account": "アカウント",
+    "appearance": "外観",
+    "notifications": "通知",
+    "display": "表示",
+    "help-center": "ヘルプセンター",
+    "storage": "ストレージ"
+  }
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
@@ -16,6 +17,7 @@ type StorageResponse = {
 const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
 
 export function SettingsStorage() {
+  const { t } = useTranslation('pages')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dbPath, setDbPath] = useState('')
@@ -85,8 +87,8 @@ export function SettingsStorage() {
 
   return (
     <ContentSection
-      title='Storage'
-      desc='Review database/media paths and run storage maintenance actions.'
+      title={t('settings.storage.title')}
+      desc={t('settings.storage.description')}
     >
       <div className='space-y-4 text-sm'>
         {error ? (
