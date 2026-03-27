@@ -173,6 +173,12 @@ Folder create and folder-properties workflows MUST save the resulting tree state
 - **WHEN** the creation succeeds and they refresh the inventory workspace
 - **THEN** the new folder MUST still exist in the same hierarchy after reload
 
+#### Scenario: Move folder and refresh
+- **GIVEN** user re-parents or reorders a folder in the tree using the supported drag-drop move workflow
+- **WHEN** the move completes and they refresh the inventory workspace
+- **THEN** the moved folder MUST still appear in the saved hierarchy position after reload
+- **AND** the persisted tree for the active profile MUST reflect the moved folder's updated parent/order state
+
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-016: Tree SHALL support persisted inventory item assignment through direct drag-drop
 Users MUST be able to drag inventory items onto folder rows and have the assignment survive refresh in the live runtime.
 

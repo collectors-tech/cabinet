@@ -78,7 +78,7 @@ describe('inventory-folder-tree-persistence', () => {
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveSettings')
   })
 
-  it('UI-SCREEN-INVENTORY-FOLDER-TREE-015 persists folder edits and new folders to profile settings and across refresh', () => {
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-015 persists folder edits, new folders, and moved folders to profile settings and across refresh', () => {
     cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
     cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click()
     cy.get('[data-testid="folder-properties-name-input"]').clear().type('Store 1 Persisted')
@@ -96,6 +96,19 @@ describe('inventory-folder-tree-persistence', () => {
     cy.wait('@saveSettings')
     cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
 
+    const moveTransfer = new DataTransfer()
+    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', {
+      dataTransfer: moveTransfer,
+    })
+    cy.get('[data-testid="folder-tree-item-warehouses"]')
+      .trigger('dragenter', { dataTransfer: moveTransfer })
+      .trigger('dragover', { dataTransfer: moveTransfer })
+      .trigger('drop', { dataTransfer: moveTransfer })
+    cy.wait('@saveSettings')
+
+    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
+      .should('exist')
+
     cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
       const settings = (response.body.settings ?? {}) as Record<string, string>
       const persistedTree = JSON.parse(settings[folderTreeSettingsKey] ?? '[]') as Array<{
@@ -108,11 +121,19 @@ describe('inventory-folder-tree-persistence', () => {
       }>
 
       const storeOne = findNode(persistedTree, 'store-1')
+      const warehouses = findNode(persistedTree, 'warehouses') as {
+        children?: Array<{ id?: string }>
+      } | null
+
       expect(storeOne?.name).to.equal('Store 1 Persisted')
       expect(storeOne?.category).to.equal('Warehouse')
       expect(storeOne?.secondaryLabel).to.equal('Aisle B')
       expect(storeOne?.statusBadge).to.equal('Cold')
       expect(findNode(persistedTree, 'refresh-persisted')).to.not.equal(null)
+      expect(warehouses?.children).to.satisfy(
+        (children?: Array<{ id?: string }>) =>
+          Array.isArray(children) && children.some((child) => child.id === 'store-1')
+      )
     })
 
     cy.reload()
@@ -122,6 +143,8 @@ describe('inventory-folder-tree-persistence', () => {
     cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
     cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
     cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
+      .should('exist')
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-016 persists inventory item folder assignment to profile settings and across refresh', () => {
