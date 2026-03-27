@@ -2,33 +2,35 @@
 
 Desktop-first collector intelligence app.
 
-## 🤖 Antfarm Automation (24/7)
+## 🚧 Current Delivery Mode
 
-This repo is configured to run through Antfarm with issue-fed workflow execution.
+This repo is currently worked **direct/manual**.
 
-### Source of truth
-- Workflow definition: `.antfarm/workflows/cabinet/`
-- Dispatcher script: `.antfarm/scripts/issue-dispatcher.ps1`
-- Dispatcher docs: `.antfarm/DISPATCHER.md`
+### Current source of truth
+- GitHub issue backlog + project board decide what gets worked next
+- OpenSpec + traceability define the required behavior
+- Validation evidence is mandatory before completion claims
+- Branch/deploy workflow is enforced through repo rules
 
-### How work flows (two lanes)
-1. **Build lane dispatcher** selects next eligible issue (`ready` OR `priority:p*` OR `high-priority`, excluding `blocked`) and starts `antfarm workflow run cabinet ...`.
-2. Build lane executes coding pipeline (`plan -> setup -> implement -> verify -> test -> pr -> review`) and publishes artifact manifests under `.antfarm/artifacts/`.
-3. **Validator lane dispatcher** watches artifact manifests and starts `antfarm workflow run cabinet-validator ...` for the latest artifact.
-4. Validator lane runs exhaustive UI validation (intent/form/layering), gates, and creates focused GitHub issues for failures/spec gaps.
-   - Cabinet validator runs in strict demo1 isolation with fixed runtime params:
-     - source exe: `C:\projects\collectors-tech\cabinet\bin\cabinet.exe`
-     - target exe: `C:\projects\collectors-tech\cabinet\tmp\demo1\bin\cabinet.exe`
-     - data dir: `C:\projects\collectors-tech\cabinet\tmp\demo1\data`
-     - flags: `-allow-parallel -no-open-browser -data-dir ... -profile demo1-helper -instance-name demo1-helper -port 17881`
-     - hash compare + copy source->target before launch when different/missing
-5. Validator always prefers latest artifact and may skip stale ones intentionally.
+### How work flows now
+1. Pick the next real backlog issue.
+2. Claim the issue with a comment and durable backlog/project state.
+3. Bind or update the relevant spec/governance requirement(s).
+4. Implement the issue on **one focused issue branch**.
+5. Validate with the required checks for the touched scope.
+6. Commit with an issue-prefixed message.
+7. Push and update the issue with evidence.
+8. Merge validated issue branches into `develop`.
+9. Deploy demo/review lanes from `develop`.
+10. Merge `develop` into `main` only after Max explicitly approves.
 
 ### Workflow policy (enforced)
 - Issue -> Spec -> Validate -> Commit
-- UI checks must verify control intent outcomes, form-field behavior, and dialog/layering contracts
-- OpenSpec validation gate required (`openspec validate --all`)
-- Evidence-first reporting and issue templates required for failures
+- One focused branch per issue/fix whenever possible
+- UI checks must verify control intent outcomes, form-field behavior, dialog/layering behavior, and persistence/data outcomes where relevant
+- OpenSpec validation gate required for implementation work
+- No “done” claims without command/test evidence
+- Do the active work directly in-repo using the current manual delivery flow
 
 ## Current Status
 - Runtime scaffold implemented (issue `#1` in GitHub):

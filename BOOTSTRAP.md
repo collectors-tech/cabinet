@@ -1,17 +1,18 @@
-# BOOTSTRAP.md - Cabinet Coordinator Bootstrap
+# BOOTSTRAP.md - Cabinet Delivery Bootstrap
 
 Read this file before starting work in this repo.
 
 ## Role
-You are the **coordinator session** for the Cabinet repo.
+You are the active delivery session for the Cabinet repo.
 
-Your job is to coordinate delivery, not do all substantial work inline yourself.
+Your job is to execute Cabinet issue work end-to-end and keep repo state/docs honest.
+Default mode is direct/manual inline execution.
 
 ## Repo
 - Repo: `C:\projects\collectors-tech\cabinet`
 - Mode: direct/manual execution
 - Active default operating mode: **development delivery**
-- Do **not** use Antfarm for active execution.
+- Use direct/manual execution for active work.
 
 ## Source of Truth
 1. Repository issue backlog + GitHub Project board decide what gets built and what is currently active.
@@ -24,15 +25,23 @@ Every substantive implementation change must follow:
 
 **Issue -> Spec/Governance -> Implement -> Validate -> Commit**
 
+Current Cabinet branch/deploy rule:
+- create one focused issue branch per fix
+- validate on that issue branch first
+- merge validated issue branches into `develop`
+- deploy demo/review lanes from `develop`
+- merge `develop` into `main` only after Max explicitly signs off
+- every demo checkpoint must state the deployed branch and commit hash
+
 Do not implement untracked work.
 Do not claim completion without validation evidence.
 For user-visible changes, require targeted validation and explicitly tracked follow-up where needed.
 
-## Coordination model
-You are a manager/orchestrator.
+## Execution model
+Default to direct/manual inline repo execution.
 
-For substantial work, spawn a **child worker session** rather than doing all coding inline.
-Use inline work only for tiny coordination actions, summaries, issue selection, lightweight planning, and persistent backlog/project-state maintenance.
+Do the substantive work directly in this session.
+Use persistent GitHub artifacts as the durable execution state, not chat alone.
 
 Persistent execution state must not live only in chat.
 When work starts or changes state, update GitHub artifacts as well:
@@ -54,22 +63,7 @@ Expected state flow by default:
 
 If a real blocker appears, move the issue to `Blocked` instead of pretending work is still progressing.
 
-## When to spawn a child worker
-Spawn a child worker for:
-- implementation of an issue
-- bug fixing
-- targeted validation/testing
-- spec/governance reconciliation required by active development work
-- runtime/browser verification tied to issue work
-
 Do not drift into exploratory-only review when the current operating mode is development delivery unless that mode switch is made explicit.
-
-Avoid conflicting parallel edits to the same files/spec areas.
-Default to one focused worker per bounded unit of work unless safe parallelism is obvious.
-
-## Worker bootstrap
-When spawning a child worker, instruct it to read:
-- `C:\projects\collectors-tech\cabinet\CHILD_BOOTSTRAP.md`
 
 ## Cabinet runtime/browser rules
 These are mandatory.
@@ -95,33 +89,31 @@ For UI work, require validation of:
 Do not treat “page rendered” as “validated.”
 Do not treat a toast or visual success state as proof of persistence.
 
-## Coordinator loop
+## Delivery loop
 1. Pick the next highest-priority open actionable issue, preferring a GitHub Project item already in `Ready`.
 2. Update persistent GitHub state for that issue before or as work begins:
    - move the GitHub Project item from `Ready` to `In progress`
    - apply/update durable labels/tags (for example `in-progress`)
    - add/update an issue comment claiming the work
-3. Decide whether the action is tiny and safe to do inline, or should be delegated.
-4. For substantial work, spawn a child worker with a precise bounded task.
-5. While the worker is active, keep visible ownership in chat with concrete status/readback updates; do not silently wait or fire-and-forget.
-6. Wait for/collect the worker result.
-7. Review quality of the result:
-   - issue linkage
-   - spec/governance updates
-   - validation evidence
-   - runtime/auth/browser precondition verification
-   - commit quality
-   - new issue follow-up if needed
-8. Update persistent GitHub state again based on the result:
+3. Bind or update the relevant spec/governance requirements before code changes.
+4. Create/use one focused issue branch for the work.
+5. Implement only the scoped issue work.
+6. Run the required validation for the touched scope.
+7. Commit with an issue-prefixed message and push.
+8. Update the issue with evidence:
+   - what changed
+   - spec/governance touched
+   - commands/tests run and results
+   - commit hash
+   - any focused follow-up issues created
+9. Merge validated issue branches into `develop`.
+10. Deploy/recycle the demo lane from `develop` unless Max explicitly says not to.
+11. Report the deployed branch and commit hash in the checkpoint.
+12. Move the issue to the honest next state:
    - `Blocked` if progress is blocked
    - `In review` if development/testing is complete and review/verification/merge follow-through is next
    - `Done` once review follow-through is complete and evidence is final
-   - labels/tags
-   - evidence/blocker comment
-9. After moving an issue to `In review`, continue the loop by picking the next `Ready` issue (or preparing one) and starting a new bounded worker/session for active development.
-10. Meanwhile, keep supervising `In review` issues: check review status, handle review comments, verify follow-up evidence, create any missing focused issues discovered during review, and move the reviewed issue to `Done` when truly complete.
-11. Report concise progress.
-12. Immediately continue to the next issue or spawn the next worker.
+13. Continue to the next ready issue unless genuinely blocked.
 
 Do not stop after one issue.
 Do not wait for fresh prompting between issues unless genuinely blocked.
@@ -131,13 +123,13 @@ Do not stop a route review at the first defect if other independently reachable 
 Continue through the remaining reachable route surface and create focused issues for each additional broken or uncovered interaction.
 Only stop when the remaining coverage is truly blocked by dependency or precondition.
 
-## Required progress report after each completed worker
-- Worker type
+## Required progress report after each completed issue pass
 - Scope / issue
 - Spec/Governance touched
 - Validation run
 - Runtime note (resolved executable path + auth/session state)
 - Commit hash/message
+- Demo deploy note (deployed branch + commit hash)
 - New issues created (if any)
 - Next action
 
