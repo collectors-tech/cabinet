@@ -338,6 +338,20 @@ function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNod
   return [...next, removed]
 }
 
+function sortRootFolderNodesAlphabetically(nodes: FolderNode[]): FolderNode[] {
+  if (nodes.length <= 1) {
+    return nodes
+  }
+
+  const pinnedRoot = nodes.find((node) => node.id === 'all-items') ?? null
+  const sortable = nodes.filter((node) => node.id !== 'all-items')
+  const sorted = [...sortable].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+  )
+
+  return pinnedRoot ? [pinnedRoot, ...sorted] : sorted
+}
+
 function updateFolderNodeByID(
   nodes: FolderNode[],
   targetID: string,
@@ -1963,7 +1977,19 @@ export function Collection({
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2 min-h-0 flex flex-1 flex-col'>
-              <div className='flex justify-end'>
+              <div className='flex justify-end gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  data-testid='folder-tree-sort-root-az'
+                  aria-label='Sort root folders A to Z'
+                  onClick={() => {
+                    setFolderTree((previous) => sortRootFolderNodesAlphabetically(previous))
+                  }}
+                >
+                  A/Z
+                </Button>
                 <Button
                   type='button'
                   variant='outline'

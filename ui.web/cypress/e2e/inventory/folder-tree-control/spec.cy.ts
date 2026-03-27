@@ -408,4 +408,38 @@ describe('inventory-folder-tree-control', () => {
     cy.contains('Tree Item 1').should('be.visible')
     cy.contains('Tree Item 2').should('not.exist')
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-017 applies deterministic A/Z sorting to root-level folders while preserving pinned root context', () => {
+    cy.get('[data-testid="folder-tree-sort-root-az"]')
+      .should('be.visible')
+      .and('have.text', 'A/Z')
+      .click()
+
+    cy.get('[data-testid="inventory-folder-tree"]').children('[role="none"]').then(($rows) => {
+      const labels = [...$rows].map((row) => {
+        const treeItem = row.querySelector('[role="treeitem"] [data-testid^="collection-folder-"]')
+        return treeItem?.textContent?.trim() ?? ''
+      })
+
+      expect(labels[0]).to.equal('All Items')
+      expect(labels[1]).to.equal('Archive A')
+      expect(labels[2]).to.equal('Archive B')
+      expect(labels[3]).to.equal('Archive C')
+      expect(labels).to.deep.equal([...labels].sort((left, right) => {
+        if (left === 'All Items') return -1
+        if (right === 'All Items') return 1
+        return left.localeCompare(right)
+      }))
+    })
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-group-warehouses"] > [role="none"]').then(($rows) => {
+      const labels = [...$rows].map((row) => {
+        const treeItem = row.querySelector('[role="treeitem"] [data-testid^="collection-folder-"]')
+        return treeItem?.textContent?.trim() ?? ''
+      })
+
+      expect(labels).to.deep.equal(['Warehouse 1', 'Warehouse 2', 'Warehouse 3'])
+    })
+  })
 })
