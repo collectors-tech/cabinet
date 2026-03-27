@@ -35,7 +35,12 @@ Apply and follow these files:
 - Do not hand off verification to the user unless genuinely blocked.
 - Keep issue subtasks/checklists updated and only close when all acceptance criteria/subtasks are complete.
 - Commit with issue reference first: `#<issue-number> <type>(<scope>): <description>`.
+- Use one focused issue branch per fix whenever possible.
+- Validate on the issue branch first, then merge validated issue branches into `develop`.
+- Deploy demo/review lanes from `develop`, and include deployed branch + commit hash in demo checkpoints.
+- Do not merge `develop` into `main` until Max explicitly signs off.
 - Do not mark done until validation/tests pass, commit+push is complete, and issue/board are updated per rules.
+- Default to direct/manual inline execution for normal issue work.
 
 ## Notes
 
