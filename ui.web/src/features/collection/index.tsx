@@ -271,6 +271,23 @@ function folderNodeContainsID(node: FolderNode, targetID: string): boolean {
   return (node.children ?? []).some((child) => folderNodeContainsID(child, targetID))
 }
 
+function isInvalidFolderDropTarget(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string
+): boolean {
+  if (draggedID === targetID) {
+    return true
+  }
+
+  const draggedNode = findFolderNodeByID(nodes, draggedID)
+  if (!draggedNode) {
+    return true
+  }
+
+  return folderNodeContainsID(draggedNode, targetID)
+}
+
 function moveFolderNode(
   nodes: FolderNode[],
   draggedID: string,
@@ -903,6 +920,23 @@ export function Collection({
     setItemDropTargetFolderID(null)
   }, [])
 
+  const handleFolderDragStart = useCallback(
+    (nodeID: string, event: DragEvent<HTMLElement>) => {
+      if (nodeID === 'all-items') {
+        event.preventDefault()
+        return
+      }
+      event.stopPropagation()
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData(folderDragMimeType, nodeID)
+      event.dataTransfer.setData('text/plain', nodeID)
+      setDraggedItemID(null)
+      setItemDropTargetFolderID(null)
+      setDraggedFolderID(nodeID)
+    },
+    []
+  )
+
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
     const walk = (treeNodes: FolderNode[]) => {
@@ -1056,32 +1090,47 @@ export function Collection({
         const isBeforeDropTarget = dragTarget?.kind === 'before' && dragTarget.nodeID === node.id
         const isAfterDropTarget = dragTarget?.kind === 'after' && dragTarget.nodeID === node.id
         const isItemDropTarget = itemDropTargetFolderID === node.id
-        const canAcceptChildDrop = node.id !== 'all-items'
+        const hasInvalidFolderDropTarget = draggedFolderID
+          ? isInvalidFolderDropTarget(folderTree, draggedFolderID, node.id)
+          : false
+        const canAcceptChildDrop =
+          node.id !== 'all-items' && !hasInvalidFolderDropTarget
         return (
           <div key={node.id} role='none' className='relative'>
             {draggedFolderID ? (
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-before-${node.id}`}
+                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
                 className={cn(
                   'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
-                  isBeforeDropTarget
-                    ? 'border-primary bg-primary/25'
-                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
+                  hasInvalidFolderDropTarget
+                    ? 'border-destructive/60 bg-destructive/10'
+                    : isBeforeDropTarget
+                      ? 'border-primary bg-primary/25'
+                      : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault()
+                  if (hasInvalidFolderDropTarget) {
+                    setDragTarget(null)
+                    return
+                  }
                   setDragTarget({ kind: 'before', nodeID: node.id })
                 }}
                 onDragOver={(event) => {
                   event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
+                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget ? 'none' : 'move'
+                  if (hasInvalidFolderDropTarget) {
+                    setDragTarget(null)
+                    return
+                  }
                   setDragTarget({ kind: 'before', nodeID: node.id })
                 }}
                 onDrop={(event) => {
                   event.preventDefault()
                   const droppedID = readDraggedFolderID(event)
-                  if (droppedID) {
+                  if (droppedID && !hasInvalidFolderDropTarget) {
                     moveDraggedFolder(droppedID, { kind: 'before', nodeID: node.id })
                   }
                   setDraggedFolderID(null)
@@ -1123,6 +1172,7 @@ export function Collection({
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
+                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
                 className={cn(
                   'relative flex flex-1 min-w-0 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 pr-14 text-left text-sm transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
@@ -1133,23 +1183,11 @@ export function Collection({
                     node.id !== 'all-items' &&
                     draggedFolderID !== node.id &&
                     'border-dashed border-border/40',
+                  hasInvalidFolderDropTarget &&
+                    'border-destructive/60 bg-destructive/10 text-foreground/70 ring-1 ring-destructive/20',
                   (isChildDropTarget || isItemDropTarget) &&
-                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25',
-                  node.id !== 'all-items' && 'cursor-grab active:cursor-grabbing'
+                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25'
                 )}
-                draggable={node.id !== 'all-items'}
-                onDragStart={(event) => {
-                  if (node.id === 'all-items') {
-                    event.preventDefault()
-                    return
-                  }
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData(folderDragMimeType, node.id)
-                  event.dataTransfer.setData('text/plain', node.id)
-                  setDraggedItemID(null)
-                  setItemDropTargetFolderID(null)
-                  setDraggedFolderID(node.id)
-                }}
                 onDragEnter={(event) => {
                   const draggedRecordID = readDraggedItemID(event)
                   if (draggedRecordID) {
@@ -1159,9 +1197,13 @@ export function Collection({
                   }
 
                   const droppedFolderID = readDraggedFolderID(event)
-                  if (droppedFolderID && droppedFolderID !== node.id && canAcceptChildDrop) {
+                  if (droppedFolderID && droppedFolderID !== node.id) {
                     event.preventDefault()
-                    setDragTarget({ kind: 'child', nodeID: node.id })
+                    if (canAcceptChildDrop) {
+                      setDragTarget({ kind: 'child', nodeID: node.id })
+                    } else {
+                      setDragTarget(null)
+                    }
                   }
                 }}
                 onDragOver={(event) => {
@@ -1174,10 +1216,14 @@ export function Collection({
                   }
 
                   const droppedFolderID = readDraggedFolderID(event)
-                  if (droppedFolderID && droppedFolderID !== node.id && canAcceptChildDrop) {
+                  if (droppedFolderID && droppedFolderID !== node.id) {
                     event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                    setDragTarget({ kind: 'child', nodeID: node.id })
+                    event.dataTransfer.dropEffect = canAcceptChildDrop ? 'move' : 'none'
+                    if (canAcceptChildDrop) {
+                      setDragTarget({ kind: 'child', nodeID: node.id })
+                    } else {
+                      setDragTarget(null)
+                    }
                   }
                 }}
                 onDragLeave={() => {
@@ -1253,13 +1299,23 @@ export function Collection({
                     </Badge>
                   ) : null}
                   {node.id !== 'all-items' ? (
-                    <span
-                      aria-hidden='true'
+                    <button
+                      type='button'
+                      draggable
+                      aria-label={`Drag ${node.name}`}
                       data-testid={`folder-tree-drag-handle-${node.id}`}
-                      className='inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground'
+                      className='inline-flex h-5 w-5 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground active:cursor-grabbing hover:bg-muted/60'
+                      onClick={(event) => event.stopPropagation()}
+                      onDragStart={(event) => handleFolderDragStart(node.id, event)}
+                      onDragEnd={() => {
+                        setDraggedFolderID(null)
+                        setDragTarget(null)
+                        setDraggedItemID(null)
+                        setItemDropTargetFolderID(null)
+                      }}
                     >
                       <GripVertical className='size-3.5' />
-                    </span>
+                    </button>
                   ) : null}
                 </span>
               </div>
@@ -1352,25 +1408,36 @@ export function Collection({
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-after-${node.id}`}
+                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
                 className={cn(
                   'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
-                  isAfterDropTarget
-                    ? 'border-primary bg-primary/25'
-                    : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
+                  hasInvalidFolderDropTarget
+                    ? 'border-destructive/60 bg-destructive/10'
+                    : isAfterDropTarget
+                      ? 'border-primary bg-primary/25'
+                      : 'border-border/40 bg-muted/20 hover:border-primary/40 hover:bg-primary/10'
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault()
+                  if (hasInvalidFolderDropTarget) {
+                    setDragTarget(null)
+                    return
+                  }
                   setDragTarget({ kind: 'after', nodeID: node.id })
                 }}
                 onDragOver={(event) => {
                   event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
+                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget ? 'none' : 'move'
+                  if (hasInvalidFolderDropTarget) {
+                    setDragTarget(null)
+                    return
+                  }
                   setDragTarget({ kind: 'after', nodeID: node.id })
                 }}
                 onDrop={(event) => {
                   event.preventDefault()
                   const droppedID = readDraggedFolderID(event)
-                  if (droppedID) {
+                  if (droppedID && !hasInvalidFolderDropTarget) {
                     moveDraggedFolder(droppedID, { kind: 'after', nodeID: node.id })
                   }
                   setDraggedFolderID(null)
@@ -1397,6 +1464,8 @@ export function Collection({
       draggedFolderID,
       draggedItemID,
       expandedNodeIDs,
+      folderTree,
+      handleFolderDragStart,
       handleTreeItemKeyDown,
       itemDropTargetFolderID,
       moveDraggedFolder,
