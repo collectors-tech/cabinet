@@ -106,6 +106,12 @@ Forgot-password flow SHALL provide a deterministic next-step outcome after valid
 - **WHEN** submission fails
 - **THEN** UI MUST show actionable error feedback and remain recoverable on `/forgot-password`
 
+#### Scenario: Forgot-password keyboard submit and secondary handoff
+- **GIVEN** user is on `/forgot-password`
+- **WHEN** user submits the form with keyboard activation after entering a valid email
+- **THEN** `Continue` MUST show deterministic in-flight handling and complete the same OTP handoff as click submission
+- **AND** the visible `Sign up` secondary link MUST remain keyboard-activatable and route deterministically to `/sign-up`
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-013: Legal auth links SHALL resolve to public policy content
 Auth legal links SHALL route to public content pages instead of falling through to the generic not-found screen.
 
@@ -168,6 +174,7 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
+| UC-ONB-11B | Forgot-password controls | `/forgot-password` supports keyboard submit with deterministic loading state and keyboard-activatable `/sign-up` secondary handoff | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
 | UC-ONB-14 | OTP resend flow | `/otp` resend keeps the user in OTP recovery flow with visible resend confirmation instead of redirecting to sign-in | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback` |
