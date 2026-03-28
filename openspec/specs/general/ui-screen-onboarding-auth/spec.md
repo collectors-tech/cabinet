@@ -121,6 +121,16 @@ Auth legal links SHALL route to public content pages instead of falling through 
 - **THEN** UI MUST render `Terms of Service` content
 - **AND** MUST NOT render the generic `404` not-found screen
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-014: OTP resend SHALL remain in OTP recovery context
+OTP recovery SHALL provide an in-place resend action that confirms resend progress/outcome without redirecting the user back to sign-in.
+
+#### Scenario: Successful OTP resend
+- **GIVEN** user is on `/otp` after entering the recovery verification step
+- **WHEN** user activates `Resend a new code.`
+- **THEN** UI MUST keep the user on `/otp`
+- **AND** MUST show a deterministic resend progress/confirmation message
+- **AND** MUST NOT redirect to `/sign-in`
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -145,3 +155,4 @@ Auth legal links SHALL route to public content pages instead of falling through 
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
+| UC-ONB-14 | OTP resend flow | `/otp` resend keeps the user in OTP recovery flow with visible resend confirmation instead of redirecting to sign-in | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback` |
