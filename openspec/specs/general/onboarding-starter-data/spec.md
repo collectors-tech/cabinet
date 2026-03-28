@@ -18,6 +18,13 @@ Cabinet SHALL support one-click sample data import in onboarding after identity/
 - **WHEN** user selects `Use Sample Data` from starter setup flows
 - **THEN** runtime MUST create starter dataset and return seed summary (`folders_created`, `items_created`, `media_created`)
 
+#### Scenario: Seed representative category coverage
+- **GIVEN** active profile has no prior onboarding sample dataset
+- **WHEN** runtime seeds onboarding sample data
+- **THEN** sample items MUST cover multiple distinct collecting categories so inventory/category views do not look empty or repetitive
+- **AND** MUST include a mix of immediately-owned examples and wishlist-target examples
+- **AND** rerunning the same seed for the same profile MUST remain idempotent
+
 ### Requirement ONBOARDING-STARTER-DATA-003: Starter flow SHALL support import-existing alternative
 Cabinet SHALL provide import-existing-collection option as an alternative to sample data.
 
