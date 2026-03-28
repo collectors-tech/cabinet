@@ -17,6 +17,7 @@ import {
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { ArrowDownAZ, ArrowUpAZ, Pencil, Tag, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 type CollectionFilterMode = 'all' | 'active-lanes' | 'storage' | 'custom'
 type CollectionSortMode = 'name-asc' | 'name-desc' | 'items-desc'
@@ -43,7 +44,6 @@ export function Collections() {
   const [newCollectionName, setNewCollectionName] = useState('')
   const [createPanelOpen, setCreatePanelOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [createOutcome, setCreateOutcome] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMode, setFilterMode] = useState<CollectionFilterMode>('all')
   const [sortMode, setSortMode] = useState<CollectionSortMode>('name-asc')
@@ -159,7 +159,7 @@ export function Collections() {
                   onClick={() => {
                     setCreatePanelOpen(true)
                     setCreateError(null)
-                    setCreateOutcome('New opens the primary create flow for a named collection.')
+                    toast.message('New opens the primary create flow for a named collection.')
                   }}
                 >
                   New
@@ -180,7 +180,7 @@ export function Collections() {
                       onClick={() => {
                         setCreatePanelOpen(true)
                         setCreateError(null)
-                        setCreateOutcome('Create → New Collection opens the full naming flow on this page.')
+                        toast.message('Create → New Collection opens the full naming flow on this page.')
                       }}
                     >
                       New Collection
@@ -192,7 +192,7 @@ export function Collections() {
                         addCollection('Recently Graded')
                         setCreatePanelOpen(false)
                         setCreateError(null)
-                        setCreateOutcome(
+                        toast.success(
                           'Starter collections added. New Arrivals is now available as an active collection choice.'
                         )
                       }}
@@ -349,14 +349,6 @@ export function Collections() {
                 </div>
               </div>
             ) : null}
-            {createOutcome ? (
-              <div
-                className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm'
-                data-testid='collections-create-outcome'
-              >
-                {createOutcome}
-              </div>
-            ) : null}
             {createError ? (
               <div
                 className='rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
@@ -400,7 +392,6 @@ export function Collections() {
                         const trimmedName = newCollectionName.trim()
                         if (!trimmedName) {
                           setCreateError('Enter a collection name before saving.')
-                          setCreateOutcome(null)
                           return
                         }
                         addCollection(trimmedName)
@@ -409,7 +400,7 @@ export function Collections() {
                         setEditingCollectionName(null)
                         setPendingRemoveName(null)
                         setCreateError(null)
-                        setCreateOutcome(
+                        toast.success(
                           `${trimmedName} created and set as the active collection.`
                         )
                       }}
@@ -423,7 +414,7 @@ export function Collections() {
                         setCreatePanelOpen(false)
                         setNewCollectionName('')
                         setCreateError(null)
-                        setCreateOutcome('Collection creation cancelled. No collection was added.')
+                        toast.message('Collection creation cancelled. No collection was added.')
                       }}
                     >
                       Cancel
@@ -458,13 +449,12 @@ export function Collections() {
                         const renamed = renameCollection(editingCollectionName, renameValue)
                         if (!renamed) {
                           setCreateError('Enter a new collection name before saving rename.')
-                          setCreateOutcome(null)
                           return
                         }
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        setCreateOutcome(`${editingCollectionName} renamed to ${renamed}.`)
+                        toast.success(`${editingCollectionName} renamed to ${renamed}.`)
                       }}
                     >
                       Save rename
@@ -476,7 +466,7 @@ export function Collections() {
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        setCreateOutcome('Collection rename cancelled. No changes were made.')
+                        toast.message('Collection rename cancelled. No changes were made.')
                       }}
                     >
                       Cancel
@@ -502,7 +492,6 @@ export function Collections() {
                         const removed = removeCollection(pendingRemoveName)
                         if (!removed) {
                           setCreateError('Collection removal could not be completed.')
-                          setCreateOutcome(null)
                           return
                         }
                         const removedName = pendingRemoveName
@@ -510,7 +499,7 @@ export function Collections() {
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        setCreateOutcome(`${removedName} removed from workspace collections.`)
+                        toast.success(`${removedName} removed from workspace collections.`)
                       }}
                     >
                       Confirm remove
@@ -520,7 +509,7 @@ export function Collections() {
                       data-testid='collections-remove-cancel'
                       onClick={() => {
                         setPendingRemoveName(null)
-                        setCreateOutcome('Collection removal cancelled. No collection was removed.')
+                        toast.message('Collection removal cancelled. No collection was removed.')
                       }}
                     >
                       Cancel
@@ -599,7 +588,6 @@ export function Collections() {
                           setRenameValue(collection.name)
                           setPendingRemoveName(null)
                           setCreateError(null)
-                          setCreateOutcome(null)
                         }}
                       >
                         <Pencil className='mr-1 size-4' /> Rename
@@ -615,7 +603,6 @@ export function Collections() {
                           setEditingCollectionName(null)
                           setRenameValue('')
                           setCreateError(null)
-                          setCreateOutcome(null)
                         }}
                       >
                         <Trash2 className='mr-1 size-4' /> Remove

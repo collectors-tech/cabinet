@@ -26,8 +26,9 @@ describe("ui-screen-collections", () => {
     cy.get('[data-testid="collections-create-panel"]').should("be.visible");
     cy.get('[data-testid="collections-create-panel-description"]')
       .should("contain.text", "Saving creates the collection immediately")
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "New opens the primary create flow")
+    cy.contains("New opens the primary create flow for a named collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
 
     cy.get('[data-testid="collections-create-menu-trigger"]').click();
     cy.get('[data-testid="collections-create-menu-new"]').should("be.visible");
@@ -41,8 +42,9 @@ describe("ui-screen-collections", () => {
     cy.get('[data-testid="collections-new-input"]').type("Collections Inline Alpha");
     cy.get('[data-testid="collections-new-save"]').click();
 
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "Collections Inline Alpha created and set as the active collection.")
+    cy.contains("Collections Inline Alpha created and set as the active collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
     cy.get('[data-testid="collections-item-collections-inline-alpha"]')
       .should("be.visible")
       .and("have.attr", "data-state", "active");
@@ -59,13 +61,14 @@ describe("ui-screen-collections", () => {
     cy.get('[data-testid="collections-new-input"]').type("Collections Visible Beta");
     cy.get('[data-testid="collections-new-save"]').click();
     cy.get('[data-testid="collections-create-error"]').should("not.exist");
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "Collections Visible Beta created and set as the active collection.")
+    cy.contains("Collections Visible Beta created and set as the active collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
 
     cy.get('[data-testid="collections-create-menu-trigger"]').click();
     cy.get('[data-testid="collections-create-menu-starter"]').click();
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "Starter collections added.")
+    cy.contains("Starter collections added.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
   });
 
   it("UI-SCREEN-COLLECTIONS-006 exposes collection details and metadata summaries before selection", () => {
@@ -121,16 +124,16 @@ describe("ui-screen-collections", () => {
     cy.get('[data-testid="collections-rename-panel"]').should("be.visible");
     cy.get('[data-testid="collections-rename-input"]').clear().type("Store 2 Prime");
     cy.get('[data-testid="collections-rename-save"]').click();
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "Store 2 renamed to Store 2 Prime.");
+    cy.contains("Store 2 renamed to Store 2 Prime.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
     cy.get('[data-testid="collections-item-store-2-prime"]').should("be.visible");
     cy.get('[data-testid="collections-item-store-2"]').should("not.exist");
 
     cy.get('[data-testid="collections-remove-trigger-store-2-prime"]').click();
     cy.get('[data-testid="collections-remove-panel"]').should("be.visible");
     cy.get('[data-testid="collections-remove-confirm"]').click();
-    cy.get('[data-testid="collections-create-outcome"]')
-      .should("contain.text", "Store 2 Prime removed from workspace collections.");
+    cy.contains("Store 2 Prime removed from workspace collections.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
     cy.get('[data-testid="collections-item-store-2-prime"]').should("not.exist");
   });
 
