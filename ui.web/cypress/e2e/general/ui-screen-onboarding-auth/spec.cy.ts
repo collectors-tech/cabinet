@@ -213,4 +213,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains(/^404$/).should('not.exist');
     cy.contains('Go Back').should('not.exist');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/terms');
+    cy.contains('h1', 'Terms of Service').should('be.visible');
+    cy.contains('Acceptable use').should('be.visible');
+    cy.contains('Account and data responsibility').should('be.visible');
+    cy.contains(/^404$/).should('not.exist');
+    cy.contains('Go Back').should('not.exist');
+  });
 });
