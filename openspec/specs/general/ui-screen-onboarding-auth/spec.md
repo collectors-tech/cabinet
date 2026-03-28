@@ -80,6 +80,16 @@ Sign-in screen SHALL include a first-time-user CTA that routes deterministically
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011: Sign-up submit SHALL provide deterministic completion feedback
 Sign-up flow SHALL provide a deterministic outcome after valid submission so first-time users are never left on a dead-end state.
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011B: Sign-in password visibility toggle SHALL be deterministic and keyboard-accessible
+Sign-in password field SHALL expose a visibility toggle that switches the input type deterministically, updates accessible state/label, and remains keyboard-activatable.
+
+#### Scenario: Sign-in password visibility toggle
+- **GIVEN** runtime setup is complete and user is on `/sign-in`
+- **WHEN** user activates the password visibility toggle by mouse or keyboard
+- **THEN** password input MUST switch deterministically between masked and text-visible modes
+- **AND** toggle accessible label/state MUST update to reflect the current mode
+- **AND** focus/activation MUST remain on the sign-in route without side effects
+
 #### Scenario: Successful sign-up completion
 - **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
 - **WHEN** user activates `Create Account`
@@ -173,6 +183,7 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
+| UC-ONB-10B | Sign-in password visibility toggle | Sign-in password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-11B | Forgot-password controls | `/forgot-password` supports keyboard submit with deterministic loading state and keyboard-activatable `/sign-up` secondary handoff | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |

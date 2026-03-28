@@ -8,12 +8,14 @@ type PasswordInputProps = Omit<
   'type'
 > & {
   ref?: React.Ref<HTMLInputElement>
+  toggleTestId?: string
 }
 
 export function PasswordInput({
   className,
   disabled,
   ref,
+  toggleTestId,
   ...props
 }: PasswordInputProps) {
   const [showPassword, setShowPassword] = React.useState(false)
@@ -33,6 +35,8 @@ export function PasswordInput({
         variant='ghost'
         disabled={disabled}
         aria-label={showPassword ? 'Hide password' : 'Show password'}
+        aria-pressed={showPassword}
+        data-testid={toggleTestId}
         className='absolute end-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
         onClick={() => setShowPassword((prev) => !prev)}
       >
