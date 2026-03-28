@@ -201,6 +201,21 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains(/please enter your email/i).should('not.exist');
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/forgot-password');
+    cy.get('input[name="email"]').type('valid.keyboard@example.com{enter}');
+    cy.get('[data-testid="forgot-password-submit"]').should('be.disabled');
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/otp\/?$/);
+
+    cy.visit('/forgot-password');
+    cy.get('[data-testid="forgot-password-sign-up-link"]').focus().type('{enter}');
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
