@@ -215,6 +215,7 @@ export function UserAuthForm({
               <FormMessage />
               <Link
                 to='/forgot-password'
+                data-testid='sign-in-forgot-password-link'
                 className='absolute end-0 -top-0.5 text-sm font-medium text-muted-foreground hover:opacity-75'
               >
                 Forgot password?

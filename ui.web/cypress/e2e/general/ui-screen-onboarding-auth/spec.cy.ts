@@ -84,6 +84,20 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.get('[data-testid="sign-in-forgot-password-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/forgot-password')
+      .focus()
+      .type('{enter}');
+    cy.location('pathname').should('match', /^\/forgot-password\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')

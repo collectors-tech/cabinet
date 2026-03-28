@@ -77,6 +77,16 @@ Sign-in screen SHALL include a first-time-user CTA that routes deterministically
 - **THEN** UI MUST show visible `Create account` link/button
 - **AND** control MUST navigate to `/sign-up`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010B: Sign-in forgot-password entry SHALL be visible and deterministic
+Sign-in SHALL expose a visible forgot-password recovery entry path that supports deterministic mouse and keyboard navigation to `/forgot-password`.
+
+#### Scenario: Forgot-password entry path from sign-in
+- **GIVEN** runtime setup is complete and user is on `/sign-in`
+- **WHEN** user scans the password field controls for recovery actions
+- **THEN** `Forgot password?` MUST be visible on the sign-in surface
+- **AND** activation by mouse or keyboard MUST navigate deterministically to `/forgot-password`
+- **AND** focus/route handoff MUST complete without side effects on `/sign-in`
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011: Sign-up submit SHALL provide deterministic completion feedback
 Sign-up flow SHALL provide a deterministic outcome after valid submission so first-time users are never left on a dead-end state.
 
@@ -183,6 +193,7 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
+| UC-ONB-10A | Sign-in forgot-password entry | Sign-in shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in` |
 | UC-ONB-10B | Sign-in password visibility toggle | Sign-in password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-11B | Forgot-password controls | `/forgot-password` supports keyboard submit with deterministic loading state and keyboard-activatable `/sign-up` secondary handoff | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff` |
