@@ -210,7 +210,7 @@ export function UserAuthForm({
             <FormItem className='relative'>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <PasswordInput placeholder='********' toggleTestId='sign-in-password-toggle' {...field} />
               </FormControl>
               <FormMessage />
               <Link
