@@ -45,7 +45,8 @@ The dedicated Collections screen SHALL provide direct management actions for exi
 - **GIVEN** collections section is open and a non-default collection exists
 - **WHEN** user chooses rename or remove for that collection
 - **THEN** the screen MUST expose the corresponding action
-- **AND** the action MUST complete through a clear confirmation/edit flow with deterministic result messaging
+- **AND** the action MUST complete through a clear confirmation/edit flow with deterministic transient result messaging
+- **AND** short-lived success/info/cancel outcomes for rename/remove flows MUST surface as toasts rather than only inline helper text
 - **AND** protected/default collections MUST not expose destructive completion for removal
 
 ### Requirement UI-SCREEN-COLLECTIONS-006: Collections screen SHALL expose collection details and metadata summaries
@@ -73,7 +74,7 @@ Collection creation entry points SHALL make their behavior obvious and communica
 - **GIVEN** collections section is open
 - **WHEN** user uses `New` or `Create`
 - **THEN** the resulting workflow/options MUST be obvious from the page state
-- **AND** success, validation, and failure outcomes MUST be communicated with visible feedback
+- **AND** success and informational/cancel outcomes for create flows MUST be communicated with visible toast feedback while validation failures remain explicit and actionable
 - **AND** the page MUST explain the difference between the primary `New` flow and alternate `Create` actions before mutation occurs
 
 ### Requirement UI-SCREEN-COLLECTIONS-009: Collections affordances SHALL use tag iconography consistently
