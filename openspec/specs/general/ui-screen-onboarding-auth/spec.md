@@ -115,6 +115,12 @@ Auth legal links SHALL route to public content pages instead of falling through 
 - **THEN** UI MUST render `Privacy Policy` content
 - **AND** MUST NOT render the generic `404` not-found screen
 
+#### Scenario: Terms of service route
+- **GIVEN** runtime setup is complete and an unauthenticated visitor opens `/terms`
+- **WHEN** the route renders from a sign-in or sign-up legal link
+- **THEN** UI MUST render `Terms of Service` content
+- **AND** MUST NOT render the generic `404` not-found screen
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -138,3 +144,4 @@ Auth legal links SHALL route to public content pages instead of falling through 
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
+| UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
