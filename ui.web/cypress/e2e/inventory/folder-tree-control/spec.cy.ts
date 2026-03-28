@@ -352,6 +352,20 @@ describe('inventory-folder-tree-control', () => {
       .should('exist')
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
 
+    const invalidTransfer = new DataTransfer()
+    cy.get('[data-testid="folder-tree-item-warehouses"]').trigger('dragstart', { dataTransfer: invalidTransfer })
+    cy.get('[data-testid="folder-tree-item-store-1"]')
+      .trigger('dragenter', { dataTransfer: invalidTransfer })
+      .trigger('dragover', { dataTransfer: invalidTransfer })
+      .should('have.attr', 'data-invalid-drop-target', 'true')
+      .and('not.have.class', 'bg-primary/20')
+      .trigger('drop', { dataTransfer: invalidTransfer })
+
+    cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-warehouses"]')
+      .should('exist')
+    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
+      .should('exist')
+
     const reorderTransfer = new DataTransfer()
     cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: reorderTransfer })
     cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]')
