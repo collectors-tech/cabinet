@@ -131,6 +131,21 @@ OTP recovery SHALL provide an in-place resend action that confirms resend progre
 - **AND** MUST show a deterministic resend progress/confirmation message
 - **AND** MUST NOT redirect to `/sign-in`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-015: OTP verify control SHALL enforce deterministic threshold and submit handoff
+OTP verification controls SHALL keep the verify action disabled until a full six-digit code is present and SHALL transition deterministically once a valid code is submitted.
+
+#### Scenario: OTP verify enablement threshold
+- **GIVEN** user is on `/otp`
+- **WHEN** fewer than six digits are present in the OTP input
+- **THEN** `Verify` MUST remain disabled
+- **AND** once six digits are present `Verify` MUST become enabled without leaving the route
+
+#### Scenario: OTP verify submit handoff
+- **GIVEN** six digits are present in the OTP input
+- **WHEN** user submits verification from the OTP form
+- **THEN** UI MUST show deterministic in-flight handling
+- **AND** MUST complete the happy-path handoff without redirecting back to `/sign-in`
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -156,3 +171,4 @@ OTP recovery SHALL provide an in-place resend action that confirms resend progre
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
 | UC-ONB-14 | OTP resend flow | `/otp` resend keeps the user in OTP recovery flow with visible resend confirmation instead of redirecting to sign-in | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback` |
+| UC-ONB-15 | OTP verify control | `/otp` keeps Verify disabled until six digits are present, then submits deterministically from the OTP route | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and submit handoff` |

@@ -240,4 +240,19 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .and('contain', 'Stay on this screen and enter the latest code.');
     cy.contains('Sign in').should('not.exist');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and submit handoff', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/otp');
+    cy.get('[data-slot="input-otp"]').type('12345');
+    cy.get('[data-testid="otp-verify"]').should('be.disabled');
+
+    cy.get('[data-slot="input-otp"]').type('6{enter}');
+    cy.get('[data-testid="otp-verify"]').should('not.be.disabled');
+    cy.location('pathname', { timeout: 15000 }).should('match', /^(\/|\/_authenticated\/?|\/dashboard\/?)$/);
+    cy.contains('Sign in').should('not.exist');
+  });
 });
