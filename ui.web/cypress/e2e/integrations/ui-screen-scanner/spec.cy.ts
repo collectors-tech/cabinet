@@ -114,10 +114,35 @@ describe('integrations/ui-screen-scanner', () => {
       statusCode: 200,
       body: { status: 'ok' },
     }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/query-sets', () => {
+      throw new Error('Create Query Set should stay client-side when required fields are blank')
+    }).as('createQuerySetBlocked')
+    cy.intercept('POST', '/api/scanner/run/scheduled', () => {
+      throw new Error('Scheduled refresh should stay client-side when no query sets exist')
+    }).as('scheduledRefreshBlocked')
 
     signInToScanner()
     cy.wait(['@emptyQuerySets', '@emptyFailures', '@providerHealth'])
     cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+
+    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.get('[data-testid="scanner-new-query-name-validation"]')
+      .should('be.visible')
+      .and('contain', 'Query set name is required.')
+    cy.get('[data-testid="scanner-new-query-keywords-validation"]')
+      .should('be.visible')
+      .and('contain', 'Enter at least one keyword before creating a query set.')
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Create Query Set requires the highlighted fields.')
+      .and('contain', 'Provide a query set name.')
+      .and('contain', 'Enter at least one keyword before creating a query set.')
+
+    cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
+    cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_blocked_empty')
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Run Scheduled Refresh needs at least one runnable query set.')
+      .and('contain', 'Create a query set first.')
+      .and('contain', 'Add keywords so the first scheduled run has valid criteria.')
 
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 500,
