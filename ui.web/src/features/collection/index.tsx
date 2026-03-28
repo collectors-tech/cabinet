@@ -1303,8 +1303,15 @@ export function Collection({
                       type='button'
                       draggable
                       aria-label={`Drag ${node.name}`}
+                      title={`Drag ${node.name}`}
                       data-testid={`folder-tree-drag-handle-${node.id}`}
-                      className='inline-flex h-5 w-5 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground active:cursor-grabbing hover:bg-muted/60'
+                      className={cn(
+                        'inline-flex h-7 w-7 shrink-0 select-none touch-none cursor-grab items-center justify-center rounded-md border border-border/50 bg-background/80 text-foreground/80 shadow-sm transition-colors',
+                        'hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:cursor-grabbing',
+                        draggedFolderID === node.id && 'border-primary bg-primary/10 text-primary'
+                      )}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => event.stopPropagation()}
                       onDragStart={(event) => handleFolderDragStart(node.id, event)}
                       onDragEnd={() => {
@@ -1314,7 +1321,7 @@ export function Collection({
                         setItemDropTargetFolderID(null)
                       }}
                     >
-                      <GripVertical className='size-3.5' />
+                      <GripVertical className='size-4' />
                     </button>
                   ) : null}
                 </span>

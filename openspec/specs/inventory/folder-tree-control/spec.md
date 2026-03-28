@@ -156,7 +156,7 @@ Users MUST be able to reorganize the folder hierarchy without rebuilding it manu
 - **WHEN** they drag and drop a folder using the supported move interaction
 - **THEN** the tree MUST provide a deterministic move workflow with clear feedback, valid drop/move constraints, and correct hierarchy updates after completion
 - **AND** each draggable folder row MUST expose a clear row-end drag affordance so drag capability is discoverable
-- **AND** drag initiation MUST work reliably from the practical row grab area for both selected and non-selected rows, not only from a narrow or accidental hit target
+- **AND** the visible row-end drag handle MAY be the only drag initiator, but it MUST be a practical and reliable grab area for both selected and non-selected rows rather than a narrow or accidental hit target
 
 ### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-015: Folder structure edits SHALL persist for the active profile across refresh
 Folder create and folder-properties workflows MUST save the resulting tree state so the same user sees the edited structure again after refresh within the supported live runtime.

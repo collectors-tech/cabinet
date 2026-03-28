@@ -328,7 +328,7 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-properties-status-badge-input"]').should('have.value', 'Cold')
   })
 
-  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, root-drop feedback, and row drag affordance coverage', () => {
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, root-drop feedback, and practical handle drag coverage', () => {
     const childTransfer = new DataTransfer()
 
     cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
@@ -339,7 +339,12 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
       .should('be.visible')
       .and('have.attr', 'draggable')
+      .and('have.attr', 'title', 'Drag Store 1')
       .and('have.css', 'cursor', 'grab')
+      .and(($handle) => {
+        expect($handle.outerWidth(), 'practical handle width').to.be.gte(28)
+        expect($handle.outerHeight(), 'practical handle height').to.be.gte(28)
+      })
     cy.get('[data-testid="folder-tree-inline-actions-store-1"]')
       .should('have.css', 'pointer-events', 'none')
 
