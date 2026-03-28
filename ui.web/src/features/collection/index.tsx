@@ -920,6 +920,23 @@ export function Collection({
     setItemDropTargetFolderID(null)
   }, [])
 
+  const handleFolderDragStart = useCallback(
+    (nodeID: string, event: DragEvent<HTMLElement>) => {
+      if (nodeID === 'all-items') {
+        event.preventDefault()
+        return
+      }
+      event.stopPropagation()
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData(folderDragMimeType, nodeID)
+      event.dataTransfer.setData('text/plain', nodeID)
+      setDraggedItemID(null)
+      setItemDropTargetFolderID(null)
+      setDraggedFolderID(nodeID)
+    },
+    []
+  )
+
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
     const walk = (treeNodes: FolderNode[]) => {
@@ -1169,22 +1186,8 @@ export function Collection({
                   hasInvalidFolderDropTarget &&
                     'border-destructive/60 bg-destructive/10 text-foreground/70 ring-1 ring-destructive/20',
                   (isChildDropTarget || isItemDropTarget) &&
-                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25',
-                  node.id !== 'all-items' && 'cursor-grab active:cursor-grabbing'
+                    'border-primary bg-primary/20 text-primary ring-1 ring-primary/25'
                 )}
-                draggable={node.id !== 'all-items'}
-                onDragStart={(event) => {
-                  if (node.id === 'all-items') {
-                    event.preventDefault()
-                    return
-                  }
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData(folderDragMimeType, node.id)
-                  event.dataTransfer.setData('text/plain', node.id)
-                  setDraggedItemID(null)
-                  setItemDropTargetFolderID(null)
-                  setDraggedFolderID(node.id)
-                }}
                 onDragEnter={(event) => {
                   const draggedRecordID = readDraggedItemID(event)
                   if (draggedRecordID) {
@@ -1296,13 +1299,23 @@ export function Collection({
                     </Badge>
                   ) : null}
                   {node.id !== 'all-items' ? (
-                    <span
-                      aria-hidden='true'
+                    <button
+                      type='button'
+                      draggable
+                      aria-label={`Drag ${node.name}`}
                       data-testid={`folder-tree-drag-handle-${node.id}`}
-                      className='inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground'
+                      className='inline-flex h-5 w-5 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/80 transition-colors group-hover:text-foreground active:cursor-grabbing hover:bg-muted/60'
+                      onClick={(event) => event.stopPropagation()}
+                      onDragStart={(event) => handleFolderDragStart(node.id, event)}
+                      onDragEnd={() => {
+                        setDraggedFolderID(null)
+                        setDragTarget(null)
+                        setDraggedItemID(null)
+                        setItemDropTargetFolderID(null)
+                      }}
                     >
                       <GripVertical className='size-3.5' />
-                    </span>
+                    </button>
                   ) : null}
                 </span>
               </div>
@@ -1452,6 +1465,7 @@ export function Collection({
       draggedItemID,
       expandedNodeIDs,
       folderTree,
+      handleFolderDragStart,
       handleTreeItemKeyDown,
       itemDropTargetFolderID,
       moveDraggedFolder,

@@ -336,12 +336,14 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-item-store-1"]')
       .should('have.attr', 'aria-selected', 'false')
       .and('have.attr', 'data-draggable-row', 'true')
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
+      .should('be.visible')
+      .and('have.attr', 'draggable')
       .and('have.css', 'cursor', 'grab')
-    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').should('be.visible')
     cy.get('[data-testid="folder-tree-inline-actions-store-1"]')
       .should('have.css', 'pointer-events', 'none')
 
-    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
     cy.get('[data-testid="folder-tree-item-warehouses"]')
       .trigger('dragenter', { dataTransfer: childTransfer })
       .trigger('dragover', { dataTransfer: childTransfer })
@@ -353,7 +355,7 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
 
     const invalidTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-item-warehouses"]').trigger('dragstart', { dataTransfer: invalidTransfer })
+    cy.get('[data-testid="folder-tree-drag-handle-warehouses"]').trigger('dragstart', { dataTransfer: invalidTransfer })
     cy.get('[data-testid="folder-tree-item-store-1"]')
       .trigger('dragenter', { dataTransfer: invalidTransfer })
       .trigger('dragover', { dataTransfer: invalidTransfer })
@@ -367,7 +369,7 @@ describe('inventory-folder-tree-control', () => {
       .should('exist')
 
     const reorderTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: reorderTransfer })
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: reorderTransfer })
     cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]')
       .trigger('dragenter', { dataTransfer: reorderTransfer })
       .trigger('dragover', { dataTransfer: reorderTransfer })
@@ -381,7 +383,7 @@ describe('inventory-folder-tree-control', () => {
     })
 
     const rootTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-item-store-1"]').trigger('dragstart', { dataTransfer: rootTransfer })
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: rootTransfer })
     cy.get('[data-testid="folder-tree-root-drop-zone"]')
       .trigger('dragenter', { dataTransfer: rootTransfer })
       .trigger('dragover', { dataTransfer: rootTransfer })
