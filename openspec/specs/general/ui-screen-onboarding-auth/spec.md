@@ -106,6 +106,15 @@ Forgot-password flow SHALL provide a deterministic next-step outcome after valid
 - **WHEN** submission fails
 - **THEN** UI MUST show actionable error feedback and remain recoverable on `/forgot-password`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-013: Legal auth links SHALL resolve to public policy content
+Auth legal links SHALL route to public content pages instead of falling through to the generic not-found screen.
+
+#### Scenario: Privacy policy route
+- **GIVEN** runtime setup is complete and an unauthenticated visitor opens `/privacy`
+- **WHEN** the route renders from a sign-in or sign-up legal link
+- **THEN** UI MUST render `Privacy Policy` content
+- **AND** MUST NOT render the generic `404` not-found screen
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -128,3 +137,4 @@ Forgot-password flow SHALL provide a deterministic next-step outcome after valid
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
+| UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |

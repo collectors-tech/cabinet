@@ -200,4 +200,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/otp\/?$/);
     cy.contains(/please enter your email/i).should('not.exist');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/privacy');
+    cy.contains('h1', 'Privacy Policy').should('be.visible');
+    cy.contains('What Cabinet stores').should('be.visible');
+    cy.contains('Optional integrations').should('be.visible');
+    cy.contains(/^404$/).should('not.exist');
+    cy.contains('Go Back').should('not.exist');
+  });
 });
