@@ -226,4 +226,18 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains(/^404$/).should('not.exist');
     cy.contains('Go Back').should('not.exist');
   });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/otp');
+    cy.get('[data-testid="otp-resend"]').click();
+    cy.location('pathname').should('match', /^\/otp\/?$/);
+    cy.get('[data-testid="otp-resend-feedback"]')
+      .should('contain', 'A new verification code was sent.')
+      .and('contain', 'Stay on this screen and enter the latest code.');
+    cy.contains('Sign in').should('not.exist');
+  });
 });

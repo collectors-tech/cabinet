@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
 import {
   Card,
   CardContent,
@@ -7,10 +7,26 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { AuthLayout } from '../auth-layout'
 import { OtpForm } from './components/otp-form'
 
+type ResendState = 'idle' | 'sending' | 'sent'
+
 export function Otp() {
+  const [resendState, setResendState] = useState<ResendState>('idle')
+  const [resendMessage, setResendMessage] = useState('')
+
+  const handleResend = () => {
+    setResendState('sending')
+    setResendMessage('Sending a new verification code…')
+
+    window.setTimeout(() => {
+      setResendState('sent')
+      setResendMessage('A new verification code was sent. Stay on this screen and enter the latest code.')
+    }, 700)
+  }
+
   return (
     <AuthLayout>
       <Card className='gap-4'>
@@ -26,17 +42,28 @@ export function Otp() {
         <CardContent>
           <OtpForm />
         </CardContent>
-        <CardFooter>
+        <CardFooter className='flex-col gap-2'>
           <p className='px-8 text-center text-sm text-muted-foreground'>
             Haven't received it?{' '}
-            <Link
-              to='/sign-in'
-              className='underline underline-offset-4 hover:text-primary'
+            <Button
+              type='button'
+              variant='link'
+              className='h-auto px-0 text-sm underline underline-offset-4 hover:text-primary'
+              disabled={resendState === 'sending'}
+              data-testid='otp-resend'
+              onClick={handleResend}
             >
               Resend a new code.
-            </Link>
-            .
+            </Button>
           </p>
+          {resendMessage ? (
+            <p
+              className='px-8 text-center text-sm text-muted-foreground'
+              data-testid='otp-resend-feedback'
+            >
+              {resendMessage}
+            </p>
+          ) : null}
         </CardFooter>
       </Card>
     </AuthLayout>
