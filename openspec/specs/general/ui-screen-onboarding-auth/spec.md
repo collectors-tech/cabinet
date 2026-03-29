@@ -87,6 +87,16 @@ Sign-in SHALL expose a visible forgot-password recovery entry path that supports
 - **AND** activation by mouse or keyboard MUST navigate deterministically to `/forgot-password`
 - **AND** focus/route handoff MUST complete without side effects on `/sign-in`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010C: Sign-up secondary links SHALL be visible and deterministic
+Sign-up SHALL expose visible return/legal links that support deterministic mouse and keyboard navigation to `/sign-in`, `/terms`, and `/privacy`.
+
+#### Scenario: Sign-up sign-in/legal entry paths
+- **GIVEN** runtime setup is complete and user is on `/sign-up`
+- **WHEN** user scans the form header/footer for account-return and legal actions
+- **THEN** `Sign In`, `Terms of Service`, and `Privacy Policy` MUST be visible on the sign-up surface
+- **AND** activation by mouse or keyboard MUST navigate deterministically to `/sign-in`, `/terms`, and `/privacy`
+- **AND** route handoff MUST complete without side effects on `/sign-up`
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-011: Sign-up submit SHALL provide deterministic completion feedback
 Sign-up flow SHALL provide a deterministic outcome after valid submission so first-time users are never left on a dead-end state.
 
@@ -195,6 +205,7 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
 | UC-ONB-10A | Sign-in forgot-password entry | Sign-in shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in` |
 | UC-ONB-10B | Sign-in password visibility toggle | Sign-in password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically` |
+| UC-ONB-10C | Sign-up secondary links | Sign-up shows visible sign-in/legal links with deterministic keyboard/mouse navigation to `/sign-in`, `/terms`, and `/privacy` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010C exposes deterministic sign-up secondary links` |
 | UC-ONB-11 | Forgot-password completion | Valid forgot-password submit shows progress and navigates to OTP recovery without fallback validation regression | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery` |
 | UC-ONB-11B | Forgot-password controls | `/forgot-password` supports keyboard submit with deterministic loading state and keyboard-activatable `/sign-up` secondary handoff | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-012 supports forgot-password keyboard submit and sign-up handoff` |
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
