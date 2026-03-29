@@ -97,6 +97,16 @@ Sign-in SHALL expose GitHub and Facebook provider actions with explicit visible/
 - **AND** those actions MUST remain deterministically disabled when no sign-in provider flow is wired
 - **AND** keyboard focus/activation MUST NOT navigate away from `/sign-in`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010BC: Sign-in-2 forgot-password entry SHALL be visible and deterministic
+`/sign-in-2` SHALL expose a visible forgot-password recovery entry path that supports deterministic mouse and keyboard navigation to `/forgot-password`.
+
+#### Scenario: Forgot-password entry path from sign-in-2
+- **GIVEN** runtime setup is complete and user is on `/sign-in-2`
+- **WHEN** user scans the password field controls for recovery actions
+- **THEN** `Forgot password?` MUST be visible on the sign-in-2 surface
+- **AND** activation by mouse or keyboard MUST navigate deterministically to `/forgot-password`
+- **AND** focus/route handoff MUST complete without side effects on `/sign-in-2`
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010C: Sign-up secondary links SHALL be visible and deterministic
 Sign-up SHALL expose visible return/legal links that support deterministic mouse and keyboard navigation to `/sign-in`, `/terms`, and `/privacy`.
 
@@ -245,6 +255,7 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
 | UC-ONB-10A | Sign-in forgot-password entry | Sign-in shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in` |
 | UC-ONB-10AA | Sign-in GitHub/Facebook actions | Sign-in shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BB renders deterministic sign-in GitHub and Facebook actions` |
+| UC-ONB-10AB | Sign-in-2 forgot-password entry | `/sign-in-2` shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BC exposes deterministic forgot-password entry from sign-in-2` |
 | UC-ONB-10B | Sign-in password visibility toggle | Sign-in password field toggles deterministically between masked/text modes with updated accessible state and keyboard activation | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically` |
 | UC-ONB-10C | Sign-up secondary links | Sign-up shows visible sign-in/legal links with deterministic keyboard/mouse navigation to `/sign-in`, `/terms`, and `/privacy` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010C exposes deterministic sign-up secondary links` |
 | UC-ONB-10D | Sign-up GitHub/Facebook actions | Sign-up shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010D renders deterministic sign-up GitHub and Facebook actions` |
