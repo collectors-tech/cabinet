@@ -127,6 +127,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/privacy\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010D renders deterministic sign-up GitHub and Facebook actions', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-up');
+    cy.get('[data-testid="sign-up-provider-github"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="sign-up-provider-facebook"]').should('be.visible').and('be.disabled');
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
