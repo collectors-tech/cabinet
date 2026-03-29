@@ -338,6 +338,18 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCE renders deterministic sign-in-2 Google Apple and Microsoft actions', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2');
+    cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
+    cy.get('[data-testid="provider-apple"]').should('be.visible').and('not.be.disabled');
+    cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
+    cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
