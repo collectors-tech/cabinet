@@ -12,13 +12,14 @@ Cabinet SHALL treat `openspec/specs/*/spec.md` as the normative source for produ
 - **THEN** they SHALL implement from OpenSpec specs, not legacy markdown notes
 
 ### Requirement DOCUMENTATION-GOVERNANCE-002: Legacy Docs Directory Contains No Markdown Sources
-The `docs/` directory SHALL contain no `*.md` files. Legacy markdown content SHALL be migrated into canonical OpenSpec specs and then removed.
+The `docs/` directory SHALL not be used as a generic source-of-truth markdown dump. Legacy markdown content SHALL be migrated into canonical OpenSpec specs and then removed, except for explicitly allowed published guides that remain part of the shipped product/help surface.
 
 #### Scenario: Legacy markdown is removed after canonical migration
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** documentation migration runs
-- **THEN** markdown files from `docs/**/*.md` are absorbed into OpenSpec canonical specs
-- **AND** `docs/` has zero markdown files
+- **THEN** legacy markdown files from `docs/**/*.md` are absorbed into OpenSpec canonical specs
+- **AND** only explicitly allowed published guide paths may remain as markdown under `docs/`
+- **AND** ad hoc legacy migration notes SHALL NOT remain in `docs/`
 
 ### Requirement DOCUMENTATION-GOVERNANCE-003: OpenAPI Contract Remains in docs/api/openapi.yaml
 The runtime API contract SHALL remain at `docs/api/openapi.yaml` for server and docs tooling compatibility.
@@ -62,5 +63,9 @@ Cabinet SHALL maintain a strict per-file migration audit at `openspec/migrations
 - `docs/UI_ENDPOINT_PARITY.md` -> `openspec/specs/general/ui-data-contract-parity/spec.md`
 - `docs/ui-spec/*.md` -> `openspec/specs/ui-*/spec.md`
 - `docs/auth/CLERK_BILLING_SETUP.md` -> `openspec/specs/general/cloud-auth-billing/spec.md`
+
+## Allowed Published Markdown Exceptions
+- `docs/help-center/**/*.md`
+- `docs/auth/exploration-auth-setup.md`
 
 
