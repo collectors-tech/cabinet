@@ -306,6 +306,27 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains(/please enter your email/i).should('be.visible');
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010CC exposes deterministic legal links from sign-in-2', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2');
+    cy.get('[data-testid="sign-in-2-terms-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/terms')
+      .click();
+    cy.location('pathname').should('match', /^\/terms\/?$/);
+
+    cy.visit('/sign-in-2');
+    cy.get('[data-testid="sign-in-2-privacy-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/privacy')
+      .focus()
+      .type('{enter}');
+    cy.location('pathname').should('match', /^\/privacy\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')

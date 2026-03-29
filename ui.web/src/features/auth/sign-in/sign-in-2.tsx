@@ -27,6 +27,7 @@ export function SignIn2() {
             By clicking sign in, you agree to our{' '}
             <a
               href='/terms'
+              data-testid='sign-in-2-terms-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Terms of Service
@@ -34,6 +35,7 @@ export function SignIn2() {
             and{' '}
             <a
               href='/privacy'
+              data-testid='sign-in-2-privacy-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Privacy Policy
