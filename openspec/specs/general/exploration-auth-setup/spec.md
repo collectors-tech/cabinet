@@ -1,0 +1,39 @@
+## Purpose
+Define deterministic exploratory auth setup guidance for Cabinet so route audits and UI review do not stall on avoidable local-vs-Clerk ambiguity.
+
+## Requirements
+### Requirement EXPLORATION-AUTH-SETUP-001: Exploratory auth guidance SHALL define local mode as the default route-audit path
+Cabinet documentation SHALL define a deterministic default exploratory auth path that prefers local mode for routine route audits and general UI review.
+
+#### Scenario: Choose default exploratory auth mode
+- **GIVEN** a developer or reviewer is starting exploratory work not explicitly scoped to Clerk behavior
+- **WHEN** they consult the exploratory auth setup guide
+- **THEN** the guide MUST direct them to use local auth mode by default
+- **AND** the guide MUST include a runnable startup path and example local sign-in expectations
+
+### Requirement EXPLORATION-AUTH-SETUP-002: Exploratory auth guidance SHALL distinguish Clerk-specific prerequisites and blockers
+Cabinet documentation SHALL distinguish Clerk-only auth prerequisites from the default local exploratory path so Clerk configuration gaps are not confused with general product failures.
+
+#### Scenario: Resolve Clerk exploratory prerequisites
+- **GIVEN** exploratory work explicitly targets Clerk flows or permissions behavior
+- **WHEN** the reviewer follows the exploratory auth setup guide
+- **THEN** the guide MUST enumerate Clerk publishable-key and auth-mode prerequisites
+- **AND** the guide MUST identify common Clerk/domain/origin blockers with actionable next steps
+
+### Requirement EXPLORATION-AUTH-SETUP-003: Exploratory auth guidance SHALL document sample-data/bootstrap paths
+Cabinet documentation SHALL identify how exploratory sessions obtain authenticated sample data for route traversal.
+
+#### Scenario: Choose authenticated sample-data path
+- **GIVEN** a reviewer needs representative authenticated data after sign-in
+- **WHEN** they follow the exploratory auth setup guide
+- **THEN** the guide MUST identify the starter-data path and Showcase DB profile path
+- **AND** the guide MUST state when each path should be preferred
+
+### Requirement EXPLORATION-AUTH-SETUP-004: Exploratory auth guidance SHALL normalize passkey domain mismatch diagnosis
+Cabinet documentation SHALL describe passkey domain/origin mismatch as an auth-environment setup problem and SHALL direct exploratory users toward deterministic fallback behavior.
+
+#### Scenario: Diagnose passkey invalid-domain failure during exploration
+- **GIVEN** passkey sign-in fails with an invalid-domain, origin-mismatch, or relying-party mismatch symptom
+- **WHEN** the reviewer consults the exploratory auth setup guide
+- **THEN** the guide MUST describe the failure as an environment/domain setup issue rather than a generic route failure
+- **AND** the guide MUST direct the reviewer to continue with password/provider auth unless the task explicitly requires passkey validation
