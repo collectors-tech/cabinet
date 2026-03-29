@@ -157,7 +157,8 @@ export function SignUpForm({
             variant='outline'
             className='w-full'
             type='button'
-            disabled={isLoading}
+            disabled
+            data-testid='sign-up-provider-github'
           >
             <IconGithub className='h-4 w-4' /> GitHub
           </Button>
@@ -165,7 +166,8 @@ export function SignUpForm({
             variant='outline'
             className='w-full'
             type='button'
-            disabled={isLoading}
+            disabled
+            data-testid='sign-up-provider-facebook'
           >
             <IconFacebook className='h-4 w-4' /> Facebook
           </Button>
