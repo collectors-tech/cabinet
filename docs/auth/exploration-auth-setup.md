@@ -86,11 +86,29 @@ Before attempting Clerk exploration, confirm all of the following:
 3. The browser origin you are using is allowed by Clerk.
 4. If passkeys are involved, the active domain/origin matches the configured passkey relying-party expectations.
 
+### Preferred Clerk startup example
+From the repo root:
+
+```powershell
+pwsh -NoLogo -NoProfile -File .\scripts\runtime\start-exploration-clerk.ps1 -ClerkPublishableKey 'pk_test_your_key' -Rebuild -Background
+```
+
+What this launcher does:
+- exports `VITE_CLERK_PUBLISHABLE_KEY` for the build/runtime process
+- exports `CABINET_AUTH_IDENTITY_MODE=clerk`
+- starts a dedicated Clerk exploration profile on port `17883`
+- gives a deterministic verification target: `GET /api/auth/provider-options`
+
+Expected verification after launch:
+- `http://127.0.0.1:17883/healthz` returns `200 ok`
+- `http://127.0.0.1:17883/api/auth/provider-options` returns `identity_mode = "clerk"`
+- first-run flows should be completed with **Auth Mode = clerk**
+
 ## Troubleshooting matrix
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
 | `Missing Clerk key` in setup wizard | Clerk mode selected without publishable key | Switch back to `local` for exploratory work, or provide `VITE_CLERK_PUBLISHABLE_KEY` before continuing |
-| `/clerk` route shows "No Publishable Key Found!" | `VITE_CLERK_PUBLISHABLE_KEY` not loaded | Create/update `.env`, restart the app, and confirm the key is visible to the UI runtime |
+| `/clerk` route shows "No Publishable Key Found!" | `VITE_CLERK_PUBLISHABLE_KEY` not loaded | Create/update `.env`, rebuild/restart the app, or use `start-exploration-clerk.ps1`; then confirm `/api/auth/provider-options` reports `identity_mode = "clerk"` |
 | `This is an invalid domain.` during passkey sign-in | Current origin/domain is not passkey-enabled for the auth setup | Prefer local password/provider sign-in for exploration; if validating Clerk/passkeys specifically, align the active domain/origin with the configured relying-party/domain settings |
 | Passkey guidance says `Passkey sign-in is not available on this domain yet...` | Cabinet normalized a domain/origin mismatch into deterministic fallback guidance | Treat this as an auth-environment setup issue, not a generic UI failure; continue with password/provider sign-in or fix the domain/origin setup |
 | Clerk sign-in page loads but session/bootstrap fails | Incomplete Clerk env, origin, or token/bootstrap configuration | Re-check publishable key, allowed origins, and the exact runtime URL being used |
@@ -105,7 +123,7 @@ Before attempting Clerk exploration, confirm all of the following:
 Whenever auth affects a route review, record:
 - auth mode used (`local` or `clerk`)
 - runtime URL
-- startup path used (`start-exploration-local.ps1`, direct `bin\cabinet.exe`, or other explicit launcher)
+- startup path used (`start-exploration-local.ps1`, `start-exploration-clerk.ps1`, direct `bin\cabinet.exe`, or other explicit launcher)
 - whether setup wizard was completed or bypassed
 - whether the session used first-sign-in local bootstrap or an existing local account
 - active profile/sample-data path used (`starter` vs `Showcase DB`)
