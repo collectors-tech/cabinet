@@ -109,7 +109,11 @@ export function SignUpForm({
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <PasswordInput
+                  placeholder='********'
+                  toggleTestId='sign-up-password-toggle'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -122,7 +126,11 @@ export function SignUpForm({
             <FormItem>
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <PasswordInput
+                  placeholder='********'
+                  toggleTestId='sign-up-confirm-password-toggle'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
