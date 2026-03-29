@@ -22,6 +22,10 @@ export function SettingsStorage() {
   const [error, setError] = useState<string | null>(null)
   const [dbPath, setDbPath] = useState('')
   const [mediaDir, setMediaDir] = useState('')
+  const [reindexPending, setReindexPending] = useState(false)
+  const [rebuildPending, setRebuildPending] = useState(false)
+  const [actionStatus, setActionStatus] = useState<string | null>(null)
+  const [actionTone, setActionTone] = useState<'default' | 'destructive'>('default')
   const [lastKnown, setLastKnown] = useState<StorageResponse | null>(() => {
     if (typeof window === 'undefined') {
       return null
@@ -85,6 +89,54 @@ export function SettingsStorage() {
     void loadStorage()
   }, [loadStorage])
 
+  const runReindex = useCallback(async () => {
+    setReindexPending(true)
+    setActionStatus(null)
+    setActionTone('default')
+    try {
+      const response = await fetch('/api/data/reindex', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('failed_to_reindex')
+      }
+      setActionStatus('Search reindex completed successfully.')
+    } catch {
+      setActionTone('destructive')
+      setActionStatus('Search reindex failed. Try again when runtime diagnostics are healthy.')
+    } finally {
+      setReindexPending(false)
+    }
+  }, [])
+
+  const runRebuild = useCallback(async () => {
+    setRebuildPending(true)
+    setActionStatus(null)
+    setActionTone('default')
+    try {
+      const response = await fetch('/api/data/rebuild-thumbnails', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('failed_to_rebuild_thumbnails')
+      }
+      const payload = (await response.json()) as {
+        rebuilt_items?: number
+        rebuilt_photos?: number
+      }
+      const rebuiltItems = Number(payload.rebuilt_items ?? 0)
+      const rebuiltPhotos = Number(payload.rebuilt_photos ?? 0)
+      setActionStatus(
+        `Thumbnail rebuild completed for ${rebuiltPhotos} photo${rebuiltPhotos === 1 ? '' : 's'} across ${rebuiltItems} item${rebuiltItems === 1 ? '' : 's'}.`
+      )
+    } catch {
+      setActionTone('destructive')
+      setActionStatus(
+        'Thumbnail rebuild failed. Check diagnostics health and try again.'
+      )
+    } finally {
+      setRebuildPending(false)
+    }
+  }, [])
+
+  const actionsDisabled = loading || Boolean(error) || reindexPending || rebuildPending
+
   return (
     <ContentSection
       title={t('settings.storage.title')}
@@ -133,13 +185,35 @@ export function SettingsStorage() {
           </div>
         </div>
         <div className='flex gap-2'>
-          <Button variant='outline' size='sm' disabled>
-            Reindex Search (Diagnostics only)
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={actionsDisabled}
+            onClick={() => {
+              void runReindex()
+            }}
+          >
+            {reindexPending ? 'Reindexing Search…' : 'Reindex Search'}
           </Button>
-          <Button variant='outline' size='sm' disabled>
-            Rebuild Thumbnails (Diagnostics only)
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={actionsDisabled}
+            onClick={() => {
+              void runRebuild()
+            }}
+          >
+            {rebuildPending ? 'Rebuilding Thumbnails…' : 'Rebuild Thumbnails'}
           </Button>
         </div>
+        {actionStatus ? (
+          <p
+            data-testid='settings-storage-action-status'
+            className={actionTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          >
+            {actionStatus}
+          </p>
+        ) : null}
         {error ? (
           <p className='text-xs text-muted-foreground'>
             Diagnostics actions are unavailable while storage info is degraded.
