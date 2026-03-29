@@ -63,6 +63,10 @@ Concrete path:
 2. continue through the onboarding starter-data choice
 3. choose the starter/sample-data path so Cabinet seeds the profile via `POST /api/onboarding/sample-data`
 
+Verification target:
+- targeted Cypress proof: `ui.web/cypress/e2e/general/onboarding-starter-data/spec.cy.ts`
+- run with: `pwsh -NoLogo -NoProfile -File .\cypress.ps1 -Spec cypress/e2e/general/onboarding-starter-data/spec.cy.ts -Browser chrome -RequireE2EHooks`
+
 ### Option B: Showcase DB profile
 When the profile switcher is available, choose **Showcase DB** for deterministic demo content across inventory, wishlist, and related routes.
 
@@ -70,6 +74,10 @@ Use Showcase DB when you need:
 - repeatable route traversal
 - visible seeded content for demos
 - stable exploratory screenshots/evidence
+
+Verification target:
+- targeted Cypress proof: `ui.web/cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts` (`UI-FOUNDATION-SHELL-NAVIGATION-010 provides Showcase DB profile with seeded demo context`)
+- run with: `pwsh -NoLogo -NoProfile -File .\cypress.ps1 -Spec cypress/e2e/general/ui-foundation-shell-navigation/spec.cy.ts -Browser chrome -RequireE2EHooks`
 
 ## When to use Clerk instead
 Use **Clerk auth mode** only when the task explicitly needs:

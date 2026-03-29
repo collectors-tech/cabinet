@@ -31,6 +31,7 @@ Cabinet documentation SHALL identify how exploratory sessions obtain authenticat
 - **THEN** the guide MUST identify the starter-data path and Showcase DB profile path
 - **AND** the guide MUST state when each path should be preferred
 - **AND** the guide MUST identify the concrete first-sign-in starter-data path for local exploratory sessions
+- **AND** the guide MUST identify verification targets for both the starter-data and Showcase DB paths
 
 ### Requirement EXPLORATION-AUTH-SETUP-005: Exploratory auth guidance SHALL define local account bootstrap expectations
 Cabinet documentation SHALL define the expected local exploratory account behavior so reviewers do not wait for a separately provisioned account before route testing.
