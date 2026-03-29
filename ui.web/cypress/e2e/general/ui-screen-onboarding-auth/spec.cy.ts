@@ -291,6 +291,21 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010BC exposes deterministic forgot-password entry from sign-in-2', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2');
+    cy.get('[data-testid="sign-in-forgot-password-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/forgot-password')
+      .focus()
+      .type('{enter}');
+    cy.location('pathname').should('match', /^\/forgot-password\/?$/);
+    cy.contains(/please enter your email/i).should('be.visible');
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
