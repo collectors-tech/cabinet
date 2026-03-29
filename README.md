@@ -196,6 +196,7 @@ openspec validate --changes --strict --no-interactive
 
 Exploratory auth setup guide:
 - `docs/auth/exploration-auth-setup.md`
+- preferred local exploration launcher: `scripts/runtime/start-exploration-local.ps1`
 
 eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
 - `ebay_bearer_token`

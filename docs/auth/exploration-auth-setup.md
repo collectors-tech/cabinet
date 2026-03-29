@@ -14,7 +14,13 @@ Why:
 
 ## Local auth flow
 ### Startup
-From the repo root, start Cabinet with the project-local binary:
+From the repo root, preferred exploratory launcher:
+
+```powershell
+pwsh -NoLogo -NoProfile -File .\scripts\runtime\start-exploration-local.ps1 -Background
+```
+
+Manual fallback:
 
 ```powershell
 .\bin\cabinet.exe
@@ -32,7 +38,8 @@ If Cabinet is not configured yet:
 3. Finish config creation and launch.
 
 ### Local sign-in behavior
-For exploratory local auth, the current sign-in form accepts:
+For exploratory local auth, Cabinet does **not** require a pre-seeded local account.
+The current sign-in form accepts:
 - any syntactically valid email address
 - any password with length `>= 7`
 
@@ -40,13 +47,21 @@ Example exploratory credentials:
 - email: `explorer@cabinet.local`
 - password: `password123`
 
-These credentials are for local exploratory flow only. They are not a Clerk account requirement.
+Account-creation expectation:
+- treat the first successful local sign-in as the exploratory local account bootstrap path
+- do **not** block route audits waiting for a separately provisioned sample account
+- these credentials are local-only exploratory credentials, not a Clerk account requirement
 
 ## Getting authenticated sample data
 After local sign-in, use one of these paths:
 
 ### Option A: starter/onboarding sample flow
 Use the built-in onboarding sample data path after first auth completion when the task needs a freshly bootstrapped dataset.
+
+Concrete path:
+1. complete first local sign-in
+2. continue through the onboarding starter-data choice
+3. choose the starter/sample-data path so Cabinet seeds the profile via `POST /api/onboarding/sample-data`
 
 ### Option B: Showcase DB profile
 When the profile switcher is available, choose **Showcase DB** for deterministic demo content across inventory, wishlist, and related routes.
@@ -90,6 +105,8 @@ Before attempting Clerk exploration, confirm all of the following:
 Whenever auth affects a route review, record:
 - auth mode used (`local` or `clerk`)
 - runtime URL
+- startup path used (`start-exploration-local.ps1`, direct `bin\cabinet.exe`, or other explicit launcher)
 - whether setup wizard was completed or bypassed
+- whether the session used first-sign-in local bootstrap or an existing local account
 - active profile/sample-data path used (`starter` vs `Showcase DB`)
 - exact auth blocker text if any

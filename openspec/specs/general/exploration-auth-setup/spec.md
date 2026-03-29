@@ -10,6 +10,7 @@ Cabinet documentation SHALL define a deterministic default exploratory auth path
 - **WHEN** they consult the exploratory auth setup guide
 - **THEN** the guide MUST direct them to use local auth mode by default
 - **AND** the guide MUST include a runnable startup path and example local sign-in expectations
+- **AND** the guide MUST identify the preferred repo-level local exploration launcher
 
 ### Requirement EXPLORATION-AUTH-SETUP-002: Exploratory auth guidance SHALL distinguish Clerk-specific prerequisites and blockers
 Cabinet documentation SHALL distinguish Clerk-only auth prerequisites from the default local exploratory path so Clerk configuration gaps are not confused with general product failures.
@@ -28,6 +29,17 @@ Cabinet documentation SHALL identify how exploratory sessions obtain authenticat
 - **WHEN** they follow the exploratory auth setup guide
 - **THEN** the guide MUST identify the starter-data path and Showcase DB profile path
 - **AND** the guide MUST state when each path should be preferred
+- **AND** the guide MUST identify the concrete first-sign-in starter-data path for local exploratory sessions
+
+### Requirement EXPLORATION-AUTH-SETUP-005: Exploratory auth guidance SHALL define local account bootstrap expectations
+Cabinet documentation SHALL define the expected local exploratory account behavior so reviewers do not wait for a separately provisioned account before route testing.
+
+#### Scenario: Bootstrap local exploratory account on first sign-in
+- **GIVEN** the reviewer is using local auth mode for exploratory work
+- **WHEN** they reach the sign-in form on a fresh local runtime
+- **THEN** the guide MUST state that no pre-seeded local account is required
+- **AND** the guide MUST state that first successful local sign-in is the expected bootstrap path
+- **AND** the guide MUST provide example local exploratory credentials that satisfy current validation constraints
 
 ### Requirement EXPLORATION-AUTH-SETUP-004: Exploratory auth guidance SHALL normalize passkey domain mismatch diagnosis
 Cabinet documentation SHALL describe passkey domain/origin mismatch as an auth-environment setup problem and SHALL direct exploratory users toward deterministic fallback behavior.
