@@ -278,10 +278,20 @@ export function UserAuthForm({
         </div>
 
         <div className='grid grid-cols-2 gap-2'>
-          <Button variant='outline' type='button' disabled={isLoading}>
+          <Button
+            variant='outline'
+            type='button'
+            disabled
+            data-testid='sign-in-provider-github'
+          >
             <IconGithub className='h-4 w-4' /> GitHub
           </Button>
-          <Button variant='outline' type='button' disabled={isLoading}>
+          <Button
+            variant='outline'
+            type='button'
+            disabled
+            data-testid='sign-in-provider-facebook'
+          >
             <IconFacebook className='h-4 w-4' /> Facebook
           </Button>
         </div>

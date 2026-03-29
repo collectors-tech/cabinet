@@ -98,6 +98,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/forgot-password\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010BB renders deterministic sign-in GitHub and Facebook actions', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in');
+    cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+    cy.location('pathname').should('match', /^\/sign-in\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-010C exposes deterministic sign-up secondary links', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
