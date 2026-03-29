@@ -350,6 +350,44 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCF keeps sign-in-2 as retained route with shared auth contract parity', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.request('POST', '/api/test/auth/provider-options', {
+      identity_mode: 'clerk',
+      providers: [
+        { id: 'google', enabled: true },
+        { id: 'apple', enabled: false },
+        { id: 'microsoft', enabled: true },
+      ],
+    })
+      .its('status')
+      .should('eq', 200);
+
+    const assertSharedAuthSurface = (pathname: '/sign-in' | '/sign-in-2') => {
+      cy.visit(pathname);
+      cy.location('pathname').should('match', new RegExp(`^${pathname}\\/?$`));
+      cy.get('input[name="email"]').should('be.visible');
+      cy.get('input[name="password"]').should('have.attr', 'type', 'password');
+      cy.contains('button', 'Sign in').should('be.visible');
+      cy.get('[data-testid="passkey-signin"]').should('be.visible');
+      cy.get('[data-testid="sign-in-forgot-password-link"]')
+        .should('be.visible')
+        .and('have.attr', 'href', '/forgot-password');
+      cy.get('[data-testid="identity-mode-indicator"]').should('contain.text', 'clerk');
+      cy.get('[data-testid="provider-google"]').should('be.visible').and('not.be.disabled');
+      cy.get('[data-testid="provider-apple"]').should('be.visible').and('be.disabled');
+      cy.get('[data-testid="provider-microsoft"]').should('be.visible').and('not.be.disabled');
+      cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
+      cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+    };
+
+    assertSharedAuthSurface('/sign-in');
+    assertSharedAuthSurface('/sign-in-2');
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
