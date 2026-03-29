@@ -23,6 +23,7 @@ export function SignUp() {
             Already have an account?{' '}
             <Link
               to='/sign-in'
+              data-testid='sign-up-sign-in-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Sign In
@@ -37,6 +38,7 @@ export function SignUp() {
             By creating an account, you agree to our{' '}
             <a
               href='/terms'
+              data-testid='sign-up-terms-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Terms of Service
@@ -44,6 +46,7 @@ export function SignUp() {
             and{' '}
             <a
               href='/privacy'
+              data-testid='sign-up-privacy-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Privacy Policy

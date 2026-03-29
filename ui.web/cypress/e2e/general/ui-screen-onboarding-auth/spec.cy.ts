@@ -98,6 +98,35 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/forgot-password\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010C exposes deterministic sign-up secondary links', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-up');
+    cy.get('[data-testid="sign-up-sign-in-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/sign-in')
+      .focus()
+      .type('{enter}');
+    cy.location('pathname').should('match', /^\/sign-in\/?$/);
+
+    cy.visit('/sign-up');
+    cy.get('[data-testid="sign-up-terms-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/terms')
+      .click();
+    cy.location('pathname').should('match', /^\/terms\/?$/);
+
+    cy.visit('/sign-up');
+    cy.get('[data-testid="sign-up-privacy-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/privacy')
+      .focus()
+      .type('{enter}');
+    cy.location('pathname').should('match', /^\/privacy\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-006 renders Google, Apple, and Microsoft provider actions deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
