@@ -137,6 +137,16 @@ Sign-up SHALL expose visible return/legal links that support deterministic mouse
 - **AND** those actions MUST remain deterministically disabled when no provider flow is wired
 - **AND** keyboard focus/activation MUST NOT navigate away from `/sign-in-2`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-010CCE: Sign-in-2 Google/Apple/Microsoft actions SHALL be explicit and deterministic
+`/sign-in-2` SHALL expose Google, Apple, and Microsoft provider actions with deterministic visible/enabled state that mirrors runtime configuration.
+
+#### Scenario: Sign-in-2 Google, Apple, and Microsoft actions
+- **GIVEN** runtime setup is complete and user is on `/sign-in-2`
+- **WHEN** user inspects social and enterprise provider actions on the sign-in-2 surface
+- **THEN** UI MUST show visible `Google`, `Apple`, and `Microsoft` actions
+- **AND** each action MUST reflect deterministic enabled/disabled state from provider configuration
+- **AND** focus/inspection MUST NOT navigate away from `/sign-in-2`
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010D: Sign-up GitHub/Facebook actions SHALL be explicit and deterministic
 Sign-up SHALL expose GitHub and Facebook provider actions with explicit visible/disabled behavior until provider sign-up flows are implemented.
 
