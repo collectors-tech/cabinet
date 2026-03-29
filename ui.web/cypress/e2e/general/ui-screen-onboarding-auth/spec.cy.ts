@@ -327,6 +327,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/privacy\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-010CCD renders deterministic sign-in-2 GitHub and Facebook actions', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2');
+    cy.get('[data-testid="sign-in-provider-github"]').should('be.visible').and('be.disabled');
+    cy.get('[data-testid="sign-in-provider-facebook"]').should('be.visible').and('be.disabled');
+    cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011D toggles sign-in-2 password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
