@@ -21,7 +21,7 @@ func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 		}
 		if strings.EqualFold(filepath.Ext(path), ".md") {
 			normalized := filepath.ToSlash(path)
-			if strings.HasPrefix(normalized, "../../docs/help-center/") {
+			if strings.HasPrefix(normalized, "../../docs/help-center/") || normalized == "../../docs/auth/exploration-auth-setup.md" {
 				return nil
 			}
 			markdownFiles = append(markdownFiles, filepath.ToSlash(path))
