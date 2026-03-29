@@ -45,6 +45,27 @@ type ProviderOptionsPayload = {
   providers?: ProviderOption[]
 }
 
+function normalizePasskeyError(error: unknown) {
+  const fallback = 'Passkey sign-in failed. Use password or provider sign-in.'
+  if (!(error instanceof Error)) {
+    return fallback
+  }
+
+  const message = error.message.trim()
+  const lower = message.toLowerCase()
+  if (
+    lower.includes('invalid domain') ||
+    lower.includes('invalid rp id') ||
+    lower.includes('relying party') ||
+    lower.includes('origin mismatch') ||
+    lower.includes('domain mismatch')
+  ) {
+    return 'Passkey sign-in is not available on this domain yet. Use password or provider sign-in.'
+  }
+
+  return message || fallback
+}
+
 export function UserAuthForm({
   className,
   redirectTo,
@@ -139,11 +160,7 @@ export function UserAuthForm({
       const targetPath = redirectTo || '/dashboard'
       navigate({ to: targetPath, replace: true })
     } catch (error) {
-      setPasskeyError(
-        error instanceof Error
-          ? error.message
-          : 'Passkey sign-in failed. Use password or provider sign-in.'
-      )
+      setPasskeyError(normalizePasskeyError(error))
     } finally {
       setPasskeyLoading(false)
     }

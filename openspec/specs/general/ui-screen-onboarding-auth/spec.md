@@ -55,6 +55,12 @@ Sign-in flow SHALL support passkey authentication compatible with platform authe
 - **WHEN** passkey auth attempt fails
 - **THEN** UI MUST provide deterministic fallback to other enabled methods (password/social) with actionable error message
 
+#### Scenario: Passkey domain or origin mismatch fallback behavior
+- **GIVEN** passkey runtime returns a domain, origin, or relying-party mismatch error during sign-in
+- **WHEN** the passkey auth attempt fails before credential completion
+- **THEN** UI MUST normalize the raw provider/browser mismatch into deterministic guidance that the current domain is not yet passkey-enabled
+- **AND** UI MUST keep password and provider sign-in methods visible as immediate fallback options
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-009: Setup wizard SHALL gate sign-in when runtime setup config is missing
 Sign-in route SHALL present a full-screen setup wizard before auth controls when runtime setup config file is missing.
 

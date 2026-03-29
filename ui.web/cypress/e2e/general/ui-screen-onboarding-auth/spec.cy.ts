@@ -237,6 +237,39 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains('button', 'Sign in').should('be.visible');
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-008 normalizes passkey domain mismatch into actionable fallback guidance', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in', {
+      onBeforeLoad(win) {
+        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
+          function PublicKeyCredential() {
+            return undefined;
+          };
+        Object.defineProperty(win.navigator, 'credentials', {
+          configurable: true,
+          value: {
+            get: () => Promise.reject(new Error('This is an invalid domain.')),
+          },
+        });
+      },
+    });
+
+    cy.get('[data-testid="passkey-signin"]').click();
+    cy.get('[data-testid="passkey-error"]')
+      .should('be.visible')
+      .and(
+        'contain.text',
+        'Passkey sign-in is not available on this domain yet. Use password or provider sign-in.'
+      )
+      .and('not.contain.text', 'This is an invalid domain.');
+    cy.contains('button', 'Sign in').should('be.visible');
+    cy.get('[data-testid="provider-google"]').should('be.visible');
+    cy.location('pathname').should('match', /^\/sign-in\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011B toggles sign-in password visibility deterministically', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
