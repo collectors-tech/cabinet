@@ -20,6 +20,7 @@ Cabinet documentation SHALL distinguish Clerk-only auth prerequisites from the d
 - **WHEN** the reviewer follows the exploratory auth setup guide
 - **THEN** the guide MUST enumerate Clerk publishable-key and auth-mode prerequisites
 - **AND** the guide MUST identify common Clerk/domain/origin blockers with actionable next steps
+- **AND** the guide MUST include a concrete repo-level Clerk startup example and verification target
 
 ### Requirement EXPLORATION-AUTH-SETUP-003: Exploratory auth guidance SHALL document sample-data/bootstrap paths
 Cabinet documentation SHALL identify how exploratory sessions obtain authenticated sample data for route traversal.
@@ -40,6 +41,16 @@ Cabinet documentation SHALL define the expected local exploratory account behavi
 - **THEN** the guide MUST state that no pre-seeded local account is required
 - **AND** the guide MUST state that first successful local sign-in is the expected bootstrap path
 - **AND** the guide MUST provide example local exploratory credentials that satisfy current validation constraints
+
+### Requirement EXPLORATION-AUTH-SETUP-006: Exploratory auth guidance SHALL provide a repo-level Clerk launcher contract
+Cabinet documentation and scripts SHALL provide a deterministic Clerk exploration launcher so reviewers can start a Clerk-oriented runtime with explicit env expectations and verification targets.
+
+#### Scenario: Start Clerk exploration runtime from repo launcher
+- **GIVEN** the reviewer needs Clerk-specific exploratory auth coverage
+- **WHEN** they run the documented Clerk exploration launcher with a publishable key
+- **THEN** the launcher MUST set Clerk-specific env expectations for the child build/runtime process
+- **AND** the guide MUST identify the expected runtime URL and verification endpoints
+- **AND** the launcher MUST fail fast with actionable guidance when the Clerk publishable key is missing
 
 ### Requirement EXPLORATION-AUTH-SETUP-004: Exploratory auth guidance SHALL normalize passkey domain mismatch diagnosis
 Cabinet documentation SHALL describe passkey domain/origin mismatch as an auth-environment setup problem and SHALL direct exploratory users toward deterministic fallback behavior.
