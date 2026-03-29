@@ -224,6 +224,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(resolveAuthProviderOptions())
 	})
+	registerFutureHookRoutes(mux)
 	mux.HandleFunc("/api/runtime/setup-status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
