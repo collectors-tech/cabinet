@@ -371,6 +371,70 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-011E signs in from sign-in-2 and honors redirect target', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2?redirect=%2Fsettings%2Fdisplay');
+    cy.get('input[name="email"]').type('e2e-signin2@example.com');
+    cy.get('input[name="password"]').type('password123');
+    cy.contains('button', 'Sign in').click();
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/display\/?$/);
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-011F signs in with passkey from sign-in-2 and honors redirect target', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2?redirect=%2Fsettings%2Fdisplay', {
+      onBeforeLoad(win) {
+        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
+          function PublicKeyCredential() {
+            return undefined;
+          };
+        Object.defineProperty(win.navigator, 'credentials', {
+          configurable: true,
+          value: {
+            get: () => Promise.resolve({ id: 'e2e-passkey-credential' }),
+          },
+        });
+      },
+    });
+
+    cy.get('[data-testid="passkey-signin"]').click();
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/display\/?$/);
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-011F shows deterministic fallback guidance on sign-in-2 when passkey is unavailable', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-in-2', {
+      onBeforeLoad(win) {
+        (win as Window & { PublicKeyCredential?: unknown }).PublicKeyCredential =
+          undefined;
+        Object.defineProperty(win.navigator, 'credentials', {
+          configurable: true,
+          value: undefined,
+        });
+      },
+    });
+
+    cy.get('[data-testid="passkey-signin"]').click();
+    cy.get('[data-testid="passkey-error"]')
+      .should('be.visible')
+      .and(
+        'contain.text',
+        'Passkey sign-in is unavailable on this device. Use password or provider sign-in.'
+      );
+    cy.contains('button', 'Sign in').should('be.visible');
+    cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')

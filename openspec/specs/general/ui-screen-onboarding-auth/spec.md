@@ -190,6 +190,31 @@ The `/sign-in-2` password field SHALL expose a visibility toggle that switches d
 - **AND** toggle accessible label/state MUST update to reflect the current mode
 - **AND** focus/activation MUST remain on the `/sign-in-2` route without side effects
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011E: Sign-in-2 successful submit SHALL honor redirect outcomes
+The `/sign-in-2` password submit flow SHALL authenticate the session and honor the preserved `redirect` target, falling back to the canonical dashboard only when no redirect target exists.
+
+#### Scenario: Sign-in-2 successful submit with redirect target
+- **GIVEN** runtime setup is complete and user opens `/sign-in-2?redirect=%2Fsettings%2Fdisplay`
+- **WHEN** user submits valid credentials
+- **THEN** UI MUST authenticate successfully
+- **AND** MUST navigate deterministically to `/settings/display`
+- **AND** MUST NOT fall back to `/dashboard` when a valid redirect target is present
+
+### Requirement UI-SCREEN-ONBOARDING-AUTH-011F: Sign-in-2 passkey outcome SHALL honor redirect and fallback deterministically
+The `/sign-in-2` passkey flow SHALL preserve the same redirect semantics as password sign-in and SHALL keep alternate methods visible when passkey is unavailable.
+
+#### Scenario: Sign-in-2 passkey success with redirect target
+- **GIVEN** runtime setup is complete and user opens `/sign-in-2?redirect=%2Fsettings%2Fdisplay`
+- **WHEN** user completes a valid passkey sign-in
+- **THEN** UI MUST authenticate without password prompt
+- **AND** MUST navigate deterministically to `/settings/display`
+
+#### Scenario: Sign-in-2 passkey fallback behavior
+- **GIVEN** runtime setup is complete and user is on `/sign-in-2`
+- **WHEN** passkey auth attempt fails or is unavailable
+- **THEN** UI MUST show actionable fallback guidance
+- **AND** MUST keep password and provider sign-in methods visible on `/sign-in-2`
+
 #### Scenario: Successful sign-up completion
 - **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
 - **WHEN** user activates `Create Account`
