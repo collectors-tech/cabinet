@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -123,7 +124,11 @@ func TestRuntimeLifecycleMetadataAndStructuredLogs(t *testing.T) {
 		t.Fatalf("expected meta.lastRunClean=true after clean shutdown, got %+v", updated.Meta)
 	}
 
-	runtimeLines, err := readStructuredLogLines(runtimeLogPath(cfg))
+	runtimeLogPath, err := singleTimestampedLogPath(filepath.Join(base, "logs"), "cabinet.runtime.*.log")
+	if err != nil {
+		t.Fatalf("find runtime log: %v", err)
+	}
+	runtimeLines, err := readStructuredLogLines(runtimeLogPath)
 	if err != nil {
 		t.Fatalf("read runtime log: %v", err)
 	}
@@ -137,7 +142,11 @@ func TestRuntimeLifecycleMetadataAndStructuredLogs(t *testing.T) {
 		t.Fatalf("expected shutdown event in runtime log, got %+v", runtimeLines)
 	}
 
-	accessLines, err := readStructuredLogLines(runtimeAccessLogPath(cfg))
+	accessLogPath, err := singleTimestampedLogPath(filepath.Join(base, "logs"), "cabinet.access.*.log")
+	if err != nil {
+		t.Fatalf("find access log: %v", err)
+	}
+	accessLines, err := readStructuredLogLines(accessLogPath)
 	if err != nil {
 		t.Fatalf("read access log: %v", err)
 	}
@@ -150,6 +159,30 @@ func TestRuntimeLifecycleMetadataAndStructuredLogs(t *testing.T) {
 	if !containsPath(accessLines, "/api/runtime") {
 		t.Fatalf("expected /api/runtime access log entry, got %+v", accessLines)
 	}
+
+	errorLogPath, err := singleTimestampedLogPath(filepath.Join(base, "logs"), "cabinet.error.*.log")
+	if err != nil {
+		t.Fatalf("find error log: %v", err)
+	}
+	if _, err := os.Stat(errorLogPath); err != nil {
+		t.Fatalf("stat error log: %v", err)
+	}
+	for _, legacy := range []string{"cabinet.runtime.log", "cabinet.access.log", "cabinet.error.log"} {
+		if _, err := os.Stat(filepath.Join(base, legacy)); err == nil {
+			t.Fatalf("expected legacy fixed log filename %s to be absent", legacy)
+		}
+	}
+}
+
+func singleTimestampedLogPath(base, pattern string) (string, error) {
+	matches, err := filepath.Glob(filepath.Join(base, pattern))
+	if err != nil {
+		return "", err
+	}
+	if len(matches) != 1 {
+		return "", fmt.Errorf("expected exactly one match for %s, got %d (%v)", pattern, len(matches), matches)
+	}
+	return matches[0], nil
 }
 
 func containsEvent(lines []map[string]any, event string) bool {

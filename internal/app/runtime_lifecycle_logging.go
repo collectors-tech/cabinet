@@ -15,11 +15,16 @@ import (
 )
 
 type runtimeLogManager struct {
-	cfg        config.Config
-	mu         sync.Mutex
-	runtimeLog *os.File
-	errorLog   *os.File
-	accessLog  *os.File
+	cfg          config.Config
+	mu           sync.Mutex
+	startedAtUTC time.Time
+	logSetID     string
+	runtimePath  string
+	errorPath    string
+	accessPath   string
+	runtimeLog   *os.File
+	errorLog     *os.File
+	accessLog    *os.File
 }
 
 type runtimeStatusRecorder struct {
@@ -32,38 +37,61 @@ func (r *runtimeStatusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-func runtimeLogPath(cfg config.Config) string {
-	return filepath.Join(cfg.DataDir, "cabinet.runtime.log")
+func runtimeLogSetID(startedAtUTC time.Time) string {
+	return startedAtUTC.UTC().Format("20060102T150405.000Z")
 }
 
-func runtimeErrorLogPath(cfg config.Config) string {
-	return filepath.Join(cfg.DataDir, "cabinet.error.log")
+func runtimeLogsDir(cfg config.Config) string {
+	return filepath.Join(cfg.DataDir, "logs")
 }
 
-func runtimeAccessLogPath(cfg config.Config) string {
-	return filepath.Join(cfg.DataDir, "cabinet.access.log")
+func runtimeLogPath(cfg config.Config, startedAtUTC time.Time) string {
+	return filepath.Join(runtimeLogsDir(cfg), fmt.Sprintf("cabinet.runtime.%s.log", runtimeLogSetID(startedAtUTC)))
+}
+
+func runtimeErrorLogPath(cfg config.Config, startedAtUTC time.Time) string {
+	return filepath.Join(runtimeLogsDir(cfg), fmt.Sprintf("cabinet.error.%s.log", runtimeLogSetID(startedAtUTC)))
+}
+
+func runtimeAccessLogPath(cfg config.Config, startedAtUTC time.Time) string {
+	return filepath.Join(runtimeLogsDir(cfg), fmt.Sprintf("cabinet.access.%s.log", runtimeLogSetID(startedAtUTC)))
 }
 
 func newRuntimeLogManager(cfg config.Config) (*runtimeLogManager, error) {
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(runtimeLogsDir(cfg), 0o755); err != nil {
 		return nil, err
 	}
-	runtimeFile, err := os.OpenFile(runtimeLogPath(cfg), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	startedAtUTC := time.Now().UTC()
+	logSetID := runtimeLogSetID(startedAtUTC)
+	runtimePath := runtimeLogPath(cfg, startedAtUTC)
+	errorPath := runtimeErrorLogPath(cfg, startedAtUTC)
+	accessPath := runtimeAccessLogPath(cfg, startedAtUTC)
+	runtimeFile, err := os.OpenFile(runtimePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	errorFile, err := os.OpenFile(runtimeErrorLogPath(cfg), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	errorFile, err := os.OpenFile(errorPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		_ = runtimeFile.Close()
 		return nil, err
 	}
-	accessFile, err := os.OpenFile(runtimeAccessLogPath(cfg), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	accessFile, err := os.OpenFile(accessPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		_ = runtimeFile.Close()
 		_ = errorFile.Close()
 		return nil, err
 	}
-	return &runtimeLogManager{cfg: cfg, runtimeLog: runtimeFile, errorLog: errorFile, accessLog: accessFile}, nil
+	return &runtimeLogManager{
+		cfg:          cfg,
+		startedAtUTC: startedAtUTC,
+		logSetID:     logSetID,
+		runtimePath:  runtimePath,
+		errorPath:    errorPath,
+		accessPath:   accessPath,
+		runtimeLog:   runtimeFile,
+		errorLog:     errorFile,
+		accessLog:    accessFile,
+	}, nil
 }
 
 func (m *runtimeLogManager) Close() error {
@@ -99,13 +127,17 @@ func (m *runtimeLogManager) writeJSONLine(file *os.File, payload map[string]any)
 
 func (m *runtimeLogManager) writeRuntimeEvent(level, event, message string, extra map[string]any) {
 	payload := map[string]any{
-		"ts":      time.Now().UTC().Format(time.RFC3339),
-		"level":   level,
-		"type":    "runtime",
-		"event":   event,
-		"message": message,
-		"pid":     os.Getpid(),
-		"dataDir": strings.TrimSpace(m.cfg.DataDir),
+		"ts":         time.Now().UTC().Format(time.RFC3339),
+		"level":      level,
+		"type":       "runtime",
+		"event":      event,
+		"message":    message,
+		"pid":        os.Getpid(),
+		"dataDir":    strings.TrimSpace(m.cfg.DataDir),
+		"logSetId":   m.logSetID,
+		"runtimeLog": m.runtimePath,
+		"errorLog":   m.errorPath,
+		"accessLog":  m.accessPath,
 	}
 	instanceName, profileKey := readRuntimeSetupIdentity(m.cfg)
 	if instanceName != "" {
@@ -122,12 +154,15 @@ func (m *runtimeLogManager) writeRuntimeEvent(level, event, message string, extr
 
 func (m *runtimeLogManager) writeErrorEvent(event, message string, extra map[string]any) {
 	payload := map[string]any{
-		"ts":      time.Now().UTC().Format(time.RFC3339),
-		"level":   "error",
-		"type":    "error",
-		"event":   event,
-		"message": message,
-		"pid":     os.Getpid(),
+		"ts":        time.Now().UTC().Format(time.RFC3339),
+		"level":     "error",
+		"type":      "error",
+		"event":     event,
+		"message":   message,
+		"pid":       os.Getpid(),
+		"logSetId":  m.logSetID,
+		"errorLog":  m.errorPath,
+		"dataDir":   strings.TrimSpace(m.cfg.DataDir),
 	}
 	for key, value := range extra {
 		payload[key] = value
@@ -147,6 +182,9 @@ func (m *runtimeLogManager) writeAccessEvent(r *http.Request, status int, durati
 		"status":     status,
 		"durationMs": duration.Milliseconds(),
 		"remoteAddr": strings.TrimSpace(r.RemoteAddr),
+		"logSetId":   m.logSetID,
+		"accessLog":  m.accessPath,
+		"dataDir":    strings.TrimSpace(m.cfg.DataDir),
 	}
 	m.writeJSONLine(m.accessLog, payload)
 }
