@@ -236,6 +236,39 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-011C toggles sign-up password fields deterministically', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-up');
+    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
+    cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'password');
+
+    cy.get('[data-testid="sign-up-password-toggle"]')
+      .should('have.attr', 'aria-label', 'Show password')
+      .and('have.attr', 'aria-pressed', 'false')
+      .focus()
+      .type('{enter}');
+    cy.get('input[name="password"]').should('have.attr', 'type', 'text');
+    cy.get('[data-testid="sign-up-password-toggle"]')
+      .should('have.attr', 'aria-label', 'Hide password')
+      .and('have.attr', 'aria-pressed', 'true');
+
+    cy.get('[data-testid="sign-up-confirm-password-toggle"]')
+      .should('have.attr', 'aria-label', 'Show password')
+      .and('have.attr', 'aria-pressed', 'false')
+      .focus()
+      .type('{enter}');
+    cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'text');
+    cy.get('[data-testid="sign-up-confirm-password-toggle"]')
+      .should('have.attr', 'aria-label', 'Hide password')
+      .and('have.attr', 'aria-pressed', 'true')
+      .type(' ');
+    cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'password');
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
