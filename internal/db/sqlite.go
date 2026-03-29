@@ -11,6 +11,12 @@ import (
 )
 
 func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
+	_, statErr := os.Stat(path)
+	freshDB := os.IsNotExist(statErr)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("stat db path: %w", statErr)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
@@ -85,6 +91,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_profile_id ON webauthn_credentials(profile_id);`,
 		`CREATE TABLE IF NOT EXISTS canonical_items (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			brand TEXT NOT NULL,
 			category TEXT NOT NULL,
 			part_number TEXT NOT NULL,
@@ -179,6 +186,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_item_photos_item_id ON item_photos(item_id);`,
 		`CREATE TABLE IF NOT EXISTS scanner_query_sets (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			keywords_json TEXT NOT NULL,
 			exclusions_json TEXT NOT NULL DEFAULT '[]',
@@ -196,6 +204,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS scanner_candidates (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			query_set_id TEXT NOT NULL,
 			listing_id TEXT NOT NULL UNIQUE,
 			title TEXT NOT NULL,
@@ -251,6 +260,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS wishlist_entries (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			item_id TEXT NOT NULL UNIQUE,
 			target_price REAL NOT NULL DEFAULT 0,
 			priority TEXT NOT NULL DEFAULT 'normal',
@@ -262,6 +272,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS tracked_items (
 			item_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
@@ -375,6 +386,29 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		}
 	}
 
+	if freshDB {
+		if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure wishlist_entries profile index: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure scanner_query_sets profile index: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure tracked_items profile index: %w", err)
+		}
+		return conn, nil
+	}
 	if err := ensureColumn(ctx, conn, "canonical_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.profile_id: %w", err)
