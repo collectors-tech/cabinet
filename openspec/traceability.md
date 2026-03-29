@@ -96,8 +96,8 @@
 | `INVENTORY-GRADING-003` | `openspec/specs/inventory/inventory-grading/spec.md` | `internal/app/inventory_grading_api_test.go` | implemented |
 | `LICENSING-001` | `openspec/specs/general/licensing/spec.md` | `openspec/specs/general/licensing/spec.md` | TestLicenseStatusAndFreeTierCap (internal/app/license_api_test.go) | implemented |
 | `LICENSING-002` | `openspec/specs/general/licensing/spec.md` | `openspec/specs/general/licensing/spec.md` | TestLicenseStatusAndFreeTierCap (internal/app/license_api_test.go) | implemented |
-| `LOGGING-001` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); planned: TODO runtime/API/E2E proof for this requirement ID | partial |
-| `LOGGING-002` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); planned: TODO runtime/API/E2E proof for this requirement ID | partial |
+| `LOGGING-001` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); TestRuntimeLifecycleMetadataAndStructuredLogs (internal/app/runtime_lifecycle_logging_test.go) | implemented |
+| `LOGGING-002` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestOpenSpecScenariosRequireGivenWhenThen (internal/app/openspec_scenario_contract_test.go); TestRuntimeLifecycleMetadataAndStructuredLogs (internal/app/runtime_lifecycle_logging_test.go); TestWave6LoggingDebugToggleAndRedactedExport (internal/app/traceability_wave6_ops_contracts_test.go) | implemented |
 | `LOGGING-003` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestWave6LoggingDebugToggleAndRedactedExport (internal/app/traceability_wave6_ops_contracts_test.go) | implemented |
 | `LOGGING-004` | `openspec/specs/general/logging/spec.md` | `openspec/specs/general/logging/spec.md` | TestWave6LoggingDebugToggleAndRedactedExport (internal/app/traceability_wave6_ops_contracts_test.go) | implemented |
 | `LOOKUP-001` | `openspec/specs/inventory/lookup/spec.md` | `openspec/specs/inventory/lookup/spec.md` | TestWave7BarcodeLookupAndVariantDuplicateResolution (internal/app/traceability_wave7_ai_settings_lookup_test.go), TestBarcodeExternalSearchEndpoint (internal/app/barcodes_api_test.go) | implemented |
@@ -486,6 +486,7 @@
 | EXPLORATION-AUTH-SETUP-004 | openspec/specs/general/exploration-auth-setup/spec.md | passkey invalid-domain/origin mismatch diagnosis guidance | docs/auth/exploration-auth-setup.md; planned: docs QA walkthrough for passkey mismatch troubleshooting | partial |
 | EXPLORATION-AUTH-SETUP-005 | openspec/specs/general/exploration-auth-setup/spec.md | local exploratory account bootstrap expectations and example credentials | docs/auth/exploration-auth-setup.md; scripts/runtime/start-exploration-local.ps1; planned: docs QA walkthrough for first-sign-in local bootstrap expectations | partial |
 | EXPLORATION-AUTH-SETUP-006 | openspec/specs/general/exploration-auth-setup/spec.md | repo-level Clerk exploration launcher contract with env preflight and verification targets | docs/auth/exploration-auth-setup.md; scripts/runtime/start-exploration-clerk.ps1; planned: docs QA walkthrough for Clerk launcher contract | partial |
+
 
 
 
