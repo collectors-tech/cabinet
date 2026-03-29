@@ -154,6 +154,7 @@ Cabinet MUST write machine-readable JSONL log files for runtime lifecycle, reque
 #### Scenario: Structured runtime log files during local execution
 - **GIVEN** Cabinet starts successfully with writable data directory
 - **WHEN** runtime lifecycle events occur and HTTP requests are served
-- **THEN** Cabinet MUST append JSONL entries under the active data directory for runtime, access, and error streams
-- **AND** runtime log entries MUST include timestamp, level, event/type, and process/runtime context
+- **THEN** Cabinet MUST create a fresh timestamped JSONL log set under the active data directory's `logs/` subfolder for runtime, access, and error streams on every process start
+- **AND** runtime log entries MUST append only to that process start's own runtime log file and include timestamp, level, event/type, and process/runtime context
 - **AND** access log entries MUST include method, path, status, and duration
+- **AND** fixed shared filenames like `cabinet.runtime.log`, `cabinet.access.log`, and `cabinet.error.log` MUST NOT be reused across multiple starts, and the timestamped files MUST live under that `logs/` subfolder
