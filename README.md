@@ -194,6 +194,9 @@ openspec validate --changes --strict --no-interactive
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
 - `VITE_CLERK_PUBLISHABLE_KEY` enables Clerk sign-in gate and cloud entitlement bootstrap in the web UI
 
+Exploratory auth setup guide:
+- `docs/auth/exploration-auth-setup.md`
+
 eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
 - `ebay_bearer_token`
 - `ebay_marketplace` (example: `EBAY_US`)

@@ -12,6 +12,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `documentation-governance` -> `openspec/specs/general/documentation-governance/spec.md`
 - `entitlements` -> `openspec/specs/general/entitlements/spec.md`
 - `errors` -> `openspec/specs/general/errors/spec.md`
+- `exploration-auth-setup` -> `openspec/specs/general/exploration-auth-setup/spec.md`
 - `future-hooks` -> `openspec/specs/general/future-hooks/spec.md`
 - `licensing` -> `openspec/specs/general/licensing/spec.md`
 - `logging` -> `openspec/specs/general/logging/spec.md`
@@ -53,6 +54,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `DOCUMENTATION-GOVERNANCE-*`
 - `ENTITLEMENTS-*`
 - `ERRORS-*`
+- `EXPLORATION-AUTH-SETUP-*`
 - `FUTURE-HOOKS-*`
 - `LICENSING-*`
 - `LOGGING-*`
