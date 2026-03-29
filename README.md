@@ -65,7 +65,7 @@ This repo is currently worked **direct/manual**.
 - `http://127.0.0.1:17880/api/runtime`
 
 ### Isolated demo / helper instance
-- Runbook: `docs/demo-instance-plan.md`
+- Runbook: `references/demo-instance-plan.md`
 - One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
 
 ## Branch / Demo Promotion Workflow

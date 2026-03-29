@@ -51,6 +51,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/data/import/csv/dry-run",
 		"/api/data/import/csv/apply",
 		"/api/data/reindex",
+		"/api/data/rebuild-thumbnails",
 		"/api/data/repair",
 		"/api/backup/run",
 		"/api/backup/list",

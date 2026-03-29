@@ -1335,6 +1335,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+  /api/data/rebuild-thumbnails:
+    post:
+      tags: [Data]
+      summary: Rebuild all stored thumbnails
+      responses:
+        "200":
+          description: Thumbnail rebuild result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  rebuilt_items:
+                    type: integer
+                  rebuilt_photos:
+                    type: integer
   /api/data/repair:
     post:
       tags: [Data]

@@ -3556,6 +3556,23 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
+	mux.HandleFunc("/api/data/rebuild-thumbnails", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		rebuiltItems, rebuiltPhotos, err := mediaService.RebuildAllThumbnails(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_rebuild_thumbnails"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"rebuilt_items": rebuiltItems,
+			"rebuilt_photos": rebuiltPhotos,
+		})
+	})
 	mux.HandleFunc("/api/data/repair", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
