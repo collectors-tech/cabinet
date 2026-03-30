@@ -303,7 +303,7 @@
 | `UI-SCREEN-SETTINGS-DISPLAY-001` | `openspec/specs/settings/display/spec.md` | `ui.web/cypress/e2e/settings/display/spec.cy.ts` (`UI-SCREEN-SETTINGS-DISPLAY-001 persists sidebar visibility selection`) | implemented |
 | `UI-SCREEN-SETTINGS-DISPLAY-002` | `openspec/specs/settings/display/spec.md` | `ui.web/cypress/e2e/settings/display/spec.cy.ts` (`UI-SCREEN-SETTINGS-DISPLAY-002 requires at least one selected display item`) | implemented |
 | `UI-SCREEN-SETTINGS-DISPLAY-003` | `openspec/specs/settings/display/spec.md` | explicit `Retry` action for display load failure | planned: `ui.web/cypress/e2e/settings/display/spec.cy.ts` (`settings-display-retry`) | partial |
-| `UI-SCREEN-SETTINGS-DISPLAY-004` | `openspec/specs/settings/display/spec.md` | explicit `Clear selection` and `Update display` actions | planned: `ui.web/cypress/e2e/settings/display/spec.cy.ts` (`settings-display-clear-selection`, `settings-display-update`) | partial |
+| `UI-SCREEN-SETTINGS-DISPLAY-004` | `openspec/specs/settings/display/spec.md` | explicit `Clear selection` and `Update display` actions | implemented: `ui.web/cypress/e2e/settings/display/spec.cy.ts` (`UI-SCREEN-SETTINGS-DISPLAY-001 persists sidebar visibility selection`, `UI-SCREEN-SETTINGS-DISPLAY-002 requires at least one selected display item`) | implemented |
 | `UI-SCREEN-USERS-001` | `openspec/specs/users/ui-screen-users/spec.md` | `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` (`UI-SCREEN-USERS-001 reads users table from Cabinet API and supports filter/sort/pagination workflows`) | implemented |
 | `UI-SCREEN-USERS-002` | `openspec/specs/users/ui-screen-users/spec.md` | `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` (`UI-SCREEN-USERS-002 persists add and invite actions through Cabinet API`) | implemented |
 | `UI-SCREEN-USERS-003` | `openspec/specs/users/ui-screen-users/spec.md` | `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` (`UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context`) | implemented |
@@ -486,6 +486,7 @@
 | EXPLORATION-AUTH-SETUP-004 | openspec/specs/general/exploration-auth-setup/spec.md | passkey invalid-domain/origin mismatch diagnosis guidance | docs/auth/exploration-auth-setup.md; planned: docs QA walkthrough for passkey mismatch troubleshooting | partial |
 | EXPLORATION-AUTH-SETUP-005 | openspec/specs/general/exploration-auth-setup/spec.md | local exploratory account bootstrap expectations and example credentials | docs/auth/exploration-auth-setup.md; scripts/runtime/start-exploration-local.ps1; planned: docs QA walkthrough for first-sign-in local bootstrap expectations | partial |
 | EXPLORATION-AUTH-SETUP-006 | openspec/specs/general/exploration-auth-setup/spec.md | repo-level Clerk exploration launcher contract with env preflight and verification targets | docs/auth/exploration-auth-setup.md; scripts/runtime/start-exploration-clerk.ps1; planned: docs QA walkthrough for Clerk launcher contract | partial |
+
 
 
 
