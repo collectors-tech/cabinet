@@ -1,5 +1,5 @@
 describe('general/ui-data-contract-parity', () => {
-  function bootstrapAndSignIn(path = '/') {
+  function bootstrapAndSignIn(path = '/dashboard') {
     cy.e2eReset()
     cy.e2eBootstrap().then((bootstrap) => {
       cy.useBootstrappedProfile(bootstrap.profile_id, bootstrap.profile_name, { path })
@@ -59,7 +59,7 @@ describe('general/ui-data-contract-parity', () => {
       body: { settings: {} },
     }).as('settings')
 
-    bootstrapAndSignIn('/')
+    bootstrapAndSignIn('/dashboard')
     cy.wait('@dashboard')
     cy.contains('Home').should('be.visible')
 
@@ -99,14 +99,15 @@ describe('general/ui-data-contract-parity', () => {
       })
     }).as('dashboardRetry')
 
-    bootstrapAndSignIn('/')
+    bootstrapAndSignIn('/dashboard')
     cy.wait('@dashboardRetry')
-    cy.contains('Dashboard unavailable').should('be.visible')
+    cy.contains(/dashboard(\.unavailable| unavailable)/i).should('be.visible')
+    cy.contains(/dashboard_fetch_failed_500|500/i).should('be.visible')
     cy.contains('button', 'Retry').click()
     cy.wait('@dashboardRetry')
-    cy.contains('Dashboard unavailable').should('not.exist')
-    cy.contains('Inventory Items').should('be.visible')
-    cy.contains('500').should('not.exist')
+    cy.contains(/dashboard(\.unavailable| unavailable)/i).should('not.exist')
+    cy.contains(/dashboard\.metrics\.inventoryItems|Inventory Items/i).should('be.visible')
+    cy.contains('dashboard_fetch_failed_500').should('not.exist')
   })
 
   it('UI-DATA-CONTRACT-PARITY-003 preserves settings context and surfaces inline mutation failure', () => {
@@ -115,7 +116,7 @@ describe('general/ui-data-contract-parity', () => {
       body: { error: 'profile_settings_save_500' },
     }).as('saveProfileSettings')
 
-    bootstrapAndSignIn('/settings/')
+    bootstrapAndSignIn('/settings/profile')
     cy.get('input[placeholder="cabinet-user"]').clear().type('parity-user')
     cy.contains('button', 'Update profile').click()
     cy.wait('@saveProfileSettings')

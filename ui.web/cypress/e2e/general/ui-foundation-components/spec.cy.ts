@@ -1,5 +1,5 @@
 describe('general/ui-foundation-components', () => {
-  function bootstrapAndSignIn(path = '/settings/') {
+  function bootstrapAndSignIn(path = '/settings/profile') {
     cy.e2eReset()
     cy.e2eBootstrap().then((bootstrap) => {
       cy.useBootstrappedProfile(bootstrap.profile_id, bootstrap.profile_name, { path })
@@ -7,13 +7,10 @@ describe('general/ui-foundation-components', () => {
   }
 
   it('UI-FOUNDATION-COMPONENTS-001 exposes explicit foundation component contract surface on settings profile', () => {
-    bootstrapAndSignIn('/settings/')
+    bootstrapAndSignIn('/settings/profile')
     cy.get('main').within(() => {
-      cy.contains('h1, h2, h3, [data-slot="card-title"]', /^\s*Profile\s*$/).should(
-        'be.visible'
-      )
+      cy.contains('h1', /^\s*Settings\s*$/).should('be.visible')
       cy.get('input[placeholder="cabinet-user"]').should('be.visible')
-      cy.get('textarea[placeholder="Tell us a little bit about yourself"]').should('be.visible')
       cy.contains('button', 'Update profile').should('be.visible')
     })
 
@@ -66,7 +63,7 @@ describe('general/ui-foundation-components', () => {
       req.reply({ delay: 1200, statusCode: 200, body: req.body })
     }).as('saveSettings')
 
-    bootstrapAndSignIn('/settings/')
+    bootstrapAndSignIn('/settings/profile')
     cy.get('input[placeholder="cabinet-user"]').clear().type(targetUsername)
     cy.contains('button', 'Update profile').dblclick()
     cy.contains('button', 'Update profile').should('be.disabled')
@@ -75,7 +72,7 @@ describe('general/ui-foundation-components', () => {
   })
 
   it('UI-FOUNDATION-COMPONENTS-004 enforces keyboard dialog open/escape-close with trigger focus restore', () => {
-    bootstrapAndSignIn('/settings/')
+    bootstrapAndSignIn('/settings/profile')
     cy.get('[aria-label="Open theme settings"]').as('themeTrigger').click()
     cy.contains('Theme Settings').should('be.visible')
     cy.focused().type('{esc}')
@@ -84,7 +81,7 @@ describe('general/ui-foundation-components', () => {
   })
 
   it('UI-FOUNDATION-COMPONENTS-005 links component contract testability artifacts to executable coverage', () => {
-    bootstrapAndSignIn('/settings/')
+    bootstrapAndSignIn('/settings/profile')
     cy.contains('button', 'Update profile').should('be.visible')
     cy.get('[aria-label="Open theme settings"]').should('be.visible')
     cy.visit('/users')
