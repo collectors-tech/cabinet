@@ -388,9 +388,6 @@
 
 | UI-SCREEN-USERS-004 | openspec/specs/users/ui-screen-users/spec.md | users add/invite entitlement gating by plan | planned: ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts (Add User visible for Creator/Teams only) | partial |
 
-| UI-SCREEN-DISCOVERIES-004 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | discoveries missing-item detection vs local inventory | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (provider results classified missing vs owned) | partial |
-| UI-SCREEN-DISCOVERIES-005 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | ranked actionable missing candidates | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (missing candidates ranking/filtering + wishlist apply) | partial |
-| UI-SCREEN-DISCOVERIES-006 | openspec/specs/discoveries/ui-screen-discoveries/spec.md | explainable match rationale | planned: ui.web/cypress/e2e/discoveries/ui-screen-discoveries/spec.cy.ts (candidate rationale visibility) | partial |
 
 | DEFAULT-SITE-SEARCH-004 | openspec/specs/integrations/default-site-search/spec.md | provider-bound saved searches with persisted filters and manage lifecycle (create/edit/delete) | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-004 manages provider-bound saved searches with persisted filters`) | implemented |
 | DEFAULT-SITE-SEARCH-005 | openspec/specs/integrations/default-site-search/spec.md | run-now + scheduled refresh execution summaries for saved searches | `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` (`DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh`) | implemented |
