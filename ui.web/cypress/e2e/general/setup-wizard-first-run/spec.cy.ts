@@ -614,10 +614,7 @@ describe('SETUP-WIZ', () => {
     cy.get('input[name="email"]').type('e2e-setup-home@example.com');
     cy.get('input[name="password"]').type('password123');
     cy.contains('button', 'Sign in').click();
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard');
     cy.contains('Home').should('be.visible');
 
     cy.get('[data-testid="setup-wizard"]').should('not.exist');

@@ -16,6 +16,7 @@ type BaseNavItem = {
   title: string
   badge?: string
   icon?: React.ElementType
+  testIdKey?: string
 }
 
 type NavLink = BaseNavItem & {
@@ -32,6 +33,7 @@ type NavItem = NavCollapsible | NavLink
 
 type NavGroup = {
   title: string
+  testIdKey?: string
   items: NavItem[]
 }
 
