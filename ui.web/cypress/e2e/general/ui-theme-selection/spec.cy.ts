@@ -11,7 +11,7 @@ describe('ui-theme-selection', () => {
     cy.get('input[name="email"]').clear().type('e2e-theme@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('eq', '/')
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
   }
 
   beforeEach(() => {
@@ -54,7 +54,7 @@ describe('ui-theme-selection', () => {
   })
 
   it('UI-THEME-SELECTION-003 updates layout density live and persists preference after navigation', () => {
-    cy.location('pathname').should('eq', '/')
+    cy.location('pathname').should('eq', '/dashboard')
 
     cy.get('button[aria-label="Open theme settings"]').click()
     cy.get('[aria-label="Select compact"]').click()
@@ -63,7 +63,7 @@ describe('ui-theme-selection', () => {
     cy.get('[aria-label="Select full layout"]').click()
     cy.getCookie('layout_collapsible').its('value').should('eq', 'offcanvas')
 
-    cy.location('pathname').should('eq', '/')
+    cy.location('pathname').should('eq', '/dashboard')
     cy.visit('/inventory')
     cy.location('pathname').should('match', /^\/inventory\/?$/)
     cy.getCookie('layout_collapsible').its('value').should('eq', 'offcanvas')

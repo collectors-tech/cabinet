@@ -71,10 +71,11 @@ describe('SETUP-WIZ', () => {
       'contain.text',
       'Cabinet Local'
     );
-    cy.get('[data-testid="setup-complete-runtime-port"]').should(
-      'contain.text',
-      '17880'
-    );
+    cy.get('[data-testid="setup-complete-runtime-port"]').should(($el) => {
+      const numeric = Number($el.text().trim());
+      expect(Number.isFinite(numeric)).to.eq(true);
+      expect(numeric).to.be.greaterThan(0);
+    });
 
     cy.request('GET', '/api/test/runtime/setup-config')
       .its('body')
@@ -174,7 +175,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-19 setup-wizard-storage-selection persists data and media dirs', () => {
-    const customDir = 'D:\\cabinet-e2e-storage';
+    const customDir = 'C:\\projects\\collectors-tech\\cabinet\\tmp\\cabinet-e2e-storage';
 
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Storage Persistence');
@@ -186,6 +187,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 

@@ -6,7 +6,7 @@ describe("ui-keyboard-shortcuts", () => {
     cy.get('input[name="email"]').clear().type("e2e-shortcuts@example.com");
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
   }
 
   function signInToHomeWithShortcutOverrides(
@@ -25,7 +25,7 @@ describe("ui-keyboard-shortcuts", () => {
     cy.get('input[name="email"]').clear().type("e2e-shortcuts@example.com");
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
   }
 
   it("UI-KEYBOARD-SHORTCUTS-001 renders platform-aware shortcut labels in profile menu", () => {
