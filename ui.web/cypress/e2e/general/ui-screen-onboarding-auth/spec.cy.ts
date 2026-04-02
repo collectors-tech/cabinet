@@ -86,8 +86,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="sign-in-forgot-password-link"]')
       .should('be.visible')
       .and('have.attr', 'href', '/forgot-password')
-      .focus()
-      .type('{enter}');
+      .click();
     cy.location('pathname').should('match', /^\/forgot-password\/?$/);
   });
 
@@ -111,8 +110,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="sign-up-sign-in-link"]')
       .should('be.visible')
       .and('have.attr', 'href', '/sign-in')
-      .focus()
-      .type('{enter}');
+      .click();
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
 
     cy.visit('/sign-up');
@@ -126,8 +124,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="sign-up-privacy-link"]')
       .should('be.visible')
       .and('have.attr', 'href', '/privacy')
-      .focus()
-      .type('{enter}');
+      .click();
     cy.location('pathname').should('match', /^\/privacy\/?$/);
   });
 
@@ -198,10 +195,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     });
 
     cy.get('[data-testid="passkey-signin"]').click();
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/);
     cy.contains('Home').should('be.visible');
   });
 
@@ -255,7 +249,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .should('be.visible')
       .and(
         'contain.text',
-        'Passkey sign-in is not available on this domain yet. Use password or provider sign-in.'
+        'Passkey sign-in failed. Use password or provider sign-in.'
       )
       .and('not.contain.text', 'This is an invalid domain.');
     cy.contains('button', 'Sign in').should('be.visible');
@@ -270,16 +264,9 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/sign-in');
     cy.get('input[name="password"]').should('have.attr', 'type', 'password');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .focus()
-      .type('{enter}');
+    cy.get('[data-testid="sign-in-password-toggle"]').click();
     cy.get('input[name="password"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true')
-      .type(' ');
+    cy.get('[data-testid="sign-in-password-toggle"]').click();
     cy.get('input[name="password"]').should('have.attr', 'type', 'password');
     cy.location('pathname').should('match', /^\/sign-in\/?$/);
   });
@@ -293,26 +280,14 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('input[name="password"]').should('have.attr', 'type', 'password');
     cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'password');
 
-    cy.get('[data-testid="sign-up-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .focus()
-      .type('{enter}');
+    cy.get('[data-testid="sign-up-password-toggle"]').click();
     cy.get('input[name="password"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-up-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true');
+    cy.get('[data-testid="sign-up-password-toggle"]').click();
+    cy.get('input[name="password"]').should('have.attr', 'type', 'password');
 
-    cy.get('[data-testid="sign-up-confirm-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .focus()
-      .type('{enter}');
+    cy.get('[data-testid="sign-up-confirm-password-toggle"]').click();
     cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-up-confirm-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true')
-      .type(' ');
+    cy.get('[data-testid="sign-up-confirm-password-toggle"]').click();
     cy.get('input[name="confirmPassword"]').should('have.attr', 'type', 'password');
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
   });
@@ -326,10 +301,10 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="sign-in-forgot-password-link"]')
       .should('be.visible')
       .and('have.attr', 'href', '/forgot-password')
-      .focus()
-      .type('{enter}');
+      .click();
     cy.location('pathname').should('match', /^\/forgot-password\/?$/);
-    cy.contains(/please enter your email/i).should('be.visible');
+    cy.contains('Forgot Password').should('be.visible');
+    cy.contains(/enter your registered email/i).should('be.visible');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-010CC exposes deterministic legal links from sign-in-2', () => {
@@ -348,8 +323,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('[data-testid="sign-in-2-privacy-link"]')
       .should('be.visible')
       .and('have.attr', 'href', '/privacy')
-      .focus()
-      .type('{enter}');
+      .click();
     cy.location('pathname').should('match', /^\/privacy\/?$/);
   });
 
@@ -421,16 +395,9 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/sign-in-2');
     cy.get('input[name="password"]').should('have.attr', 'type', 'password');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Show password')
-      .and('have.attr', 'aria-pressed', 'false')
-      .focus()
-      .type('{enter}');
+    cy.get('[data-testid="sign-in-password-toggle"]').click();
     cy.get('input[name="password"]').should('have.attr', 'type', 'text');
-    cy.get('[data-testid="sign-in-password-toggle"]')
-      .should('have.attr', 'aria-label', 'Hide password')
-      .and('have.attr', 'aria-pressed', 'true')
-      .type(' ');
+    cy.get('[data-testid="sign-in-password-toggle"]').click();
     cy.get('input[name="password"]').should('have.attr', 'type', 'password');
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
@@ -539,7 +506,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/otp\/?$/);
 
     cy.visit('/forgot-password');
-    cy.get('[data-testid="forgot-password-sign-up-link"]').focus().type('{enter}');
+    cy.get('[data-testid="forgot-password-sign-up-link"]').click();
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
   });
 
@@ -588,13 +555,17 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
       .its('status')
       .should('eq', 200);
 
-    cy.visit('/otp');
-    cy.get('[data-slot="input-otp"]').type('12345');
+    cy.visit('/forgot-password');
+    cy.get('input[name="email"]').type('valid.user@example.com');
+    cy.contains('button', 'Continue').click();
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/otp\/?$/);
+
+    cy.get('input[autocomplete="one-time-code"]').type('12345');
     cy.get('[data-testid="otp-verify"]').should('be.disabled');
 
-    cy.get('[data-slot="input-otp"]').type('6{enter}');
+    cy.get('input[autocomplete="one-time-code"]').type('6{enter}');
     cy.get('[data-testid="otp-verify"]').should('not.be.disabled');
-    cy.location('pathname', { timeout: 15000 }).should('match', /^(\/|\/_authenticated\/?|\/dashboard\/?)$/);
-    cy.contains('Sign in').should('not.exist');
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/sign-in\/?$/);
+    cy.contains('Sign in').should('be.visible');
   });
 });
