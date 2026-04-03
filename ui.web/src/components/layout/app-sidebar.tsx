@@ -1,8 +1,21 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Pencil, X } from 'lucide-react'
-import { useLayout } from '@/context/layout-provider'
-import { useAuthStore } from '@/stores/auth-store'
+import { useRouterState } from '@tanstack/react-router'
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Inbox,
+  MessageSquare,
+  PanelLeft,
+  Pencil,
+  X,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { useLayout } from '@/context/layout-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
   Sidebar,
   SidebarContent,
@@ -12,10 +25,10 @@ import {
 } from '@/components/ui/sidebar'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
-import { type NavCollapsible, type NavItem } from './types'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
+import { type NavCollapsible, type NavItem } from './types'
 
 type NavPreference = {
   order: number
@@ -34,7 +47,10 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
     return order
   }
 
-  const clampedTargetIndex = Math.max(0, Math.min(targetIndex, order.length - 1))
+  const clampedTargetIndex = Math.max(
+    0,
+    Math.min(targetIndex, order.length - 1)
+  )
   if (fromIndex === clampedTargetIndex) {
     return order
   }
@@ -48,6 +64,14 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { t } = useTranslation('nav')
+  const { activeProfileId, activeWorkspace, setActiveWorkspace } =
+    useShellWorkspace()
+  const location = useRouterState({
+    select: (state) => ({
+      pathname: state.location.pathname,
+      search: state.location.searchStr,
+    }),
+  })
   const authUser = useAuthStore((state) => state.auth.user)
   const sidebarUser = authUser
     ? {
@@ -65,7 +89,9 @@ export function AppSidebar() {
     key: string
     position: 'before' | 'after'
   } | null>(null)
-  const [navPreferences, setNavPreferences] = useState<Record<string, NavPreference>>(() => {
+  const [navPreferences, setNavPreferences] = useState<
+    Record<string, NavPreference>
+  >(() => {
     try {
       const raw = window.localStorage.getItem(GLOBAL_NAV_PREFERENCES_KEY)
       if (!raw) {
@@ -132,14 +158,19 @@ export function AppSidebar() {
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
     const storageKey = `cabinet.nav.preferences.${profileScope}`
-    window.localStorage.setItem(GLOBAL_NAV_PREFERENCES_KEY, JSON.stringify(navPreferences))
+    window.localStorage.setItem(
+      GLOBAL_NAV_PREFERENCES_KEY,
+      JSON.stringify(navPreferences)
+    )
     window.localStorage.setItem(storageKey, JSON.stringify(navPreferences))
   }, [authUser?.accountNo, authUser?.email, navPreferences])
 
   const primaryItems = sidebarData.navGroups[0]?.items ?? []
   const orderForPrimaryItem = (item: NavItem) => {
     const key = navKeyForTitle(item.title)
-    const defaultOrder = primaryItems.findIndex((candidate) => candidate.title === item.title)
+    const defaultOrder = primaryItems.findIndex(
+      (candidate) => candidate.title === item.title
+    )
     return navPreferences[key]?.order ?? defaultOrder
   }
 
@@ -159,7 +190,10 @@ export function AppSidebar() {
     })
   }
 
-  const handleNavDragStart = (key: string, event: DragEvent<HTMLButtonElement>) => {
+  const handleNavDragStart = (
+    key: string,
+    event: DragEvent<HTMLButtonElement>
+  ) => {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', key)
     setDraggedNavKey(key)
@@ -223,16 +257,17 @@ export function AppSidebar() {
   const orderedPrimaryItems = [...primaryItems].sort(
     (left, right) => orderForPrimaryItem(left) - orderForPrimaryItem(right)
   )
-  const orderedPrimaryKeys = orderedPrimaryItems.map((item) => navKeyForTitle(item.title))
+  const orderedPrimaryKeys = orderedPrimaryItems.map((item) =>
+    navKeyForTitle(item.title)
+  )
   const primaryItemsByKey = new Map(
     primaryItems.map((item) => [navKeyForTitle(item.title), item] as const)
   )
 
-  const configuredPrimaryItems = orderedPrimaryItems
-    .filter((item) => {
-      const key = navKeyForTitle(item.title)
-      return !navPreferences[key]?.hidden
-    })
+  const configuredPrimaryItems = orderedPrimaryItems.filter((item) => {
+    const key = navKeyForTitle(item.title)
+    return !navPreferences[key]?.hidden
+  })
 
   const translateItem = (item: NavItem): NavItem => {
     if ('items' in item) {
@@ -259,30 +294,126 @@ export function AppSidebar() {
     }
   }
 
-  const sidebarGroupsWithPreferences = sidebarData.navGroups.map((group, index) => ({
-    ...group,
-    items: index === 0 ? configuredPrimaryItems : group.items,
-  }))
+  const sidebarGroupsWithPreferences = sidebarData.navGroups.map(
+    (group, index) => ({
+      ...group,
+      items: index === 0 ? configuredPrimaryItems : group.items,
+    })
+  )
 
   const translatedNavGroups = sidebarGroupsWithPreferences.map((group) => ({
     ...group,
-    title: t(`groups.${normalizeNavKey(group.title)}`, { defaultValue: group.title }),
+    title: t(`groups.${normalizeNavKey(group.title)}`, {
+      defaultValue: group.title,
+    }),
     items: group.items.map(translateItem),
   }))
+
+  const workspaceRouteContext = `${location.pathname || '/'}${location.search || ''}`
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
         <TeamSwitcher teams={sidebarData.teams} />
+        <div className='px-2 pb-2' data-testid='shell-workspace-switcher'>
+          <p className='mb-2 text-xs font-medium text-muted-foreground'>
+            Workspace
+          </p>
+          <div className='grid grid-cols-3 gap-2'>
+            <button
+              type='button'
+              data-testid='shell-workspace-navigation'
+              data-active={activeWorkspace === 'navigation' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('navigation')}
+            >
+              <PanelLeft className='h-3.5 w-3.5' />
+              Nav
+            </button>
+            <button
+              type='button'
+              data-testid='shell-workspace-assistant'
+              data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('assistant')}
+            >
+              <MessageSquare className='h-3.5 w-3.5' />
+              Assistant
+            </button>
+            <button
+              type='button'
+              data-testid='shell-workspace-inbox'
+              data-active={activeWorkspace === 'inbox' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('inbox')}
+            >
+              <Inbox className='h-3.5 w-3.5' />
+              Inbox
+            </button>
+          </div>
+        </div>
 
         {/* Replace <TeamSwitch /> with the following <AppTitle />
          /* if you want to use the normal app title instead of TeamSwitch dropdown */}
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {translatedNavGroups.map((props) => (
-          <NavGroup key={props.title} {...props} />
-        ))}
+        {activeWorkspace === 'navigation'
+          ? translatedNavGroups.map((props) => (
+              <NavGroup key={props.title} {...props} />
+            ))
+          : null}
+        {activeWorkspace === 'assistant' ? (
+          <div
+            className='space-y-3 px-2 py-2'
+            data-testid='shell-assistant-workspace'
+          >
+            <div
+              className='rounded-md border bg-card p-3'
+              data-testid='shell-chat-rail'
+            >
+              <h2 className='font-semibold'>Assistant Workspace</h2>
+              <p className='mt-2 text-sm text-muted-foreground'>
+                Persistent route-aware helper workspace for guided actions.
+              </p>
+              <dl className='mt-3 space-y-2 text-xs text-muted-foreground'>
+                <div>
+                  <dt className='font-medium text-foreground'>Profile scope</dt>
+                  <dd data-testid='shell-assistant-profile-scope'>
+                    {activeProfileId}
+                  </dd>
+                </div>
+                <div>
+                  <dt className='font-medium text-foreground'>Current route</dt>
+                  <dd data-testid='shell-assistant-route-context'>
+                    {workspaceRouteContext}
+                  </dd>
+                </div>
+              </dl>
+              <p
+                className='mt-3 text-xs text-muted-foreground'
+                data-testid='shell-assistant-boundary-note'
+              >
+                Thread continuity persists across authenticated route changes
+                until an explicit reset boundary.
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {activeWorkspace === 'inbox' ? (
+          <div
+            className='space-y-3 px-2 py-2'
+            data-testid='shell-inbox-workspace'
+          >
+            <div className='rounded-md border bg-card p-3'>
+              <h2 className='font-semibold'>Inbox Workspace</h2>
+              <p className='mt-2 text-sm text-muted-foreground'>
+                Notifications and asynchronous assistant outcomes will surface
+                here.
+              </p>
+            </div>
+          </div>
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
         <div className='px-2 pb-2'>
@@ -312,7 +443,11 @@ export function AppSidebar() {
               })
             }}
           >
-            {navEditMode ? <X className='h-4 w-4' /> : <Pencil className='h-4 w-4' />}
+            {navEditMode ? (
+              <X className='h-4 w-4' />
+            ) : (
+              <Pencil className='h-4 w-4' />
+            )}
           </button>
           {navEditMode ? (
             <div
@@ -325,7 +460,10 @@ export function AppSidebar() {
                   return null
                 }
                 const hidden = navPreferences[key]?.hidden ?? false
-                const dragPosition = dragOverNavTarget?.key === key ? dragOverNavTarget.position : null
+                const dragPosition =
+                  dragOverNavTarget?.key === key
+                    ? dragOverNavTarget.position
+                    : null
                 return (
                   <div
                     key={key}
@@ -357,12 +495,20 @@ export function AppSidebar() {
                           aria-label={`Drag ${item.title}`}
                           data-testid={`sidebar-nav-drag-handle-${key}`}
                           className='cursor-grab rounded border p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing'
-                          onDragStart={(event) => handleNavDragStart(key, event)}
+                          onDragStart={(event) =>
+                            handleNavDragStart(key, event)
+                          }
                           onDragEnd={clearNavDragState}
                         >
                           <GripVertical className='h-3 w-3' />
                         </button>
-                        <span className={hidden ? 'truncate opacity-50' : 'truncate'}>{item.title}</span>
+                        <span
+                          className={
+                            hidden ? 'truncate opacity-50' : 'truncate'
+                          }
+                        >
+                          {item.title}
+                        </span>
                       </div>
                       <div className='flex items-center gap-1'>
                         <button
@@ -413,10 +559,16 @@ export function AppSidebar() {
           data-testid='sidebar-runtime-meta'
         >
           <p>
-            Version: <span data-testid='sidebar-app-version'>{runtimeMeta.appVersion}</span>
+            Version:{' '}
+            <span data-testid='sidebar-app-version'>
+              {runtimeMeta.appVersion}
+            </span>
           </p>
           <p>
-            Build Date: <span data-testid='sidebar-build-date'>{runtimeMeta.buildDate}</span>
+            Build Date:{' '}
+            <span data-testid='sidebar-build-date'>
+              {runtimeMeta.buildDate}
+            </span>
           </p>
         </div>
       </SidebarFooter>
