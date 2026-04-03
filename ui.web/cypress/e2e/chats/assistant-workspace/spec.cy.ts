@@ -42,9 +42,39 @@ describe('chats/assistant-workspace', () => {
       expect(request.body.context.route.pathname).to.eq('/inventory/')
       expect(request.body.context.profile.id).to.eq('e2e-profile-001')
       expect(request.body.context.selection.active_workspace_collection).to.eq('All Items')
+      expect(request.body.context.assistant.provider).to.eq('openai')
+      expect(request.body.context.assistant.model).to.eq('gpt-4o-mini')
     })
     cy.contains('[data-testid="shell-assistant-message-list"]', 'what should I do with this inventory route?').should(
       'be.visible'
     )
+  })
+
+  it('ASSISTANT-WORKSPACE-003 changes provider/model with deterministic forked-thread semantics', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/threads').as('assistantThreadCreate')
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-id"]').invoke('text').as('originalThreadId')
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'openai')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'gpt-4o-mini')
+
+    cy.get('[data-testid="shell-assistant-provider-select"]').select('anthropic')
+    cy.wait('@assistantThreadCreate').then(({ request }) => {
+      expect(request.body.metadata.provider).to.eq('anthropic')
+      expect(request.body.metadata.model).to.eq('claude-3-5-haiku')
+      expect(request.body.metadata.thread_semantics).to.eq('fork_on_provider_model_change')
+      cy.get('@originalThreadId').then((originalThreadId) => {
+        expect(request.body.metadata.forked_from_thread_id).to.eq(String(originalThreadId).trim())
+      })
+    })
+
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'anthropic')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'claude-3-5-haiku')
+    cy.get('[data-testid="shell-assistant-thread-semantics"]').should('contain', 'fork a new assistant thread')
+    cy.get('@originalThreadId').then((originalThreadId) => {
+      cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
+        expect($next.text().trim()).not.to.eq(String(originalThreadId).trim())
+      })
+    })
   })
 })

@@ -24,7 +24,7 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 		t.Fatalf("decode profile: %v", err)
 	}
 
-	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Main Thread"}`), map[string]string{"Content-Type": "application/json"})
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Main Thread","metadata":{"provider":"openai","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
 	if threadResp.Code != http.StatusCreated {
 		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
 	}

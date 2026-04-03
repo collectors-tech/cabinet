@@ -3399,14 +3399,15 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"threads": threads})
 		case http.MethodPost:
 			var req struct {
-				ProfileID string `json:"profile_id"`
-				Title     string `json:"title"`
+				ProfileID string         `json:"profile_id"`
+				Title     string         `json:"title"`
+				Metadata  map[string]any `json:"metadata"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			thread, err := chatSvc.CreateThread(r.Context(), req.ProfileID, req.Title)
+			thread, err := chatSvc.CreateThread(r.Context(), req.ProfileID, req.Title, req.Metadata)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_thread"}`, http.StatusBadRequest)
 				return

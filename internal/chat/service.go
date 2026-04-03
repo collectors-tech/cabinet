@@ -20,11 +20,12 @@ type Service struct {
 }
 
 type Thread struct {
-	ID        string `json:"id"`
-	ProfileID string `json:"profile_id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        string         `json:"id"`
+	ProfileID string         `json:"profile_id"`
+	Title     string         `json:"title"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
 }
 
 type Message struct {
@@ -86,7 +87,7 @@ func NewService(db *sql.DB, dataDir string) *Service {
 	return &Service{db: db, dataDir: dataDir}
 }
 
-func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Thread, error) {
+func (s *Service) CreateThread(ctx context.Context, profileID, title string, metadata map[string]any) (Thread, error) {
 	profileID = strings.TrimSpace(profileID)
 	title = strings.TrimSpace(title)
 	if profileID == "" {
@@ -96,10 +97,11 @@ func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Th
 		return Thread{}, fmt.Errorf("title is required")
 	}
 	id := uuid.NewString()
+	metadataJSON := marshalContextJSON(metadata)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO chat_threads(id, profile_id, title)
-		VALUES (?, ?, ?)
-	`, id, profileID, title); err != nil {
+		INSERT INTO chat_threads(id, profile_id, title, metadata_json)
+		VALUES (?, ?, ?, ?)
+	`, id, profileID, title, metadataJSON); err != nil {
 		return Thread{}, fmt.Errorf("create thread: %w", err)
 	}
 	return s.GetThread(ctx, profileID, id)
@@ -108,7 +110,7 @@ func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Th
 func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, error) {
 	profileID = strings.TrimSpace(profileID)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, profile_id, title, created_at, updated_at
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
 		FROM chat_threads
 		WHERE profile_id = ?
 		ORDER BY updated_at DESC, created_at DESC
@@ -120,9 +122,11 @@ func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, 
 	var out []Thread
 	for rows.Next() {
 		var t Thread
-		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
+		t.Metadata = parseContextJSON(metadataJSON)
 		out = append(out, t)
 	}
 	return out, rows.Err()
@@ -130,17 +134,19 @@ func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, 
 
 func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Thread, error) {
 	var t Thread
+	var metadataJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, title, created_at, updated_at
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
 		FROM chat_threads
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(threadID), strings.TrimSpace(profileID)).Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt)
+	`, strings.TrimSpace(threadID), strings.TrimSpace(profileID)).Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Thread{}, fmt.Errorf("thread not found")
 		}
 		return Thread{}, err
 	}
+	t.Metadata = parseContextJSON(metadataJSON)
 	return t, nil
 }
 
