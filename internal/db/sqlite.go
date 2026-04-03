@@ -346,6 +346,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
 			title TEXT NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
@@ -358,6 +359,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
 			attachments_json TEXT NOT NULL DEFAULT '[]',
+			context_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
@@ -559,6 +561,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, conn, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure tracked_items.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "chat_messages", "context_json", "TEXT NOT NULL DEFAULT '{}' "); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_messages.context_json: %w", err)
+	}
+	if err := ensureColumn(ctx, conn, "chat_threads", "metadata_json", "TEXT NOT NULL DEFAULT '{}' "); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_threads.metadata_json: %w", err)
 	}
 	if err := ensureColumn(ctx, conn, "price_snapshots", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
 		conn.Close()

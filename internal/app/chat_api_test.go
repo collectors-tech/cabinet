@@ -24,7 +24,7 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 		t.Fatalf("decode profile: %v", err)
 	}
 
-	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Main Thread"}`), map[string]string{"Content-Type": "application/json"})
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Main Thread","metadata":{"provider":"openai","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
 	if threadResp.Code != http.StatusCreated {
 		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
 	}
@@ -43,14 +43,20 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 		t.Fatalf("list threads status=%d body=%s", threadsList.Code, threadsList.Body.String())
 	}
 
-	msgResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"hello"}`), map[string]string{"Content-Type": "application/json"})
+	msgResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"hello","context":{"route":{"pathname":"/inventory","search":"?tab=all"},"profile":{"id":"`+p.ID+`"},"selection":{"active_workspace_collection":"All Items"}}}`), map[string]string{"Content-Type": "application/json"})
 	if msgResp.Code != http.StatusCreated {
 		t.Fatalf("create message status=%d body=%s", msgResp.Code, msgResp.Body.String())
+	}
+	if !strings.Contains(msgResp.Body.String(), `"pathname":"/inventory"`) {
+		t.Fatalf("expected message response to include route context, body=%s", msgResp.Body.String())
 	}
 
 	msgList := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
 	if msgList.Code != http.StatusOK {
 		t.Fatalf("list messages status=%d body=%s", msgList.Code, msgList.Body.String())
+	}
+	if !strings.Contains(msgList.Body.String(), `"active_workspace_collection":"All Items"`) {
+		t.Fatalf("expected listed messages to retain selection context, body=%s", msgList.Body.String())
 	}
 
 	// Must reject attachment calls that do not include explicit multipart file input.

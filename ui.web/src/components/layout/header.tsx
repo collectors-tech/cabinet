@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -12,7 +13,8 @@ type HeaderProps = React.HTMLAttributes<HTMLElement> & {
 
 export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
-  const [chatRailOpen, setChatRailOpen] = useState(false)
+  const { activeWorkspace, toggleAssistantWorkspace } = useShellWorkspace()
+  const assistantActive = activeWorkspace === 'assistant'
 
   useEffect(() => {
     const onScroll = () => {
@@ -50,31 +52,24 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
         <Button
           data-testid='shell-chat-toggle'
           type='button'
-          variant='outline'
+          variant={assistantActive ? 'default' : 'outline'}
           size='icon'
-          aria-label={chatRailOpen ? 'Close chat rail' : 'Open chat rail'}
-          title={chatRailOpen ? 'Close chat rail' : 'Open chat rail'}
-          onClick={() => setChatRailOpen((open) => !open)}
+          aria-label={
+            assistantActive
+              ? 'Return to navigation workspace'
+              : 'Open assistant workspace'
+          }
+          title={
+            assistantActive
+              ? 'Return to navigation workspace'
+              : 'Open assistant workspace'
+          }
+          onClick={toggleAssistantWorkspace}
           className='shrink-0'
         >
           <MessageSquare className='h-4 w-4' />
         </Button>
       </div>
-      {chatRailOpen ? (
-        <aside
-          data-testid='shell-chat-rail'
-          className='fixed top-20 right-4 z-50 w-full max-w-md rounded-lg border bg-background p-4 shadow-lg'
-        >
-          <h2 className='font-semibold'>Chat Copilot</h2>
-          <p className='mt-2 text-sm text-muted-foreground'>
-            Keep route context while opening quick chat access from the
-            workspace header.
-          </p>
-          <p className='mt-2 text-sm text-muted-foreground'>
-            Open the dedicated Chats page for full thread management.
-          </p>
-        </aside>
-      ) : null}
     </header>
   )
 }
