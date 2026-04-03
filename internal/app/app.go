@@ -55,7 +55,7 @@ import (
 )
 
 func startupMigrationTimeout() time.Duration {
-	const defaultTimeout = 10 * time.Second
+	const defaultTimeout = 30 * time.Second
 	value := strings.TrimSpace(os.Getenv("CABINET_STARTUP_TIMEOUT_SECONDS"))
 	if value == "" {
 		return defaultTimeout
