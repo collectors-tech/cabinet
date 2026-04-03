@@ -77,4 +77,56 @@ describe('chats/assistant-workspace', () => {
       })
     })
   })
+
+  it('ASSISTANT-WORKSPACE-004 applies explicit reset boundaries for manual new-thread and active profile changes', () => {
+    cy.request('POST', '/api/test/reset', {})
+    cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
+      expect(primaryResp.status).to.eq(201)
+      const primaryID = primaryResp.body.id as string
+
+      cy.request('POST', '/api/profiles', { name: 'Showcase DB' }).then((showcaseResp) => {
+        expect(showcaseResp.status).to.eq(201)
+        const showcaseID = showcaseResp.body.id as string
+
+        cy.request('PUT', '/api/profiles/active', { profile_id: primaryID }).its('status').should('eq', 200)
+        cy.visit('/sign-in?redirect=%2Finventory%2F', {
+          onBeforeLoad(win) {
+            win.localStorage.setItem(`cabinet.workspace.${primaryID}`, '1')
+          },
+        })
+        cy.get('input[name="email"]').clear().type('e2e-login-session@example.com')
+        cy.get('input[name="password"]').clear().type('password123')
+        cy.contains('button', 'Sign in').click()
+        cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+        cy.get('[data-testid="shell-chat-toggle"]').click()
+        cy.get('[data-testid="shell-assistant-compose-input"]').type('primary profile message')
+        cy.get('[data-testid="shell-assistant-send-button"]').click()
+        cy.contains('[data-testid="shell-assistant-message-list"]', 'primary profile message').should('be.visible')
+        cy.get('[data-testid="shell-assistant-thread-id"]').invoke('text').as('primaryThreadId')
+
+        cy.intercept('POST', '/api/chat/threads').as('assistantResetThread')
+        cy.get('[data-testid="shell-assistant-new-thread"]').click()
+        cy.wait('@assistantResetThread').then(({ request }) => {
+          expect(request.body.metadata.thread_semantics).to.eq('manual_new_thread')
+        })
+        cy.get('@primaryThreadId').then((primaryThreadId) => {
+          cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
+            expect($next.text().trim()).not.to.eq(String(primaryThreadId).trim())
+          })
+        })
+        cy.contains('[data-testid="shell-assistant-message-list"]', 'primary profile message').should('not.exist')
+
+        cy.request('PUT', '/api/profiles/active', { profile_id: showcaseID }).its('status').should('eq', 200)
+        cy.reload()
+        cy.get('[data-testid="active-profile-name"]', { timeout: 20000 }).should('contain', 'Showcase DB')
+        cy.get('[data-testid="shell-chat-toggle"]').click()
+        cy.get('[data-testid="shell-assistant-profile-scope"]').should('eq', showcaseID)
+        cy.contains('[data-testid="shell-assistant-message-list"]', 'primary profile message').should('not.exist')
+        cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
+          expect($next.text().trim()).not.to.eq('')
+        })
+      })
+    })
+  })
 })

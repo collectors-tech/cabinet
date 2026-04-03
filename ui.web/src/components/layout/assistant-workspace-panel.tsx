@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouterState } from '@tanstack/react-router'
-import { GitBranchPlus, Send } from 'lucide-react'
+import { GitBranchPlus, RotateCcw, Send } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import { Button } from '@/components/ui/button'
@@ -133,12 +133,15 @@ export function AssistantWorkspacePanel() {
     profileId: string,
     nextProvider: string,
     nextModel: string,
-    forkedFromThreadId = ''
+    options?: { semantics?: string; forkedFromThreadId?: string }
   ) {
+    const semantics =
+      options?.semantics?.trim() || 'assistant_workspace_session'
+    const forkedFromThreadId = options?.forkedFromThreadId?.trim() || ''
     const metadata: ThreadMetadata = {
       provider: nextProvider,
       model: nextModel,
-      thread_semantics: 'fork_on_provider_model_change',
+      thread_semantics: semantics,
     }
     if (forkedFromThreadId.trim()) {
       metadata.forked_from_thread_id = forkedFromThreadId.trim()
@@ -288,7 +291,10 @@ export function AssistantWorkspacePanel() {
         activeProfileId,
         nextProvider,
         nextModel,
-        previousThreadId
+        {
+          semantics: 'fork_on_provider_model_change',
+          forkedFromThreadId: previousThreadId,
+        }
       )
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
@@ -315,12 +321,41 @@ export function AssistantWorkspacePanel() {
         activeProfileId,
         provider,
         nextModel,
-        previousThreadId
+        {
+          semantics: 'fork_on_provider_model_change',
+          forkedFromThreadId: previousThreadId,
+        }
       )
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'failed_to_change_assistant_model'
+      )
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function handleNewThread() {
+    if (!activeProfileId) {
+      return
+    }
+    setSending(true)
+    setError('')
+    try {
+      const newThreadId = await createAssistantThread(
+        activeProfileId,
+        provider,
+        model,
+        {
+          semantics: 'manual_new_thread',
+        }
+      )
+      setDraft('')
+      await loadMessages(activeProfileId, newThreadId)
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'failed_to_reset_assistant_thread'
       )
     } finally {
       setSending(false)
@@ -445,20 +480,33 @@ export function AssistantWorkspacePanel() {
           className='mt-2 text-xs text-muted-foreground'
           data-testid='shell-assistant-thread-semantics'
         >
-          Provider/model changes fork a new assistant thread and record the
-          resulting provider/model in thread metadata.
+          Provider/model changes fork a new assistant thread; manual reset
+          creates a clean thread for the current profile.
         </p>
       </div>
 
       <div className='rounded-md border bg-card p-3'>
         <div className='mb-2 flex items-center justify-between gap-2'>
           <p className='text-sm font-medium'>Assistant Thread</p>
-          <span
-            className='text-xs text-muted-foreground'
-            data-testid='shell-assistant-thread-id'
-          >
-            {threadId || 'bootstrapping'}
-          </span>
+          <div className='flex items-center gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              data-testid='shell-assistant-new-thread'
+              onClick={() => void handleNewThread()}
+              disabled={loading || sending || !activeProfileId}
+            >
+              <RotateCcw className='mr-1 h-3.5 w-3.5' />
+              New Thread
+            </Button>
+            <span
+              className='text-xs text-muted-foreground'
+              data-testid='shell-assistant-thread-id'
+            >
+              {threadId || 'bootstrapping'}
+            </span>
+          </div>
         </div>
         <div className='mb-2 flex items-center gap-2 text-xs text-muted-foreground'>
           <GitBranchPlus className='h-3.5 w-3.5' />
