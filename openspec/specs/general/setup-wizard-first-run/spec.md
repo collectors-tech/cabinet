@@ -334,7 +334,7 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 
 #### Scenario: Authenticated home
 - **GIVEN** user is authenticated and app shell is loaded
-- **WHEN** home/dashboard renders
+- **WHEN** canonical authenticated dashboard renders
 - **THEN** setup starter controls (`Start Setup`, `Import Existing Collection`, `Use Sample Data`, etc.) MUST NOT render in home card region
 
 ## Use-Case IDs and E2E Mapping
@@ -344,7 +344,7 @@ Completion step MUST show resolved runtime/location summary and explicit post-se
 | UC-SW-02 | Existing config startup | Wizard skipped; normal auth/shell loads | planned: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `setup-wizard-existing-config-skip` |
 | UC-SW-03 | Step navigation | Progress + prev/next/save controls behave deterministically | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-03 setup-wizard-step-controls preserves step form state while navigating previous/next` |
 | UC-SW-04 | Completion state | Config-complete screen shows start action and no registration template copy | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-04 setup-wizard-completion-state shows runtime and storage details with start action` |
-| UC-SW-05 | Dashboard guard | Home contains no embedded setup starter card | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home` |
+| UC-SW-05 | Dashboard guard | Dashboard contains no embedded setup starter card | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-05 setup-wizard-not-in-home-shell keeps starter setup controls out of authenticated home` |
 | UC-SW-06 | Progress template parity | Step header shows `STEP X OF N` + progress %, footer actions match step state | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-06 setup-wizard-progress-template shows step header, percentage, and footer actions` |
 | UC-SW-07 | Final complete transition | `Complete` transitions to `Config complete` + `Start App` action | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-07 setup-wizard-complete-to-launch transitions to config complete with start action` |
 | UC-SW-08 | Initial config schema write | `cabinet.json` contains deterministic required sections/fields after completion | implemented: `ui.web/cypress/e2e/general/setup-wizard-first-run/spec.cy.ts` `UC-SW-08 setup-wizard-config-schema-write persists deterministic cabinet.json payload`; `internal/app/runtime_setup_api_test.go` `TestRuntimeSetupStatusAndCompleteContract` |
@@ -390,3 +390,4 @@ UI test harness MUST provide deterministic setup handling so route tests are not
 - **GIVEN** test suite explicitly validates first-run behavior
 - **WHEN** setup gate is active
 - **THEN** harness MUST complete setup flow via deterministic helper before continuing route-level assertions
+

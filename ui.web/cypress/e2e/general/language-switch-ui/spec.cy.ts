@@ -2,11 +2,11 @@ describe('language-switch-ui', () => {
   function signInToHome() {
     cy.clearCookies()
     cy.clearLocalStorage()
-    cy.visit('/sign-in?redirect=%2F')
+    cy.visit('/sign-in?redirect=%2Fdashboard')
     cy.get('input[name="email"]').clear().type('e2e-theme-i18n@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('eq', '/')
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard')
   }
 
   function switchLanguage(code: 'en' | 'zh' | 'ja') {
