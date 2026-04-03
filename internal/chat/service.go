@@ -28,13 +28,14 @@ type Thread struct {
 }
 
 type Message struct {
-	ID          string `json:"id"`
-	ProfileID   string `json:"profile_id"`
-	ThreadID    string `json:"thread_id"`
-	Role        string `json:"role"`
-	Content     string `json:"content"`
-	Attachments string `json:"attachments_json"`
-	CreatedAt   string `json:"created_at"`
+	ID          string         `json:"id"`
+	ProfileID   string         `json:"profile_id"`
+	ThreadID    string         `json:"thread_id"`
+	Role        string         `json:"role"`
+	Content     string         `json:"content"`
+	Attachments string         `json:"attachments_json"`
+	Context     map[string]any `json:"context,omitempty"`
+	CreatedAt   string         `json:"created_at"`
 }
 
 type Attachment struct {
@@ -143,7 +144,7 @@ func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Th
 	return t, nil
 }
 
-func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string) (Message, error) {
+func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (Message, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	role = strings.TrimSpace(strings.ToLower(role))
@@ -161,10 +162,11 @@ func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, 
 		return Message{}, err
 	}
 	id := uuid.NewString()
+	contextJSON := marshalContextJSON(messageContext)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json)
-		VALUES (?, ?, ?, ?, ?, '[]')
-	`, id, profileID, threadID, role, content); err != nil {
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES (?, ?, ?, ?, ?, '[]', ?)
+	`, id, profileID, threadID, role, content, contextJSON); err != nil {
 		return Message{}, fmt.Errorf("create message: %w", err)
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, threadID)
@@ -175,7 +177,7 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE profile_id = ? AND thread_id = ?
 		ORDER BY created_at ASC
@@ -187,9 +189,11 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	var out []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
+		var contextJSON string
+		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
+		m.Context = parseContextJSON(contextJSON)
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -197,18 +201,43 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 
 func (s *Service) getMessage(ctx context.Context, profileID, messageID string) (Message, error) {
 	var m Message
+	var contextJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt)
+	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Message{}, fmt.Errorf("message not found")
 		}
 		return Message{}, err
 	}
+	m.Context = parseContextJSON(contextJSON)
 	return m, nil
+}
+
+func marshalContextJSON(messageContext map[string]any) string {
+	if len(messageContext) == 0 {
+		return "{}"
+	}
+	raw, err := json.Marshal(messageContext)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func parseContextJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 func (s *Service) SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (Attachment, error) {

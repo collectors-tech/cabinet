@@ -1,5 +1,4 @@
 import { useEffect, useState, type DragEvent } from 'react'
-import { useRouterState } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
@@ -23,6 +22,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
@@ -64,14 +64,7 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { t } = useTranslation('nav')
-  const { activeProfileId, activeWorkspace, setActiveWorkspace } =
-    useShellWorkspace()
-  const location = useRouterState({
-    select: (state) => ({
-      pathname: state.location.pathname,
-      search: state.location.searchStr,
-    }),
-  })
+  const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const authUser = useAuthStore((state) => state.auth.user)
   const sidebarUser = authUser
     ? {
@@ -309,8 +302,6 @@ export function AppSidebar() {
     items: group.items.map(translateItem),
   }))
 
-  const workspaceRouteContext = `${location.pathname || '/'}${location.search || ''}`
-
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
@@ -363,43 +354,7 @@ export function AppSidebar() {
               <NavGroup key={props.title} {...props} />
             ))
           : null}
-        {activeWorkspace === 'assistant' ? (
-          <div
-            className='space-y-3 px-2 py-2'
-            data-testid='shell-assistant-workspace'
-          >
-            <div
-              className='rounded-md border bg-card p-3'
-              data-testid='shell-chat-rail'
-            >
-              <h2 className='font-semibold'>Assistant Workspace</h2>
-              <p className='mt-2 text-sm text-muted-foreground'>
-                Persistent route-aware helper workspace for guided actions.
-              </p>
-              <dl className='mt-3 space-y-2 text-xs text-muted-foreground'>
-                <div>
-                  <dt className='font-medium text-foreground'>Profile scope</dt>
-                  <dd data-testid='shell-assistant-profile-scope'>
-                    {activeProfileId}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='font-medium text-foreground'>Current route</dt>
-                  <dd data-testid='shell-assistant-route-context'>
-                    {workspaceRouteContext}
-                  </dd>
-                </div>
-              </dl>
-              <p
-                className='mt-3 text-xs text-muted-foreground'
-                data-testid='shell-assistant-boundary-note'
-              >
-                Thread continuity persists across authenticated route changes
-                until an explicit reset boundary.
-              </p>
-            </div>
-          </div>
-        ) : null}
+        {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
         {activeWorkspace === 'inbox' ? (
           <div
             className='space-y-3 px-2 py-2'
