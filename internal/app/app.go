@@ -34,6 +34,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/barcode"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
@@ -115,6 +116,7 @@ func New(cfg config.Config) (*App, error) {
 	matchingSvc := matching.NewService(conn)
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
+	commerceSvc := commerce.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
@@ -2775,6 +2777,86 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
+	})
+	mux.HandleFunc("/api/commerce/lifecycle", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+			items, err := commerceSvc.ListLifecycleByProfile(r.Context(), profileID, itemID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_commerce_lifecycle"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+		case http.MethodPost:
+			var req commerce.LifecycleEntry
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, arrival, err := commerceSvc.CreateLifecycleForProfile(r.Context(), profileID, req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_commerce_lifecycle"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"entry": created, "expected_arrival": arrival})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/commerce/arrivals", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			items, err := commerceSvc.ListArrivalsByProfile(r.Context(), profileID, itemID, status)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_expected_arrivals"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+		case http.MethodPost:
+			var req commerce.ExpectedArrival
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, err := commerceSvc.CreateArrivalForProfile(r.Context(), profileID, req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_expected_arrival"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(created)
+		case http.MethodPut:
+			var req commerce.ExpectedArrival
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if err := commerceSvc.UpdateArrivalForProfile(r.Context(), profileID, req); err != nil {
+				http.Error(w, `{"error":"failed_to_update_expected_arrival"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
 	})
 	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
 		profileID = strings.TrimSpace(profileID)
