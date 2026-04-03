@@ -51,11 +51,13 @@ func (r *Repository) SearchItemsByProfile(ctx context.Context, profileID string,
 		limit = 50
 	}
 	sortExpr := "c.created_at ASC"
+	requiresInstanceJoin := false
 	switch strings.ToLower(strings.TrimSpace(q.SortBy)) {
 	case "part_number":
 		sortExpr = "c.part_number ASC"
 	case "price":
 		sortExpr = "COALESCE(MIN(i.acquisition_price), 0) ASC, c.part_number ASC"
+		requiresInstanceJoin = true
 	case "date_added":
 		sortExpr = "c.created_at ASC"
 	}
@@ -92,20 +94,25 @@ func (r *Repository) SearchItemsByProfile(ctx context.Context, profileID string,
 		args = append(args, status)
 	}
 	if t := strings.TrimSpace(q.Text); t != "" {
-		where = append(where, "(EXISTS (SELECT 1 FROM canonical_items_fts WHERE item_id = c.id AND canonical_items_fts MATCH ?) OR EXISTS (SELECT 1 FROM instances it WHERE it.item_id = c.id AND (it.notes LIKE ? OR it.storage_location LIKE ? OR it.status LIKE ? OR it.condition LIKE ?)))")
+		where = append(where, "(c.id IN (SELECT item_id FROM canonical_items_fts WHERE canonical_items_fts MATCH ?) OR c.id IN (SELECT it.item_id FROM instances it WHERE it.notes LIKE ? OR it.storage_location LIKE ? OR it.status LIKE ? OR it.condition LIKE ?))")
 		like := "%" + t + "%"
-		args = append(args, t, like, like, like, like)
+		args = append(args, buildFTSMatchQuery(t), like, like, like, like)
 	}
 
 	sqlText := `
 		SELECT c.id, c.brand, c.category, c.part_number, c.title, c.make, c.model, c.year, c.scale, c.series, c.description, c.tags_json, c.created_at, c.updated_at
 		FROM canonical_items c
 	`
-	sqlText += ` LEFT JOIN instances i ON i.item_id = c.id `
+	if requiresInstanceJoin {
+		sqlText += ` LEFT JOIN instances i ON i.item_id = c.id `
+	}
 	if len(where) > 0 {
 		sqlText += " WHERE " + strings.Join(where, " AND ")
 	}
-	sqlText += " GROUP BY c.id ORDER BY " + sortExpr + " LIMIT ?"
+	if requiresInstanceJoin {
+		sqlText += " GROUP BY c.id"
+	}
+	sqlText += " ORDER BY " + sortExpr + " LIMIT ?"
 	args = append(args, limit)
 
 	rows, err := r.db.QueryContext(ctx, sqlText, args...)
@@ -130,6 +137,17 @@ func (r *Repository) SearchItemsByProfile(ctx context.Context, profileID string,
 		return nil, fmt.Errorf("iterate search items: %w", err)
 	}
 	return out, nil
+}
+
+func buildFTSMatchQuery(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return text
+	}
+	if strings.ContainsAny(text, " \t\r\n") {
+		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(text, "\"", "\"\""))
+	}
+	return text
 }
 
 func (r *Repository) SaveFilter(ctx context.Context, profileID, name string, q Query) (SavedFilter, error) {
