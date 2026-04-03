@@ -616,7 +616,7 @@ describe('SETUP-WIZ', () => {
     cy.contains('button', 'Sign in').click();
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
-      /^(\/|\/_authenticated\/?)$/
+      /^\\/dashboard\\/?$/
     );
     cy.contains('Home').should('be.visible');
 
@@ -627,3 +627,4 @@ describe('SETUP-WIZ', () => {
     cy.contains('Use Sample Data').should('not.exist');
   });
 });
+
