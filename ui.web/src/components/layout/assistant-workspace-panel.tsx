@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouterState } from '@tanstack/react-router'
-import { GitBranchPlus, RotateCcw, Send } from 'lucide-react'
+import { GitBranchPlus, RotateCcw, Send, ShieldAlert } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -29,7 +39,23 @@ type Message = {
     profile?: { id?: string }
     selection?: { active_workspace_collection?: string }
     assistant?: { provider?: string; model?: string }
+    assistant_handoff?: { status?: string; inbox_item_id?: string }
   }
+}
+
+type ActionPreview = {
+  id: string
+  action: string
+  status: string
+  payload?: { part_number?: string; title?: string }
+}
+
+type ApplyActionResult = {
+  applied: boolean
+  action: string
+  item_id?: string
+  wishlist_id?: string
+  preview_id: string
 }
 
 type AssistantProviderOption = {
@@ -102,6 +128,17 @@ export function AssistantWorkspacePanel() {
   const [sending, setSending] = useState(false)
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('gpt-4o-mini')
+  const [actionPartNumber, setActionPartNumber] = useState('ASSIST-001')
+  const [actionTitle, setActionTitle] = useState('Assistant Proposed Item')
+  const [actionPreview, setActionPreview] = useState<ActionPreview | null>(null)
+  const [executionState, setExecutionState] = useState<
+    'idle' | 'queued' | 'running' | 'success' | 'failure'
+  >('idle')
+  const [applyResult, setApplyResult] = useState<ApplyActionResult | null>(null)
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
+  const [permissionGuidance, setPermissionGuidance] = useState(
+    'Read-only browsing is always allowed. Structured mutations are preview-first and confirmation-required before any apply call runs.'
+  )
 
   const routeContext = useMemo(
     () => ({
@@ -220,9 +257,7 @@ export function AssistantWorkspacePanel() {
 
   useEffect(() => {
     let cancelled = false
-    if (!activeProfileId) {
-      return
-    }
+    if (!activeProfileId) return
 
     setLoading(true)
     setError('')
@@ -243,9 +278,7 @@ export function AssistantWorkspacePanel() {
           storedProvider,
           storedModel
         )
-        if (cancelled) {
-          return
-        }
+        if (cancelled) return
         const threads = await loadThreads(activeProfileId)
         const activeThread = threads.find(
           (thread) => thread.id === ensuredThread
@@ -265,9 +298,7 @@ export function AssistantWorkspacePanel() {
           )
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        if (!cancelled) setLoading(false)
       }
     })()
 
@@ -277,9 +308,7 @@ export function AssistantWorkspacePanel() {
   }, [activeProfileId])
 
   async function handleProviderChange(nextProvider: string) {
-    if (!activeProfileId) {
-      return
-    }
+    if (!activeProfileId) return
     const nextModel = defaultModelForProvider(nextProvider)
     setProvider(nextProvider)
     setModel(nextModel)
@@ -309,9 +338,7 @@ export function AssistantWorkspacePanel() {
   }
 
   async function handleModelChange(nextModel: string) {
-    if (!activeProfileId) {
-      return
-    }
+    if (!activeProfileId) return
     setModel(nextModel)
     setSending(true)
     setError('')
@@ -337,9 +364,7 @@ export function AssistantWorkspacePanel() {
   }
 
   async function handleNewThread() {
-    if (!activeProfileId) {
-      return
-    }
+    if (!activeProfileId) return
     setSending(true)
     setError('')
     try {
@@ -352,6 +377,9 @@ export function AssistantWorkspacePanel() {
         }
       )
       setDraft('')
+      setActionPreview(null)
+      setApplyResult(null)
+      setExecutionState('idle')
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
       setError(
@@ -363,9 +391,7 @@ export function AssistantWorkspacePanel() {
   }
 
   async function sendMessage() {
-    if (!activeProfileId || !threadId || !draft.trim()) {
-      return
-    }
+    if (!activeProfileId || !threadId || !draft.trim()) return
     setSending(true)
     setError('')
     try {
@@ -380,19 +406,12 @@ export function AssistantWorkspacePanel() {
           context: {
             route: routeContext,
             profile: { id: activeProfileId },
-            selection: {
-              active_workspace_collection: selectionContext,
-            },
-            assistant: {
-              provider,
-              model,
-            },
+            selection: { active_workspace_collection: selectionContext },
+            assistant: { provider, model },
           },
         }),
       })
-      if (!response.ok) {
-        throw new Error('failed_to_send_assistant_message')
-      }
+      if (!response.ok) throw new Error('failed_to_send_assistant_message')
       setDraft('')
       await loadMessages(activeProfileId, threadId)
     } catch (err) {
@@ -401,6 +420,72 @@ export function AssistantWorkspacePanel() {
       )
     } finally {
       setSending(false)
+    }
+  }
+
+  async function previewAction() {
+    if (!activeProfileId || !threadId) return
+    setExecutionState('queued')
+    setError('')
+    setApplyResult(null)
+    setPermissionGuidance(
+      'Structured mutations are preview-only until you explicitly confirm apply.'
+    )
+    try {
+      const response = await fetch('/api/chat/actions/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: threadId,
+          action: 'create_item_stub',
+          payload: {
+            part_number: actionPartNumber.trim(),
+            title: actionTitle.trim(),
+            brand: 'AFX',
+            category: 'General',
+          },
+        }),
+      })
+      if (!response.ok) throw new Error(`assistant_preview_${response.status}`)
+      const preview = (await response.json()) as ActionPreview
+      setActionPreview(preview)
+      setExecutionState('running')
+    } catch (err) {
+      setExecutionState('failure')
+      setError(err instanceof Error ? err.message : 'assistant_preview_failed')
+      setPermissionGuidance(
+        'This action could not be previewed under the active policy. Read-only browsing remains available; mutation preview/apply may be unavailable.'
+      )
+    }
+  }
+
+  async function applyPreviewAction() {
+    if (!activeProfileId || !threadId || !actionPreview?.id) return
+    setExecutionState('running')
+    setError('')
+    try {
+      const response = await fetch('/api/chat/actions/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: threadId,
+          preview_id: actionPreview.id,
+          confirm: true,
+        }),
+      })
+      if (!response.ok) throw new Error(`assistant_apply_${response.status}`)
+      const result = (await response.json()) as ApplyActionResult
+      setApplyResult(result)
+      setExecutionState('success')
+      setConfirmApplyOpen(false)
+    } catch (err) {
+      setExecutionState('failure')
+      setError(err instanceof Error ? err.message : 'assistant_apply_failed')
+      setPermissionGuidance(
+        'Apply is confirm-required. If apply remains blocked, the active policy may be preview-only for this action class.'
+      )
     }
   }
 
@@ -442,9 +527,7 @@ export function AssistantWorkspacePanel() {
               data-testid='shell-assistant-provider-select'
               className='w-full rounded-md border bg-background px-2 py-1'
               value={provider}
-              onChange={(event) =>
-                void handleProviderChange(event.target.value)
-              }
+              onChange={(e) => void handleProviderChange(e.target.value)}
             >
               {assistantProviderOptions.map((option) => (
                 <option key={option.provider} value={option.provider}>
@@ -459,7 +542,7 @@ export function AssistantWorkspacePanel() {
               data-testid='shell-assistant-model-select'
               className='w-full rounded-md border bg-background px-2 py-1'
               value={model}
-              onChange={(event) => void handleModelChange(event.target.value)}
+              onChange={(e) => void handleModelChange(e.target.value)}
             >
               {availableModels.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -552,7 +635,7 @@ export function AssistantWorkspacePanel() {
           <Input
             data-testid='shell-assistant-compose-input'
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(e) => setDraft(e.target.value)}
             placeholder='Ask Assistant about the current route...'
             disabled={!threadId || loading || sending}
           />
@@ -566,6 +649,127 @@ export function AssistantWorkspacePanel() {
           </Button>
         </div>
       </div>
+
+      <div
+        className='rounded-md border bg-card p-3'
+        data-testid='shell-assistant-execution-panel'
+      >
+        <div className='mb-2 flex items-center justify-between gap-2'>
+          <p className='text-sm font-medium'>Execution Surface</p>
+          <span
+            className='text-xs text-muted-foreground uppercase'
+            data-testid='shell-assistant-execution-state'
+          >
+            {executionState}
+          </span>
+        </div>
+        <p
+          className='text-xs text-muted-foreground'
+          data-testid='shell-assistant-permission-guidance'
+        >
+          {permissionGuidance}
+        </p>
+        <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+          <Input
+            data-testid='shell-assistant-preview-part-number'
+            value={actionPartNumber}
+            onChange={(e) => setActionPartNumber(e.target.value)}
+            placeholder='Part number'
+            disabled={!threadId || sending}
+          />
+          <Input
+            data-testid='shell-assistant-preview-title'
+            value={actionTitle}
+            onChange={(e) => setActionTitle(e.target.value)}
+            placeholder='Item title'
+            disabled={!threadId || sending}
+          />
+        </div>
+        <div className='mt-3 flex flex-wrap gap-2'>
+          <Button
+            type='button'
+            data-testid='shell-assistant-preview-action'
+            onClick={() => void previewAction()}
+            disabled={
+              !threadId ||
+              !actionPartNumber.trim() ||
+              !actionTitle.trim() ||
+              sending
+            }
+          >
+            Preview Action
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            data-testid='shell-assistant-apply-action'
+            onClick={() => setConfirmApplyOpen(true)}
+            disabled={!actionPreview?.id || sending}
+          >
+            Apply Action
+          </Button>
+        </div>
+        {actionPreview ? (
+          <div
+            className='mt-3 rounded-md border p-2 text-xs'
+            data-testid='shell-assistant-action-preview'
+          >
+            Preview {actionPreview.action} ({actionPreview.status}) for{' '}
+            {actionPreview.payload?.part_number} /{' '}
+            {actionPreview.payload?.title}
+          </div>
+        ) : null}
+        {applyResult ? (
+          <div
+            className='mt-3 rounded-md border p-2 text-xs'
+            data-testid='shell-assistant-apply-result'
+          >
+            Applied {applyResult.action}{' '}
+            {applyResult.item_id ? `to ${applyResult.item_id}` : ''}
+          </div>
+        ) : null}
+        <div
+          className='mt-3 flex items-start gap-2 rounded-md border border-dashed p-2 text-xs text-muted-foreground'
+          data-testid='shell-assistant-permission-boundary'
+        >
+          <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
+          <div>
+            <p className='font-medium text-foreground'>Permission boundary</p>
+            <p>
+              Read-only is always allowed. Mutations are preview-first,
+              confirm-required, and may still be unavailable under the active
+              policy.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
+        <AlertDialogContent data-testid='shell-assistant-apply-confirm-dialog'>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Assistant Action</AlertDialogTitle>
+            <AlertDialogDescription data-testid='shell-assistant-apply-confirm-summary'>
+              {actionPreview
+                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                : 'No action preview selected.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid='shell-assistant-apply-cancel'>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid='shell-assistant-apply-confirm'
+              onClick={(event) => {
+                event.preventDefault()
+                void applyPreviewAction()
+              }}
+            >
+              Confirm Apply
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
