@@ -3451,11 +3451,58 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return
 			}
+			response := map[string]any{"message": message}
+			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
+				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
+					inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
+						ProfileID: req.ProfileID,
+						ThreadID:  req.ThreadID,
+						Source:    "assistant_handoff",
+						Status:    "queued",
+						Title:     "Assistant handoff queued",
+						Summary:   strings.TrimSpace(req.Content),
+						Metadata: map[string]any{
+							"assistant": assistantContext,
+							"route":     req.Context["route"],
+							"selection": req.Context["selection"],
+						},
+					})
+					if inboxErr == nil {
+						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
+							"assistant_handoff": map[string]any{
+								"status":        "queued",
+								"inbox_item_id": inboxItem.ID,
+							},
+						})
+						if assistantErr == nil {
+							response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+						}
+					}
+				}
+			}
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(message)
+			_ = json.NewEncoder(w).Encode(response)
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/chat/inbox", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		items, err := chatSvc.ListInboxItems(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_chat_inbox_items"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
 	mux.HandleFunc("/api/chat/attachments", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
