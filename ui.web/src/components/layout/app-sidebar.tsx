@@ -25,6 +25,7 @@ import {
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
+import { InboxWorkspacePanel } from './inbox-workspace-panel'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
@@ -355,20 +356,7 @@ export function AppSidebar() {
             ))
           : null}
         {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
-        {activeWorkspace === 'inbox' ? (
-          <div
-            className='space-y-3 px-2 py-2'
-            data-testid='shell-inbox-workspace'
-          >
-            <div className='rounded-md border bg-card p-3'>
-              <h2 className='font-semibold'>Inbox Workspace</h2>
-              <p className='mt-2 text-sm text-muted-foreground'>
-                Notifications and asynchronous assistant outcomes will surface
-                here.
-              </p>
-            </div>
-          </div>
-        ) : null}
+        {activeWorkspace === 'inbox' ? <InboxWorkspacePanel /> : null}
       </SidebarContent>
       <SidebarFooter>
         <div className='px-2 pb-2'>

@@ -50,6 +50,19 @@ type Attachment struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type InboxItem struct {
+	ID        string         `json:"id"`
+	ProfileID string         `json:"profile_id"`
+	ThreadID  string         `json:"thread_id"`
+	Source    string         `json:"source"`
+	Status    string         `json:"status"`
+	Title     string         `json:"title"`
+	Summary   string         `json:"summary"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
+}
+
 type PreviewActionInput struct {
 	ProfileID string         `json:"profile_id"`
 	ThreadID  string         `json:"thread_id"`
@@ -244,6 +257,82 @@ func parseContextJSON(raw string) map[string]any {
 		return map[string]any{}
 	}
 	return out
+}
+
+func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxItem, error) {
+	item.ProfileID = strings.TrimSpace(item.ProfileID)
+	item.ThreadID = strings.TrimSpace(item.ThreadID)
+	item.Source = strings.TrimSpace(item.Source)
+	item.Status = strings.TrimSpace(item.Status)
+	item.Title = strings.TrimSpace(item.Title)
+	item.Summary = strings.TrimSpace(item.Summary)
+	if item.ProfileID == "" || item.ThreadID == "" {
+		return InboxItem{}, fmt.Errorf("profile_id and thread_id are required")
+	}
+	if item.Source == "" {
+		item.Source = "assistant_handoff"
+	}
+	if item.Status == "" {
+		item.Status = "queued"
+	}
+	if item.Title == "" {
+		item.Title = "Assistant handoff queued"
+	}
+	if _, err := s.GetThread(ctx, item.ProfileID, item.ThreadID); err != nil {
+		return InboxItem{}, err
+	}
+	item.ID = uuid.NewString()
+	metadataJSON := marshalContextJSON(item.Metadata)
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_inbox_items(id, profile_id, thread_id, source, status, title, summary, metadata_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, item.ID, item.ProfileID, item.ThreadID, item.Source, item.Status, item.Title, item.Summary, metadataJSON); err != nil {
+		return InboxItem{}, fmt.Errorf("create inbox item: %w", err)
+	}
+	return s.getInboxItem(ctx, item.ProfileID, item.ID)
+}
+
+func (s *Service) ListInboxItems(ctx context.Context, profileID string) ([]InboxItem, error) {
+	profileID = strings.TrimSpace(profileID)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		ORDER BY updated_at DESC, created_at DESC
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []InboxItem
+	for rows.Next() {
+		var item InboxItem
+		var metadataJSON string
+		if err := rows.Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		item.Metadata = parseContextJSON(metadataJSON)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) getInboxItem(ctx context.Context, profileID, inboxID string) (InboxItem, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(inboxID), strings.TrimSpace(profileID)).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, fmt.Errorf("inbox item not found")
+		}
+		return InboxItem{}, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, nil
 }
 
 func (s *Service) SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (Attachment, error) {
