@@ -106,4 +106,27 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'openai')
     cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'gpt-4.1-mini')
   })
+
+  it('PROVIDER-OPENAI-UX-004 syncs Assistant defaults immediately after integrations save without reload', () => {
+    cy.wait('@activeProfile')
+    cy.wait('@providersRegistry')
+    cy.wait('@profileSettings')
+
+    cy.visit('/inventory')
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'openai')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'gpt-4o-mini')
+
+    cy.visit('/integrations')
+    cy.contains('OpenAI / ChatGPT').click()
+    cy.get('[data-testid="provider-openai-default-provider"]').clear().type('openai')
+    cy.get('[data-testid="provider-openai-default-model"]').select('gpt-4.1-mini')
+    cy.contains('Save Integration').click()
+    cy.wait('@saveSettings')
+
+    cy.visit('/inventory')
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-provider"]').should('contain', 'openai')
+    cy.get('[data-testid="shell-assistant-thread-model"]').should('contain', 'gpt-4.1-mini')
+  })
 })
