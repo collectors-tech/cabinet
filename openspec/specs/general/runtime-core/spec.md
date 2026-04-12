@@ -158,3 +158,20 @@ Cabinet MUST write machine-readable JSONL log files for runtime lifecycle, reque
 - **AND** runtime log entries MUST append only to that process start's own runtime log file and include timestamp, level, event/type, and process/runtime context
 - **AND** access log entries MUST include method, path, status, and duration
 - **AND** fixed shared filenames like `cabinet.runtime.log`, `cabinet.access.log`, and `cabinet.error.log` MUST NOT be reused across multiple starts, and the timestamped files MUST live under that `logs/` subfolder
+
+### Requirement RUNTIME-CORE-015: Runtime startup SHALL remain deterministic under parallel local validation load
+Parallel local validation runs that create many fresh runtime instances concurrently MUST avoid self-inflicted migration deadline failures.
+
+#### Scenario: Parallel fresh-db startup in local validation
+- **GIVEN** multiple local validation/test workers create fresh Cabinet data directories and SQLite paths concurrently
+- **WHEN** each worker opens and migrates its own fresh runtime database
+- **THEN** runtime migration/open behavior MUST complete without deterministic deadline failures caused only by local parallel startup pressure
+
+### Requirement RUNTIME-CORE-016: Runtime run loop SHALL fast-exit when startup context is already canceled
+If the supplied runtime context is already canceled before run-loop startup begins, Cabinet MUST not bind/listen/start the server just to shut it down again.
+
+#### Scenario: Pre-canceled startup context
+- **GIVEN** caller invokes runtime `Run` with a context that is already canceled
+- **WHEN** run-loop startup begins
+- **THEN** runtime MUST return quickly without binding a listener or writing startup lifecycle artifacts
+- **AND** local NFR/startup checks MUST observe the fast-exit behavior rather than an unnecessary shutdown timeout path
