@@ -137,3 +137,21 @@ Runtime startup MUST keep `cabinet.pid` as PID-only lock signal and MUST resolve
 - **WHEN** attach resolution executes
 - **THEN** runtime MUST remove stale PID file and continue with fresh startup
 - **AND** no attach/open action MUST occur for stale lock state
+
+### Requirement RUNTIME-CORE-013: Runtime startup SHALL remain deterministic under parallel local validation load
+Parallel local validation runs that create many fresh runtime instances concurrently MUST avoid self-inflicted migration deadline failures.
+
+#### Scenario: Parallel fresh-db startup in local validation
+- **GIVEN** multiple local validation/test workers create fresh Cabinet data directories and SQLite paths concurrently
+- **WHEN** each worker opens and migrates its own fresh runtime database
+- **THEN** runtime migration/open behavior MUST complete without deterministic deadline failures caused only by local parallel startup pressure
+- **AND** the startup path MAY apply bounded concurrency/back-pressure internally to preserve completion under test/package parallelism
+
+### Requirement RUNTIME-CORE-014: Runtime run loop SHALL fast-exit when startup context is already canceled
+If the supplied runtime context is already canceled before run-loop startup begins, Cabinet MUST not bind/listen/start the server just to shut it down again.
+
+#### Scenario: Pre-canceled startup context
+- **GIVEN** caller invokes runtime `Run` with a context that is already canceled
+- **WHEN** run-loop startup begins
+- **THEN** runtime MUST return quickly without binding a listener or writing startup lifecycle artifacts
+- **AND** local NFR/startup checks MUST observe the fast-exit behavior rather than an unnecessary shutdown timeout path

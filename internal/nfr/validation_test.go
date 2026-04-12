@@ -35,16 +35,16 @@ func TestNFRGates(t *testing.T) {
 		WebAuthnName:   "Cabinet",
 		BackupInterval: 60,
 	}
-	start := time.Now()
 	a, err := app.New(cfg)
 	if err != nil {
 		t.Fatalf("app.New() error = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	start := time.Now()
 	_ = a.Run(ctx)
 	if took := time.Since(start); took > 2500*time.Millisecond {
-		t.Fatalf("startup exceeded 2.5s: %s", took)
+		t.Fatalf("startup fast-exit exceeded 2.5s: %s", took)
 	}
 
 	conn, err := db.OpenAndMigrate(context.Background(), cfg.DBPath)

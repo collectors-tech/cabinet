@@ -72,7 +72,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	conn, err := db.OpenAndMigrate(ctx, cfg.DBPath)
@@ -954,9 +954,9 @@ func New(cfg config.Config) (*App, error) {
 			"total_count":        totalCount,
 			"completion_percent": completionPercent,
 			"breakdown": map[string]any{
-				"variant": variantBreakdown,
+				"variant":  variantBreakdown,
 				"language": languageBreakdown,
-				"graded":  gradedBreakdown,
+				"graded":   gradedBreakdown,
 			},
 		})
 	})
@@ -1026,10 +1026,10 @@ func New(cfg config.Config) (*App, error) {
 			"completion_percent": completionPercent,
 			"generated_at":       time.Now().UTC().Format(time.RFC3339),
 			"share_payload": map[string]any{
-				"headline":    fmt.Sprintf("Set %s progress", strings.ToUpper(setID)),
-				"summary":     fmt.Sprintf("%d/%d cards collected", ownedCount, totalCount),
-				"visibility":  visibility,
-				"share_link":  shareLink,
+				"headline":     fmt.Sprintf("Set %s progress", strings.ToUpper(setID)),
+				"summary":      fmt.Sprintf("%d/%d cards collected", ownedCount, totalCount),
+				"visibility":   visibility,
+				"share_link":   shareLink,
 				"profile_hint": "active_profile",
 			},
 		})
@@ -1224,10 +1224,10 @@ func New(cfg config.Config) (*App, error) {
 		})
 
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"set_id": setID,
-			"items":  consideredItemIDs,
+			"set_id":  setID,
+			"items":   consideredItemIDs,
 			"sources": sources,
-			"alerts": alerts,
+			"alerts":  alerts,
 		})
 	})
 	mux.HandleFunc("/api/integrations/pokemon/visibility-access", func(w http.ResponseWriter, r *http.Request) {
@@ -2250,13 +2250,13 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			QuerySetID      string   `json:"query_set_id"`
-			AssetURL        string   `json:"asset_url"`
-			SearchURL       string   `json:"search_url"`
-			ProviderDomain  string   `json:"provider_domain"`
+			QuerySetID        string   `json:"query_set_id"`
+			AssetURL          string   `json:"asset_url"`
+			SearchURL         string   `json:"search_url"`
+			ProviderDomain    string   `json:"provider_domain"`
 			FallbackAssetURLs []string `json:"fallback_asset_urls"`
-			Page            int      `json:"page"`
-			PageSize        int      `json:"page_size"`
+			Page              int      `json:"page"`
+			PageSize          int      `json:"page_size"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
@@ -2355,10 +2355,10 @@ func New(cfg config.Config) (*App, error) {
 			"candidates":      candidates,
 			"warning":         warning,
 			"discovery": map[string]any{
-				"store":   config.Store,
-				"zone":    config.Zone,
-				"hashid":  config.HashID,
-				"source":  config.Source,
+				"store":    config.Store,
+				"zone":     config.Zone,
+				"hashid":   config.HashID,
+				"source":   config.Source,
 				"api_base": config.APIBase,
 			},
 		})
@@ -5557,16 +5557,16 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 	base := []map[string]any{
 		{
-			"provider_id":      "ebay",
-			"display_name":     "eBay",
-			"base_domain":      "ebay.com",
-			"api_family":       "official_api",
+			"provider_id":         "ebay",
+			"display_name":        "eBay",
+			"base_domain":         "ebay.com",
+			"api_family":          "official_api",
 			"api_support_profile": "rest_v1",
-			"active_mode":      "official_api",
-			"integration_mode": "official_api",
-			"api_available":    true,
-			"auth_requirement": "api_key",
-			"auth_mode":        "api_key",
+			"active_mode":         "official_api",
+			"integration_mode":    "official_api",
+			"api_available":       true,
+			"auth_requirement":    "api_key",
+			"auth_mode":           "api_key",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": false,
@@ -5634,16 +5634,16 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			supportProfile = "boost_v2"
 		}
 		base = append(base, map[string]any{
-			"provider_id":      "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
-			"display_name":     d,
-			"base_domain":      d,
-			"api_family":       apiFamily,
+			"provider_id":         "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
+			"display_name":        d,
+			"base_domain":         d,
+			"api_family":          apiFamily,
 			"api_support_profile": supportProfile,
-			"active_mode":      activeMode,
-			"integration_mode": integrationMode,
-			"api_available":    d == "voglers.com.au" || d == "mrtoys.com.au",
-			"auth_requirement": "none",
-			"auth_mode":        "none",
+			"active_mode":         activeMode,
+			"integration_mode":    integrationMode,
+			"api_available":       d == "voglers.com.au" || d == "mrtoys.com.au",
+			"auth_requirement":    "none",
+			"auth_mode":           "none",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": true,
@@ -5874,12 +5874,12 @@ type hobbytechBoostConfig struct {
 }
 
 type bonzaProductResponse struct {
-	ID               int    `json:"id"`
-	Name             string `json:"name"`
-	Permalink        string `json:"permalink"`
-	Price            string `json:"prices"`
-	IsInStock        *bool  `json:"is_in_stock"`
-	LowStockRemaining *int  `json:"low_stock_remaining"`
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	Permalink         string `json:"permalink"`
+	Price             string `json:"prices"`
+	IsInStock         *bool  `json:"is_in_stock"`
+	LowStockRemaining *int   `json:"low_stock_remaining"`
 }
 
 type bonzaSearchResult struct {
@@ -6366,7 +6366,7 @@ func runBigCommerceTokenSearch(
 								} `json:"price"`
 							} `json:"prices"`
 							Inventory struct {
-								IsInStock bool `json:"isInStock"`
+								IsInStock  bool `json:"isInStock"`
 								Aggregated struct {
 									AvailableToSell int `json:"availableToSell"`
 								} `json:"aggregated"`
@@ -6983,13 +6983,13 @@ func detectProviderFamily(ctx context.Context, client *http.Client, providerURL,
 		"glgoliasearch":  strings.Contains(lower, "glgoliasearch"),
 	})
 	buildEvidence("shopify_json", map[string]bool{
-		"/products.json":              strings.Contains(lower, "/products.json"),
+		"/products.json":               strings.Contains(lower, "/products.json"),
 		"/collections/*/products.json": strings.Contains(lower, "/collections/") && strings.Contains(lower, "/products.json"),
 	})
 	buildEvidence("doofinder", map[string]bool{
-		"cdn.doofinder.com":         strings.Contains(lower, "cdn.doofinder.com"),
-		"hashid/search_engines":     strings.Contains(lower, "hashid") && strings.Contains(lower, "search_engines"),
-		"doofinder loader/config":   strings.Contains(lower, "doofinder"),
+		"cdn.doofinder.com":       strings.Contains(lower, "cdn.doofinder.com"),
+		"hashid/search_engines":   strings.Contains(lower, "hashid") && strings.Contains(lower, "search_engines"),
+		"doofinder loader/config": strings.Contains(lower, "doofinder"),
 	})
 
 	if len(candidates) == 0 {
@@ -7041,6 +7041,9 @@ func runtimeBuildMetadata() (string, string) {
 }
 
 func (a *App) Run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return a.close()
+	}
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
 	}
