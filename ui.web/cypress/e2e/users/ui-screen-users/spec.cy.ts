@@ -66,9 +66,7 @@ describe('ui-screen-users', () => {
   it('UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context', () => {
     cy.intercept('DELETE', '/api/users/*').as('deleteUser')
 
-    cy.get('tbody tr').first().find('td').eq(1).invoke('text').then((usernameRaw) => {
-      const username = usernameRaw.trim()
-
+    cy.get('tbody tr').first().find('td').eq(1).invoke('text').then(() => {
       cy.contains('span', 'Open menu').first().parents('button').first().click()
       cy.contains('[role="menuitem"]', 'Delete').click()
       cy.contains('[role="alertdialog"], [role="dialog"]', 'Delete User')

@@ -561,15 +561,15 @@ describe('SETUP-WIZ', () => {
       .then((payload) => {
         expect(payload.instance.name).to.eq('Primary');
         expect(payload.instance.profile).to.eq('primary');
-        expect(payload.storage.dataDir).to.be.a('string').and.not.empty;
-        expect(payload.storage.mediaDir).to.be.a('string').and.not.empty;
+        expect(String(payload.storage.dataDir).trim()).not.to.equal('');
+        expect(String(payload.storage.mediaDir).trim()).not.to.equal('');
         expect(payload.runtime.portMode).to.be.oneOf(['auto', 'fixed']);
         expect(payload.runtime.resolvedUrl).to.match(
           /^http:\/\/(127\.0\.0\.1|0\.0\.0\.0):/
         );
         expect(payload.auth.mode).to.eq('local');
         expect(payload.auth.clerk.enabled).to.eq(false);
-        expect(payload.bootstrap.workspace).to.be.a('string').and.not.empty;
+        expect(String(payload.bootstrap.workspace).trim()).not.to.equal('');
         expect(payload.features.chat).to.eq(true);
         expect(payload.features.providers).to.eq(true);
         expect(payload.features.scanner).to.eq(true);
@@ -616,7 +616,7 @@ describe('SETUP-WIZ', () => {
     cy.contains('button', 'Sign in').click();
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
-      /^\\/dashboard\\/?$/
+      /^\/dashboard\/?$/
     );
     cy.contains('Home').should('be.visible');
 

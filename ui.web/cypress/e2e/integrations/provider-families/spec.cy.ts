@@ -10,7 +10,7 @@ describe('provider-families', () => {
       expect(response.status).to.eq(200)
       expect(response.body.proposed_api_family).to.eq('boost_shopify')
       expect(response.body.confidence).to.be.greaterThan(0)
-      expect(response.body.evidence).to.be.an('array').and.not.be.empty
+      expect((response.body.evidence as unknown[]).length).to.be.greaterThan(0)
     })
   })
 
@@ -28,7 +28,7 @@ describe('provider-families', () => {
       const provider = (registryResponse.body.providers as Array<Record<string, unknown>>).find(
         (entry) => String(entry.base_domain || '') === 'frontlinehobbies.com.au'
       )
-      expect(provider).to.exist
+      expect(Boolean(provider)).to.equal(true)
       expect(String(provider!.api_family || '')).to.eq('doofinder')
     })
   })

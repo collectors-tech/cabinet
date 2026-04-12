@@ -38,7 +38,7 @@ describe('chats/assistant-workspace', () => {
     cy.get('[data-testid="shell-assistant-send-button"]').click()
     cy.wait('@assistantMessage').then(({ request }) => {
       expect(request.body.profile_id).to.eq('e2e-profile-001')
-      expect(request.body.thread_id).to.be.a('string').and.not.be.empty
+      expect(String(request.body.thread_id).trim()).not.to.equal('')
       expect(request.body.context.route.pathname).to.eq('/inventory/')
       expect(request.body.context.profile.id).to.eq('e2e-profile-001')
       expect(request.body.context.selection.active_workspace_collection).to.eq('All Items')

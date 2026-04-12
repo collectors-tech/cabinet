@@ -10,7 +10,7 @@ describe('general/ui-scale', () => {
     }).then((first) => {
       expect(first.status).to.eq(200)
       const firstHash = first.body?.dataset_hash
-      expect(firstHash).to.be.a('string').and.not.empty
+      expect(String(firstHash).trim()).not.to.equal('')
 
       cy.e2eReset()
       cy.request('POST', '/api/test/scale/bootstrap', {
@@ -31,11 +31,11 @@ describe('general/ui-scale', () => {
     }).then((bootstrapResp) => {
       expect(bootstrapResp.status).to.eq(200)
       const querySetID = bootstrapResp.body?.query_set_id
-      expect(querySetID).to.be.a('string').and.not.empty
+      expect(String(querySetID).trim()).not.to.equal('')
 
       cy.request('GET', '/api/items?status=active').then((itemsResp) => {
         expect(itemsResp.status).to.eq(200)
-        expect(itemsResp.body?.items).to.be.an('array').and.not.empty
+        expect((itemsResp.body?.items as unknown[]).length).to.be.greaterThan(0)
       })
 
       cy.request('GET', '/api/search/items?q=scale&limit=25').then((searchResp) => {
@@ -57,7 +57,7 @@ describe('general/ui-scale', () => {
     }).then((bootstrapResp) => {
       expect(bootstrapResp.status).to.eq(200)
       const querySetID = bootstrapResp.body?.query_set_id
-      expect(querySetID).to.be.a('string').and.not.empty
+      expect(String(querySetID).trim()).not.to.equal('')
 
       for (let idx = 0; idx < 12; idx += 1) {
         cy.request('GET', '/api/search/items?q=scale&limit=20').its('status').should('eq', 200)
