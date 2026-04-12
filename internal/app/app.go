@@ -55,7 +55,7 @@ import (
 )
 
 func startupMigrationTimeout() time.Duration {
-	const defaultTimeout = 30 * time.Second
+	const defaultTimeout = 3 * time.Minute
 	value := strings.TrimSpace(os.Getenv("CABINET_STARTUP_TIMEOUT_SECONDS"))
 	if value == "" {
 		return defaultTimeout
@@ -7227,6 +7227,9 @@ func runtimeBuildMetadata() (string, string) {
 }
 
 func (a *App) Run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return a.close()
+	}
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
 	}
