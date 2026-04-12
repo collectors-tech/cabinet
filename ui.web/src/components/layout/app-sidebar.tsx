@@ -137,16 +137,24 @@ export function AppSidebar() {
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
     const storageKey = `cabinet.nav.preferences.${profileScope}`
-    try {
-      const raw = window.localStorage.getItem(storageKey)
-      if (!raw) {
-        return
+    const syncPreferences = () => {
+      try {
+        const raw = window.localStorage.getItem(storageKey)
+        if (!raw) {
+          setNavPreferences({})
+          return
+        }
+        const parsed = JSON.parse(raw) as Record<string, NavPreference>
+        setNavPreferences(parsed && typeof parsed === 'object' ? parsed : {})
+      } catch {
+        setNavPreferences({})
       }
-      const parsed = JSON.parse(raw) as Record<string, NavPreference>
-      if (parsed && typeof parsed === 'object') {
-        setNavPreferences(parsed)
-      }
-    } catch {}
+    }
+
+    const timeoutId = window.setTimeout(syncPreferences, 0)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
   }, [authUser?.accountNo, authUser?.email])
 
   useEffect(() => {

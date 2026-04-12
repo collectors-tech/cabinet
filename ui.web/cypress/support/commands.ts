@@ -13,6 +13,7 @@ type E2EBootstrapState = {
 type E2ESetupState = "missing" | "present";
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
     interface Chainable {
       e2eReset(): Chainable<void>;

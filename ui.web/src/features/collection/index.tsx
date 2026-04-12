@@ -8,8 +8,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Button } from '@/components/ui/button'
+import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -17,14 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Sheet,
   SheetContent,
@@ -46,17 +41,22 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { TasksTable } from '@/features/tasks/components/tasks-table'
-import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
-import { TasksProvider } from '@/features/tasks/components/tasks-provider'
-import { tasks } from '@/features/tasks/data/tasks'
-import { type Task } from '@/features/tasks/data/schema'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
-import { cn } from '@/lib/utils'
-import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
+import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
+import { TasksProvider } from '@/features/tasks/components/tasks-provider'
+import { TasksTable } from '@/features/tasks/components/tasks-table'
+import { type Task } from '@/features/tasks/data/schema'
+import { tasks } from '@/features/tasks/data/tasks'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -100,7 +100,10 @@ type FolderDropTarget =
   | { kind: 'after'; nodeID: string }
   | { kind: 'root' }
 
-function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null {
+function findFolderNodeByID(
+  nodes: FolderNode[],
+  id: string
+): FolderNode | null {
   for (const node of nodes) {
     if (node.id === id) {
       return node
@@ -115,7 +118,8 @@ function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null 
 
 const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
 const inventoryFolderTreeSettingsKey = 'inventory.folder-tree.v1'
-const inventoryItemAssignmentsSettingsKey = 'inventory.folder-item-assignments.v1'
+const inventoryItemAssignmentsSettingsKey =
+  'inventory.folder-item-assignments.v1'
 const inventoryWorkspaceSettingsStorageKeyPrefix =
   'cabinet.inventory.workspace-settings.v1.'
 const folderDragMimeType = 'application/x-cabinet-folder-id'
@@ -146,16 +150,76 @@ const initialFolderTree: FolderNode[] = [
     secondaryLabel: 'Priority targets',
     statusBadge: 'Goal',
   },
-  { id: 'store-1', name: 'Store 1', category: 'Store', itemCount: 18, secondaryLabel: 'Aisle A' },
-  { id: 'store-2', name: 'Store 2', category: 'Store', itemCount: 14, secondaryLabel: 'Aisle B' },
-  { id: 'store-3', name: 'Store 3', category: 'Store', itemCount: 11, secondaryLabel: 'Aisle C' },
-  { id: 'store-4', name: 'Store 4', category: 'Store', itemCount: 9, secondaryLabel: 'Overflow shelf' },
-  { id: 'store-5', name: 'Store 5', category: 'Store', itemCount: 8, secondaryLabel: 'Back room' },
-  { id: 'store-6', name: 'Store 6', category: 'Store', itemCount: 10, secondaryLabel: 'Bin 6' },
-  { id: 'store-7', name: 'Store 7', category: 'Store', itemCount: 6, secondaryLabel: 'Bin 7' },
-  { id: 'store-8', name: 'Store 8', category: 'Store', itemCount: 5, secondaryLabel: 'Bin 8' },
-  { id: 'store-9', name: 'Store 9', category: 'Store', itemCount: 4, secondaryLabel: 'Bin 9' },
-  { id: 'store-10', name: 'Store 10', category: 'Store', itemCount: 3, secondaryLabel: 'Bin 10' },
+  {
+    id: 'store-1',
+    name: 'Store 1',
+    category: 'Store',
+    itemCount: 18,
+    secondaryLabel: 'Aisle A',
+  },
+  {
+    id: 'store-2',
+    name: 'Store 2',
+    category: 'Store',
+    itemCount: 14,
+    secondaryLabel: 'Aisle B',
+  },
+  {
+    id: 'store-3',
+    name: 'Store 3',
+    category: 'Store',
+    itemCount: 11,
+    secondaryLabel: 'Aisle C',
+  },
+  {
+    id: 'store-4',
+    name: 'Store 4',
+    category: 'Store',
+    itemCount: 9,
+    secondaryLabel: 'Overflow shelf',
+  },
+  {
+    id: 'store-5',
+    name: 'Store 5',
+    category: 'Store',
+    itemCount: 8,
+    secondaryLabel: 'Back room',
+  },
+  {
+    id: 'store-6',
+    name: 'Store 6',
+    category: 'Store',
+    itemCount: 10,
+    secondaryLabel: 'Bin 6',
+  },
+  {
+    id: 'store-7',
+    name: 'Store 7',
+    category: 'Store',
+    itemCount: 6,
+    secondaryLabel: 'Bin 7',
+  },
+  {
+    id: 'store-8',
+    name: 'Store 8',
+    category: 'Store',
+    itemCount: 5,
+    secondaryLabel: 'Bin 8',
+  },
+  {
+    id: 'store-9',
+    name: 'Store 9',
+    category: 'Store',
+    itemCount: 4,
+    secondaryLabel: 'Bin 9',
+  },
+  {
+    id: 'store-10',
+    name: 'Store 10',
+    category: 'Store',
+    itemCount: 3,
+    secondaryLabel: 'Bin 10',
+  },
   {
     id: 'warehouses',
     name: 'Warehouses',
@@ -164,23 +228,113 @@ const initialFolderTree: FolderNode[] = [
     secondaryLabel: 'Bulk storage',
     statusBadge: 'Cold',
     children: [
-      { id: 'warehouse-1', name: 'Warehouse 1', category: 'Warehouse', itemCount: 15, secondaryLabel: 'Pallet zone A' },
-      { id: 'warehouse-2', name: 'Warehouse 2', category: 'Warehouse', itemCount: 13, secondaryLabel: 'Pallet zone B' },
-      { id: 'warehouse-3', name: 'Warehouse 3', category: 'Warehouse', itemCount: 11, secondaryLabel: 'Pallet zone C' },
+      {
+        id: 'warehouse-1',
+        name: 'Warehouse 1',
+        category: 'Warehouse',
+        itemCount: 15,
+        secondaryLabel: 'Pallet zone A',
+      },
+      {
+        id: 'warehouse-2',
+        name: 'Warehouse 2',
+        category: 'Warehouse',
+        itemCount: 13,
+        secondaryLabel: 'Pallet zone B',
+      },
+      {
+        id: 'warehouse-3',
+        name: 'Warehouse 3',
+        category: 'Warehouse',
+        itemCount: 11,
+        secondaryLabel: 'Pallet zone C',
+      },
     ],
   },
-  { id: 'archive-a', name: 'Archive A', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
-  { id: 'archive-b', name: 'Archive B', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
-  { id: 'archive-c', name: 'Archive C', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-d', name: 'Archive D', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-e', name: 'Archive E', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-f', name: 'Archive F', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-g', name: 'Archive G', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-h', name: 'Archive H', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-i', name: 'Archive I', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-j', name: 'Archive J', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-k', name: 'Archive K', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
-  { id: 'archive-l', name: 'Archive L', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  {
+    id: 'archive-a',
+    name: 'Archive A',
+    category: 'Archive',
+    itemCount: 2,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-b',
+    name: 'Archive B',
+    category: 'Archive',
+    itemCount: 2,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-c',
+    name: 'Archive C',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-d',
+    name: 'Archive D',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-e',
+    name: 'Archive E',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-f',
+    name: 'Archive F',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-g',
+    name: 'Archive G',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-h',
+    name: 'Archive H',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-i',
+    name: 'Archive I',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-j',
+    name: 'Archive J',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-k',
+    name: 'Archive K',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
+  {
+    id: 'archive-l',
+    name: 'Archive L',
+    category: 'Archive',
+    itemCount: 1,
+    secondaryLabel: 'Retired stock',
+  },
 ]
 
 function countFolderNodes(nodes: FolderNode[]): number {
@@ -268,7 +422,9 @@ function folderNodeContainsID(node: FolderNode, targetID: string): boolean {
   if (node.id === targetID) {
     return true
   }
-  return (node.children ?? []).some((child) => folderNodeContainsID(child, targetID))
+  return (node.children ?? []).some((child) =>
+    folderNodeContainsID(child, targetID)
+  )
 }
 
 function isInvalidFolderDropTarget(
@@ -320,7 +476,12 @@ function insertFolderNodeRelative(
       return [
         {
           ...node,
-          children: insertFolderNodeRelative(node.children, targetID, nodeToInsert, position),
+          children: insertFolderNodeRelative(
+            node.children,
+            targetID,
+            nodeToInsert,
+            position
+          ),
         },
       ]
     }
@@ -347,7 +508,10 @@ function moveFolderNodeRelative(
   return insertFolderNodeRelative(next, targetID, removed, position)
 }
 
-function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNode[] {
+function moveFolderNodeToRoot(
+  nodes: FolderNode[],
+  draggedID: string
+): FolderNode[] {
   const { removed, next } = removeFolderNode(nodes, draggedID)
   if (!removed) {
     return nodes
@@ -393,7 +557,10 @@ function deleteFolderNode(nodes: FolderNode[], targetID: string): FolderNode[] {
 }
 
 function flattenFolderNodes(nodes: FolderNode[]): FolderNode[] {
-  return nodes.flatMap((node) => [node, ...flattenFolderNodes(node.children ?? [])])
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenFolderNodes(node.children ?? []),
+  ])
 }
 
 function normalizeFolderLabel(value: string): string {
@@ -424,7 +591,8 @@ function sanitizeFolderNodes(
     seenNodeIDs.add(id)
     const children = sanitizeFolderNodes(candidate.children, seenNodeIDs)
     const itemCount =
-      typeof candidate.itemCount === 'number' && Number.isFinite(candidate.itemCount)
+      typeof candidate.itemCount === 'number' &&
+      Number.isFinite(candidate.itemCount)
         ? candidate.itemCount
         : undefined
 
@@ -432,7 +600,8 @@ function sanitizeFolderNodes(
       id,
       name,
       category:
-        typeof candidate.category === 'string' && candidate.category.trim() !== ''
+        typeof candidate.category === 'string' &&
+        candidate.category.trim() !== ''
           ? candidate.category.trim()
           : undefined,
       itemCount,
@@ -442,7 +611,8 @@ function sanitizeFolderNodes(
           ? candidate.secondaryLabel.trim()
           : undefined,
       statusBadge:
-        typeof candidate.statusBadge === 'string' && candidate.statusBadge.trim() !== ''
+        typeof candidate.statusBadge === 'string' &&
+        candidate.statusBadge.trim() !== ''
           ? candidate.statusBadge.trim()
           : undefined,
       children: children.length > 0 ? children : undefined,
@@ -452,7 +622,9 @@ function sanitizeFolderNodes(
   return sanitized
 }
 
-function parsePersistedFolderTree(value: string | undefined): FolderNode[] | null {
+function parsePersistedFolderTree(
+  value: string | undefined
+): FolderNode[] | null {
   if (!value) {
     return null
   }
@@ -479,7 +651,9 @@ function parsePersistedItemAssignments(
 
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>
-    const validFolderIDs = new Set(flattenFolderNodes(nodes).map((node) => node.id))
+    const validFolderIDs = new Set(
+      flattenFolderNodes(nodes).map((node) => node.id)
+    )
     return Object.entries(parsed).reduce<Record<string, string>>(
       (nextAssignments, [recordID, folderID]) => {
         const normalizedRecordID = recordID.trim()
@@ -505,9 +679,10 @@ function inventoryWorkspaceSettingsStorageKey(profileID: string): string {
   return `${inventoryWorkspaceSettingsStorageKeyPrefix}${profileID.trim()}`
 }
 
-function parsePersistedWorkspaceSnapshot(
-  value: string | null
-): { folderTree: FolderNode[]; itemAssignments: Record<string, string> } | null {
+function parsePersistedWorkspaceSnapshot(value: string | null): {
+  folderTree: FolderNode[]
+  itemAssignments: Record<string, string>
+} | null {
   if (!value) {
     return null
   }
@@ -534,9 +709,10 @@ function parsePersistedWorkspaceSnapshot(
   }
 }
 
-function loadPersistedWorkspaceSnapshot(
-  profileID: string
-): { folderTree: FolderNode[]; itemAssignments: Record<string, string> } | null {
+function loadPersistedWorkspaceSnapshot(profileID: string): {
+  folderTree: FolderNode[]
+  itemAssignments: Record<string, string>
+} | null {
   if (typeof window === 'undefined') {
     return null
   }
@@ -582,7 +758,9 @@ function resolveTaskFolderID(
   itemAssignments: Record<string, string>
 ): string | null {
   const recordID = task.recordID?.trim() || ''
-  const assignedFolderID = recordID ? itemAssignments[recordID]?.trim() || '' : ''
+  const assignedFolderID = recordID
+    ? itemAssignments[recordID]?.trim() || ''
+    : ''
   if (assignedFolderID && findFolderNodeByID(nodes, assignedFolderID)) {
     return assignedFolderID
   }
@@ -631,7 +809,8 @@ function loadInventoryTreeState() {
       : undefined
 
     return {
-      activeFolderID: parsed.activeFolderID?.trim() || legacyActiveFolderID || 'all-items',
+      activeFolderID:
+        parsed.activeFolderID?.trim() || legacyActiveFolderID || 'all-items',
       expandedNodeIDs: new Set(parsed.expandedNodeIDs ?? []),
     }
   } catch {
@@ -655,22 +834,28 @@ export function Collection({
   const [activeFolderID, setActiveFolderID] = useState(
     () => loadInventoryTreeState().activeFolderID
   )
-  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
+  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] =
+    useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
-  const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
-    null
-  )
+  const [folderCreateParentID, setFolderCreateParentID] = useState<
+    string | null
+  >(null)
   const [folderCreateName, setFolderCreateName] = useState('')
   const [folderPropertiesOpen, setFolderPropertiesOpen] = useState(false)
-  const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(null)
+  const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(
+    null
+  )
   const [folderPropertiesName, setFolderPropertiesName] = useState('')
-  const [folderPropertiesCategory, setFolderPropertiesCategory] = useState('General')
-  const [folderPropertiesSecondaryLabel, setFolderPropertiesSecondaryLabel] = useState('')
-  const [folderPropertiesStatusBadge, setFolderPropertiesStatusBadge] = useState('')
+  const [folderPropertiesCategory, setFolderPropertiesCategory] =
+    useState('General')
+  const [folderPropertiesSecondaryLabel, setFolderPropertiesSecondaryLabel] =
+    useState('')
+  const [folderPropertiesStatusBadge, setFolderPropertiesStatusBadge] =
+    useState('')
   const [folderDeleteID, setFolderDeleteID] = useState<string | null>(null)
   const [itemCreateOpen, setItemCreateOpen] = useState(false)
   const [itemCreateTitle, setItemCreateTitle] = useState('')
@@ -678,9 +863,9 @@ export function Collection({
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [draggedItemID, setDraggedItemID] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
-  const [itemDropTargetFolderID, setItemDropTargetFolderID] = useState<string | null>(
-    null
-  )
+  const [itemDropTargetFolderID, setItemDropTargetFolderID] = useState<
+    string | null
+  >(null)
   const treeItemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -699,8 +884,12 @@ export function Collection({
   const [barcodeAddBusy, setBarcodeAddBusy] = useState(false)
   const [barcodeLookupBusy, setBarcodeLookupBusy] = useState(false)
   const [barcodeAddError, setBarcodeAddError] = useState<string | null>(null)
-  const [barcodeAddSuccess, setBarcodeAddSuccess] = useState<string | null>(null)
-  const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null)
+  const [barcodeAddSuccess, setBarcodeAddSuccess] = useState<string | null>(
+    null
+  )
+  const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(
+    null
+  )
   const [barcodeMatches, setBarcodeMatches] = useState<BarcodeMatch[]>([])
   const [barcodeLookupCompleted, setBarcodeLookupCompleted] = useState(false)
   const [lastLookupBarcode, setLastLookupBarcode] = useState('')
@@ -725,7 +914,9 @@ export function Collection({
     addCollection,
   } = useWorkspaceCollections()
   const activeFolderNode = useMemo(
-    () => findFolderNodeByID(folderTree, activeFolderID) ?? findFolderNodeByID(folderTree, 'all-items'),
+    () =>
+      findFolderNodeByID(folderTree, activeFolderID) ??
+      findFolderNodeByID(folderTree, 'all-items'),
     [activeFolderID, folderTree]
   )
   const activeFolderName = activeFolderNode?.name ?? 'All Items'
@@ -736,7 +927,8 @@ export function Collection({
 
     return tableData.filter(
       (task) =>
-        resolveTaskFolderID(task, folderTree, itemFolderAssignments) === activeFolderID
+        resolveTaskFolderID(task, folderTree, itemFolderAssignments) ===
+        activeFolderID
     )
   }, [activeFolderID, folderTree, itemFolderAssignments, tableData])
   const folderCategoryOptions = useMemo(() => {
@@ -1023,20 +1215,25 @@ export function Collection({
     [expandedNodeIDs, focusTreeItemByOffset, toggleNodeExpanded]
   )
 
-  const handleTreeFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) {
-      return
-    }
-    const activeNode = visibleTreeNodes.find((node) => node.id === activeFolderID)
-    const fallbackNode = visibleTreeNodes[0]
-    const targetID = activeNode?.id ?? fallbackNode?.id
-    if (!targetID) {
-      return
-    }
-    requestAnimationFrame(() => {
-      treeItemRefs.current[targetID]?.focus()
-    })
-  }, [activeFolderID, visibleTreeNodes])
+  const handleTreeFocus = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return
+      }
+      const activeNode = visibleTreeNodes.find(
+        (node) => node.id === activeFolderID
+      )
+      const fallbackNode = visibleTreeNodes[0]
+      const targetID = activeNode?.id ?? fallbackNode?.id
+      if (!targetID) {
+        return
+      }
+      requestAnimationFrame(() => {
+        treeItemRefs.current[targetID]?.focus()
+      })
+    },
+    [activeFolderID, visibleTreeNodes]
+  )
 
   const moveDraggedFolder = useCallback(
     (draggedID: string, target: FolderDropTarget | null) => {
@@ -1049,7 +1246,9 @@ export function Collection({
         if (draggedID === target.nodeID) {
           return
         }
-        setFolderTree((previous) => moveFolderNode(previous, draggedID, target.nodeID))
+        setFolderTree((previous) =>
+          moveFolderNode(previous, draggedID, target.nodeID)
+        )
         setExpandedNodeIDs((previous) => {
           const next = new Set(previous)
           next.add(target.nodeID)
@@ -1060,7 +1259,12 @@ export function Collection({
           return
         }
         setFolderTree((previous) =>
-          moveFolderNodeRelative(previous, draggedID, target.nodeID, target.kind)
+          moveFolderNodeRelative(
+            previous,
+            draggedID,
+            target.nodeID,
+            target.kind
+          )
         )
       } else {
         setFolderTree((previous) => moveFolderNodeToRoot(previous, draggedID))
@@ -1086,9 +1290,12 @@ export function Collection({
         const hasChildren = Boolean(node.children?.length)
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
         const isActive = activeFolderID === node.id
-        const isChildDropTarget = dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
-        const isBeforeDropTarget = dragTarget?.kind === 'before' && dragTarget.nodeID === node.id
-        const isAfterDropTarget = dragTarget?.kind === 'after' && dragTarget.nodeID === node.id
+        const isChildDropTarget =
+          dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
+        const isBeforeDropTarget =
+          dragTarget?.kind === 'before' && dragTarget.nodeID === node.id
+        const isAfterDropTarget =
+          dragTarget?.kind === 'after' && dragTarget.nodeID === node.id
         const isItemDropTarget = itemDropTargetFolderID === node.id
         const hasInvalidFolderDropTarget = draggedFolderID
           ? isInvalidFolderDropTarget(folderTree, draggedFolderID, node.id)
@@ -1101,7 +1308,9 @@ export function Collection({
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-before-${node.id}`}
-                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
+                data-invalid-drop-target={
+                  hasInvalidFolderDropTarget ? 'true' : 'false'
+                }
                 className={cn(
                   'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
                   hasInvalidFolderDropTarget
@@ -1120,7 +1329,9 @@ export function Collection({
                 }}
                 onDragOver={(event) => {
                   event.preventDefault()
-                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget ? 'none' : 'move'
+                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget
+                    ? 'none'
+                    : 'move'
                   if (hasInvalidFolderDropTarget) {
                     setDragTarget(null)
                     return
@@ -1131,7 +1342,10 @@ export function Collection({
                   event.preventDefault()
                   const droppedID = readDraggedFolderID(event)
                   if (droppedID && !hasInvalidFolderDropTarget) {
-                    moveDraggedFolder(droppedID, { kind: 'before', nodeID: node.id })
+                    moveDraggedFolder(droppedID, {
+                      kind: 'before',
+                      nodeID: node.id,
+                    })
                   }
                   setDraggedFolderID(null)
                   setDragTarget(null)
@@ -1152,7 +1366,10 @@ export function Collection({
                   onClick={() => toggleNodeExpanded(node.id)}
                 >
                   <ChevronRight
-                    className={cn('size-4 transition-transform duration-200', expanded && 'rotate-90')}
+                    className={cn(
+                      'size-4 transition-transform duration-200',
+                      expanded && 'rotate-90'
+                    )}
                   />
                 </Button>
               ) : (
@@ -1166,18 +1383,24 @@ export function Collection({
                 tabIndex={isActive ? 0 : -1}
                 aria-level={level}
                 aria-selected={isActive ? 'true' : 'false'}
-                aria-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                aria-expanded={
+                  hasChildren ? (expanded ? 'true' : 'false') : undefined
+                }
                 data-testid={`folder-tree-item-${node.id}`}
                 data-active={isActive ? 'true' : 'false'}
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
-                data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                data-node-expanded={
+                  hasChildren ? (expanded ? 'true' : 'false') : undefined
+                }
                 data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
-                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
+                data-invalid-drop-target={
+                  hasInvalidFolderDropTarget ? 'true' : 'false'
+                }
                 className={cn(
-                  'relative flex flex-1 min-w-0 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 pr-14 text-left text-sm transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  'relative flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-3 rounded-md border border-transparent px-2 py-1.5 pr-14 text-left text-sm transition-colors',
+                  'focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 focus-visible:outline-none',
                   isActive
-                    ? 'border-primary/45 bg-primary/18 text-accent-foreground font-semibold shadow-sm ring-1 ring-primary/25 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-primary before:content-["\"]'
+                    ? 'border-primary/45 bg-primary/18 font-semibold text-accent-foreground shadow-sm ring-1 ring-primary/25 before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-primary before:content-[""]'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
                   draggedFolderID &&
                     node.id !== 'all-items' &&
@@ -1218,7 +1441,9 @@ export function Collection({
                   const droppedFolderID = readDraggedFolderID(event)
                   if (droppedFolderID && droppedFolderID !== node.id) {
                     event.preventDefault()
-                    event.dataTransfer.dropEffect = canAcceptChildDrop ? 'move' : 'none'
+                    event.dataTransfer.dropEffect = canAcceptChildDrop
+                      ? 'move'
+                      : 'none'
                     if (canAcceptChildDrop) {
                       setDragTarget({ kind: 'child', nodeID: node.id })
                     } else {
@@ -1255,8 +1480,15 @@ export function Collection({
                   }
 
                   const droppedID = readDraggedFolderID(event)
-                  if (droppedID && droppedID !== node.id && canAcceptChildDrop) {
-                    moveDraggedFolder(droppedID, { kind: 'child', nodeID: node.id })
+                  if (
+                    droppedID &&
+                    droppedID !== node.id &&
+                    canAcceptChildDrop
+                  ) {
+                    moveDraggedFolder(droppedID, {
+                      kind: 'child',
+                      nodeID: node.id,
+                    })
                   }
                   setDraggedFolderID(null)
                   setDragTarget(null)
@@ -1284,7 +1516,7 @@ export function Collection({
                   {typeof node.itemCount === 'number' ? (
                     <span
                       data-testid={`folder-tree-count-${node.id}`}
-                      className='text-xs font-medium tabular-nums text-muted-foreground'
+                      className='text-xs font-medium text-muted-foreground tabular-nums'
                     >
                       {node.itemCount}
                     </span>
@@ -1306,14 +1538,17 @@ export function Collection({
                       title={`Drag ${node.name}`}
                       data-testid={`folder-tree-drag-handle-${node.id}`}
                       className={cn(
-                        'inline-flex h-7 w-7 shrink-0 select-none touch-none cursor-grab items-center justify-center rounded-md border border-border/50 bg-background/80 text-foreground/80 shadow-sm transition-colors',
-                        'hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:cursor-grabbing',
-                        draggedFolderID === node.id && 'border-primary bg-primary/10 text-primary'
+                        'inline-flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md border border-border/50 bg-background/80 text-foreground/80 shadow-sm transition-colors select-none',
+                        'hover:border-border hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:cursor-grabbing',
+                        draggedFolderID === node.id &&
+                          'border-primary bg-primary/10 text-primary'
                       )}
                       onPointerDown={(event) => event.stopPropagation()}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => event.stopPropagation()}
-                      onDragStart={(event) => handleFolderDragStart(node.id, event)}
+                      onDragStart={(event) =>
+                        handleFolderDragStart(node.id, event)
+                      }
                       onDragEnd={() => {
                         setDraggedFolderID(null)
                         setDragTarget(null)
@@ -1328,7 +1563,7 @@ export function Collection({
               </div>
               <div
                 data-testid={`folder-tree-inline-actions-${node.id}`}
-                className='pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+                className='pointer-events-none absolute top-1/2 right-1 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
               >
                 <Button
                   type='button'
@@ -1415,7 +1650,9 @@ export function Collection({
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-after-${node.id}`}
-                data-invalid-drop-target={hasInvalidFolderDropTarget ? 'true' : 'false'}
+                data-invalid-drop-target={
+                  hasInvalidFolderDropTarget ? 'true' : 'false'
+                }
                 className={cn(
                   'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
                   hasInvalidFolderDropTarget
@@ -1434,7 +1671,9 @@ export function Collection({
                 }}
                 onDragOver={(event) => {
                   event.preventDefault()
-                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget ? 'none' : 'move'
+                  event.dataTransfer.dropEffect = hasInvalidFolderDropTarget
+                    ? 'none'
+                    : 'move'
                   if (hasInvalidFolderDropTarget) {
                     setDragTarget(null)
                     return
@@ -1445,7 +1684,10 @@ export function Collection({
                   event.preventDefault()
                   const droppedID = readDraggedFolderID(event)
                   if (droppedID && !hasInvalidFolderDropTarget) {
-                    moveDraggedFolder(droppedID, { kind: 'after', nodeID: node.id })
+                    moveDraggedFolder(droppedID, {
+                      kind: 'after',
+                      nodeID: node.id,
+                    })
                   }
                   setDraggedFolderID(null)
                   setDragTarget(null)
@@ -1551,7 +1793,9 @@ export function Collection({
       setInventoryPhotos(mapped.filter((photo) => photo.id !== ''))
     } catch {
       setInventoryPhotos([])
-      setPhotosError('Photos could not be loaded for this item. Retry to continue.')
+      setPhotosError(
+        'Photos could not be loaded for this item. Retry to continue.'
+      )
     } finally {
       setPhotosLoading(false)
     }
@@ -1754,7 +1998,9 @@ export function Collection({
         }
         await loadInventoryPhotos()
       } catch {
-        setPhotosError('Photo upload failed. Retry with a supported image file.')
+        setPhotosError(
+          'Photo upload failed. Retry with a supported image file.'
+        )
       } finally {
         setPhotosBusy(false)
       }
@@ -1783,7 +2029,9 @@ export function Collection({
         }
         await loadInventoryPhotos()
       } catch {
-        setPhotosError('Unable to set primary photo right now. Retry this action.')
+        setPhotosError(
+          'Unable to set primary photo right now. Retry this action.'
+        )
       } finally {
         setPhotosBusy(false)
       }
@@ -1868,7 +2116,9 @@ export function Collection({
     setBarcodeMatches([])
     setLastLookupBarcode(barcode)
     try {
-      const response = await fetch(`/api/barcodes/${encodeURIComponent(barcode)}`)
+      const response = await fetch(
+        `/api/barcodes/${encodeURIComponent(barcode)}`
+      )
       if (!response.ok) {
         throw new Error(`lookup_barcode_${response.status}`)
       }
@@ -2045,14 +2295,14 @@ export function Collection({
         </div>
 
         <div className='grid min-h-[34rem] grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch'>
-          <Card className='lg:col-span-3 min-h-0 h-full flex flex-col'>
+          <Card className='flex h-full min-h-0 flex-col lg:col-span-3'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
                 Browse folders before drilling into results.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2 min-h-0 flex flex-1 flex-col'>
+            <CardContent className='flex min-h-0 flex-1 flex-col space-y-2'>
               <div className='flex justify-end gap-2'>
                 <Button
                   type='button'
@@ -2061,7 +2311,9 @@ export function Collection({
                   data-testid='folder-tree-sort-root-az'
                   aria-label='Sort root folders A to Z'
                   onClick={() => {
-                    setFolderTree((previous) => sortRootFolderNodesAlphabetically(previous))
+                    setFolderTree((previous) =>
+                      sortRootFolderNodesAlphabetically(previous)
+                    )
                   }}
                 >
                   A/Z
@@ -2087,7 +2339,7 @@ export function Collection({
                 data-testid='inventory-folder-tree'
                 tabIndex={0}
                 className={cn(
-                  'min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2',
+                  'h-full min-h-0 flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2',
                   (dragTarget?.kind === 'root' ||
                     itemDropTargetFolderID === 'all-items') &&
                     'border-primary bg-primary/5'
@@ -2139,7 +2391,8 @@ export function Collection({
                     data-testid='folder-tree-root-drop-zone'
                     className={cn(
                       'mt-2 flex min-h-10 items-center justify-center rounded-md border border-dashed px-3 text-xs text-muted-foreground transition-colors',
-                      dragTarget?.kind === 'root' || itemDropTargetFolderID === 'all-items'
+                      dragTarget?.kind === 'root' ||
+                        itemDropTargetFolderID === 'all-items'
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border/70'
                     )}
@@ -2204,13 +2457,17 @@ export function Collection({
                       data-testid='inventory-item-create-title'
                       placeholder='Item title'
                       value={itemCreateTitle}
-                      onChange={(event) => setItemCreateTitle(event.target.value)}
+                      onChange={(event) =>
+                        setItemCreateTitle(event.target.value)
+                      }
                     />
                     <Input
                       data-testid='inventory-item-create-part-number'
                       placeholder='Part number or SKU'
                       value={itemCreatePartNumber}
-                      onChange={(event) => setItemCreatePartNumber(event.target.value)}
+                      onChange={(event) =>
+                        setItemCreatePartNumber(event.target.value)
+                      }
                     />
                   </div>
                   <DialogFooter>
@@ -2235,7 +2492,8 @@ export function Collection({
                         if (title === '') {
                           return
                         }
-                        const nextID = partNumber || `ITEM-${tableData.length + 1}`
+                        const nextID =
+                          partNumber || `ITEM-${tableData.length + 1}`
                         setTableData((previous) => [
                           {
                             id: nextID,
@@ -2276,14 +2534,18 @@ export function Collection({
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>
-                      {folderCreateParentID ? 'Add Child Folder' : 'Add Root Folder'}
+                      {folderCreateParentID
+                        ? 'Add Child Folder'
+                        : 'Add Root Folder'}
                     </DialogTitle>
                   </DialogHeader>
                   <Input
                     data-testid='folder-tree-name-input'
                     placeholder='Folder name'
                     value={folderCreateName}
-                    onChange={(event) => setFolderCreateName(event.target.value)}
+                    onChange={(event) =>
+                      setFolderCreateName(event.target.value)
+                    }
                   />
                   <DialogFooter>
                     <Button
@@ -2306,17 +2568,26 @@ export function Collection({
                         if (name === '') {
                           return
                         }
-                        const newFolderID = buildUniqueFolderID(name, folderTree)
+                        const newFolderID = buildUniqueFolderID(
+                          name,
+                          folderTree
+                        )
                         setFolderTree((previous) => {
                           const newNode: FolderNode = {
                             id: newFolderID,
                             name,
-                            category: folderCreateParentID ? 'General' : 'Collection',
+                            category: folderCreateParentID
+                              ? 'General'
+                              : 'Collection',
                           }
                           if (!folderCreateParentID) {
                             return [...previous, newNode]
                           }
-                          return addChildFolder(previous, folderCreateParentID, newNode)
+                          return addChildFolder(
+                            previous,
+                            folderCreateParentID,
+                            newNode
+                          )
                         })
                         if (folderCreateParentID) {
                           setExpandedNodeIDs((previous) => {
@@ -2353,23 +2624,32 @@ export function Collection({
                   <SheetHeader className='text-start'>
                     <SheetTitle>Folder Properties</SheetTitle>
                     <SheetDescription>
-                      Update the selected folder title, category, secondary label, and status badge using its stable folder ID.
+                      Update the selected folder title, category, secondary
+                      label, and status badge using its stable folder ID.
                     </SheetDescription>
                   </SheetHeader>
                   <div className='grid gap-4 py-4'>
                     <div className='grid gap-2'>
-                      <label className='text-sm font-medium' htmlFor='folder-properties-name'>
+                      <label
+                        className='text-sm font-medium'
+                        htmlFor='folder-properties-name'
+                      >
                         Title
                       </label>
                       <Input
                         id='folder-properties-name'
                         data-testid='folder-properties-name-input'
                         value={folderPropertiesName}
-                        onChange={(event) => setFolderPropertiesName(event.target.value)}
+                        onChange={(event) =>
+                          setFolderPropertiesName(event.target.value)
+                        }
                       />
                     </div>
                     <div className='grid gap-2'>
-                      <label className='text-sm font-medium' htmlFor='folder-properties-category'>
+                      <label
+                        className='text-sm font-medium'
+                        htmlFor='folder-properties-category'
+                      >
                         Category
                       </label>
                       <select
@@ -2377,7 +2657,9 @@ export function Collection({
                         data-testid='folder-properties-category-select'
                         className='h-9 rounded-md border bg-background px-2 text-sm'
                         value={folderPropertiesCategory}
-                        onChange={(event) => setFolderPropertiesCategory(event.target.value)}
+                        onChange={(event) =>
+                          setFolderPropertiesCategory(event.target.value)
+                        }
                       >
                         {folderCategoryOptions.map((category) => (
                           <option key={category} value={category}>
@@ -2387,7 +2669,10 @@ export function Collection({
                       </select>
                     </div>
                     <div className='grid gap-2'>
-                      <label className='text-sm font-medium' htmlFor='folder-properties-secondary-label'>
+                      <label
+                        className='text-sm font-medium'
+                        htmlFor='folder-properties-secondary-label'
+                      >
                         Secondary label
                       </label>
                       <Input
@@ -2401,7 +2686,10 @@ export function Collection({
                       />
                     </div>
                     <div className='grid gap-2'>
-                      <label className='text-sm font-medium' htmlFor='folder-properties-status-badge'>
+                      <label
+                        className='text-sm font-medium'
+                        htmlFor='folder-properties-status-badge'
+                      >
                         Status badge
                       </label>
                       <Input
@@ -2409,7 +2697,9 @@ export function Collection({
                         data-testid='folder-properties-status-badge-input'
                         placeholder='Cold'
                         value={folderPropertiesStatusBadge}
-                        onChange={(event) => setFolderPropertiesStatusBadge(event.target.value)}
+                        onChange={(event) =>
+                          setFolderPropertiesStatusBadge(event.target.value)
+                        }
                       />
                     </div>
                     {folderPropertiesID ? (
@@ -2439,14 +2729,21 @@ export function Collection({
                           return
                         }
                         setFolderTree((previous) =>
-                          updateFolderNodeByID(previous, folderPropertiesID, (node) => ({
-                            ...node,
-                            name,
-                            category: folderPropertiesCategory.trim() || 'General',
-                            secondaryLabel:
-                              folderPropertiesSecondaryLabel.trim() || undefined,
-                            statusBadge: folderPropertiesStatusBadge.trim() || undefined,
-                          }))
+                          updateFolderNodeByID(
+                            previous,
+                            folderPropertiesID,
+                            (node) => ({
+                              ...node,
+                              name,
+                              category:
+                                folderPropertiesCategory.trim() || 'General',
+                              secondaryLabel:
+                                folderPropertiesSecondaryLabel.trim() ||
+                                undefined,
+                              statusBadge:
+                                folderPropertiesStatusBadge.trim() || undefined,
+                            })
+                          )
                         )
                         setActiveFolderID(folderPropertiesID)
                         setFolderPropertiesOpen(false)
@@ -2488,7 +2785,9 @@ export function Collection({
                         if (!folderDeleteID) {
                           return
                         }
-                        setFolderTree((previous) => deleteFolderNode(previous, folderDeleteID))
+                        setFolderTree((previous) =>
+                          deleteFolderNode(previous, folderDeleteID)
+                        )
                         if (activeFolderID === folderDeleteID) {
                           setActiveFolderID('all-items')
                         }
@@ -2510,7 +2809,9 @@ export function Collection({
             <CardContent className='space-y-4'>
               <p className='text-sm text-muted-foreground'>
                 Folders: <strong>{summary.folders}</strong>{' '}
-                <span className='mx-2'>Items: <strong>{summary.items}</strong></span>
+                <span className='mx-2'>
+                  Items: <strong>{summary.items}</strong>
+                </span>
                 Active Brand: <strong>{summary.activeBrand}</strong>{' '}
                 <span className='mx-2'>
                   Active Category: <strong>{summary.activeCategory}</strong>
@@ -2528,7 +2829,10 @@ export function Collection({
                   </strong>
                 </span>
               </p>
-              <div className='rounded-md border p-3' data-testid='collection-inline-picker'>
+              <div
+                className='rounded-md border p-3'
+                data-testid='collection-inline-picker'
+              >
                 <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center'>
                   <select
                     className='h-9 rounded-md border bg-background px-2 text-sm'
@@ -2564,7 +2868,9 @@ export function Collection({
                     type='button'
                     variant='outline'
                     data-testid='collection-inline-add-new'
-                    onClick={() => setInlineCollectionInputOpen((open) => !open)}
+                    onClick={() =>
+                      setInlineCollectionInputOpen((open) => !open)
+                    }
                   >
                     + New Collection
                   </Button>
@@ -2575,7 +2881,9 @@ export function Collection({
                       data-testid='collection-inline-new-name'
                       placeholder='Collection name'
                       value={inlineCollectionName}
-                      onChange={(event) => setInlineCollectionName(event.target.value)}
+                      onChange={(event) =>
+                        setInlineCollectionName(event.target.value)
+                      }
                     />
                     <Button
                       type='button'
@@ -2632,8 +2940,12 @@ export function Collection({
                     ? `inventory-item-row-${record.recordID.trim()}`
                     : undefined
                 }
-                onRowDragStart={isInventoryRoute ? handleItemRowDragStart : undefined}
-                onRowDragEnd={isInventoryRoute ? handleItemRowDragEnd : undefined}
+                onRowDragStart={
+                  isInventoryRoute ? handleItemRowDragStart : undefined
+                }
+                onRowDragEnd={
+                  isInventoryRoute ? handleItemRowDragEnd : undefined
+                }
               />
               {isInventoryRoute ? (
                 <>
@@ -2667,7 +2979,9 @@ export function Collection({
                         }}
                       />
                       {photosBusy ? (
-                        <span className='text-xs text-muted-foreground'>Working...</span>
+                        <span className='text-xs text-muted-foreground'>
+                          Working...
+                        </span>
                       ) : null}
                     </div>
                     {cameraError ? (
@@ -2700,7 +3014,9 @@ export function Collection({
                         data-testid='inventory-photos-error'
                       >
                         <p className='font-medium'>Photos are unavailable.</p>
-                        <p className='mt-1 text-muted-foreground'>{photosError}</p>
+                        <p className='mt-1 text-muted-foreground'>
+                          {photosError}
+                        </p>
                         <Button
                           className='mt-3'
                           size='sm'
@@ -2711,15 +3027,20 @@ export function Collection({
                         </Button>
                       </div>
                     ) : null}
-                    {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
+                    {!photosLoading &&
+                    !photosError &&
+                    inventoryPhotos.length === 0 ? (
                       <div
                         className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
                         data-testid='inventory-photos-empty'
                       >
-                        No photos yet for the selected item. Upload an image to begin.
+                        No photos yet for the selected item. Upload an image to
+                        begin.
                       </div>
                     ) : null}
-                    {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
+                    {!photosLoading &&
+                    !photosError &&
+                    inventoryPhotos.length > 0 ? (
                       <>
                         <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
                           {inventoryPhotos.map((photo, index) => (
@@ -2737,7 +3058,9 @@ export function Collection({
                                 alt={photo.filename}
                                 className='h-32 w-full object-cover'
                               />
-                              <div className='p-2 text-sm'>{photo.filename}</div>
+                              <div className='p-2 text-sm'>
+                                {photo.filename}
+                              </div>
                             </button>
                           ))}
                         </div>
@@ -2764,7 +3087,9 @@ export function Collection({
                                   size='sm'
                                   variant='outline'
                                   data-testid='inventory-photo-set-primary'
-                                  onClick={() => void handleSetPrimaryPhoto(photo.id)}
+                                  onClick={() =>
+                                    void handleSetPrimaryPhoto(photo.id)
+                                  }
                                 >
                                   Set Primary
                                 </Button>
@@ -2772,7 +3097,9 @@ export function Collection({
                                   size='sm'
                                   variant='outline'
                                   data-testid='inventory-photo-delete'
-                                  onClick={() => void handleDeletePhoto(photo.id)}
+                                  onClick={() =>
+                                    void handleDeletePhoto(photo.id)
+                                  }
                                 >
                                   Delete
                                 </Button>
@@ -2927,7 +3254,8 @@ export function Collection({
                     <div>
                       <h3 className='text-base font-semibold'>AI Assist</h3>
                       <p className='text-sm text-muted-foreground'>
-                        Generate title and photo suggestions with explicit confirm-before-apply.
+                        Generate title and photo suggestions with explicit
+                        confirm-before-apply.
                       </p>
                     </div>
                     <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
@@ -2936,7 +3264,9 @@ export function Collection({
                           placeholder='Paste listing title'
                           data-testid='inventory-ai-title-input'
                           value={aiTitleInput}
-                          onChange={(event) => setAITitleInput(event.target.value)}
+                          onChange={(event) =>
+                            setAITitleInput(event.target.value)
+                          }
                         />
                         <Button
                           data-testid='inventory-ai-suggest-title'
@@ -2951,7 +3281,9 @@ export function Collection({
                           placeholder='Paste photo URL'
                           data-testid='inventory-ai-photo-url-input'
                           value={aiPhotoURLInput}
-                          onChange={(event) => setAIPhotoURLInput(event.target.value)}
+                          onChange={(event) =>
+                            setAIPhotoURLInput(event.target.value)
+                          }
                         />
                         <Button
                           data-testid='inventory-ai-suggest-photo'
@@ -2998,7 +3330,8 @@ export function Collection({
                         data-testid='inventory-ai-suggestion'
                       >
                         <p>
-                          <strong>Part:</strong> {aiSuggestion.part_number || 'n/a'}
+                          <strong>Part:</strong>{' '}
+                          {aiSuggestion.part_number || 'n/a'}
                         </p>
                         <p>
                           <strong>Brand:</strong> {aiSuggestion.brand || 'n/a'}
@@ -3047,7 +3380,9 @@ export function Collection({
             data-testid='inventory-photo-fullscreen'
           >
             <DialogHeader>
-              <DialogTitle>{selectedPhoto?.filename ?? 'Photo Viewer'}</DialogTitle>
+              <DialogTitle>
+                {selectedPhoto?.filename ?? 'Photo Viewer'}
+              </DialogTitle>
             </DialogHeader>
             {selectedPhoto ? (
               <img

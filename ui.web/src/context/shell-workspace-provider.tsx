@@ -59,10 +59,21 @@ export function ShellWorkspaceProvider({
           return
         }
         const nextProfileId = payload.id?.trim() || 'local'
+        const savedWorkspace = (() => {
+          try {
+            return normalizeWorkspace(
+              window.localStorage.getItem(storageKey(nextProfileId))
+            )
+          } catch {
+            return 'navigation'
+          }
+        })()
         setActiveProfileId(nextProfileId)
+        setActiveWorkspaceState(savedWorkspace)
       } catch {
         if (!cancelled) {
           setActiveProfileId('local')
+          setActiveWorkspaceState('navigation')
         }
       }
     }
@@ -72,15 +83,6 @@ export function ShellWorkspaceProvider({
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey(activeProfileId))
-      setActiveWorkspaceState(normalizeWorkspace(saved))
-    } catch {
-      setActiveWorkspaceState('navigation')
-    }
-  }, [activeProfileId])
 
   const setActiveWorkspace = useCallback(
     (workspace: ShellWorkspace) => {

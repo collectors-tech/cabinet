@@ -25,10 +25,15 @@ function normalizeCollectionName(value: string): string {
 }
 
 export function collectionKey(value: string): string {
-  return normalizeCollectionName(value).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return normalizeCollectionName(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
 }
 
-function deriveCollectionSummary(name: string, index: number): CollectionSummary {
+function deriveCollectionSummary(
+  name: string,
+  index: number
+): CollectionSummary {
   const normalized = normalizeCollectionName(name)
   const lower = normalized.toLowerCase()
 
@@ -52,7 +57,8 @@ function deriveCollectionSummary(name: string, index: number): CollectionSummary
       updatedLabel: 'Updated 12m ago',
       scopeLabel: 'Monitoring set',
       statusLabel: 'Needs review',
-      description: 'Fast-moving cards/items that benefit from repeated checking.',
+      description:
+        'Fast-moving cards/items that benefit from repeated checking.',
     }
   }
 
@@ -64,7 +70,8 @@ function deriveCollectionSummary(name: string, index: number): CollectionSummary
       updatedLabel: 'Updated 1h ago',
       scopeLabel: 'Intent shortlist',
       statusLabel: 'Prioritized',
-      description: 'Targets staged for acquisition or tighter pricing decisions.',
+      description:
+        'Targets staged for acquisition or tighter pricing decisions.',
     }
   }
 
@@ -76,7 +83,8 @@ function deriveCollectionSummary(name: string, index: number): CollectionSummary
       updatedLabel: 'Updated yesterday',
       scopeLabel: 'Storage location',
       statusLabel: 'Archived storage',
-      description: 'Longer-term storage grouping with slower movement and larger volume.',
+      description:
+        'Longer-term storage grouping with slower movement and larger volume.',
     }
   }
 
@@ -88,7 +96,8 @@ function deriveCollectionSummary(name: string, index: number): CollectionSummary
       updatedLabel: 'Updated 20m ago',
       scopeLabel: 'Retail lane',
       statusLabel: 'Active rotation',
-      description: 'Operational selling/stock lane with frequent active-context switching.',
+      description:
+        'Operational selling/stock lane with frequent active-context switching.',
     }
   }
 
@@ -99,7 +108,8 @@ function deriveCollectionSummary(name: string, index: number): CollectionSummary
     updatedLabel: 'Updated recently',
     scopeLabel: 'Custom collection',
     statusLabel: 'User managed',
-    description: 'Custom workspace collection created for a focused subset of items.',
+    description:
+      'Custom workspace collection created for a focused subset of items.',
   }
 }
 
@@ -117,28 +127,35 @@ export function useWorkspaceCollections() {
   useEffect(() => {
     const listKey = `cabinet.workspace.collections.${profileScope}`
     const activeKey = `cabinet.workspace.collections.active.${profileScope}`
-    try {
-      const raw = window.localStorage.getItem(listKey)
-      if (raw) {
-        const parsed = JSON.parse(raw) as string[]
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const sanitized = parsed
-            .map((entry) => normalizeCollectionName(entry))
-            .filter((entry) => entry !== '')
-          if (sanitized.length > 0) {
-            setWorkspaceCollections(sanitized)
+    const syncCollections = () => {
+      try {
+        const raw = window.localStorage.getItem(listKey)
+        let nextCollections = DEFAULT_COLLECTIONS
+        if (raw) {
+          const parsed = JSON.parse(raw) as string[]
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const sanitized = parsed
+              .map((entry) => normalizeCollectionName(entry))
+              .filter((entry) => entry !== '')
+            if (sanitized.length > 0) {
+              nextCollections = sanitized
+            }
           }
         }
+        const active = normalizeCollectionName(
+          window.localStorage.getItem(activeKey) || ''
+        )
+        setWorkspaceCollections(nextCollections)
+        setActiveWorkspaceCollection(active || 'All Items')
+      } catch {
+        setWorkspaceCollections(DEFAULT_COLLECTIONS)
+        setActiveWorkspaceCollection('All Items')
       }
-      const active = normalizeCollectionName(
-        window.localStorage.getItem(activeKey) || ''
-      )
-      if (active) {
-        setActiveWorkspaceCollection(active)
-      }
-    } catch {
-      setWorkspaceCollections(DEFAULT_COLLECTIONS)
-      setActiveWorkspaceCollection('All Items')
+    }
+
+    const timeoutId = window.setTimeout(syncCollections, 0)
+    return () => {
+      window.clearTimeout(timeoutId)
     }
   }, [profileScope])
 
@@ -172,7 +189,9 @@ export function useWorkspaceCollections() {
     if (!normalizedCurrent || !normalizedNext) {
       return null
     }
-    const target = workspaceCollections.find((value) => value === normalizedCurrent)
+    const target = workspaceCollections.find(
+      (value) => value === normalizedCurrent
+    )
     if (!target || normalizedCurrent === 'All Items') {
       return null
     }
@@ -183,7 +202,9 @@ export function useWorkspaceCollections() {
       return existing
     }
     setWorkspaceCollections((current) =>
-      current.map((value) => (value === normalizedCurrent ? normalizedNext : value))
+      current.map((value) =>
+        value === normalizedCurrent ? normalizedNext : value
+      )
     )
     if (activeWorkspaceCollection === normalizedCurrent) {
       setActiveWorkspaceCollection(normalizedNext)
@@ -200,7 +221,9 @@ export function useWorkspaceCollections() {
     if (!exists) {
       return false
     }
-    setWorkspaceCollections((current) => current.filter((value) => value !== normalized))
+    setWorkspaceCollections((current) =>
+      current.filter((value) => value !== normalized)
+    )
     if (activeWorkspaceCollection === normalized) {
       setActiveWorkspaceCollection('All Items')
     }
@@ -208,7 +231,10 @@ export function useWorkspaceCollections() {
   }
 
   const collectionSummaries = useMemo(
-    () => workspaceCollections.map((name, index) => deriveCollectionSummary(name, index)),
+    () =>
+      workspaceCollections.map((name, index) =>
+        deriveCollectionSummary(name, index)
+      ),
     [workspaceCollections]
   )
 

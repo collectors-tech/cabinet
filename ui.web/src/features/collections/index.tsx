@@ -1,23 +1,29 @@
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { LanguageSwitch } from '@/components/language-switch'
-import { ConfigDrawer } from '@/components/config-drawer'
+import { useMemo, useState } from 'react'
+import { ArrowDownAZ, ArrowUpAZ, Pencil, Tag, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
-import { ArrowDownAZ, ArrowUpAZ, Pencil, Tag, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
 type CollectionFilterMode = 'all' | 'active-lanes' | 'storage' | 'custom'
 type CollectionSortMode = 'name-asc' | 'name-desc' | 'items-desc'
@@ -47,22 +53,27 @@ export function Collections() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMode, setFilterMode] = useState<CollectionFilterMode>('all')
   const [sortMode, setSortMode] = useState<CollectionSortMode>('name-asc')
-  const [editingCollectionName, setEditingCollectionName] = useState<string | null>(null)
+  const [editingCollectionName, setEditingCollectionName] = useState<
+    string | null
+  >(null)
   const [renameValue, setRenameValue] = useState('')
-  const [pendingRemoveName, setPendingRemoveName] = useState<string | null>(null)
-  const [activeContextMessage, setActiveContextMessage] = useState('')
+  const [pendingRemoveName, setPendingRemoveName] = useState<string | null>(
+    null
+  )
 
   const availableCreateActions = useMemo(
     () => [
       {
         id: 'new-collection',
         label: 'New Collection',
-        description: 'Open the primary create flow and name a collection explicitly.',
+        description:
+          'Open the primary create flow and name a collection explicitly.',
       },
       {
         id: 'starter-collections',
         label: 'Add Starter Collections',
-        description: 'Seed a couple of ready-to-use collections for quick workspace setup.',
+        description:
+          'Seed a couple of ready-to-use collections for quick workspace setup.',
       },
     ],
     []
@@ -70,19 +81,15 @@ export function Collections() {
 
   const activeCollectionSummary = useMemo(
     () =>
-      collectionSummaries.find((collection) => collection.name === activeWorkspaceCollection) ??
-      collectionSummaries[0],
+      collectionSummaries.find(
+        (collection) => collection.name === activeWorkspaceCollection
+      ) ?? collectionSummaries[0],
     [activeWorkspaceCollection, collectionSummaries]
   )
 
-  useEffect(() => {
-    if (!activeCollectionSummary) {
-      return
-    }
-    setActiveContextMessage(
-      `Active collection is ${activeCollectionSummary.name}. This choice persists for the current signed-in profile.`
-    )
-  }, [activeCollectionSummary])
+  const activeContextMessage = activeCollectionSummary
+    ? `Active collection is ${activeCollectionSummary.name}. This choice persists for the current signed-in profile.`
+    : ''
 
   const filteredCollections = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -107,7 +114,10 @@ export function Collections() {
           return true
         }
         if (filterMode === 'active-lanes') {
-          return collection.scopeLabel === 'Retail lane' || collection.scopeLabel === 'Monitoring set'
+          return (
+            collection.scopeLabel === 'Retail lane' ||
+            collection.scopeLabel === 'Monitoring set'
+          )
         }
         if (filterMode === 'storage') {
           return collection.scopeLabel === 'Storage location'
@@ -117,7 +127,10 @@ export function Collections() {
 
     return [...visible].sort((left, right) => {
       if (sortMode === 'items-desc') {
-        return right.itemCount - left.itemCount || left.name.localeCompare(right.name)
+        return (
+          right.itemCount - left.itemCount ||
+          left.name.localeCompare(right.name)
+        )
       }
       if (sortMode === 'name-desc') {
         return right.name.localeCompare(left.name)
@@ -141,7 +154,10 @@ export function Collections() {
       <Main className='space-y-4'>
         <div className='space-y-1'>
           <div className='flex items-center gap-2'>
-            <Tag data-testid='collections-page-icon' className='h-5 w-5 text-muted-foreground' />
+            <Tag
+              data-testid='collections-page-icon'
+              className='h-5 w-5 text-muted-foreground'
+            />
             <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
           </div>
           <p className='text-muted-foreground'>
@@ -159,7 +175,9 @@ export function Collections() {
                   onClick={() => {
                     setCreatePanelOpen(true)
                     setCreateError(null)
-                    toast.message('New opens the primary create flow for a named collection.')
+                    toast.message(
+                      'New opens the primary create flow for a named collection.'
+                    )
                   }}
                 >
                   New
@@ -180,7 +198,9 @@ export function Collections() {
                       onClick={() => {
                         setCreatePanelOpen(true)
                         setCreateError(null)
-                        toast.message('Create → New Collection opens the full naming flow on this page.')
+                        toast.message(
+                          'Create → New Collection opens the full naming flow on this page.'
+                        )
                       }}
                     >
                       New Collection
@@ -213,8 +233,13 @@ export function Collections() {
               <p className='font-medium'>How creation works here</p>
               <ul className='mt-2 space-y-1 text-muted-foreground'>
                 {availableCreateActions.map((action) => (
-                  <li key={action.id} data-testid={`collections-create-guidance-${action.id}`}>
-                    <span className='font-medium text-foreground'>{action.label}:</span>{' '}
+                  <li
+                    key={action.id}
+                    data-testid={`collections-create-guidance-${action.id}`}
+                  >
+                    <span className='font-medium text-foreground'>
+                      {action.label}:
+                    </span>{' '}
                     {action.description}
                   </li>
                 ))}
@@ -229,7 +254,9 @@ export function Collections() {
               <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
                 <div className='flex flex-1 flex-col gap-3 md:flex-row'>
                   <div className='flex-1'>
-                    <p className='mb-1 text-sm font-medium'>Find a collection</p>
+                    <p className='mb-1 text-sm font-medium'>
+                      Find a collection
+                    </p>
                     <Input
                       data-testid='collections-search-input'
                       placeholder='Search collections...'
@@ -252,7 +279,9 @@ export function Collections() {
                       <Button
                         type='button'
                         size='sm'
-                        variant={filterMode === 'active-lanes' ? 'default' : 'outline'}
+                        variant={
+                          filterMode === 'active-lanes' ? 'default' : 'outline'
+                        }
                         data-testid='collections-filter-active-lanes'
                         onClick={() => setFilterMode('active-lanes')}
                       >
@@ -261,7 +290,9 @@ export function Collections() {
                       <Button
                         type='button'
                         size='sm'
-                        variant={filterMode === 'storage' ? 'default' : 'outline'}
+                        variant={
+                          filterMode === 'storage' ? 'default' : 'outline'
+                        }
                         data-testid='collections-filter-storage'
                         onClick={() => setFilterMode('storage')}
                       >
@@ -270,7 +301,9 @@ export function Collections() {
                       <Button
                         type='button'
                         size='sm'
-                        variant={filterMode === 'custom' ? 'default' : 'outline'}
+                        variant={
+                          filterMode === 'custom' ? 'default' : 'outline'
+                        }
                         data-testid='collections-filter-custom'
                         onClick={() => setFilterMode('custom')}
                       >
@@ -303,7 +336,9 @@ export function Collections() {
                     <Button
                       type='button'
                       size='sm'
-                      variant={sortMode === 'items-desc' ? 'default' : 'outline'}
+                      variant={
+                        sortMode === 'items-desc' ? 'default' : 'outline'
+                      }
                       data-testid='collections-sort-items-desc'
                       onClick={() => setSortMode('items-desc')}
                     >
@@ -316,7 +351,8 @@ export function Collections() {
                 className='mt-3 text-xs text-muted-foreground'
                 data-testid='collections-management-summary'
               >
-                Showing {filteredCollections.length} of {collectionSummaries.length} collections.
+                Showing {filteredCollections.length} of{' '}
+                {collectionSummaries.length} collections.
               </p>
             </div>
             {activeCollectionSummary ? (
@@ -364,14 +400,18 @@ export function Collections() {
               >
                 <div className='space-y-3'>
                   <div>
-                    <p className='font-medium' data-testid='collections-create-panel-title'>
+                    <p
+                      className='font-medium'
+                      data-testid='collections-create-panel-title'
+                    >
                       Create a collection
                     </p>
                     <p
                       className='text-sm text-muted-foreground'
                       data-testid='collections-create-panel-description'
                     >
-                      Saving creates the collection immediately, closes this panel, and makes the new collection active.
+                      Saving creates the collection immediately, closes this
+                      panel, and makes the new collection active.
                     </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>
@@ -391,7 +431,9 @@ export function Collections() {
                       onClick={() => {
                         const trimmedName = newCollectionName.trim()
                         if (!trimmedName) {
-                          setCreateError('Enter a collection name before saving.')
+                          setCreateError(
+                            'Enter a collection name before saving.'
+                          )
                           return
                         }
                         addCollection(trimmedName)
@@ -414,7 +456,9 @@ export function Collections() {
                         setCreatePanelOpen(false)
                         setNewCollectionName('')
                         setCreateError(null)
-                        toast.message('Collection creation cancelled. No collection was added.')
+                        toast.message(
+                          'Collection creation cancelled. No collection was added.'
+                        )
                       }}
                     >
                       Cancel
@@ -424,12 +468,16 @@ export function Collections() {
               </div>
             ) : null}
             {editingCollectionName ? (
-              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-rename-panel'>
+              <div
+                className='rounded-md border bg-muted/20 p-3'
+                data-testid='collections-rename-panel'
+              >
                 <div className='space-y-3'>
                   <div>
                     <p className='font-medium'>Rename collection</p>
                     <p className='text-sm text-muted-foreground'>
-                      Rename updates the collection label in place and preserves active context when applicable.
+                      Rename updates the collection label in place and preserves
+                      active context when applicable.
                     </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>
@@ -446,15 +494,22 @@ export function Collections() {
                     <Button
                       data-testid='collections-rename-save'
                       onClick={() => {
-                        const renamed = renameCollection(editingCollectionName, renameValue)
+                        const renamed = renameCollection(
+                          editingCollectionName,
+                          renameValue
+                        )
                         if (!renamed) {
-                          setCreateError('Enter a new collection name before saving rename.')
+                          setCreateError(
+                            'Enter a new collection name before saving rename.'
+                          )
                           return
                         }
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        toast.success(`${editingCollectionName} renamed to ${renamed}.`)
+                        toast.success(
+                          `${editingCollectionName} renamed to ${renamed}.`
+                        )
                       }}
                     >
                       Save rename
@@ -466,7 +521,9 @@ export function Collections() {
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        toast.message('Collection rename cancelled. No changes were made.')
+                        toast.message(
+                          'Collection rename cancelled. No changes were made.'
+                        )
                       }}
                     >
                       Cancel
@@ -476,12 +533,16 @@ export function Collections() {
               </div>
             ) : null}
             {pendingRemoveName ? (
-              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-remove-panel'>
+              <div
+                className='rounded-md border bg-muted/20 p-3'
+                data-testid='collections-remove-panel'
+              >
                 <div className='space-y-3'>
                   <div>
                     <p className='font-medium'>Remove collection</p>
                     <p className='text-sm text-muted-foreground'>
-                      Confirm removal of {pendingRemoveName}. Active context falls back to All Items if needed.
+                      Confirm removal of {pendingRemoveName}. Active context
+                      falls back to All Items if needed.
                     </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>
@@ -491,7 +552,9 @@ export function Collections() {
                       onClick={() => {
                         const removed = removeCollection(pendingRemoveName)
                         if (!removed) {
-                          setCreateError('Collection removal could not be completed.')
+                          setCreateError(
+                            'Collection removal could not be completed.'
+                          )
                           return
                         }
                         const removedName = pendingRemoveName
@@ -499,7 +562,9 @@ export function Collections() {
                         setEditingCollectionName(null)
                         setRenameValue('')
                         setCreateError(null)
-                        toast.success(`${removedName} removed from workspace collections.`)
+                        toast.success(
+                          `${removedName} removed from workspace collections.`
+                        )
                       }}
                     >
                       Confirm remove
@@ -509,7 +574,9 @@ export function Collections() {
                       data-testid='collections-remove-cancel'
                       onClick={() => {
                         setPendingRemoveName(null)
-                        toast.message('Collection removal cancelled. No collection was removed.')
+                        toast.message(
+                          'Collection removal cancelled. No collection was removed.'
+                        )
                       }}
                     >
                       Cancel
@@ -519,98 +586,107 @@ export function Collections() {
               </div>
             ) : null}
             <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-              {filteredCollections.length ? filteredCollections.map((collection) => {
-                const isActive = activeWorkspaceCollection === collection.name
-                const isProtected = collection.name === 'All Items'
-                return (
-                  <div
-                    key={collection.name}
-                    className={isActive ? 'rounded-md border-2 border-primary bg-primary/5 px-3 py-3' : 'rounded-md border px-3 py-3'}
-                    data-testid={`collections-item-${collection.key}`}
-                    data-state={isActive ? 'active' : 'inactive'}
-                  >
-                    <button
-                      type='button'
-                      className='w-full text-left hover:bg-muted/40'
-                      onClick={() => {
-                        setActiveWorkspaceCollection(collection.name)
-                        setActiveContextMessage(
-                          `Active collection switched to ${collection.name}. This choice persists for the current signed-in profile.`
-                        )
-                      }}
+              {filteredCollections.length ? (
+                filteredCollections.map((collection) => {
+                  const isActive = activeWorkspaceCollection === collection.name
+                  const isProtected = collection.name === 'All Items'
+                  return (
+                    <div
+                      key={collection.name}
+                      className={
+                        isActive
+                          ? 'rounded-md border-2 border-primary bg-primary/5 px-3 py-3'
+                          : 'rounded-md border px-3 py-3'
+                      }
+                      data-testid={`collections-item-${collection.key}`}
+                      data-state={isActive ? 'active' : 'inactive'}
                     >
-                      <div className='flex items-start justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <div
-                            className='font-medium'
-                            data-testid={`collections-item-title-${collection.key}`}
-                          >
-                            {collection.name}
+                      <button
+                        type='button'
+                        className='w-full text-left hover:bg-muted/40'
+                        onClick={() => {
+                          setActiveWorkspaceCollection(collection.name)
+                        }}
+                      >
+                        <div className='flex items-start justify-between gap-3'>
+                          <div className='min-w-0'>
+                            <div
+                              className='font-medium'
+                              data-testid={`collections-item-title-${collection.key}`}
+                            >
+                              {collection.name}
+                            </div>
+                            <div
+                              className='mt-1 text-sm text-muted-foreground'
+                              data-testid={`collections-item-description-${collection.key}`}
+                            >
+                              {collection.description}
+                            </div>
                           </div>
                           <div
-                            className='mt-1 text-sm text-muted-foreground'
-                            data-testid={`collections-item-description-${collection.key}`}
+                            className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
+                            data-testid={`collections-item-status-${collection.key}`}
                           >
-                            {collection.description}
+                            {collection.statusLabel}
                           </div>
                         </div>
                         <div
-                          className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
-                          data-testid={`collections-item-status-${collection.key}`}
+                          className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
+                          data-testid={`collections-item-metadata-${collection.key}`}
                         >
-                          {collection.statusLabel}
+                          <span
+                            data-testid={`collections-item-count-${collection.key}`}
+                          >
+                            {collection.itemCount} items
+                          </span>
+                          <span
+                            data-testid={`collections-item-scope-${collection.key}`}
+                          >
+                            {collection.scopeLabel}
+                          </span>
+                          <span
+                            data-testid={`collections-item-updated-${collection.key}`}
+                          >
+                            {collection.updatedLabel}
+                          </span>
                         </div>
+                      </button>
+                      <div className='mt-3 flex flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid={`collections-rename-trigger-${collection.key}`}
+                          disabled={isProtected}
+                          onClick={() => {
+                            setEditingCollectionName(collection.name)
+                            setRenameValue(collection.name)
+                            setPendingRemoveName(null)
+                            setCreateError(null)
+                          }}
+                        >
+                          <Pencil className='mr-1 size-4' /> Rename
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          data-testid={`collections-remove-trigger-${collection.key}`}
+                          disabled={isProtected}
+                          onClick={() => {
+                            setPendingRemoveName(collection.name)
+                            setEditingCollectionName(null)
+                            setRenameValue('')
+                            setCreateError(null)
+                          }}
+                        >
+                          <Trash2 className='mr-1 size-4' /> Remove
+                        </Button>
                       </div>
-                      <div
-                        className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
-                        data-testid={`collections-item-metadata-${collection.key}`}
-                      >
-                        <span data-testid={`collections-item-count-${collection.key}`}>
-                          {collection.itemCount} items
-                        </span>
-                        <span data-testid={`collections-item-scope-${collection.key}`}>
-                          {collection.scopeLabel}
-                        </span>
-                        <span data-testid={`collections-item-updated-${collection.key}`}>
-                          {collection.updatedLabel}
-                        </span>
-                      </div>
-                    </button>
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`collections-rename-trigger-${collection.key}`}
-                        disabled={isProtected}
-                        onClick={() => {
-                          setEditingCollectionName(collection.name)
-                          setRenameValue(collection.name)
-                          setPendingRemoveName(null)
-                          setCreateError(null)
-                        }}
-                      >
-                        <Pencil className='mr-1 size-4' /> Rename
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`collections-remove-trigger-${collection.key}`}
-                        disabled={isProtected}
-                        onClick={() => {
-                          setPendingRemoveName(collection.name)
-                          setEditingCollectionName(null)
-                          setRenameValue('')
-                          setCreateError(null)
-                        }}
-                      >
-                        <Trash2 className='mr-1 size-4' /> Remove
-                      </Button>
                     </div>
-                  </div>
-                )
-              }) : (
+                  )
+                })
+              ) : (
                 <div
                   className='rounded-md border border-dashed px-3 py-6 text-sm text-muted-foreground'
                   data-testid='collections-empty-state'

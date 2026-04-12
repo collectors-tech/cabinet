@@ -11,7 +11,7 @@ describe('general/ui-performance', () => {
     cy.request('POST', '/api/test/scale/bootstrap', { profile: 'S2', seed: 4242 }).then((bootstrapResp) => {
       expect(bootstrapResp.status).to.eq(200)
       const querySetID = bootstrapResp.body?.query_set_id as string
-      expect(querySetID).to.be.a('string').and.not.empty
+      expect(String(querySetID).trim()).not.to.equal('')
 
       const itemDurations: number[] = []
       const searchDurations: number[] = []

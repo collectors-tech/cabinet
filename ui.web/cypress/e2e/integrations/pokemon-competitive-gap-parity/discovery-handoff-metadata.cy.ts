@@ -28,7 +28,7 @@ describe('integrations/pokemon-competitive-gap-parity/discovery-handoff-metadata
       expect(resp.status).to.eq(200)
       const items = Array.isArray(resp.body?.items) ? resp.body.items : []
       const entry = items.find((item) => item.item_id === seededItemId)
-      expect(entry, 'wishlist entry for matched item').to.exist
+      expect(Boolean(entry), 'wishlist entry for matched item').to.equal(true)
       expect(entry?.notes).to.contain('[discovery_metadata]')
       const metadataRaw = (entry?.notes ?? '').split('[discovery_metadata]').pop() ?? '{}'
       const metadata = JSON.parse(metadataRaw)
