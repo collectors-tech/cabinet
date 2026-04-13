@@ -38,6 +38,20 @@ describe('ui-foundation-shell-navigation', () => {
     cy.get('header').should('be.visible')
   })
 
+  it('UI-FOUNDATION-SHELL-NAVIGATION-005 keeps browser titles in Cabinet - <Page Title> format', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.title().should('eq', 'Cabinet - Inventory')
+
+    visibleByTestId('sidebar-nav-link-integrations').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/integrations\/?$/)
+    cy.title().should('eq', 'Cabinet - Integrations')
+
+    visibleByTestId('sidebar-nav-link-dashboard').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/)
+    cy.title().should('eq', 'Cabinet - Home')
+  })
+
   it('UI-FOUNDATION-SHELL-NAVIGATION-004 renders app version and build date metadata in sidebar footer', () => {
     cy.intercept('GET', '/api/runtime', {
       statusCode: 200,

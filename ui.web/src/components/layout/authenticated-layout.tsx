@@ -1,5 +1,7 @@
-import { Outlet } from '@tanstack/react-router'
+import { Outlet, useLocation } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { getCookie } from '@/lib/cookies'
+import { getDocumentTitle } from '@/lib/document-title'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
@@ -14,6 +16,12 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const location = useLocation()
+
+  useEffect(() => {
+    document.title = getDocumentTitle(location.pathname)
+  }, [location.pathname])
+
   return (
     <SearchProvider>
       <LayoutProvider>

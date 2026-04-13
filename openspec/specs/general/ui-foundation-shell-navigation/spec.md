@@ -111,3 +111,12 @@ Sidebar navigation rows that expose notification or count pills SHALL render the
 - **THEN** the label text MUST remain left-aligned in the row body
 - **AND** the count pill MUST render as a trailing right-aligned badge near the row end
 - **AND** the label text MUST NOT collapse into or overlap the badge area
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-013: Authenticated routes SHALL set product-first browser titles
+Authenticated shell routes SHALL keep `document.title` in the format `Cabinet - <Page Title>`.
+
+#### Scenario: Browser title updates across representative routes
+- **GIVEN** an authenticated user navigates between primary shell routes
+- **WHEN** the active route changes
+- **THEN** the browser title MUST update to `Cabinet - <Page Title>` for that route
+- **AND** the title MUST NOT be blank or leak raw route ids/translation keys
