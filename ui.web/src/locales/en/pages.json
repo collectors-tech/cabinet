@@ -8,5 +8,11 @@
   },
   "wishlist": {
     "title": "Wishlist"
+  },
+  "settings": {
+    "profile": {
+      "title": "Profile settings",
+      "description": "Manage your account profile and public display details."
+    }
   }
 }
