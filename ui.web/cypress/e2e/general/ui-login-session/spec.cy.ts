@@ -162,4 +162,23 @@ describe("ui-login-session", () => {
     cy.location("search").should("include", "redirect=");
     cy.location("search").should("include", "%2Finventory%2F");
   });
+
+  it("UI-LOGIN-SESSION-007 re-gates the dashboard after sign-out", () => {
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/dashboard" });
+    });
+
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
+    cy.contains(/dashboard/i).should("be.visible");
+
+    cy.visit("/sign-out?redirect=%2Fdashboard");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=%2Fdashboard");
+    cy.getCookie("thisisjustarandomstring").should("not.exist");
+
+    cy.visit("/dashboard");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=%2Fdashboard");
+    cy.contains(/dashboard/i).should("not.exist");
+  });
 });

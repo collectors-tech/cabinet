@@ -55,3 +55,12 @@ Cabinet SHALL provide a concrete `/sign-out` route that resets local auth state 
 - **GIVEN** an authenticated local session and a reachable protected route
 - **WHEN** user visits `/sign-out`
 - **THEN** Cabinet MUST clear local auth state, redirect to `/sign-in`, and re-gate the next protected-route request through sign-in instead of rendering the prior authenticated workspace
+
+### Requirement UI-LOGIN-SESSION-007: Dashboard SHALL not remain reachable after sign-out
+After a local sign-out, Cabinet SHALL re-apply authenticated-route gating to the canonical dashboard entry so the previous authenticated dashboard shell cannot be reopened without signing in again.
+
+#### Scenario: Sign-out removes dashboard access until re-authenticated
+- **GIVEN** an authenticated local session currently able to reach `/dashboard`
+- **WHEN** the user signs out and then requests `/dashboard` again
+- **THEN** Cabinet MUST redirect to `/sign-in`
+- **AND** the previous authenticated dashboard content MUST not render until the user signs in again
