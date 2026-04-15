@@ -36,9 +36,14 @@ Each quick action SHALL navigate to the correct destination with preserved conte
 - **WHEN** user clicks a Home quick action
 - **THEN** app SHALL open the expected screen/workflow context
 
+#### Scenario: Recently Added card routes to collections
+- **GIVEN** Home dashboard data includes a `Recently Added` quick-action card for recently added inventory
+- **WHEN** user opens that quick action from Home
+- **THEN** the app SHALL route to `/collections`
+- **AND** the action MUST NOT target invalid singular route `/collection`
+
 ### Requirement UI-SCREEN-HOME-004 (Deprecated): Home onboarding rail starter actions
 This requirement is deprecated. Starter setup is now a pre-auth setup wizard and MUST NOT be rendered inside authenticated Home.
-
 #### Scenario: Deprecated behavior reference
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** legacy Home onboarding panel behavior is evaluated
@@ -65,7 +70,6 @@ Authenticated Home route SHALL not include starter setup wizard cards or control
 - **GIVEN** user is authenticated and route is Home
 - **WHEN** Home renders dashboard content
 - **THEN** labels and controls `Starter Onboarding`, `Start Setup`, `Import Existing Collection`, and `Use Sample Data` MUST NOT be present
-
 ### Requirement UI-SCREEN-HOME-007: Home SHALL use `/dashboard` as the canonical route
 Authenticated Home SHALL load on `/dashboard`, while `/` SHALL redirect deterministically to `/dashboard` without route drift.
 

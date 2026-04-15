@@ -91,7 +91,7 @@ describe("UI-SCREEN-HOME", () => {
       req.reply({
         statusCode: 200,
         body: {
-          new_discoveries: 1,
+          new_discoveries: 0,
           wishlist_hits: 0,
           price_drops: 0,
           low_stock_discoveries: 0,
@@ -100,7 +100,9 @@ describe("UI-SCREEN-HOME", () => {
           total_items: 1,
           total_instances: 1,
           estimated_value: 99,
-          cards: [{ title: "Review discoveries", value: 1, link: "/discoveries" }],
+          cards: [
+            { title: "Recently Added", value: 1, link: "/collections" },
+          ],
         },
       })
     }).as("dashboardRetry")
@@ -112,14 +114,14 @@ describe("UI-SCREEN-HOME", () => {
     cy.wait("@dashboardRetry")
     cy.contains("Dashboard unavailable").should("not.exist")
 
-    cy.contains("Review discoveries")
+    cy.contains("Recently Added")
       .parentsUntil("div.border")
       .parent()
       .within(() => {
         cy.contains("a", "Open").click()
       })
 
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/discoveries\/?$/)
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/collections\/?$/)
   })
 
   it("UI-SCREEN-HOME-003 routes dashboard action links to live Cabinet destinations", () => {
