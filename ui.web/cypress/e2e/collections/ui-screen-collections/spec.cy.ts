@@ -1,88 +1,175 @@
-describe('ui-screen-collections', () => {
+describe("ui-screen-collections", () => {
   function signInToCollections() {
-    cy.visit('/sign-in?redirect=%2Fcollections%2F')
-    cy.get('input[name="email"]').clear().type('e2e-collections@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)
+    cy.visit("/sign-in?redirect=%2Fcollections%2F");
+    cy.get('input[name="email"]').clear().type("e2e-collections@example.com");
+    cy.get('input[name="password"]').clear().type("password123");
+    cy.contains("button", "Sign in").click();
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/collections\/?$/
+    );
   }
 
-  beforeEach(() => {
-    cy.visit('/sign-in')
-    cy.window().then((win) => {
-      win.localStorage.clear()
-    })
-  })
+  it("UI-SCREEN-COLLECTIONS-001 renders top-level collections section with list and New action", () => {
+    signInToCollections();
 
-  it('renders collections as shared management table', () => {
-    signInToCollections()
+    cy.get('[data-testid="collections-section"]').should("be.visible");
+    cy.get('[data-testid="collections-item-all-items"]').should("be.visible");
+    cy.get('[data-testid="collections-new-action"]').should("be.visible");
+  });
 
-    cy.get('[data-testid="collections-shared-table"]').should('be.visible')
-    cy.contains('Collection management table').should('be.visible')
-    cy.contains('th', 'Collection').should('be.visible')
-    cy.contains('th', 'Items').should('be.visible')
-    cy.contains('th', 'Scope').should('be.visible')
-    cy.contains('th', 'Status').should('be.visible')
-    cy.get('[data-testid="collections-row-all-items"]').should('be.visible')
-    cy.get('[data-testid="collections-new-action"]').should('be.visible')
-  })
+  it("UI-SCREEN-COLLECTIONS-002 exposes New flow and adjacent Create menu quick actions", () => {
+    signInToCollections();
 
-  it('selects a collection row and updates management context', () => {
-    signInToCollections()
+    cy.get('[data-testid="collections-create-guidance"]').should("be.visible");
+    cy.get('[data-testid="collections-new-action"]').click();
+    cy.get('[data-testid="collections-create-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-create-panel-description"]')
+      .should("contain.text", "Saving creates the collection immediately")
+    cy.contains("New opens the primary create flow for a named collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
 
-    cy.get('[data-testid="collections-row-store-1"]').click()
-    cy.get('[data-testid="collections-selected-name"]').should('contain', 'Store 1')
-    cy.get('[data-testid="collections-selected-count"]').should('not.be.empty')
-    cy.get('[data-testid="collections-row-store-1"]').should('have.attr', 'data-state', 'selected')
-  })
+    cy.get('[data-testid="collections-create-menu-trigger"]').click();
+    cy.get('[data-testid="collections-create-menu-new"]').should("be.visible");
+    cy.get('[data-testid="collections-create-menu-starter"]').should("be.visible");
+  });
 
-  it('creates a collection from the table workflow and persists after refresh', () => {
-    signInToCollections()
+  it("UI-SCREEN-COLLECTIONS-003 supports inline-style quick create and auto-activates new collection", () => {
+    signInToCollections();
 
-    cy.get('[data-testid="collections-new-action"]').click()
-    cy.get('[data-testid="collections-create-input"]').type('Cabinet Alpha')
-    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.get('[data-testid="collections-new-action"]').click();
+    cy.get('[data-testid="collections-new-input"]').type("Collections Inline Alpha");
+    cy.get('[data-testid="collections-new-save"]').click();
 
-    cy.get('[data-testid="collections-row-cabinet-alpha"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain', 'Cabinet Alpha')
+    cy.contains("Collections Inline Alpha created and set as the active collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
+    cy.get('[data-testid="collections-item-collections-inline-alpha"]')
+      .should("be.visible")
+      .and("have.attr", "data-state", "active");
+  });
 
-    cy.reload()
-    cy.get('[data-testid="collections-row-cabinet-alpha"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain', 'Cabinet Alpha')
-  })
+  it("UI-SCREEN-COLLECTIONS-008 makes create outcomes and validation visible", () => {
+    signInToCollections();
 
-  it('renames a collection from the row workflow and persists after refresh', () => {
-    signInToCollections()
+    cy.get('[data-testid="collections-new-action"]').click();
+    cy.get('[data-testid="collections-new-save"]').click();
+    cy.get('[data-testid="collections-create-error"]')
+      .should("contain.text", "Enter a collection name before saving.")
 
-    cy.get('[data-testid="collections-row-store-2"]').click()
-    cy.get('[data-testid="collections-row-edit-store-2"]').click()
-    cy.get('[data-testid="collections-edit-input"]').clear().type('Store 2 Updated')
-    cy.get('[data-testid="collections-edit-submit"]').click()
+    cy.get('[data-testid="collections-new-input"]').type("Collections Visible Beta");
+    cy.get('[data-testid="collections-new-save"]').click();
+    cy.get('[data-testid="collections-create-error"]').should("not.exist");
+    cy.contains("Collections Visible Beta created and set as the active collection.")
+      .should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
 
-    cy.get('[data-testid="collections-row-store-2-updated"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain', 'Store 2 Updated')
+    cy.get('[data-testid="collections-create-menu-trigger"]').click();
+    cy.get('[data-testid="collections-create-menu-starter"]').click();
+    cy.contains("Starter collections added.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
+  });
 
-    cy.reload()
-    cy.get('[data-testid="collections-row-store-2-updated"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain', 'Store 2 Updated')
-  })
+  it("UI-SCREEN-COLLECTIONS-006 exposes collection details and metadata summaries before selection", () => {
+    signInToCollections();
 
-  it('deletes a collection from the row workflow', () => {
-    signInToCollections()
+    cy.get('[data-testid="collections-item-title-all-items"]')
+      .should("contain.text", "All Items")
+    cy.get('[data-testid="collections-item-description-all-items"]')
+      .should("contain.text", "Everything currently tracked")
+    cy.get('[data-testid="collections-item-metadata-all-items"]')
+      .should("contain.text", "248 items")
+      .and("contain.text", "Workspace default")
+      .and("contain.text", "Updated 5m ago")
+    cy.get('[data-testid="collections-item-status-all-items"]')
+      .should("contain.text", "Broadest scope")
 
-    cy.get('[data-testid="collections-row-warehouse-1"]').click()
-    cy.get('[data-testid="collections-selected-delete"]').click()
-    cy.get('[data-testid="collections-delete-submit"]').click()
+    cy.get('[data-testid="collections-item-description-watch-list"]')
+      .should("contain.text", "Fast-moving")
+    cy.get('[data-testid="collections-item-status-watch-list"]')
+      .should("contain.text", "Needs review")
+  });
 
-    cy.get('[data-testid="collections-row-warehouse-1"]').should('not.exist')
-  })
+  it("UI-SCREEN-COLLECTIONS-007 supports search, filtering, and ordering tools", () => {
+    signInToCollections();
 
-  it('filters collections within the shared table surface', () => {
-    signInToCollections()
+    cy.get('[data-testid="collections-management-tools"]').should("be.visible");
+    cy.get('[data-testid="collections-management-summary"]')
+      .should("contain.text", "Showing 6 of 6 collections.")
 
-    cy.get('input[placeholder="Filter collections..."]').type('watch')
-    cy.get('[data-testid="collections-row-watch-list"]').should('be.visible')
-    cy.get('[data-testid="collections-row-all-items"]').should('not.exist')
-    cy.get('[data-testid="collections-filtered-count"]').should('contain', '1')
-  })
-})
+    cy.get('[data-testid="collections-search-input"]').type("watch");
+    cy.get('[data-testid="collections-item-watch-list"]').should("be.visible");
+    cy.get('[data-testid="collections-item-all-items"]').should("not.exist");
+    cy.get('[data-testid="collections-management-summary"]')
+      .should("contain.text", "Showing 1 of 6 collections.")
+
+    cy.get('[data-testid="collections-search-input"]').clear();
+    cy.get('[data-testid="collections-filter-storage"]').click();
+    cy.get('[data-testid="collections-item-warehouse-1"]').should("be.visible");
+    cy.get('[data-testid="collections-item-store-1"]').should("not.exist");
+
+    cy.get('[data-testid="collections-filter-all"]').click();
+    cy.get('[data-testid="collections-sort-items-desc"]').click();
+    cy.get('[data-testid^="collections-item-"]').then(($items) => {
+      const first = $items.first().attr('data-testid');
+      expect(first).to.eq('collections-item-all-items');
+    });
+  });
+
+  it("UI-SCREEN-COLLECTIONS-005 supports rename and remove actions with visible outcomes", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-rename-trigger-store-2"]').click();
+    cy.get('[data-testid="collections-rename-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-rename-input"]').clear().type("Store 2 Prime");
+    cy.get('[data-testid="collections-rename-save"]').click();
+    cy.contains("Store 2 renamed to Store 2 Prime.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
+    cy.get('[data-testid="collections-item-store-2-prime"]').should("be.visible");
+    cy.get('[data-testid="collections-item-store-2"]').should("not.exist");
+
+    cy.get('[data-testid="collections-remove-trigger-store-2-prime"]').click();
+    cy.get('[data-testid="collections-remove-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-remove-confirm"]').click();
+    cy.contains("Store 2 Prime removed from workspace collections.").should("be.visible")
+    cy.get('[data-testid="collections-create-outcome"]').should("not.exist")
+    cy.get('[data-testid="collections-item-store-2-prime"]').should("not.exist");
+  });
+
+  it("UI-SCREEN-COLLECTIONS-004 shows active collection context changes and persistence semantics", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="collections-active-context-panel"]').should("be.visible");
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "All Items");
+    cy.get('[data-testid="collections-active-context-persistence"]')
+      .should("contain.text", "Persists for this signed-in profile");
+
+    cy.get('[data-testid="collections-select-trigger-watch-list"]').click();
+    cy.get('[data-testid="collections-item-watch-list"]')
+      .should("have.attr", "data-state", "active");
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "Watch List");
+    cy.get('[data-testid="collections-active-context-message"]')
+      .should("contain.text", "Active collection is Watch List")
+
+    cy.reload();
+    cy.get('[data-testid="collections-active-context-name"]')
+      .should("contain.text", "Watch List");
+    cy.get('[data-testid="collections-item-watch-list"]')
+      .should("have.attr", "data-state", "active");
+  });
+
+  it("UI-SCREEN-COLLECTIONS-009 uses tag iconography for collections navigation and page identity", () => {
+    signInToCollections();
+
+    cy.get('[data-testid="sidebar-nav-link-collections"]').should("be.visible");
+    cy.get('[data-testid="collections-page-icon"]').should("be.visible");
+
+    cy.get('[data-testid="sidebar-nav-link-collections"] svg')
+      .should("have.attr", "data-lucide", "tag");
+    cy.get('[data-testid="collections-page-icon"]')
+      .should("have.attr", "data-lucide", "tag");
+  });
+});
