@@ -117,7 +117,7 @@ func (s *Service) Summary(ctx context.Context) (Summary, error) {
 		{Title: "Wishlist Hits", Value: out.WishlistHits, Link: "/wishlist"},
 		{Title: "Price Drops", Value: out.PriceDrops, Link: "/pricing"},
 		{Title: "Restocks", Value: out.Restocks, Link: "/pricing"},
-		{Title: "Recently Added", Value: len(out.RecentlyAdded), Link: "/collection"},
+		{Title: "Recently Added", Value: len(out.RecentlyAdded), Link: "/collections"},
 	}
 	return out, nil
 }
