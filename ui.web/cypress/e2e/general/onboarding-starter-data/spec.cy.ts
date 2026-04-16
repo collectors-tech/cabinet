@@ -11,7 +11,8 @@ describe('ONBOARDING-STARTER-DATA', () => {
     cy.visit('/sign-in');
 
     cy.contains('Setup Wizard').should('be.visible');
-    cy.contains('button', 'Complete Setup').should('be.visible');
+    cy.get('[data-testid="setup-start"]').should('be.visible');
+    cy.get('[data-testid="setup-use-defaults"]').should('be.visible');
     cy.contains('Sign in').should('not.exist');
   });
 
@@ -20,7 +21,9 @@ describe('ONBOARDING-STARTER-DATA', () => {
       .its('status')
       .should('eq', 200);
     cy.visit('/sign-in');
-    cy.contains('button', 'Complete Setup').click();
+    cy.get('[data-testid="setup-use-defaults"]').click();
+    cy.get('[data-testid="setup-wizard-complete-state"]').should('be.visible');
+    cy.contains('button', 'Finish').click();
     cy.contains('Sign in').should('be.visible');
   });
 
