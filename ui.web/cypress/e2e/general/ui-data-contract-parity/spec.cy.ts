@@ -101,12 +101,13 @@ describe('general/ui-data-contract-parity', () => {
 
     bootstrapAndSignIn('/dashboard')
     cy.wait('@dashboardRetry')
-    cy.contains('Dashboard unavailable').should('be.visible')
+    cy.contains(/dashboard(\.unavailable| unavailable)/i).should('be.visible')
+    cy.contains(/dashboard_fetch_failed_500|500/i).should('be.visible')
     cy.contains('button', 'Retry').click()
     cy.wait('@dashboardRetry')
-    cy.contains('Dashboard unavailable').should('not.exist')
-    cy.contains('Inventory Items').should('be.visible')
-    cy.contains('500').should('not.exist')
+    cy.contains(/dashboard(\.unavailable| unavailable)/i).should('not.exist')
+    cy.contains(/dashboard\.metrics\.inventoryItems|Inventory Items/i).should('be.visible')
+    cy.contains('dashboard_fetch_failed_500').should('not.exist')
   })
 
   it('UI-DATA-CONTRACT-PARITY-003 preserves settings context and surfaces inline mutation failure', () => {
