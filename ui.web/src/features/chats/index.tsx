@@ -256,7 +256,7 @@ export function Chats() {
   }
 
   const previewCreateItemAction = async () => {
-    if (!activeProfileId || !selectedThreadId) {
+    if (!activeProfileId || !selectedThreadId || messages.length === 0) {
       return
     }
     setSendError(null)
@@ -550,7 +550,12 @@ export function Chats() {
                   type='button'
                   data-testid='chat-preview-action-button'
                   onClick={() => void previewCreateItemAction()}
-                  disabled={!selectedThreadId || !actionPartNumber.trim() || !actionTitle.trim()}
+                  disabled={
+                    !selectedThreadId ||
+                    messages.length === 0 ||
+                    !actionPartNumber.trim() ||
+                    !actionTitle.trim()
+                  }
                 >
                   Preview Action
                 </Button>

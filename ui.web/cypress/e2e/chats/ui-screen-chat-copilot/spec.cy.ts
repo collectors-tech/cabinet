@@ -74,9 +74,22 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('@createThread.all').should('have.length', 0)
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-007 supports confirm-before-apply for inventory and wishlist mutations', () => {
+  it('UI-SCREEN-CHAT-COPILOT-007 keeps Preview Action gated until thread context exists', () => {
+    openChats()
+    createThread('E2E Empty Thread Preview Gate')
+
+    cy.contains('No messages in this thread yet.').should('be.visible')
+    cy.get('[data-testid="chat-preview-action-button"]').should('be.disabled')
+    cy.get('[data-testid="chat-action-preview"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations', () => {
     openChats()
     createThread('E2E Copilot CRUD Thread')
+
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Please create this item')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should('contain', 'Please create this item')
 
     cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
     cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-007-INV')
@@ -100,7 +113,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-008 supports mobile image attachment and confirm-before-apply flow', () => {
+  it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow', () => {
     cy.viewport(390, 844)
     openChats()
     createThread('E2E Mobile Copilot Thread')
