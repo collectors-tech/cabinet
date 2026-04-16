@@ -106,6 +106,23 @@ function defaultModelForProvider(provider: string) {
   )
 }
 
+async function loadAssistantDefaultSettings(profileId: string) {
+  const response = await fetch(`/api/profiles/${profileId}/settings`)
+  if (!response.ok) {
+    throw new Error(`profile_settings_${response.status}`)
+  }
+  const payload = (await response.json()) as {
+    settings?: Record<string, string>
+  }
+  const settings = payload.settings ?? {}
+  const nextProvider =
+    settings.assistant_default_provider?.trim() || 'openai'
+  const nextModel =
+    settings.assistant_default_model?.trim() ||
+    defaultModelForProvider(nextProvider)
+  return { nextProvider, nextModel }
+}
+
 export function AssistantWorkspacePanel() {
   const { activeProfileId } = useShellWorkspace()
   const authUser = useAuthStore((state) => state.auth.user)
@@ -263,12 +280,20 @@ export function AssistantWorkspacePanel() {
     setError('')
     void (async () => {
       try {
-        const storedProvider =
-          window.localStorage.getItem(assistantProviderKey(activeProfileId)) ||
-          'openai'
-        const storedModel =
-          window.localStorage.getItem(assistantModelKey(activeProfileId)) ||
-          defaultModelForProvider(storedProvider)
+        const { nextProvider: storedProvider, nextModel: storedModel } =
+          await loadAssistantDefaultSettings(activeProfileId)
+        try {
+          window.localStorage.setItem(
+            assistantProviderKey(activeProfileId),
+            storedProvider
+          )
+          window.localStorage.setItem(
+            assistantModelKey(activeProfileId),
+            storedModel
+          )
+        } catch {
+          // ignore storage issues
+        }
         if (!cancelled) {
           setProvider(storedProvider)
           setModel(storedModel)
@@ -306,6 +331,62 @@ export function AssistantWorkspacePanel() {
       cancelled = true
     }
   }, [activeProfileId])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeProfileId || loading) return
+
+    void (async () => {
+      try {
+        const { nextProvider, nextModel } =
+          await loadAssistantDefaultSettings(activeProfileId)
+        if (cancelled) return
+        const threadSemantics = threadMetadata.thread_semantics || ''
+        const allowsDefaultSync =
+          threadSemantics === '' ||
+          threadSemantics === 'assistant_workspace_session'
+        if (!allowsDefaultSync) {
+          return
+        }
+        if (provider === nextProvider && model === nextModel) {
+          return
+        }
+        try {
+          window.localStorage.setItem(
+            assistantProviderKey(activeProfileId),
+            nextProvider
+          )
+          window.localStorage.setItem(
+            assistantModelKey(activeProfileId),
+            nextModel
+          )
+        } catch {
+          // ignore storage issues
+        }
+        setProvider(nextProvider)
+        setModel(nextModel)
+        setThreadMetadata((current) => ({
+          ...current,
+          provider: nextProvider,
+          model: nextModel,
+        }))
+      } catch {
+        // best-effort live sync only
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeProfileId,
+    loading,
+    location.pathname,
+    location.search,
+    provider,
+    model,
+    threadMetadata.thread_semantics,
+  ])
 
   async function handleProviderChange(nextProvider: string) {
     if (!activeProfileId) return
