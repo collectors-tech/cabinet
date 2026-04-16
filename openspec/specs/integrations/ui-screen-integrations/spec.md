@@ -50,6 +50,12 @@ Integrations screen SHALL never rehydrate clear credential values into UI and SH
 ### Requirement UI-SCREEN-INTEGRATIONS-005: Integrations screen SHALL provide deterministic bootstrap/load/error states
 Integrations screen SHALL show explicit loading and actionable error states for profile/registry/settings bootstrap.
 
+#### Scenario: Integrations heading copy resolves for users
+- **GIVEN** integrations route loads successfully
+- **WHEN** the page header renders
+- **THEN** the heading and description MUST render resolved user-facing copy
+- **AND** raw translation keys such as `integrations.title` and `integrations.description` MUST NOT be visible
+
 #### Scenario: Registry bootstrap failure
 - **GIVEN** integrations route loads and registry request fails
 - **WHEN** `GET /api/providers/registry` returns non-`200` or network failure

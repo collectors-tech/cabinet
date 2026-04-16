@@ -73,6 +73,13 @@ describe('ui-screen-integrations', () => {
     cy.wait('@registry')
     cy.wait('@settings')
 
+    cy.contains('h1', 'Integrations').should('be.visible')
+    cy.contains('Configure providers, credentials, and connector actions.').should(
+      'be.visible'
+    )
+    cy.contains('integrations.title').should('not.exist')
+    cy.contains('integrations.description').should('not.exist')
+
     cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
     cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
       'be.visible'
