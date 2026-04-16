@@ -47,3 +47,20 @@ Cabinet SHALL avoid attaching a redundant `redirect=%2F` query when an unauthent
 - **GIVEN** user is unauthenticated and requests a protected deep link such as `/inventory/`
 - **WHEN** router resolves the unauthenticated entry redirect
 - **THEN** UI MUST land on `/sign-in` with the intended protected return target preserved in search state
+
+### Requirement UI-LOGIN-SESSION-006: Session exit SHALL clear auth state and return users to sign-in
+Cabinet SHALL provide a concrete `/sign-out` route that resets local auth state and redirects users to sign-in so protected routes no longer remain reachable under the prior session.
+
+#### Scenario: Direct sign-out route clears session and re-gates protected routes
+- **GIVEN** an authenticated local session and a reachable protected route
+- **WHEN** user visits `/sign-out`
+- **THEN** Cabinet MUST clear local auth state, redirect to `/sign-in`, and re-gate the next protected-route request through sign-in instead of rendering the prior authenticated workspace
+
+### Requirement UI-LOGIN-SESSION-007: Dashboard SHALL not remain reachable after sign-out
+After a local sign-out, Cabinet SHALL re-apply authenticated-route gating to the canonical dashboard entry so the previous authenticated dashboard shell cannot be reopened without signing in again.
+
+#### Scenario: Sign-out removes dashboard access until re-authenticated
+- **GIVEN** an authenticated local session currently able to reach `/dashboard`
+- **WHEN** the user signs out and then requests `/dashboard` again
+- **THEN** Cabinet MUST redirect to `/sign-in`
+- **AND** the previous authenticated dashboard content MUST not render until the user signs in again
