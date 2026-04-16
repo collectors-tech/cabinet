@@ -254,4 +254,131 @@ describe("inventory-management", () => {
       "Inline Alpha"
     );
   });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-009 persists create-edit save flow and keeps media attach usable", () => {
+    const items = [
+      {
+        id: "item-existing-1",
+        part_number: "PN-EXISTING-1",
+        title: "Existing Inventory Item",
+        status: "active",
+        category: "Cars",
+        brand: "AFX",
+        priority: "medium",
+        description: "Existing description",
+      },
+    ];
+    const photos: Array<{ id: string; filename: string; is_primary: boolean }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { items },
+      });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-CREATE-1",
+        title: "Created Inventory Item",
+        brand: "Tyco",
+        category: "Cars",
+      });
+      const created = {
+        id: "item-created-1",
+        part_number: "PN-CREATE-1",
+        title: "Created Inventory Item",
+        status: "active",
+        category: "Cars",
+        brand: "Tyco",
+        priority: "medium",
+        description: "Freshly saved item",
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createItem");
+
+    cy.intercept("PUT", "/api/items/item-created-1", (req) => {
+      expect(req.body).to.include({
+        title: "Created Inventory Item Updated",
+        brand: "Aurora",
+      });
+      items[0] = {
+        ...items[0],
+        title: "Created Inventory Item Updated",
+        brand: "Aurora",
+      };
+      req.reply({ statusCode: 200, body: items[0] });
+    }).as("updateItem");
+
+    cy.intercept("GET", "/api/items/item-created-1/photos", (req) => {
+      req.reply({ statusCode: 200, body: { photos } });
+    }).as("createdItemPhotos");
+
+    cy.intercept("POST", "/api/items/item-created-1/photos", (req) => {
+      photos.push({
+        id: "photo-created-1",
+        filename: "created-photo.jpg",
+        is_primary: true,
+      });
+      req.reply({ statusCode: 201, body: photos[0] });
+    }).as("uploadCreatedPhoto");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-mode"]').should(
+      "contain",
+      "Creating new item draft"
+    );
+    cy.get('[data-testid="inventory-item-part-number"]').clear().type("PN-CREATE-1");
+    cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item");
+    cy.get('[data-testid="inventory-item-brand"]').clear().type("Tyco");
+    cy.get('[data-testid="inventory-item-category"]').clear().type("Cars");
+    cy.get('[data-testid="inventory-item-description"]').clear().type("Freshly saved item");
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@createItem");
+    cy.wait("@itemsList");
+    cy.wait("@createdItemPhotos");
+    cy.get('[data-testid="inventory-item-save-success"]').should(
+      "contain",
+      "Item created"
+    );
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    cy.contains("Created Inventory Item").should("be.visible");
+
+    cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
+      contents: Cypress.Buffer.from("created-photo-binary"),
+      fileName: "created-photo.jpg",
+      mimeType: "image/jpeg",
+    });
+    cy.wait("@uploadCreatedPhoto");
+    cy.wait("@createdItemPhotos");
+    cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
+      "be.visible"
+    );
+
+    cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item Updated");
+    cy.get('[data-testid="inventory-item-brand"]').clear().type("Aurora");
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@updateItem");
+    cy.wait("@itemsList");
+    cy.wait("@createdItemPhotos");
+    cy.get('[data-testid="inventory-item-save-success"]').should(
+      "contain",
+      "Item changes saved"
+    );
+    cy.get('[data-testid="inventory-item-title"]').should(
+      "have.value",
+      "Created Inventory Item Updated"
+    );
+    cy.get('[data-testid="inventory-item-brand"]').should("have.value", "Aurora");
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
+      "be.visible"
+    );
+  });
 });
