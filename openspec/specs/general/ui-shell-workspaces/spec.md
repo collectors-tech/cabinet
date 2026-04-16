@@ -40,3 +40,12 @@ Cabinet MUST maintain distinct responsibilities for shell workspaces so Assistan
 - **THEN** Assistant MUST behave as AI helper workspace
 - **AND** Inbox MUST behave as notification/event workspace
 - **AND** `/chats` MUST behave as intentional conversation workspace rather than duplicate Inbox or placeholder assistant shell
+
+### Requirement UI-SHELL-WORKSPACES-005: Inbox empty state SHALL expose actionable next steps
+When Inbox has no items, the workspace MUST provide clear actions so users are not left at a dead end.
+
+#### Scenario: Inbox empty state actions
+- **GIVEN** Inbox workspace is open and no inbox items exist
+- **WHEN** the empty state renders
+- **THEN** the workspace MUST show at least one explicit refresh or navigation affordance
+- **AND** users MUST be able to open a related communications surface without guessing

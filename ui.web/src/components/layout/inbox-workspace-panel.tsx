@@ -44,6 +44,25 @@ export function InboxWorkspacePanel() {
     setItems(payload.items ?? [])
   }
 
+  async function refreshInbox() {
+    if (!activeProfileId) {
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      await loadItems(activeProfileId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'failed_to_load_inbox_items')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openChats() {
+    window.location.assign('/chats')
+  }
+
   useEffect(() => {
     let cancelled = false
     if (!activeProfileId) {
@@ -114,9 +133,38 @@ export function InboxWorkspacePanel() {
               <p className='text-sm text-muted-foreground'>Loading Inbox...</p>
             ) : null}
             {!loading && items.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
-                No inbox items yet.
-              </p>
+              <div className='space-y-3 text-sm text-muted-foreground'>
+                <p>No inbox items yet.</p>
+                <div className='flex flex-wrap gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    data-testid='shell-inbox-refresh'
+                    onClick={() => void refreshInbox()}
+                  >
+                    Refresh Inbox
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    data-testid='shell-inbox-open-chats'
+                    onClick={openChats}
+                  >
+                    Open Chats
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    data-testid='shell-inbox-open-assistant-workspace'
+                    onClick={() => setActiveWorkspace('assistant')}
+                  >
+                    Open Assistant Workspace
+                  </Button>
+                </div>
+              </div>
             ) : null}
             {items.map((item) => (
               <div
