@@ -1,88 +1,78 @@
 ## Purpose
-Define top-level Collections screen behavior and create workflows.
+Define top-level Collections screen behavior as a shared Cabinet table management surface.
 
 ## Requirements
-### Requirement UI-SCREEN-COLLECTIONS-001: Collections SHALL be a top-level managed section with dedicated create flow
-Collections management SHALL exist as a first-class section and support list + create operations.
+### Requirement UI-SCREEN-COLLECTIONS-001: Collections SHALL use the shared table management pattern
+Collections SHALL render as a practical row-based table surface using the shared Cabinet table pattern instead of a custom mixed create/list layout.
 
-#### Scenario: Open collections section
-- **GIVEN** authenticated user navigates to Collections section
-- **WHEN** section renders
-- **THEN** UI MUST show collection list and dedicated `New` create action for collection entries
+#### Scenario: Collections table renders
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the screen loads
+- **THEN** the primary collections surface MUST render as a shared table
+- **AND** the table MUST show collection rows with management-oriented columns
+- **AND** the screen MUST expose one primary create action for adding a collection row
 
-### Requirement UI-SCREEN-COLLECTIONS-002: Collections screen SHALL expose New and Create-menu actions
-Collections screen SHALL provide a dedicated `New` button for primary entity creation and adjacent `Create` menu for quick create actions.
+### Requirement UI-SCREEN-COLLECTIONS-002: Collections SHALL support row selection with visible management context
+The screen SHALL keep row selection and the current collection management context visible while the user works from the table.
 
-#### Scenario: New + Create menu behavior
-- **GIVEN** collections section is open
-- **WHEN** user clicks `New`
-- **THEN** primary create-collection flow MUST open
-- **WHEN** user clicks adjacent `Create` menu
-- **THEN** menu MUST show configured quick-create actions
+#### Scenario: Select collection row
+- **GIVEN** collection rows are visible in the table
+- **WHEN** the user selects a collection row
+- **THEN** the row MUST become the active collection context
+- **AND** a visible selected-collection panel MUST reflect the selected row details
 
-### Requirement UI-SCREEN-COLLECTIONS-003: Collection picker SHALL support inline quick-create
-Where collection picker is used (inventory/wishlist detail forms), picker SHALL allow inline create without leaving current workflow.
+### Requirement UI-SCREEN-COLLECTIONS-003: Collections SHALL support create from the table workflow
+The shared table surface SHALL support creating a collection through a single explicit create flow.
 
-#### Scenario: Quick-create from collection picker
-- **GIVEN** user opens collection picker in item/wishlist details
-- **WHEN** user selects `+ New Collection` and submits valid name
-- **THEN** new collection MUST be created and auto-selected in the current picker context
+#### Scenario: Create collection from table surface
+- **GIVEN** the user is on `/collections`
+- **WHEN** the user triggers the primary create action and submits a valid collection name
+- **THEN** the collection MUST be added to the table
+- **AND** the new collection MUST become the active management context
+- **AND** the result MUST persist across refresh
 
-### Requirement UI-SCREEN-COLLECTIONS-004: Collections screen SHALL show and confirm active collection context changes
-The dedicated Collections screen SHALL let users understand which collection is currently active and confirm the effect of switching to another collection.
+### Requirement UI-SCREEN-COLLECTIONS-004: Collections SHALL support row edit workflow
+The shared table surface SHALL support editing a collection row through the standard row-management workflow.
 
-#### Scenario: Switch active collection from Collections screen
-- **GIVEN** collections section is open and at least two collections exist
-- **WHEN** user selects a different collection entry
-- **THEN** the newly active collection MUST be visually distinguished on the page
-- **AND** the active context change MUST be communicated with explicit on-screen state and persistence semantics
-- **AND** returning to the screen MUST reflect the persisted active collection without requiring reselection
+#### Scenario: Rename collection from row workflow
+- **GIVEN** a collection row exists in the table
+- **WHEN** the user edits the row and saves a valid new name
+- **THEN** the table MUST update to show the new collection name
+- **AND** the updated name MUST persist across refresh
 
-### Requirement UI-SCREEN-COLLECTIONS-005: Collections screen SHALL support rename and remove management actions
-The dedicated Collections screen SHALL provide direct management actions for existing collections beyond creation and activation.
+### Requirement UI-SCREEN-COLLECTIONS-005: Collections SHALL support row delete workflow
+The shared table surface SHALL support removing collection rows through an explicit delete confirmation flow.
 
-#### Scenario: Rename or remove an existing collection
-- **GIVEN** collections section is open and a non-default collection exists
-- **WHEN** user chooses rename or remove for that collection
-- **THEN** the screen MUST expose the corresponding action
-- **AND** the action MUST complete through a clear confirmation/edit flow with deterministic transient result messaging
-- **AND** short-lived success/info/cancel outcomes for rename/remove flows MUST surface as toasts rather than only inline helper text
-- **AND** protected/default collections MUST not expose destructive completion for removal
+#### Scenario: Delete collection from row workflow
+- **GIVEN** a collection row exists in the table
+- **WHEN** the user confirms deletion
+- **THEN** the row MUST be removed from the table
+- **AND** the active management context MUST update deterministically
 
-### Requirement UI-SCREEN-COLLECTIONS-006: Collections screen SHALL expose collection details and metadata summaries
-Users SHALL be able to understand what a collection represents before choosing it.
+### Requirement UI-SCREEN-COLLECTIONS-006: Collections table SHALL support deterministic filtering
+The shared table surface SHALL support simple filtering without leaving the table workflow.
 
-#### Scenario: Review collection details from list
-- **GIVEN** collections section is open
-- **WHEN** user scans or opens a collection entry
-- **THEN** the UI MUST expose useful metadata for that collection such as summary/details/counts/status as defined by the product contract
-- **AND** each visible collection entry MUST surface enough detail to distinguish broad workspace scope, active operational lanes, and storage/archive groupings before selection
+#### Scenario: Filter collections
+- **GIVEN** multiple collections exist
+- **WHEN** the user filters the table
+- **THEN** only matching collection rows MUST remain visible
+- **AND** the filtered count summary MUST update deterministically
 
-### Requirement UI-SCREEN-COLLECTIONS-007: Collections screen SHALL support search, filtering, and ordering tools for collection management
-When multiple collections exist, the dedicated management surface SHALL help users find and organize them efficiently.
+## Acceptance Criteria
+- Collections no longer depends on a custom mixed create/list layout.
+- The shared table pattern drives create, edit, delete, selection, and filtering behaviors.
+- Refresh-persistence evidence exists for create and rename flows.
 
-#### Scenario: Locate and organize a collection
-- **GIVEN** collections section contains many entries
-- **WHEN** user needs to find or organize a specific collection
-- **THEN** the screen MUST provide supported search/filtering and ordering controls for collection management workflows
-- **AND** visible result counts/state MUST make the current search/filter/order effect obvious to the user
+## Success Criteria
+- Collections behaves like a practical management surface, not a one-off custom page.
+- The next collections issue can build assignment/move behavior on top of this table base cleanly.
 
-### Requirement UI-SCREEN-COLLECTIONS-008: Collections screen SHALL communicate create-action outcomes and available create paths clearly
-Collection creation entry points SHALL make their behavior obvious and communicate whether creation succeeded, failed, or requires additional input.
-
-#### Scenario: Use visible create actions on Collections screen
-- **GIVEN** collections section is open
-- **WHEN** user uses `New` or `Create`
-- **THEN** the resulting workflow/options MUST be obvious from the page state
-- **AND** success and informational/cancel outcomes for create flows MUST be communicated with visible toast feedback while validation failures remain explicit and actionable
-- **AND** the page MUST explain the difference between the primary `New` flow and alternate `Create` actions before mutation occurs
-
-### Requirement UI-SCREEN-COLLECTIONS-009: Collections affordances SHALL use tag iconography consistently
-Cabinet SHALL use a tag icon for the primary Collections affordance so sidebar navigation and dedicated Collections screen entry reinforce the same metaphor.
-
-#### Scenario: Open collections from authenticated navigation
-- **GIVEN** an authenticated user views the sidebar and the dedicated Collections screen
-- **WHEN** the Collections affordance renders in navigation and page context
-- **THEN** the sidebar Collections entry MUST use a tag icon
-- **AND** the dedicated Collections screen header MUST use matching tag iconography
-- **AND** icon sizing/alignment MUST remain visually consistent with surrounding controls and headings
+## Use-Case IDs and E2E Mapping
+| UC ID | Flow | Expected Result | E2E Mapping |
+| --- | --- | --- | --- |
+| UC-COL-01 | Open collections table | Shared table surface renders | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `renders collections as shared management table` |
+| UC-COL-02 | Select row | Selected collection panel updates | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `selects a collection row and updates management context` |
+| UC-COL-03 | Create collection | New row appears and survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `creates a collection from the table workflow and persists after refresh` |
+| UC-COL-04 | Rename collection | Updated row survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `renames a collection from the row workflow and persists after refresh` |
+| UC-COL-05 | Delete collection | Row removed from table | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `deletes a collection from the row workflow` |
+| UC-COL-06 | Filter collections | Matching rows remain visible | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `filters collections within the shared table surface` |

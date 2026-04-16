@@ -43,7 +43,7 @@ import {
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { tasksColumns as columns } from './tasks-columns'
+import { getTasksColumns } from './tasks-columns'
 
 type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
@@ -62,6 +62,8 @@ export function TasksTable({
   currentRecordID,
   onRecordFocus,
 }: DataTableProps) {
+  const columns = useMemo(() => getTasksColumns({ routePath }), [routePath])
+
   const route =
     routePath === '/_authenticated/inventory/'
       ? getRouteApi('/_authenticated/inventory/')
