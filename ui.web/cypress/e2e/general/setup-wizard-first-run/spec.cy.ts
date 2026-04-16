@@ -71,19 +71,11 @@ describe('SETUP-WIZ', () => {
       'contain.text',
       'Cabinet Local'
     );
-<<<<<<< HEAD
     cy.get('[data-testid="setup-complete-runtime-port"]').should(($el) => {
       const numeric = Number($el.text().trim());
       expect(Number.isFinite(numeric)).to.eq(true);
       expect(numeric).to.be.greaterThan(0);
     });
-=======
-    cy.get('[data-testid="setup-complete-runtime-port"]').should(($el) => {
-      const numeric = Number($el.text().trim());
-      expect(Number.isFinite(numeric)).to.eq(true);
-      expect(numeric).to.be.greaterThan(0);
-    });
->>>>>>> d335689 (#446 test(shell): align route and setup expectations)
 
     cy.request('GET', '/api/test/runtime/setup-config')
       .its('body')
