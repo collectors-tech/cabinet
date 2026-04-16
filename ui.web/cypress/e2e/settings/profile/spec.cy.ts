@@ -14,6 +14,10 @@ describe('settings/profile', () => {
   })
 
   it('UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API', () => {
+    cy.contains('Profile settings').should('be.visible')
+    cy.contains('Manage your account profile and public display details.').should('be.visible')
+    cy.contains('settings.profile.title').should('not.exist')
+    cy.contains('settings.profile.description').should('not.exist')
     cy.contains('button', 'Update profile').should('not.be.disabled')
     cy.get('input[name="username"]').clear().type('collector-profile')
     cy.get('[data-testid="settings-profile-email-trigger"]').click()
