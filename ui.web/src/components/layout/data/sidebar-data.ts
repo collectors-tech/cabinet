@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import {
   LayoutDashboard,
   Telescope,
@@ -17,8 +18,16 @@ import {
   Database,
   ChartColumn,
   Tag,
+  type LucideProps,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
+
+function CollectionsTagIcon(props: LucideProps) {
+  return createElement(Tag as any, {
+    ...props,
+    'data-lucide': 'tag',
+  })
+}
 
 export const sidebarData: SidebarData = {
   user: {
@@ -50,7 +59,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Collections',
           url: '/collections',
-          icon: Tag,
+          icon: CollectionsTagIcon,
         },
         {
           title: 'Wishlist',
