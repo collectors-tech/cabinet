@@ -109,6 +109,15 @@ Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (n
 - **AND** visible text label next to the icon MUST NOT render in header row
 - **AND** control MUST retain accessible name via `aria-label` and/or tooltip
 
+### Requirement UI-SCREEN-CHAT-COPILOT-009: Top-level `/inbox` SHALL resolve to a real communications surface
+Cabinet SHALL provide a reachable authenticated `/inbox` route for communications access instead of falling through to the not-found page.
+
+#### Scenario: Open top-level inbox route
+- **GIVEN** an authenticated actor has an active local profile
+- **WHEN** user navigates directly to `/inbox`
+- **THEN** Cabinet MUST render a communications surface
+- **AND** route MUST NOT render the app 404 page
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
