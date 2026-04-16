@@ -1,5 +1,4 @@
 import {
-  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   useEffect,
@@ -44,14 +43,15 @@ import {
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { getTasksColumns, type TasksRoutePath } from './tasks-columns'
+import { tasksColumns as columns } from './tasks-columns'
+
+type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
 type DataTableProps = {
   data: Task[]
   routePath: TasksRoutePath
-  getRowTestId?: (record: Task) => string | undefined
-  onRowDragStart?: (record: Task, event: DragEvent<HTMLElement>) => void
-  onRowDragEnd?: (record: Task, event: DragEvent<HTMLElement>) => void
+  currentRecordID?: string
+  onRecordFocus?: (itemID: string, recordID: string, title: string) => void
 }
 
 type ViewMode = 'rows' | 'cards'
@@ -59,9 +59,8 @@ type ViewMode = 'rows' | 'cards'
 export function TasksTable({
   data,
   routePath,
-  getRowTestId,
-  onRowDragStart,
-  onRowDragEnd,
+  currentRecordID,
+  onRecordFocus,
 }: DataTableProps) {
   const route =
     routePath === '/_authenticated/inventory/'
@@ -76,7 +75,6 @@ export function TasksTable({
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const columns = useMemo(() => getTasksColumns({ routePath }), [routePath])
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') {
       return 'rows'
@@ -208,6 +206,10 @@ export function TasksTable({
     if (isInteractiveTarget(event.target)) {
       return
     }
+    const record = data.find((item) => item.id === id)
+    if (record) {
+      onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
+    }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
     }
@@ -222,6 +224,10 @@ export function TasksTable({
   ) => {
     if (isInteractiveTarget(event.target)) {
       return
+    }
+    const record = data.find((item) => item.id === id)
+    if (record) {
+      onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
@@ -261,46 +267,17 @@ export function TasksTable({
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder={
-          routePath === '/_authenticated/inventory/'
-            ? 'Filter by title or part number...'
-            : routePath === '/_authenticated/wishlist/'
-              ? 'Filter by title or item ID...'
-              : 'Filter by title or ID...'
-        }
+        searchPlaceholder='Filter by title or ID...'
         filters={[
           {
             columnId: 'status',
-            title:
-              routePath === '/_authenticated/inventory/'
-                ? 'Condition'
-                : routePath === '/_authenticated/wishlist/'
-                  ? 'Watch status'
-                  : 'Status',
-            options:
-              routePath === '/_authenticated/wishlist/'
-                ? [
-                    { label: 'Watching', value: 'wishlist' },
-                    { label: 'Below target', value: 'discovered' },
-                  ]
-                : statuses,
+            title: 'Status',
+            options: statuses,
           },
           {
             columnId: 'priority',
-            title:
-              routePath === '/_authenticated/inventory/'
-                ? 'Category'
-                : routePath === '/_authenticated/wishlist/'
-                  ? 'Target priority'
-                  : 'Priority',
-            options:
-              routePath === '/_authenticated/inventory/'
-                ? [
-                    { label: 'Feature', value: 'feature' },
-                    { label: 'Bug', value: 'bug' },
-                    { label: 'Documentation', value: 'documentation' },
-                  ]
-                : priorities,
+            title: 'Priority',
+            options: priorities,
           },
         ]}
       />
@@ -359,11 +336,12 @@ export function TasksTable({
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    data-testid={getRowTestId?.(row.original)}
                     data-state={row.getIsSelected() && 'selected'}
-                    draggable={Boolean(onRowDragStart && row.original.recordID)}
-                    onDragStart={(event) => onRowDragStart?.(row.original, event)}
-                    onDragEnd={(event) => onRowDragEnd?.(row.original, event)}
+                    className={cn(
+                      currentRecordID === (row.original.itemID ?? row.original.id)
+                        ? 'bg-primary/5'
+                        : undefined
+                    )}
                     onClick={(event) => handleRowClick(row.original.id, event)}
                     onDoubleClick={(event) =>
                       handleRowDoubleClick(row.original.id, event)
@@ -404,12 +382,17 @@ export function TasksTable({
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
-                className='space-y-2 rounded-md border p-4'
-                data-testid={getRowTestId?.(row.original)}
+                className={cn(
+                  'space-y-2 rounded-md border p-4',
+                  currentRecordID === (row.original.itemID ?? row.original.id)
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'cursor-pointer'
+                )}
                 data-state={row.getIsSelected() && 'selected'}
-                draggable={Boolean(onRowDragStart && row.original.recordID)}
-                onDragStart={(event) => onRowDragStart?.(row.original, event)}
-                onDragEnd={(event) => onRowDragEnd?.(row.original, event)}
+                onClick={(event) => handleRowClick(row.original.id, event)}
+                onDoubleClick={(event) =>
+                  handleRowDoubleClick(row.original.id, event)
+                }
               >
                 <div className='flex items-start justify-between gap-2'>
                   <div className='space-y-1'>
