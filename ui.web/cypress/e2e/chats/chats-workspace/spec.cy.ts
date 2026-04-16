@@ -1,7 +1,7 @@
 describe('chats/chats-workspace', () => {
   function openChats() {
     cy.e2eReset()
-    cy.e2eBootstrap()
+    cy.e2eBootstrap({ minimalProfile: true })
     cy.e2eSetSetupState('present')
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/chats/' })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
