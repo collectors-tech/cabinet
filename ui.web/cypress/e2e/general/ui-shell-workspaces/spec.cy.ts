@@ -71,4 +71,15 @@ describe('general/ui-shell-workspaces', () => {
     cy.contains('Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.').should('be.visible')
     cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
   })
+
+  it('UI-SHELL-WORKSPACES-005 gives Inbox empty state actionable next steps', () => {
+    openInventory()
+    cy.get('[data-testid="shell-workspace-inbox"]').click()
+
+    cy.contains('[data-testid="shell-inbox-workspace"]', 'No inbox items yet.').should('be.visible')
+    cy.get('[data-testid="shell-inbox-refresh"]').should('be.visible')
+    cy.get('[data-testid="shell-inbox-open-chats"]').should('be.visible')
+    cy.get('[data-testid="shell-inbox-open-assistant-workspace"]').should('be.visible').click()
+    cy.get('[data-testid="shell-assistant-workspace"]').should('be.visible')
+  })
 })
