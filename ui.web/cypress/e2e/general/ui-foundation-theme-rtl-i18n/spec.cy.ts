@@ -6,10 +6,10 @@ describe("ui-foundation-theme-rtl-i18n", () => {
     cy.get('input[name="email"]').clear().type("e2e-theme-i18n@example.com");
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
   }
 
-  function switchLanguage(code: "en" | "ar") {
+  function switchLanguage(code: "en" | "zh" | "ja") {
     cy.get('[data-testid="header-language-switch-trigger"]').click();
     cy.get(`[data-testid="header-language-option-${code}"]`).click();
   }
@@ -36,26 +36,27 @@ describe("ui-foundation-theme-rtl-i18n", () => {
     cy.get('input[name="email"]').clear().type("e2e-theme-i18n@example.com");
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
 
     cy.get('[data-testid="header-language-switch-trigger"]')
       .should("be.visible")
       .and("contain", "EN")
       .click();
     cy.get('[data-testid="header-language-option-en"]').should("be.visible").click();
-    cy.contains("button", "Dashboard").should("be.visible");
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should("contain", "Dashboard");
+    cy.contains('h1', 'Home').should('be.visible');
   });
 
   it("UI-FOUNDATION-THEME-RTL-I18N-002 keeps shell labels safe when active locale lacks specific keys", () => {
     signInToHome();
-    switchLanguage("ar");
-    cy.contains("button", "Dashboard").should("be.visible");
-    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should("be.visible");
+    switchLanguage("ja");
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should("contain", "ホーム");
+    cy.get('[data-testid="sidebar-nav-link-inventory"]').should("contain", "在庫");
   });
 
-  it("UI-FOUNDATION-THEME-RTL-I18N-003 mirrors layout direction when RTL locale is selected", () => {
+  it("UI-FOUNDATION-THEME-RTL-I18N-003 keeps layout direction stable for supported non-RTL locales", () => {
     signInToHome();
-    switchLanguage("ar");
-    cy.get("html").should("have.attr", "dir", "rtl");
+    switchLanguage("ja");
+    cy.get("html").should("have.attr", "dir", "ltr");
   });
 });

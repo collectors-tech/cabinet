@@ -17,10 +17,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('input[name="password"]').type('password123');
     cy.contains('button', 'Sign in').click();
 
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard');
     cy.contains('Home').should('be.visible');
     cy.contains('Starter Onboarding').should('not.exist');
   });
@@ -49,10 +46,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('input[name="password"]').type('password123');
     cy.contains('button', 'Sign in').click();
 
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^(\/|\/_authenticated\/?)$/
-    );
+    cy.location('pathname', { timeout: 15000 }).should('eq', '/dashboard');
 
     cy.contains('Home').should('be.visible');
   });
@@ -64,10 +58,9 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.visit('/sign-in');
     cy.contains('Setup Wizard').should('be.visible');
-    cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-next"]').click();
-    cy.get('[data-testid="setup-complete"]').click();
-    cy.get('[data-testid="setup-start-app"]').click();
+    cy.get('[data-testid="setup-use-defaults"]').click();
+    cy.get('[data-testid="setup-wizard-complete-state"]').should('be.visible');
+    cy.contains('button', 'Finish').click();
     cy.contains('Sign in').should('be.visible');
   });
 

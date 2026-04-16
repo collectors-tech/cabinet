@@ -33,10 +33,14 @@ import {
   type NavGroup as NavGroupProps,
 } from './types'
 
-export function NavGroup({ title, items }: NavGroupProps) {
+function navTestKey(value?: string) {
+  return value?.trim().toLowerCase().replace(/\s+/g, '-') || 'nav-item'
+}
+
+export function NavGroup({ title, testIdKey, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
-  const groupKey = title.trim().toLowerCase().replace(/\s+/g, '-')
+  const groupKey = navTestKey(testIdKey || title)
   return (
     <SidebarGroup data-testid={`sidebar-nav-group-${groupKey}`}>
       <SidebarGroupLabel>{title}</SidebarGroupLabel>
@@ -72,7 +76,7 @@ function NavBadge({ children, itemKey }: { children: ReactNode; itemKey: string 
 
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
   const { setOpenMobile } = useSidebar()
-  const itemKey = item.title.trim().toLowerCase().replace(/\s+/g, '-')
+  const itemKey = navTestKey(item.testIdKey || item.title)
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -100,7 +104,7 @@ function SidebarMenuCollapsible({
   href: string
 }) {
   const { setOpenMobile } = useSidebar()
-  const itemKey = item.title.trim().toLowerCase().replace(/\s+/g, '-')
+  const itemKey = navTestKey(item.testIdKey || item.title)
   return (
     <Collapsible
       asChild
@@ -119,7 +123,7 @@ function SidebarMenuCollapsible({
         <CollapsibleContent className='CollapsibleContent'>
           <SidebarMenuSub>
             {item.items.map((subItem) => {
-              const subItemKey = subItem.title.trim().toLowerCase().replace(/\s+/g, '-')
+              const subItemKey = navTestKey(subItem.testIdKey || subItem.title)
               return (
                 <SidebarMenuSubItem key={subItem.title}>
                   <SidebarMenuSubButton
@@ -149,7 +153,7 @@ function SidebarMenuCollapsedDropdown({
   item: NavCollapsible
   href: string
 }) {
-  const itemKey = item.title.trim().toLowerCase().replace(/\s+/g, '-')
+  const itemKey = navTestKey(item.testIdKey || item.title)
   return (
     <SidebarMenuItem>
       <DropdownMenu>
