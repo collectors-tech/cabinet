@@ -36,6 +36,7 @@ import { Route as AuthenticatedScannerIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedReportsIndexRouteImport } from './routes/_authenticated/reports/index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedIntegrationsIndexRouteImport } from './routes/_authenticated/integrations/index'
+import { Route as AuthenticatedInboxIndexRouteImport } from './routes/_authenticated/inbox/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedDiscoveriesIndexRouteImport } from './routes/_authenticated/discoveries/index'
 import { Route as AuthenticatedCollectionsIndexRouteImport } from './routes/_authenticated/collections/index'
@@ -192,6 +193,11 @@ const AuthenticatedIntegrationsIndexRoute =
     path: '/integrations/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedInboxIndexRoute = AuthenticatedInboxIndexRouteImport.update({
+  id: '/inbox/',
+  path: '/inbox/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
     id: '/help-center/',
@@ -320,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/collections/': typeof AuthenticatedCollectionsIndexRoute
   '/discoveries/': typeof AuthenticatedDiscoveriesIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/inbox/': typeof AuthenticatedInboxIndexRoute
   '/integrations/': typeof AuthenticatedIntegrationsIndexRoute
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/reports/': typeof AuthenticatedReportsIndexRoute
@@ -361,6 +368,7 @@ export interface FileRoutesByTo {
   '/collections': typeof AuthenticatedCollectionsIndexRoute
   '/discoveries': typeof AuthenticatedDiscoveriesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/inbox': typeof AuthenticatedInboxIndexRoute
   '/integrations': typeof AuthenticatedIntegrationsIndexRoute
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/reports': typeof AuthenticatedReportsIndexRoute
@@ -407,6 +415,7 @@ export interface FileRoutesById {
   '/_authenticated/collections/': typeof AuthenticatedCollectionsIndexRoute
   '/_authenticated/discoveries/': typeof AuthenticatedDiscoveriesIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/inbox/': typeof AuthenticatedInboxIndexRoute
   '/_authenticated/integrations/': typeof AuthenticatedIntegrationsIndexRoute
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/reports/': typeof AuthenticatedReportsIndexRoute
@@ -451,6 +460,7 @@ export interface FileRouteTypes {
     | '/collections/'
     | '/discoveries/'
     | '/help-center/'
+    | '/inbox/'
     | '/integrations/'
     | '/inventory/'
     | '/reports/'
@@ -492,6 +502,7 @@ export interface FileRouteTypes {
     | '/collections'
     | '/discoveries'
     | '/help-center'
+    | '/inbox'
     | '/integrations'
     | '/inventory'
     | '/reports'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/_authenticated/collections/'
     | '/_authenticated/discoveries/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/inbox/'
     | '/_authenticated/integrations/'
     | '/_authenticated/inventory/'
     | '/_authenticated/reports/'
@@ -755,6 +767,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIntegrationsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/inbox/': {
+      id: '/_authenticated/inbox/'
+      path: '/inbox'
+      fullPath: '/inbox/'
+      preLoaderRoute: typeof AuthenticatedInboxIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
@@ -910,6 +929,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCollectionsIndexRoute: typeof AuthenticatedCollectionsIndexRoute
   AuthenticatedDiscoveriesIndexRoute: typeof AuthenticatedDiscoveriesIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedInboxIndexRoute: typeof AuthenticatedInboxIndexRoute
   AuthenticatedIntegrationsIndexRoute: typeof AuthenticatedIntegrationsIndexRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedReportsIndexRoute: typeof AuthenticatedReportsIndexRoute
@@ -927,6 +947,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCollectionsIndexRoute: AuthenticatedCollectionsIndexRoute,
   AuthenticatedDiscoveriesIndexRoute: AuthenticatedDiscoveriesIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedInboxIndexRoute: AuthenticatedInboxIndexRoute,
   AuthenticatedIntegrationsIndexRoute: AuthenticatedIntegrationsIndexRoute,
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedReportsIndexRoute: AuthenticatedReportsIndexRoute,

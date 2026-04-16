@@ -23,6 +23,14 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
   }
 
+  function openInbox() {
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inbox/' })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+  }
+
   function createThread(title: string) {
     cy.get('[data-testid="chat-new-thread-input"]').clear().type(title)
     cy.get('[data-testid="chat-create-thread-button"]').click()
@@ -139,5 +147,13 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-confirm-summary"]').should('contain', 'CP-008-MOBILE')
     cy.get('[data-testid="chat-apply-confirm-submit"]').click()
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'CP-008-MOBILE')
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-009 keeps top-level /inbox reachable as a communications surface', () => {
+    openInbox()
+    cy.contains('h1', 'Chats').should('be.visible')
+    cy.get('[data-testid="chat-thread-list"]').should('be.visible')
+    cy.contains('404').should('not.exist')
+    cy.contains('Oops! Page Not Found!').should('not.exist')
   })
 })
