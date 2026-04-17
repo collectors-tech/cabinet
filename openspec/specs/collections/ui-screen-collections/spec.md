@@ -20,6 +20,7 @@ The screen SHALL keep row selection and the current collection management contex
 - **WHEN** the user selects a collection row
 - **THEN** the row MUST become the active collection context
 - **AND** a visible selected-collection panel MUST reflect the selected row details
+- **AND** the active collection context MUST persist across refresh for the signed-in profile
 
 ### Requirement UI-SCREEN-COLLECTIONS-003: Collections SHALL support create from the table workflow
 The shared table surface SHALL support creating a collection through a single explicit create flow.
@@ -44,10 +45,11 @@ The shared table surface SHALL support editing a collection row through the stan
 The shared table surface SHALL support removing collection rows through an explicit delete confirmation flow.
 
 #### Scenario: Delete collection from row workflow
-- **GIVEN** a collection row exists in the table
+- **GIVEN** a non-protected collection row exists in the table
 - **WHEN** the user confirms deletion
 - **THEN** the row MUST be removed from the table
 - **AND** the active management context MUST update deterministically
+- **AND** items previously assigned to the deleted collection MUST remain in Cabinet as unassigned items
 
 ### Requirement UI-SCREEN-COLLECTIONS-006: Collections table SHALL support deterministic filtering
 The shared table surface SHALL support simple filtering without leaving the table workflow.
@@ -58,21 +60,53 @@ The shared table surface SHALL support simple filtering without leaving the tabl
 - **THEN** only matching collection rows MUST remain visible
 - **AND** the filtered count summary MUST update deterministically
 
+### Requirement UI-SCREEN-COLLECTIONS-007: Collections SHALL support assigning items into the selected collection
+The collections workflow SHALL allow the user to place a Cabinet item into the currently selected collection from the same management surface.
+
+#### Scenario: Assign item to selected collection
+- **GIVEN** a non-protected collection is selected and assignable items exist
+- **WHEN** the user assigns an item into that collection
+- **THEN** the item MUST appear in the collection members panel
+- **AND** the collection row/member state MUST reflect the saved placement without relying on ephemeral in-memory UI only
+- **AND** the assignment MUST persist across refresh
+
+### Requirement UI-SCREEN-COLLECTIONS-008: Collections SHALL support moving assigned items between collections
+The collections workflow SHALL allow moving an already assigned item from one collection to another from the collections management surface.
+
+#### Scenario: Move assigned item between collections
+- **GIVEN** an item is already assigned to a non-protected collection
+- **WHEN** the user moves that item to another non-protected collection
+- **THEN** the item MUST leave the old collection view
+- **AND** the item MUST appear in the destination collection view
+- **AND** the moved membership state MUST persist across refresh
+
+### Requirement UI-SCREEN-COLLECTIONS-009: Collections route SHALL retain clear tag-based page identity
+Collections navigation and page identity SHALL continue to use the tag iconography for the collections route.
+
+#### Scenario: Collections route iconography
+- **GIVEN** the user opens `/collections`
+- **WHEN** the navigation and page header render
+- **THEN** the Collections route entry MUST remain visible in navigation
+- **AND** the page identity area MUST render a visible tag icon
+
 ## Acceptance Criteria
-- Collections no longer depends on a custom mixed create/list layout.
-- The shared table pattern drives create, edit, delete, selection, and filtering behaviors.
-- Refresh-persistence evidence exists for create and rename flows.
+- Collections uses one practical table-driven management surface.
+- Create, rename, delete, assign, and move workflows all happen from the collections route.
+- Assignment and move outcomes survive refresh for the signed-in profile.
 
 ## Success Criteria
-- Collections behaves like a practical management surface, not a one-off custom page.
-- The next collections issue can build assignment/move behavior on top of this table base cleanly.
+- Collections behaves like a practical operational surface, not a static taxonomy page.
+- Item placement can be managed directly from Collections before moving on to later wishlist/owned-state work.
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-COL-01 | Open collections table | Shared table surface renders | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `renders collections as shared management table` |
-| UC-COL-02 | Select row | Selected collection panel updates | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `selects a collection row and updates management context` |
-| UC-COL-03 | Create collection | New row appears and survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `creates a collection from the table workflow and persists after refresh` |
-| UC-COL-04 | Rename collection | Updated row survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `renames a collection from the row workflow and persists after refresh` |
-| UC-COL-05 | Delete collection | Row removed from table | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `deletes a collection from the row workflow` |
-| UC-COL-06 | Filter collections | Matching rows remain visible | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `filters collections within the shared table surface` |
+| UC-COL-01 | Open collections table | Shared table surface renders | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-001 renders shared collections management table` |
+| UC-COL-02 | Select row | Selected panel and active context update | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-002 selects a row and persists active context across refresh` |
+| UC-COL-03 | Create collection | New row appears and survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-003 creates a collection from the table workflow and persists after refresh` |
+| UC-COL-04 | Rename collection | Updated row survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-004 renames a collection from the row workflow and persists after refresh` |
+| UC-COL-05 | Delete collection | Row removed and items released deterministically | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-005 deletes a collection and releases assigned items` |
+| UC-COL-06 | Filter collections | Matching rows remain visible | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-006 filters collections within the shared table surface` |
+| UC-COL-07 | Assign item | Item appears in selected collection and survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-007 assigns an item into the selected collection and persists after refresh` |
+| UC-COL-08 | Move item | Item leaves source and appears in destination after refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-008 moves an assigned item between collections and persists after refresh` |
+| UC-COL-09 | Route iconography | Tag icon remains visible for collections route | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity` |

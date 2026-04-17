@@ -1,250 +1,367 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 
-const DEFAULT_COLLECTIONS = [
-  'All Items',
-  'Watch List',
-  'Wishlist Focus',
-  'Store 1',
-  'Store 2',
-  'Warehouse 1',
-]
-
-type CollectionSummary = {
+export type WorkspaceCollectionSummary = {
   name: string
   key: string
   itemCount: number
-  updatedLabel: string
   scopeLabel: string
   statusLabel: string
+  updatedLabel: string
   description: string
 }
 
+export type WorkspaceCollectionItem = {
+  id: string
+  name: string
+  detail: string
+  collectionName: string | null
+}
+
+type CollectionSeed = Omit<WorkspaceCollectionSummary, 'key'>
+
+const DEFAULT_COLLECTIONS: CollectionSeed[] = [
+  {
+    name: 'All Items',
+    itemCount: 248,
+    scopeLabel: 'Workspace default',
+    statusLabel: 'Broadest scope',
+    updatedLabel: 'Updated 5m ago',
+    description: 'Everything currently tracked in Cabinet.',
+  },
+  {
+    name: 'Watch List',
+    itemCount: 18,
+    scopeLabel: 'Priority lane',
+    statusLabel: 'Needs review',
+    updatedLabel: 'Updated 12m ago',
+    description: 'Fast-moving cards and sets needing quick review.',
+  },
+  {
+    name: 'Warehouse 1',
+    itemCount: 64,
+    scopeLabel: 'Primary storage',
+    statusLabel: 'Stable',
+    updatedLabel: 'Updated 32m ago',
+    description: 'Shelved long-box inventory in the main warehouse.',
+  },
+  {
+    name: 'Store 1',
+    itemCount: 27,
+    scopeLabel: 'Retail lane',
+    statusLabel: 'Ready to sell',
+    updatedLabel: 'Updated 48m ago',
+    description: 'Shopfront display stock prepared for live selling.',
+  },
+  {
+    name: 'Store 2',
+    itemCount: 19,
+    scopeLabel: 'Retail lane',
+    statusLabel: 'Ready to sell',
+    updatedLabel: 'Updated 1h ago',
+    description: 'Overflow retail stock staged for the second store.',
+  },
+  {
+    name: 'Overflow',
+    itemCount: 11,
+    scopeLabel: 'Overflow storage',
+    statusLabel: 'Needs sorting',
+    updatedLabel: 'Updated 2h ago',
+    description: 'Backlog boxes waiting for proper collection placement.',
+  },
+]
+
+const DEFAULT_ITEMS: WorkspaceCollectionItem[] = [
+  {
+    id: 'inventory-item-kobe-rookie',
+    name: '1996 Topps Kobe Bryant rookie',
+    detail: 'PSA candidate, Lakers lot',
+    collectionName: 'Watch List',
+  },
+  {
+    id: 'inventory-item-jordan-beam-team',
+    name: '1992 Beam Team Michael Jordan',
+    detail: 'Premium slab review queue',
+    collectionName: 'Warehouse 1',
+  },
+  {
+    id: 'inventory-item-pikachu-shadowless',
+    name: 'Shadowless Pikachu',
+    detail: 'Binder copy ready for retail',
+    collectionName: 'Store 1',
+  },
+  {
+    id: 'inventory-item-charizard-base',
+    name: 'Base Set Charizard',
+    detail: 'High-value vault candidate',
+    collectionName: null,
+  },
+  {
+    id: 'inventory-item-metal-raiders-pack',
+    name: 'Yu-Gi-Oh Metal Raiders blister',
+    detail: 'Sealed product awaiting assignment',
+    collectionName: null,
+  },
+]
+
 function normalizeCollectionName(value: string): string {
-  return value.trim().replace(/\s+/g, ' ')
+  return value.replace(/\s+/g, ' ').trim()
 }
 
 export function collectionKey(value: string): string {
   return normalizeCollectionName(value)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
-function deriveCollectionSummary(
-  name: string,
-  index: number
-): CollectionSummary {
+function buildDefaultSummary(name: string): WorkspaceCollectionSummary {
+  const seed = DEFAULT_COLLECTIONS.find((entry) => entry.name === name)
+  if (seed) {
+    return {
+      ...seed,
+      key: collectionKey(seed.name),
+    }
+  }
+
   const normalized = normalizeCollectionName(name)
-  const lower = normalized.toLowerCase()
-
-  if (lower === 'all items') {
-    return {
-      name: normalized,
-      key: collectionKey(normalized),
-      itemCount: 248,
-      updatedLabel: 'Updated 5m ago',
-      scopeLabel: 'Workspace default',
-      statusLabel: 'Broadest scope',
-      description: 'Everything currently tracked in this workspace profile.',
-    }
-  }
-
-  if (lower.includes('watch')) {
-    return {
-      name: normalized,
-      key: collectionKey(normalized),
-      itemCount: 34,
-      updatedLabel: 'Updated 12m ago',
-      scopeLabel: 'Monitoring set',
-      statusLabel: 'Needs review',
-      description:
-        'Fast-moving cards/items that benefit from repeated checking.',
-    }
-  }
-
-  if (lower.includes('wishlist')) {
-    return {
-      name: normalized,
-      key: collectionKey(normalized),
-      itemCount: 18,
-      updatedLabel: 'Updated 1h ago',
-      scopeLabel: 'Intent shortlist',
-      statusLabel: 'Prioritized',
-      description:
-        'Targets staged for acquisition or tighter pricing decisions.',
-    }
-  }
-
-  if (lower.includes('warehouse')) {
-    return {
-      name: normalized,
-      key: collectionKey(normalized),
-      itemCount: 126 + index * 3,
-      updatedLabel: 'Updated yesterday',
-      scopeLabel: 'Storage location',
-      statusLabel: 'Archived storage',
-      description:
-        'Longer-term storage grouping with slower movement and larger volume.',
-    }
-  }
-
-  if (lower.includes('store')) {
-    return {
-      name: normalized,
-      key: collectionKey(normalized),
-      itemCount: 42 + index * 5,
-      updatedLabel: 'Updated 20m ago',
-      scopeLabel: 'Retail lane',
-      statusLabel: 'Active rotation',
-      description:
-        'Operational selling/stock lane with frequent active-context switching.',
-    }
-  }
-
   return {
     name: normalized,
     key: collectionKey(normalized),
-    itemCount: 12 + index * 2,
-    updatedLabel: 'Updated recently',
+    itemCount: 0,
     scopeLabel: 'Custom collection',
-    statusLabel: 'User managed',
-    description:
-      'Custom workspace collection created for a focused subset of items.',
+    statusLabel: 'Active',
+    updatedLabel: 'Updated just now',
+    description: 'Custom workspace collection created from the management surface.',
   }
 }
 
+function profileScopeKey(profileID?: string | null, userEmail?: string | null): string {
+  return normalizeCollectionName(profileID || userEmail || 'default-profile')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+}
+
 export function useWorkspaceCollections() {
-  const authUser = useAuthStore((state) => state.auth.user)
-  const profileScope = useMemo(
-    () => authUser?.email || authUser?.accountNo || 'local',
-    [authUser?.accountNo, authUser?.email]
+  const userEmail = useAuthStore((state) => state.auth.user?.email)
+  const profileScope = profileScopeKey(null, userEmail)
+  const listKey = `cabinet.workspace.collections.${profileScope}`
+  const activeKey = `cabinet.workspace.collections.active.${profileScope}`
+  const itemsKey = `cabinet.workspace.collectionItems.${profileScope}`
+
+  const [workspaceCollections, setWorkspaceCollections] = useState<string[]>(
+    DEFAULT_COLLECTIONS.map((entry) => entry.name)
   )
-  const [workspaceCollections, setWorkspaceCollections] =
-    useState<string[]>(DEFAULT_COLLECTIONS)
-  const [activeWorkspaceCollection, setActiveWorkspaceCollection] =
-    useState('All Items')
+  const [activeWorkspaceCollection, setActiveWorkspaceCollection] = useState('All Items')
+  const [workspaceItems, setWorkspaceItems] = useState<WorkspaceCollectionItem[]>(DEFAULT_ITEMS)
 
   useEffect(() => {
-    const listKey = `cabinet.workspace.collections.${profileScope}`
-    const activeKey = `cabinet.workspace.collections.active.${profileScope}`
-    const syncCollections = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const persistedCollections = window.localStorage.getItem(listKey)
+    if (persistedCollections) {
       try {
-        const raw = window.localStorage.getItem(listKey)
-        let nextCollections = DEFAULT_COLLECTIONS
-        if (raw) {
-          const parsed = JSON.parse(raw) as string[]
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const sanitized = parsed
-              .map((entry) => normalizeCollectionName(entry))
-              .filter((entry) => entry !== '')
-            if (sanitized.length > 0) {
-              nextCollections = sanitized
-            }
-          }
+        const parsed = JSON.parse(persistedCollections) as string[]
+        const normalized = parsed
+          .map((entry) => normalizeCollectionName(entry))
+          .filter(Boolean)
+        if (normalized.length) {
+          const unique = Array.from(new Set(['All Items', ...normalized]))
+          setWorkspaceCollections(unique)
         }
-        const active = normalizeCollectionName(
-          window.localStorage.getItem(activeKey) || ''
-        )
-        setWorkspaceCollections(nextCollections)
-        setActiveWorkspaceCollection(active || 'All Items')
       } catch {
-        setWorkspaceCollections(DEFAULT_COLLECTIONS)
-        setActiveWorkspaceCollection('All Items')
+        // Ignore malformed persisted collections and fall back to defaults.
       }
+    } else {
+      setWorkspaceCollections(DEFAULT_COLLECTIONS.map((entry) => entry.name))
     }
 
-    const timeoutId = window.setTimeout(syncCollections, 0)
-    return () => {
-      window.clearTimeout(timeoutId)
+    const persistedActive = window.localStorage.getItem(activeKey)
+    if (persistedActive) {
+      const normalizedActive = normalizeCollectionName(persistedActive)
+      if (normalizedActive) {
+        setActiveWorkspaceCollection(normalizedActive)
+      }
+    } else {
+      setActiveWorkspaceCollection('All Items')
     }
-  }, [profileScope])
+
+    const persistedItems = window.localStorage.getItem(itemsKey)
+    if (persistedItems) {
+      try {
+        const parsed = JSON.parse(persistedItems) as WorkspaceCollectionItem[]
+        if (Array.isArray(parsed) && parsed.length) {
+          setWorkspaceItems(
+            parsed.map((item) => ({
+              ...item,
+              name: normalizeCollectionName(item.name),
+              detail: normalizeCollectionName(item.detail),
+              collectionName: item.collectionName
+                ? normalizeCollectionName(item.collectionName)
+                : null,
+            }))
+          )
+        }
+      } catch {
+        // Ignore malformed persisted items and fall back to defaults.
+      }
+    } else {
+      setWorkspaceItems(DEFAULT_ITEMS)
+    }
+  }, [activeKey, itemsKey, listKey])
 
   useEffect(() => {
-    const listKey = `cabinet.workspace.collections.${profileScope}`
-    const activeKey = `cabinet.workspace.collections.active.${profileScope}`
+    if (typeof window === 'undefined') {
+      return
+    }
     window.localStorage.setItem(listKey, JSON.stringify(workspaceCollections))
-    window.localStorage.setItem(activeKey, activeWorkspaceCollection)
-  }, [profileScope, workspaceCollections, activeWorkspaceCollection])
+  }, [listKey, workspaceCollections])
 
-  const addCollection = (rawName: string) => {
-    const trimmed = normalizeCollectionName(rawName)
-    if (!trimmed) {
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(activeKey, activeWorkspaceCollection)
+  }, [activeKey, activeWorkspaceCollection])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(itemsKey, JSON.stringify(workspaceItems))
+  }, [itemsKey, workspaceItems])
+
+  const collectionSummaries = useMemo(() => {
+    return workspaceCollections.map((name) => {
+      const base = buildDefaultSummary(name)
+      const assignedCount =
+        name === 'All Items'
+          ? workspaceItems.length
+          : workspaceItems.filter((item) => item.collectionName === name).length
+
+      return {
+        ...base,
+        itemCount: name === 'All Items' ? Math.max(base.itemCount, assignedCount) : assignedCount,
+        updatedLabel:
+          assignedCount > 0 && name !== 'All Items' ? 'Updated just now' : base.updatedLabel,
+      }
+    })
+  }, [workspaceCollections, workspaceItems])
+
+  const addCollection = (value: string): string | null => {
+    const normalized = normalizeCollectionName(value)
+    if (!normalized) {
       return null
     }
-    const existing = workspaceCollections.find(
-      (value) => value.toLowerCase() === trimmed.toLowerCase()
+    const exists = workspaceCollections.some(
+      (collection) => collection.toLowerCase() === normalized.toLowerCase()
     )
-    if (existing) {
-      setActiveWorkspaceCollection(existing)
-      return existing
+    if (exists) {
+      return null
     }
-    setWorkspaceCollections((current) => [...current, trimmed])
-    setActiveWorkspaceCollection(trimmed)
-    return trimmed
+    setWorkspaceCollections((current) => [...current, normalized])
+    setActiveWorkspaceCollection(normalized)
+    return normalized
   }
 
-  const renameCollection = (currentName: string, nextName: string) => {
+  const renameCollection = (currentName: string, nextName: string): string | null => {
     const normalizedCurrent = normalizeCollectionName(currentName)
     const normalizedNext = normalizeCollectionName(nextName)
-    if (!normalizedCurrent || !normalizedNext) {
+    if (!normalizedCurrent || !normalizedNext || normalizedCurrent === 'All Items') {
       return null
     }
-    const target = workspaceCollections.find(
-      (value) => value === normalizedCurrent
+    const exists = workspaceCollections.some(
+      (collection) =>
+        collection.toLowerCase() === normalizedNext.toLowerCase() &&
+        collection.toLowerCase() !== normalizedCurrent.toLowerCase()
     )
-    if (!target || normalizedCurrent === 'All Items') {
+    if (exists) {
       return null
     }
-    const existing = workspaceCollections.find(
-      (value) => value.toLowerCase() === normalizedNext.toLowerCase()
-    )
-    if (existing && existing !== normalizedCurrent) {
-      return existing
-    }
+
     setWorkspaceCollections((current) =>
-      current.map((value) =>
-        value === normalizedCurrent ? normalizedNext : value
+      current.map((collection) =>
+        collection.toLowerCase() === normalizedCurrent.toLowerCase()
+          ? normalizedNext
+          : collection
       )
     )
-    if (activeWorkspaceCollection === normalizedCurrent) {
+    setWorkspaceItems((current) =>
+      current.map((item) =>
+        item.collectionName?.toLowerCase() === normalizedCurrent.toLowerCase()
+          ? { ...item, collectionName: normalizedNext }
+          : item
+      )
+    )
+    if (activeWorkspaceCollection.toLowerCase() === normalizedCurrent.toLowerCase()) {
       setActiveWorkspaceCollection(normalizedNext)
     }
     return normalizedNext
   }
 
-  const removeCollection = (name: string) => {
+  const removeCollection = (name: string): boolean => {
     const normalized = normalizeCollectionName(name)
     if (!normalized || normalized === 'All Items') {
       return false
     }
-    const exists = workspaceCollections.includes(normalized)
+    const exists = workspaceCollections.some(
+      (collection) => collection.toLowerCase() === normalized.toLowerCase()
+    )
     if (!exists) {
       return false
     }
+
     setWorkspaceCollections((current) =>
-      current.filter((value) => value !== normalized)
+      current.filter((collection) => collection.toLowerCase() !== normalized.toLowerCase())
     )
-    if (activeWorkspaceCollection === normalized) {
+    setWorkspaceItems((current) =>
+      current.map((item) =>
+        item.collectionName?.toLowerCase() === normalized.toLowerCase()
+          ? { ...item, collectionName: null }
+          : item
+      )
+    )
+    if (activeWorkspaceCollection.toLowerCase() === normalized.toLowerCase()) {
       setActiveWorkspaceCollection('All Items')
     }
     return true
   }
 
-  const collectionSummaries = useMemo(
-    () =>
-      workspaceCollections.map((name, index) =>
-        deriveCollectionSummary(name, index)
-      ),
-    [workspaceCollections]
-  )
+  const assignItemToCollection = (itemID: string, collectionName: string): WorkspaceCollectionItem | null => {
+    const normalizedCollection = normalizeCollectionName(collectionName)
+    if (!itemID || !normalizedCollection || normalizedCollection === 'All Items') {
+      return null
+    }
+    if (!workspaceCollections.some((collection) => collection === normalizedCollection)) {
+      return null
+    }
+
+    let updatedItem: WorkspaceCollectionItem | null = null
+    setWorkspaceItems((current) =>
+      current.map((item) => {
+        if (item.id !== itemID) {
+          return item
+        }
+        updatedItem = { ...item, collectionName: normalizedCollection }
+        return updatedItem
+      })
+    )
+    return updatedItem
+  }
+
+  const collectionItems = useMemo(() => workspaceItems, [workspaceItems])
 
   return {
     workspaceCollections,
-    collectionSummaries,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
     addCollection,
     renameCollection,
     removeCollection,
+    collectionSummaries,
+    collectionItems,
+    assignItemToCollection,
   }
 }
