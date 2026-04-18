@@ -209,7 +209,6 @@ export function Collections() {
     []
   )
 
-<<<<<<< HEAD
   const table = useReactTable({
     data: rows,
     columns,
@@ -257,22 +256,6 @@ export function Collections() {
     setCreateOpen(false)
     toast.success(`Created collection ${created}.`)
   }
-=======
-  const activeCollectionSummary = useMemo(
-    () =>
-      collectionSummaries.find((collection) => collection.name === activeWorkspaceCollection) ??
-      collectionSummaries[0],
-    [activeWorkspaceCollection, collectionSummaries]
-  )
-  const activeCollectionName =
-    activeWorkspaceCollection.trim() || activeCollectionSummary?.name || 'All Items'
-
-  useEffect(() => {
-    setActiveContextMessage(
-      `Active collection is ${activeCollectionName}. This choice persists for the current signed-in profile.`
-    )
-  }, [activeCollectionName])
->>>>>>> 28e0916 (#443 Fix collections persistence and tag icon contracts)
 
   const handleRenameCollection = () => {
     if (!selectedRow) {
@@ -320,20 +303,9 @@ export function Collections() {
         </div>
       </Header>
 
-<<<<<<< HEAD
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-wrap items-end justify-between gap-3'>
           <div>
-=======
-      <Main className='space-y-4'>
-        <div className='space-y-1'>
-          <div className='flex items-center gap-2'>
-            <Tag
-              data-testid='collections-page-icon'
-              data-lucide='tag'
-              className='h-5 w-5 text-muted-foreground'
-            />
->>>>>>> 28e0916 (#443 Fix collections persistence and tag icon contracts)
             <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
             <p className='text-muted-foreground'>
               Manage collection rows through the shared Cabinet table surface.
@@ -415,7 +387,6 @@ export function Collections() {
               <p className='text-xs text-muted-foreground' data-testid='collections-filtered-count'>
                 Showing {filteredCount} of {workspaceCollections.length} collections.
               </p>
-<<<<<<< HEAD
             </CardContent>
           </Card>
 
@@ -433,298 +404,6 @@ export function Collections() {
                     <div className='text-sm text-muted-foreground'>Name</div>
                     <div className='font-medium' data-testid='collections-selected-name'>
                       {selectedRow.name}
-=======
-            </div>
-            {collectionSummaries.length ? (
-              <div
-                className='rounded-md border border-primary/30 bg-primary/5 px-3 py-3 text-sm'
-                data-testid='collections-active-context-panel'
-              >
-                <div className='flex flex-wrap items-start justify-between gap-3'>
-                  <div>
-                    <p className='font-medium'>Current active collection</p>
-                    <p
-                      className='mt-1 text-base font-semibold text-foreground'
-                      data-testid='collections-active-context-name'
-                    >
-                      {activeCollectionName}
-                    </p>
-                    <p
-                      className='mt-1 text-muted-foreground'
-                      data-testid='collections-active-context-message'
-                    >
-                      {activeContextMessage}
-                    </p>
-                  </div>
-                  <div
-                    className='rounded-full border border-primary/30 px-2 py-1 text-xs text-primary'
-                    data-testid='collections-active-context-persistence'
-                  >
-                    Persists for this signed-in profile
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {createError ? (
-              <div
-                className='rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
-                data-testid='collections-create-error'
-              >
-                {createError}
-              </div>
-            ) : null}
-            {createPanelOpen ? (
-              <div
-                className='rounded-md border bg-muted/20 p-3'
-                data-testid='collections-create-panel'
-              >
-                <div className='space-y-3'>
-                  <div>
-                    <p className='font-medium' data-testid='collections-create-panel-title'>
-                      Create a collection
-                    </p>
-                    <p
-                      className='text-sm text-muted-foreground'
-                      data-testid='collections-create-panel-description'
-                    >
-                      Saving creates the collection immediately, closes this panel, and makes the new collection active.
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap gap-2'>
-                    <Input
-                      data-testid='collections-new-input'
-                      placeholder='Collection name'
-                      value={newCollectionName}
-                      onChange={(event) => {
-                        setNewCollectionName(event.target.value)
-                        if (createError) {
-                          setCreateError(null)
-                        }
-                      }}
-                    />
-                    <Button
-                      data-testid='collections-new-save'
-                      onClick={() => {
-                        const trimmedName = newCollectionName.trim()
-                        if (!trimmedName) {
-                          setCreateError('Enter a collection name before saving.')
-                          return
-                        }
-                        addCollection(trimmedName)
-                        setNewCollectionName('')
-                        setCreatePanelOpen(false)
-                        setEditingCollectionName(null)
-                        setPendingRemoveName(null)
-                        setCreateError(null)
-                        toast.success(
-                          `${trimmedName} created and set as the active collection.`
-                        )
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      variant='outline'
-                      data-testid='collections-new-cancel'
-                      onClick={() => {
-                        setCreatePanelOpen(false)
-                        setNewCollectionName('')
-                        setCreateError(null)
-                        toast.message('Collection creation cancelled. No collection was added.')
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {editingCollectionName ? (
-              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-rename-panel'>
-                <div className='space-y-3'>
-                  <div>
-                    <p className='font-medium'>Rename collection</p>
-                    <p className='text-sm text-muted-foreground'>
-                      Rename updates the collection label in place and preserves active context when applicable.
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap gap-2'>
-                    <Input
-                      data-testid='collections-rename-input'
-                      value={renameValue}
-                      onChange={(event) => {
-                        setRenameValue(event.target.value)
-                        if (createError) {
-                          setCreateError(null)
-                        }
-                      }}
-                    />
-                    <Button
-                      data-testid='collections-rename-save'
-                      onClick={() => {
-                        const renamed = renameCollection(editingCollectionName, renameValue)
-                        if (!renamed) {
-                          setCreateError('Enter a new collection name before saving rename.')
-                          return
-                        }
-                        setEditingCollectionName(null)
-                        setRenameValue('')
-                        setCreateError(null)
-                        toast.success(`${editingCollectionName} renamed to ${renamed}.`)
-                      }}
-                    >
-                      Save rename
-                    </Button>
-                    <Button
-                      variant='outline'
-                      data-testid='collections-rename-cancel'
-                      onClick={() => {
-                        setEditingCollectionName(null)
-                        setRenameValue('')
-                        setCreateError(null)
-                        toast.message('Collection rename cancelled. No changes were made.')
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {pendingRemoveName ? (
-              <div className='rounded-md border bg-muted/20 p-3' data-testid='collections-remove-panel'>
-                <div className='space-y-3'>
-                  <div>
-                    <p className='font-medium'>Remove collection</p>
-                    <p className='text-sm text-muted-foreground'>
-                      Confirm removal of {pendingRemoveName}. Active context falls back to All Items if needed.
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap gap-2'>
-                    <Button
-                      variant='destructive'
-                      data-testid='collections-remove-confirm'
-                      onClick={() => {
-                        const removed = removeCollection(pendingRemoveName)
-                        if (!removed) {
-                          setCreateError('Collection removal could not be completed.')
-                          return
-                        }
-                        const removedName = pendingRemoveName
-                        setPendingRemoveName(null)
-                        setEditingCollectionName(null)
-                        setRenameValue('')
-                        setCreateError(null)
-                        toast.success(`${removedName} removed from workspace collections.`)
-                      }}
-                    >
-                      Confirm remove
-                    </Button>
-                    <Button
-                      variant='outline'
-                      data-testid='collections-remove-cancel'
-                      onClick={() => {
-                        setPendingRemoveName(null)
-                        toast.message('Collection removal cancelled. No collection was removed.')
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-              {filteredCollections.length ? filteredCollections.map((collection) => {
-                const isActive = activeWorkspaceCollection === collection.name
-                const isProtected = collection.name === 'All Items'
-                return (
-                  <div
-                    key={collection.name}
-                    className={isActive ? 'rounded-md border-2 border-primary bg-primary/5 px-3 py-3' : 'rounded-md border px-3 py-3'}
-                    data-testid={`collections-item-${collection.key}`}
-                    data-state={isActive ? 'active' : 'inactive'}
-                  >
-                    <button
-                      type='button'
-                      data-testid={`collections-select-trigger-${collection.key}`}
-                      className='w-full text-left hover:bg-muted/40'
-                      onClick={() => {
-                        setActiveWorkspaceCollection(collection.name)
-                        setActiveContextMessage(
-                          `Active collection switched to ${collection.name}. This choice persists for the current signed-in profile.`
-                        )
-                      }}
-                    >
-                      <div className='flex items-start justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <div
-                            className='font-medium'
-                            data-testid={`collections-item-title-${collection.key}`}
-                          >
-                            {collection.name}
-                          </div>
-                          <div
-                            className='mt-1 text-sm text-muted-foreground'
-                            data-testid={`collections-item-description-${collection.key}`}
-                          >
-                            {collection.description}
-                          </div>
-                        </div>
-                        <div
-                          className='rounded-full border px-2 py-1 text-xs text-muted-foreground'
-                          data-testid={`collections-item-status-${collection.key}`}
-                        >
-                          {collection.statusLabel}
-                        </div>
-                      </div>
-                      <div
-                        className='mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'
-                        data-testid={`collections-item-metadata-${collection.key}`}
-                      >
-                        <span data-testid={`collections-item-count-${collection.key}`}>
-                          {collection.itemCount} items
-                        </span>
-                        <span data-testid={`collections-item-scope-${collection.key}`}>
-                          {collection.scopeLabel}
-                        </span>
-                        <span data-testid={`collections-item-updated-${collection.key}`}>
-                          {collection.updatedLabel}
-                        </span>
-                      </div>
-                    </button>
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`collections-rename-trigger-${collection.key}`}
-                        disabled={isProtected}
-                        onClick={() => {
-                          setEditingCollectionName(collection.name)
-                          setRenameValue(collection.name)
-                          setPendingRemoveName(null)
-                          setCreateError(null)
-                        }}
-                      >
-                        <Pencil className='mr-1 size-4' /> Rename
-                      </Button>
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant='outline'
-                        data-testid={`collections-remove-trigger-${collection.key}`}
-                        disabled={isProtected}
-                        onClick={() => {
-                          setPendingRemoveName(collection.name)
-                          setEditingCollectionName(null)
-                          setRenameValue('')
-                          setCreateError(null)
-                        }}
-                      >
-                        <Trash2 className='mr-1 size-4' /> Remove
-                      </Button>
->>>>>>> 28e0916 (#443 Fix collections persistence and tag icon contracts)
                     </div>
                   </div>
                   <div className='grid grid-cols-2 gap-3 text-sm'>
