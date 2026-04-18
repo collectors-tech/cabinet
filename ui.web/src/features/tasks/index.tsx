@@ -59,14 +59,13 @@ export function Tasks({
       try {
         const [wishlistResponse, itemsResponse] = await Promise.all([
           fetch('/api/wishlist'),
-          fetch('/api/items'),
+          fetch('/api/items?status=wishlist'),
         ])
         if (!wishlistResponse.ok || !itemsResponse.ok) {
           throw new Error('wishlist_bootstrap_failed')
         }
         const wishlistPayload = (await wishlistResponse.json()) as {
           items?: Array<{
-            id?: string
             item_id?: string
             priority?: string
             below_target_now?: boolean
@@ -77,25 +76,35 @@ export function Tasks({
             id?: string
             title?: string
             part_number?: string
+            category?: string
+            priority?: string
           }>
         }
-        const itemTitleByID = new Map<string, string>()
-        ;(itemsPayload.items ?? []).forEach((item) => {
-          const itemID = item.id?.trim()
+        const wishlistByItemID = new Map<
+          string,
+          {
+            priority?: string
+            below_target_now?: boolean
+          }
+        >()
+        ;(wishlistPayload.items ?? []).forEach((entry) => {
+          const itemID = entry.item_id?.trim()
           if (!itemID) {
             return
           }
-          const label = item.title?.trim() || item.part_number?.trim() || itemID
-          itemTitleByID.set(itemID, label)
+          wishlistByItemID.set(itemID, entry)
         })
-        const mapped: Task[] = (wishlistPayload.items ?? []).map((entry, index) => {
-          const itemID = entry.item_id?.trim() || `wishlist-item-${index + 1}`
+        const mapped: Task[] = (itemsPayload.items ?? []).map((item, index) => {
+          const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
+          const wishlistEntry = wishlistByItemID.get(itemID)
           return {
             id: itemID,
-            title: itemTitleByID.get(itemID) || `Wishlist item ${index + 1}`,
-            status: entry.below_target_now ? 'discovered' : 'wishlist',
-            label: 'collection',
-            priority: entry.priority?.trim() || 'medium',
+            title:
+              item.title?.trim() || item.part_number?.trim() || `Wishlist item ${index + 1}`,
+            status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+            label: item.category?.trim() || 'collection',
+            priority:
+              wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
           }
         })
         if (!cancelled) {

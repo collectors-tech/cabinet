@@ -89,9 +89,10 @@ var allowedStatuses = map[string]struct{}{
 }
 
 var allowedItemLifecycleStatuses = map[string]struct{}{
-	"active":  {},
-	"deleted": {},
-	"recycle": {},
+	"active":   {},
+	"wishlist": {},
+	"deleted":  {},
+	"recycle":  {},
 }
 
 func NewRepository(db *sql.DB) *Repository {

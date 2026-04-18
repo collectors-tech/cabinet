@@ -60,10 +60,10 @@ Wishlist detail collection picker MUST support `+ New Collection` inline create.
 - **AND** only an explicit cancel/dismiss action MAY close the inline create state without a create result
 
 ### Requirement UI-SCREEN-WISHLIST-007: Wishlist rows SHALL use collection semantics and MUST NOT leak task seed labels
-Wishlist rows/cards MUST be sourced from `/api/wishlist` + `/api/items` contracts and MUST NOT render generic task IDs or task taxonomy labels.
+Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` records with `/api/wishlist` metadata overlays and MUST NOT render generic task IDs or task taxonomy labels.
 
 #### Scenario: Wishlist semantics in rows view
-- **GIVEN** `/api/wishlist` returns profile entries and `/api/items` returns canonical item metadata
+- **GIVEN** `/api/items?status=wishlist` returns canonical wishlist item records and `/api/wishlist` returns wishlist metadata overlays
 - **WHEN** user opens wishlist rows view
 - **THEN** rendered IDs MUST align to wishlist `item_id` values
 - **AND** row titles MUST align to canonical item title/part number

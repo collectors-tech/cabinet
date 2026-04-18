@@ -19,7 +19,7 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("wishlistItems");
-    cy.intercept("GET", "/api/items", {
+    cy.intercept("GET", "/api/items?status=wishlist", {
       statusCode: 200,
       body: {
         items: [
@@ -27,11 +27,17 @@ describe("ui-screen-wishlist", () => {
             id: "item-collector-1",
             title: "AFX Mega-G+ Camaro Wildfire",
             part_number: "22073",
+            status: "wishlist",
+            category: "Slot Cars",
+            priority: "medium",
           },
           {
             id: "item-collector-2",
             title: "F1 Silverline",
             part_number: "F1002",
+            status: "wishlist",
+            category: "Formula",
+            priority: "high",
           },
         ],
       },
