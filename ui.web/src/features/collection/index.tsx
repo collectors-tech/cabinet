@@ -112,6 +112,23 @@ type FolderNode = {
   children?: FolderNode[]
 }
 
+function findFolderNodeByID(nodes: FolderNode[], id: string): FolderNode | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node
+    }
+    const childMatch = findFolderNodeByID(node.children ?? [], id)
+    if (childMatch) {
+      return childMatch
+    }
+  }
+  return null
+}
+
+const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
+const inventoryWorkspaceSettingsStorageKeyPrefix =
+  'cabinet.inventory.workspace-settings.v1.'
+
 const folderCategoryOptions = [
   'Catalog',
   'Watch',
@@ -274,6 +291,61 @@ function addChildFolder(
   })
 }
 
+function removeFolderNode(
+  nodes: FolderNode[],
+  targetID: string
+): { removed: FolderNode | null; next: FolderNode[] } {
+  let removed: FolderNode | null = null
+  const next = nodes.flatMap((node) => {
+    if (node.id === targetID) {
+      removed = node
+      return []
+    }
+    if (node.children?.length) {
+      const result = removeFolderNode(node.children, targetID)
+      if (result.removed) {
+        removed = result.removed
+        return [{ ...node, children: result.next }]
+      }
+    }
+    return [node]
+  })
+  return { removed, next }
+}
+
+function folderNodeContainsID(node: FolderNode, targetID: string): boolean {
+  if (node.id === targetID) {
+    return true
+  }
+  return (node.children ?? []).some((child) => folderNodeContainsID(child, targetID))
+}
+
+function moveFolderNode(
+  nodes: FolderNode[],
+  draggedID: string,
+  targetID: string
+): FolderNode[] {
+  if (draggedID === targetID) {
+    return nodes
+  }
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  if (folderNodeContainsID(removed, targetID)) {
+    return nodes
+  }
+  return addChildFolder(next, targetID, removed)
+}
+
+function moveFolderNodeToRoot(nodes: FolderNode[], draggedID: string): FolderNode[] {
+  const { removed, next } = removeFolderNode(nodes, draggedID)
+  if (!removed) {
+    return nodes
+  }
+  return [...next, removed]
+}
+
 function updateFolderNodeByID(
   nodes: FolderNode[],
   targetID: string,
@@ -307,6 +379,153 @@ function sortRootFolderNodesAlphabetically(nodes: FolderNode[]): FolderNode[] {
   return pinnedRoot ? [pinnedRoot, ...sorted] : sorted
 }
 
+function inventoryWorkspaceSettingsStorageKey(profileID: string): string {
+  return `${inventoryWorkspaceSettingsStorageKeyPrefix}${profileID.trim()}`
+}
+
+function sanitizeFolderNodes(value: unknown): FolderNode[] {
+  if (!Array.isArray(value)) {
+    return initialFolderTree
+  }
+
+  const walk = (nodes: unknown[]): FolderNode[] =>
+    nodes.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+
+      const candidate = entry as {
+        id?: unknown
+        name?: unknown
+        category?: unknown
+        itemCount?: unknown
+        secondaryLabel?: unknown
+        statusBadge?: unknown
+        children?: unknown
+      }
+
+      const id = typeof candidate.id === 'string' ? candidate.id.trim() : ''
+      const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+      if (id === '' || name === '') {
+        return []
+      }
+
+      const node: FolderNode = { id, name }
+      if (typeof candidate.category === 'string' && candidate.category.trim() !== '') {
+        node.category = candidate.category.trim()
+      }
+      if (typeof candidate.itemCount === 'number' && Number.isFinite(candidate.itemCount)) {
+        node.itemCount = candidate.itemCount
+      }
+      if (
+        typeof candidate.secondaryLabel === 'string' &&
+        candidate.secondaryLabel.trim() !== ''
+      ) {
+        node.secondaryLabel = candidate.secondaryLabel.trim()
+      }
+      if (typeof candidate.statusBadge === 'string' && candidate.statusBadge.trim() !== '') {
+        node.statusBadge = candidate.statusBadge.trim()
+      }
+
+      const children = Array.isArray(candidate.children) ? walk(candidate.children) : []
+      if (children.length > 0) {
+        node.children = children
+      }
+
+      return [node]
+    })
+
+  const sanitized = walk(value)
+  return findFolderNodeByID(sanitized, 'all-items') ? sanitized : initialFolderTree
+}
+
+function parsePersistedWorkspaceSnapshot(value: string | null): FolderNode[] | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { folderTree?: unknown } | unknown
+    if (Array.isArray(parsed)) {
+      return sanitizeFolderNodes(parsed)
+    }
+    if (parsed && typeof parsed === 'object' && 'folderTree' in parsed) {
+      return sanitizeFolderNodes(parsed.folderTree)
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function loadPersistedWorkspaceSnapshot(profileID: string): FolderNode[] | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return null
+  }
+
+  return parsePersistedWorkspaceSnapshot(
+    window.localStorage.getItem(
+      inventoryWorkspaceSettingsStorageKey(normalizedProfileID)
+    )
+  )
+}
+
+function savePersistedWorkspaceSnapshot(profileID: string, folderTree: FolderNode[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return
+  }
+
+  window.localStorage.setItem(
+    inventoryWorkspaceSettingsStorageKey(normalizedProfileID),
+    JSON.stringify({ folderTree })
+  )
+}
+
+function loadInventoryTreeState() {
+  if (typeof window === 'undefined') {
+    return {
+      activeFolder: 'All Items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+
+  try {
+    const raw = window.localStorage.getItem(inventoryTreeStorageKey)
+    if (!raw) {
+      return {
+        activeFolder: 'All Items',
+        expandedNodeIDs: new Set<string>(),
+      }
+    }
+
+    const parsed = JSON.parse(raw) as {
+      activeFolder?: string
+      expandedNodeIDs?: string[]
+    }
+
+    return {
+      activeFolder: parsed.activeFolder?.trim() || 'All Items',
+      expandedNodeIDs: new Set(parsed.expandedNodeIDs ?? []),
+    }
+  } catch {
+    return {
+      activeFolder: 'All Items',
+      expandedNodeIDs: new Set<string>(),
+    }
+  }
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -315,17 +534,20 @@ export function Collection({
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [folderTree, setFolderTree] = useState<FolderNode[]>(initialFolderTree)
-  const [activeFolder, setActiveFolder] = useState('All Items')
+  const [activeFolder, setActiveFolder] = useState(
+    () => loadInventoryTreeState().activeFolder
+  )
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
-    () => new Set()
+    () => loadInventoryTreeState().expandedNodeIDs
   )
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
     null
   )
   const [folderCreateName, setFolderCreateName] = useState('')
+  const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [folderPropertiesOpen, setFolderPropertiesOpen] = useState(false)
   const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(null)
   const [folderPropertiesName, setFolderPropertiesName] = useState('')
@@ -469,6 +691,20 @@ export function Collection({
     void loadInventoryItems()
   }, [loadInventoryItems])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(
+      inventoryTreeStorageKey,
+      JSON.stringify({
+        activeFolder,
+        expandedNodeIDs: Array.from(expandedNodeIDs),
+      })
+    )
+  }, [activeFolder, expandedNodeIDs])
+
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
     const walk = (treeNodes: FolderNode[]) => {
@@ -609,12 +845,51 @@ export function Collection({
                 data-active={isActive ? 'true' : 'false'}
                 data-node-kind={hasChildren ? 'branch' : 'leaf'}
                 data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
                 className={cn(
-                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md border border-transparent px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                   isActive
-                    ? 'bg-accent text-accent-foreground font-medium shadow-sm'
+                    ? 'border-white/15 bg-white/10 text-accent-foreground font-semibold shadow-sm before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-white/85 before:content-[""]'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground'
                 )}
+                draggable={node.id !== 'all-items'}
+                onDragStart={(event) => {
+                  if (node.id === 'all-items') {
+                    event.preventDefault()
+                    return
+                  }
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', node.id)
+                  setDraggedFolderID(node.id)
+                }}
+                onDragOver={(event) => {
+                  if (!draggedFolderID || draggedFolderID === node.id) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const droppedID =
+                    event.dataTransfer.getData('text/plain').trim() || draggedFolderID
+                  const removedNode = droppedID
+                    ? removeFolderNode(folderTree, droppedID).removed
+                    : null
+                  if (
+                    droppedID &&
+                    droppedID !== node.id &&
+                    !(removedNode && folderNodeContainsID(removedNode, node.id))
+                  ) {
+                    setFolderTree((previous) => moveFolderNode(previous, droppedID, node.id))
+                    const droppedNode = findFolderNodeByID(folderTree, droppedID)
+                    if (droppedNode) {
+                      setActiveFolder(droppedNode.name)
+                    }
+                  }
+                  setDraggedFolderID(null)
+                }}
+                onDragEnd={() => setDraggedFolderID(null)}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
@@ -656,7 +931,10 @@ export function Collection({
               </button>
               <div
                 data-testid={`folder-tree-inline-actions-${node.id}`}
-                className='pointer-events-none absolute right-7 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+                className={cn(
+                  'pointer-events-none absolute right-7 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                  isActive && 'pointer-events-auto opacity-100'
+                )}
               >
                 <Button
                   type='button'
@@ -729,7 +1007,18 @@ export function Collection({
               <span
                 data-testid={`folder-tree-drag-handle-${node.id}`}
                 title={`Drag ${node.name}`}
-                className='inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground'
+                className='inline-flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground active:cursor-grabbing'
+                draggable={node.id !== 'all-items'}
+                onDragStart={(event) => {
+                  if (node.id === 'all-items') {
+                    event.preventDefault()
+                    return
+                  }
+                  event.stopPropagation()
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', node.id)
+                  setDraggedFolderID(node.id)
+                }}
               >
                 <GripVertical className='size-4' />
               </span>
@@ -863,6 +1152,36 @@ export function Collection({
       cancelled = true
     }
   }, [isInventoryRoute])
+
+  useEffect(() => {
+    if (!activeProfileID) {
+      return
+    }
+
+    const persistedTree = loadPersistedWorkspaceSnapshot(activeProfileID)
+    if (!persistedTree) {
+      return
+    }
+
+    const containsFolderName = (nodes: FolderNode[], targetName: string): boolean =>
+      nodes.some(
+        (node) =>
+          node.name === targetName ||
+          (node.children?.length ? containsFolderName(node.children, targetName) : false)
+      )
+
+    setFolderTree(persistedTree)
+    if (!containsFolderName(persistedTree, activeFolder)) {
+      setActiveFolder('All Items')
+    }
+  }, [activeFolder, activeProfileID])
+
+  useEffect(() => {
+    if (!activeProfileID) {
+      return
+    }
+    savePersistedWorkspaceSnapshot(activeProfileID, folderTree)
+  }, [activeProfileID, folderTree])
 
   useEffect(() => {
     if (itemEditorMode !== 'edit') {
@@ -1286,6 +1605,35 @@ export function Collection({
                   className='min-w-full w-max space-y-2'
                   data-testid='inventory-folder-tree-scroll-region'
                 >
+                  {draggedFolderID ? (
+                    <div
+                      role='presentation'
+                      data-testid='folder-tree-root-drop-zone'
+                      className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        const droppedID =
+                          event.dataTransfer.getData('text/plain').trim() ||
+                          draggedFolderID
+                        if (droppedID) {
+                          setFolderTree((previous) =>
+                            moveFolderNodeToRoot(previous, droppedID)
+                          )
+                          const droppedNode = findFolderNodeByID(folderTree, droppedID)
+                          if (droppedNode) {
+                            setActiveFolder(droppedNode.name)
+                          }
+                        }
+                        setDraggedFolderID(null)
+                      }}
+                    >
+                      Drop here to move folder to the root level
+                    </div>
+                  ) : null}
                   {renderFolderTree(folderTree)}
                 </div>
               </div>

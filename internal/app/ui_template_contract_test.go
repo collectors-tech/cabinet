@@ -302,6 +302,35 @@ func TestInventoryFolderTreeStructuredAffordancesContract(t *testing.T) {
 	}
 }
 
+func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read collection workspace: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"inventoryTreeStorageKey",
+		"inventoryWorkspaceSettingsStorageKeyPrefix",
+		"loadPersistedWorkspaceSnapshot",
+		"savePersistedWorkspaceSnapshot",
+		"parsePersistedWorkspaceSnapshot",
+		"loadInventoryTreeState",
+		"window.localStorage.setItem",
+		"data-draggable-row",
+		"draggedFolderID",
+		"moveFolderNode(",
+		"moveFolderNodeToRoot(",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("collection workspace missing folder tree persistence/drag token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 
