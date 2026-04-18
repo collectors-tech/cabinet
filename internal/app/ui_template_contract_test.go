@@ -278,6 +278,30 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 	})
 }
 
+func TestInventoryFolderTreeStructuredAffordancesContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read collection workspace: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"folder-tree-secondary-",
+		"folder-tree-count-",
+		"folder-tree-badge-",
+		"folder-tree-row-actions-",
+		"folder-tree-drag-handle-",
+		"folder-tree-sort-root-az",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("collection workspace missing folder tree structured affordance token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 

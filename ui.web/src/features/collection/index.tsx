@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
 } from 'react'
+import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -35,6 +37,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
@@ -44,6 +54,7 @@ import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
+import { cn } from '@/lib/utils'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -94,44 +105,83 @@ type AISuggestion = {
 type FolderNode = {
   id: string
   name: string
+  category?: string
+  itemCount?: number
+  secondaryLabel?: string
+  statusBadge?: string
   children?: FolderNode[]
 }
 
+const folderCategoryOptions = [
+  'Catalog',
+  'Watch',
+  'Wishlist',
+  'Store',
+  'Warehouse',
+  'Archive',
+  'General',
+]
+
 const initialFolderTree: FolderNode[] = [
-  { id: 'all-items', name: 'All Items' },
-  { id: 'watch-list', name: 'Watch List' },
-  { id: 'wishlist-focus', name: 'Wishlist Focus' },
-  { id: 'store-1', name: 'Store 1' },
-  { id: 'store-2', name: 'Store 2' },
-  { id: 'store-3', name: 'Store 3' },
-  { id: 'store-4', name: 'Store 4' },
-  { id: 'store-5', name: 'Store 5' },
-  { id: 'store-6', name: 'Store 6' },
-  { id: 'store-7', name: 'Store 7' },
-  { id: 'store-8', name: 'Store 8' },
-  { id: 'store-9', name: 'Store 9' },
-  { id: 'store-10', name: 'Store 10' },
+  {
+    id: 'all-items',
+    name: 'All Items',
+    category: 'Catalog',
+    itemCount: 124,
+    secondaryLabel: 'Entire catalog',
+    statusBadge: 'Live',
+  },
+  {
+    id: 'watch-list',
+    name: 'Watch List',
+    category: 'Watch',
+    itemCount: 12,
+    secondaryLabel: 'Needs review',
+    statusBadge: 'Watch',
+  },
+  {
+    id: 'wishlist-focus',
+    name: 'Wishlist Focus',
+    category: 'Wishlist',
+    itemCount: 7,
+    secondaryLabel: 'Priority targets',
+    statusBadge: 'Goal',
+  },
+  { id: 'store-1', name: 'Store 1', category: 'Store', itemCount: 18, secondaryLabel: 'Aisle A' },
+  { id: 'store-2', name: 'Store 2', category: 'Store', itemCount: 14, secondaryLabel: 'Aisle B' },
+  { id: 'store-3', name: 'Store 3', category: 'Store', itemCount: 11, secondaryLabel: 'Aisle C' },
+  { id: 'store-4', name: 'Store 4', category: 'Store', itemCount: 9, secondaryLabel: 'Overflow shelf' },
+  { id: 'store-5', name: 'Store 5', category: 'Store', itemCount: 8, secondaryLabel: 'Back room' },
+  { id: 'store-6', name: 'Store 6', category: 'Store', itemCount: 10, secondaryLabel: 'Bin 6' },
+  { id: 'store-7', name: 'Store 7', category: 'Store', itemCount: 6, secondaryLabel: 'Bin 7' },
+  { id: 'store-8', name: 'Store 8', category: 'Store', itemCount: 5, secondaryLabel: 'Bin 8' },
+  { id: 'store-9', name: 'Store 9', category: 'Store', itemCount: 4, secondaryLabel: 'Bin 9' },
+  { id: 'store-10', name: 'Store 10', category: 'Store', itemCount: 3, secondaryLabel: 'Bin 10' },
   {
     id: 'warehouses',
     name: 'Warehouses',
+    category: 'Warehouse',
+    itemCount: 39,
+    secondaryLabel: 'Bulk storage',
+    statusBadge: 'Cold',
     children: [
-      { id: 'warehouse-1', name: 'Warehouse 1' },
-      { id: 'warehouse-2', name: 'Warehouse 2' },
-      { id: 'warehouse-3', name: 'Warehouse 3' },
+      { id: 'warehouse-1', name: 'Warehouse 1', category: 'Warehouse', itemCount: 15, secondaryLabel: 'Pallet zone A' },
+      { id: 'warehouse-2', name: 'Warehouse 2', category: 'Warehouse', itemCount: 13, secondaryLabel: 'Pallet zone B' },
+      { id: 'warehouse-3', name: 'Warehouse 3', category: 'Warehouse', itemCount: 11, secondaryLabel: 'Pallet zone C' },
     ],
   },
-  { id: 'archive-a', name: 'Archive A' },
-  { id: 'archive-b', name: 'Archive B' },
-  { id: 'archive-c', name: 'Archive C' },
-  { id: 'archive-d', name: 'Archive D' },
-  { id: 'archive-e', name: 'Archive E' },
-  { id: 'archive-f', name: 'Archive F' },
-  { id: 'archive-g', name: 'Archive G' },
-  { id: 'archive-h', name: 'Archive H' },
-  { id: 'archive-i', name: 'Archive I' },
-  { id: 'archive-j', name: 'Archive J' },
-  { id: 'archive-k', name: 'Archive K' },
-  { id: 'archive-l', name: 'Archive L' },
+  { id: 'archive-a', name: 'Archive A', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-b', name: 'Archive B', category: 'Archive', itemCount: 2, secondaryLabel: 'Retired stock' },
+  { id: 'archive-c', name: 'Archive C', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-d', name: 'Archive D', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-e', name: 'Archive E', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-f', name: 'Archive F', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-g', name: 'Archive G', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-h', name: 'Archive H', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-i', name: 'Archive I', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-j', name: 'Archive J', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-k', name: 'Archive K', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
+  { id: 'archive-l', name: 'Archive L', category: 'Archive', itemCount: 1, secondaryLabel: 'Retired stock' },
 ]
 
 function emptyInventoryItemDraft(): InventoryItemDraft {
@@ -224,6 +274,39 @@ function addChildFolder(
   })
 }
 
+function updateFolderNodeByID(
+  nodes: FolderNode[],
+  targetID: string,
+  updater: (node: FolderNode) => FolderNode
+): FolderNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetID) {
+      return updater(node)
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: updateFolderNodeByID(node.children, targetID, updater),
+      }
+    }
+    return node
+  })
+}
+
+function sortRootFolderNodesAlphabetically(nodes: FolderNode[]): FolderNode[] {
+  if (nodes.length <= 1) {
+    return nodes
+  }
+
+  const pinnedRoot = nodes.find((node) => node.id === 'all-items') ?? null
+  const sortable = nodes.filter((node) => node.id !== 'all-items')
+  const sorted = [...sortable].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+  )
+
+  return pinnedRoot ? [pinnedRoot, ...sorted] : sorted
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -243,6 +326,12 @@ export function Collection({
     null
   )
   const [folderCreateName, setFolderCreateName] = useState('')
+  const [folderPropertiesOpen, setFolderPropertiesOpen] = useState(false)
+  const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(null)
+  const [folderPropertiesName, setFolderPropertiesName] = useState('')
+  const [folderPropertiesCategory, setFolderPropertiesCategory] = useState('General')
+  const [folderPropertiesSecondaryLabel, setFolderPropertiesSecondaryLabel] = useState('')
+  const [folderPropertiesStatusBadge, setFolderPropertiesStatusBadge] = useState('')
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -305,6 +394,15 @@ export function Collection({
     setItemSaveSuccess(null)
     selectInventoryItem(null)
   }, [selectInventoryItem])
+
+  const openFolderProperties = useCallback((node: FolderNode) => {
+    setFolderPropertiesID(node.id)
+    setFolderPropertiesName(node.name)
+    setFolderPropertiesCategory(node.category?.trim() || 'General')
+    setFolderPropertiesSecondaryLabel(node.secondaryLabel?.trim() || '')
+    setFolderPropertiesStatusBadge(node.statusBadge?.trim() || '')
+    setFolderPropertiesOpen(true)
+  }, [])
 
   const loadInventoryItems = useCallback(async (preferredSelectedItemID?: string) => {
     if (routePath !== '/_authenticated/inventory/') {
@@ -462,32 +560,40 @@ export function Collection({
       nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        const isActive = activeFolder === node.name
         return (
-          <div key={node.id} role='none'>
+          <div key={node.id} role='none' className='relative'>
             <div
-              className='flex items-center gap-2'
-              style={{ paddingInlineStart: `${(level - 1) * 0.75}rem` }}
+              className='group relative flex items-center gap-1'
+              style={{ paddingInlineStart: `${(level - 1) * 1}rem` }}
             >
-              <span
-                aria-hidden='true'
-                data-testid={`folder-tree-connector-${node.id}`}
-                className='inline-flex h-7 w-2 shrink-0 border-l border-border/70'
-              />
               {hasChildren ? (
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon'
-                  className='h-7 w-7'
+                  className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
+                  data-state={expanded ? 'expanded' : 'collapsed'}
                   onClick={() => toggleNodeExpanded(node.id)}
                 >
-                  {expanded ? '−' : '+'}
+                  <ChevronRight
+                    className={cn(
+                      'size-4 transition-transform duration-200',
+                      expanded && 'rotate-90'
+                    )}
+                  />
                 </Button>
               ) : (
-                <span className='inline-flex h-7 w-7 shrink-0' />
+                <span
+                  aria-hidden='true'
+                  data-testid={`folder-tree-connector-${node.id}`}
+                  className='inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground/30'
+                >
+                  <span className='h-6 border-l border-border/70' />
+                </span>
               )}
               <button
                 ref={(element) => {
@@ -495,38 +601,144 @@ export function Collection({
                 }}
                 type='button'
                 role='treeitem'
-                tabIndex={activeFolder === node.name ? 0 : -1}
+                tabIndex={isActive ? 0 : -1}
                 aria-level={level}
-                aria-selected={activeFolder === node.name ? 'true' : 'false'}
+                aria-selected={isActive ? 'true' : 'false'}
                 aria-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
                 data-testid={`folder-tree-item-${node.id}`}
-                className={`w-full rounded-md px-3 py-2 text-left text-sm ${activeFolder === node.name ? 'bg-primary text-primary-foreground' : 'bg-muted/30 hover:bg-muted/60'}`}
+                data-active={isActive ? 'true' : 'false'}
+                data-node-kind={hasChildren ? 'branch' : 'leaf'}
+                data-node-expanded={hasChildren ? (expanded ? 'true' : 'false') : undefined}
+                className={cn(
+                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  isActive
+                    ? 'bg-accent text-accent-foreground font-medium shadow-sm'
+                    : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground'
+                )}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
-                <span data-testid={`collection-folder-${node.id}`}>{node.name}</span>
+                <span className='min-w-0 flex-1'>
+                  <span
+                    data-testid={`collection-folder-${node.id}`}
+                    className='block truncate'
+                  >
+                    {node.name}
+                  </span>
+                  {node.secondaryLabel ? (
+                    <span
+                      data-testid={`folder-tree-secondary-${node.id}`}
+                      className='block truncate text-xs font-normal text-muted-foreground'
+                    >
+                      {node.secondaryLabel}
+                    </span>
+                  ) : null}
+                </span>
+                <span className='flex shrink-0 items-center gap-2 ps-2'>
+                  {typeof node.itemCount === 'number' ? (
+                    <span
+                      data-testid={`folder-tree-count-${node.id}`}
+                      className='text-xs font-medium tabular-nums text-muted-foreground'
+                    >
+                      {node.itemCount}
+                    </span>
+                  ) : null}
+                  {node.statusBadge ? (
+                    <Badge
+                      data-testid={`folder-tree-badge-${node.id}`}
+                      variant='secondary'
+                      className='rounded-full px-2 py-0.5 text-[11px] font-semibold'
+                    >
+                      {node.statusBadge}
+                    </Badge>
+                  ) : null}
+                </span>
               </button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                className='h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground'
-                data-testid={`folder-tree-add-child-${node.id}`}
-                aria-label={`Add child folder under ${node.name}`}
-                onClick={() => {
-                  setFolderCreateParentID(node.id)
-                  setFolderCreateName('')
-                  setFolderCreateOpen(true)
-                }}
+              <div
+                data-testid={`folder-tree-inline-actions-${node.id}`}
+                className='pointer-events-none absolute right-7 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
               >
-                +
-              </Button>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  tabIndex={-1}
+                  className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                  data-testid={`folder-tree-add-child-${node.id}`}
+                  aria-label={`Add child folder under ${node.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setFolderCreateParentID(node.id)
+                    setFolderCreateName('')
+                    setFolderCreateOpen(true)
+                  }}
+                >
+                  <Plus className='size-4' />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      tabIndex={-1}
+                      className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                      data-testid={`folder-tree-row-actions-${node.id}`}
+                      aria-label={`Open folder actions for ${node.name}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Ellipsis className='size-4' />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align='end'
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-select-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setActiveFolder(node.name)
+                      }}
+                    >
+                      Select folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-properties-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openFolderProperties(node)
+                      }}
+                    >
+                      Properties
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`folder-tree-row-action-add-child-${node.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setFolderCreateParentID(node.id)
+                        setFolderCreateName('')
+                        setFolderCreateOpen(true)
+                      }}
+                    >
+                      Add child folder
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <span
+                data-testid={`folder-tree-drag-handle-${node.id}`}
+                title={`Drag ${node.name}`}
+                className='inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground'
+              >
+                <GripVertical className='size-4' />
+              </span>
             </div>
             {hasChildren && expanded ? (
               <div
                 role='group'
                 data-testid={`folder-tree-group-${node.id}`}
-                className='space-y-2'
+                className='ml-4 border-l pl-1'
               >
                 {renderFolderTree(node.children ?? [], level + 1)}
               </div>
@@ -534,7 +746,13 @@ export function Collection({
           </div>
         )
       }),
-    [activeFolder, expandedNodeIDs, handleTreeItemKeyDown, toggleNodeExpanded]
+    [
+      activeFolder,
+      expandedNodeIDs,
+      handleTreeItemKeyDown,
+      openFolderProperties,
+      toggleNodeExpanded,
+    ]
   )
 
   const summary = useMemo(
@@ -1029,19 +1247,32 @@ export function Collection({
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2 min-h-0'>
-              <div className='flex justify-end'>
+              <div className='flex justify-end gap-2'>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  data-testid='folder-tree-sort-root-az'
+                  aria-label='Sort root folders A to Z'
+                  onClick={() => {
+                    setFolderTree((previous) => sortRootFolderNodesAlphabetically(previous))
+                  }}
+                >
+                  A/Z
+                </Button>
                 <Button
                   type='button'
                   variant='outline'
-                  size='sm'
+                  size='icon'
                   data-testid='folder-tree-add-root'
+                  aria-label='Add root folder'
                   onClick={() => {
                     setFolderCreateParentID(null)
                     setFolderCreateName('')
                     setFolderCreateOpen(true)
                   }}
                 >
-                  Add Root Folder
+                  +
                 </Button>
               </div>
               <div
@@ -1129,6 +1360,119 @@ export function Collection({
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              <Sheet
+                open={folderPropertiesOpen}
+                onOpenChange={(open) => {
+                  setFolderPropertiesOpen(open)
+                  if (!open) {
+                    setFolderPropertiesID(null)
+                    setFolderPropertiesName('')
+                    setFolderPropertiesCategory('General')
+                    setFolderPropertiesSecondaryLabel('')
+                    setFolderPropertiesStatusBadge('')
+                  }
+                }}
+              >
+                <SheetContent className='flex flex-col'>
+                  <SheetHeader className='text-start'>
+                    <SheetTitle>Folder Properties</SheetTitle>
+                    <SheetDescription>
+                      Update the selected folder title, category, secondary label, and status badge.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className='grid gap-4 py-4'>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-name'>
+                        Title
+                      </label>
+                      <Input
+                        id='folder-properties-name'
+                        data-testid='folder-properties-name-input'
+                        value={folderPropertiesName}
+                        onChange={(event) => setFolderPropertiesName(event.target.value)}
+                      />
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-category'>
+                        Category
+                      </label>
+                      <select
+                        id='folder-properties-category'
+                        data-testid='folder-properties-category-select'
+                        className='h-9 rounded-md border bg-background px-2 text-sm'
+                        value={folderPropertiesCategory}
+                        onChange={(event) => setFolderPropertiesCategory(event.target.value)}
+                      >
+                        {folderCategoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-secondary-label'>
+                        Secondary label
+                      </label>
+                      <Input
+                        id='folder-properties-secondary-label'
+                        data-testid='folder-properties-secondary-label-input'
+                        placeholder='Aisle B'
+                        value={folderPropertiesSecondaryLabel}
+                        onChange={(event) =>
+                          setFolderPropertiesSecondaryLabel(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className='grid gap-2'>
+                      <label className='text-sm font-medium' htmlFor='folder-properties-status-badge'>
+                        Status badge
+                      </label>
+                      <Input
+                        id='folder-properties-status-badge'
+                        data-testid='folder-properties-status-badge-input'
+                        placeholder='Cold'
+                        value={folderPropertiesStatusBadge}
+                        onChange={(event) => setFolderPropertiesStatusBadge(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <SheetFooter className='gap-2'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='folder-properties-cancel'
+                      onClick={() => setFolderPropertiesOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type='button'
+                      data-testid='folder-properties-save'
+                      onClick={() => {
+                        const name = folderPropertiesName.trim()
+                        if (!folderPropertiesID || name === '') {
+                          return
+                        }
+                        setFolderTree((previous) =>
+                          updateFolderNodeByID(previous, folderPropertiesID, (node) => ({
+                            ...node,
+                            name,
+                            category: folderPropertiesCategory.trim() || 'General',
+                            secondaryLabel:
+                              folderPropertiesSecondaryLabel.trim() || undefined,
+                            statusBadge: folderPropertiesStatusBadge.trim() || undefined,
+                          }))
+                        )
+                        setActiveFolder(name)
+                        setFolderPropertiesOpen(false)
+                      }}
+                    >
+                      Save Properties
+                    </Button>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
             </CardContent>
           </Card>
 
