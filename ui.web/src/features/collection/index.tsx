@@ -974,6 +974,28 @@ export function Collection({
     [folderTree]
   )
 
+  const beginFolderDrag = useCallback(
+    (event: DragEvent<HTMLElement>, nodeID: string) => {
+      if (nodeID === 'all-items') {
+        event.preventDefault()
+        return
+      }
+
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-drag-disabled="true"]')) {
+        event.preventDefault()
+        return
+      }
+
+      event.stopPropagation()
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', nodeID)
+      setDragTarget(null)
+      setDraggedFolderID(nodeID)
+    },
+    []
+  )
+
   const renderFolderTree = useCallback(
     (nodes: FolderNode[], level = 1) =>
       nodes.map((node) => {
@@ -1039,8 +1061,10 @@ export function Collection({
               />
             ) : null}
             <div
+              data-testid={`folder-tree-row-shell-${node.id}`}
               className='group relative flex items-center gap-1'
               style={{ paddingInlineStart: `${(level - 1) * 1}rem` }}
+              draggable={node.id !== 'all-items'}
               onDragEnter={(event) => {
                 const droppedFolderID = readDraggedFolderID(event)
                 if (droppedFolderID && droppedFolderID !== node.id) {
@@ -1078,6 +1102,11 @@ export function Collection({
                 setDraggedFolderID(null)
                 setDragTarget(null)
               }}
+              onDragStart={(event) => beginFolderDrag(event, node.id)}
+              onDragEnd={() => {
+                setDraggedFolderID(null)
+                setDragTarget(null)
+              }}
             >
               {hasChildren ? (
                 <Button
@@ -1086,6 +1115,7 @@ export function Collection({
                   size='icon'
                   className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
+                  data-drag-disabled='true'
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
                   data-state={expanded ? 'expanded' : 'collapsed'}
@@ -1126,37 +1156,64 @@ export function Collection({
                   hasInvalidFolderDropTarget ? 'true' : 'false'
                 }
                 className={cn(
-                  'relative flex min-w-0 flex-1 items-start rounded-md border border-transparent px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
-                  isActive
-                    ? 'border-white/15 bg-white/10 text-accent-foreground font-semibold shadow-sm before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-white/85 before:content-[""]'
-                    : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
-                  hasInvalidFolderDropTarget &&
-                    'border-destructive/60 bg-destructive/10 text-foreground/70',
-                  isChildDropTarget && 'border-primary bg-primary/20 text-primary'
+                  'relative flex min-w-0 flex-1 items-start rounded-md bg-transparent px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                 )}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
-                <span className='min-w-0 flex-1'>
-                  <span
-                    data-testid={`collection-folder-${node.id}`}
-                    className='block truncate'
-                  >
-                    {node.name}
-                  </span>
-                  {node.secondaryLabel ? (
+                <span
+                  className={cn(
+                    'pointer-events-none absolute inset-0 rounded-md border border-transparent transition-colors',
+                    isActive
+                      ? 'border-white/15 bg-white/10 shadow-sm'
+                      : 'group-hover:border-border/60 group-hover:bg-accent/70',
+                    hasInvalidFolderDropTarget &&
+                      'border-destructive/60 bg-destructive/10',
+                    isChildDropTarget && 'border-primary bg-primary/20'
+                  )}
+                  aria-hidden='true'
+                />
+                <span
+                  className={cn(
+                    'pointer-events-none absolute inset-y-1 left-0 w-1 rounded-full transition-opacity',
+                    isActive ? 'bg-white/85 opacity-100' : 'opacity-0'
+                  )}
+                  aria-hidden='true'
+                />
+                <span
+                  className={cn(
+                    'relative flex min-w-0 flex-1 items-start',
+                  isActive
+                    ? 'text-accent-foreground font-semibold'
+                    : 'text-foreground/90'
+                  )}
+                >
+                  <span className='min-w-0 flex-1'>
                     <span
-                      data-testid={`folder-tree-secondary-${node.id}`}
-                      className='block truncate text-xs font-normal text-muted-foreground'
+                      data-testid={`collection-folder-${node.id}`}
+                      className='block truncate'
                     >
-                      {node.secondaryLabel}
+                      {node.name}
                     </span>
-                  ) : null}
+                    {node.secondaryLabel ? (
+                      <span
+                        data-testid={`folder-tree-secondary-${node.id}`}
+                        className='block truncate text-xs font-normal text-muted-foreground'
+                      >
+                        {node.secondaryLabel}
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
               </button>
               <div
                 data-testid={`folder-tree-trailing-${node.id}`}
-                className='flex shrink-0 items-center gap-2 pe-1'
+                className={cn(
+                  'relative flex shrink-0 items-center gap-2 pe-1',
+                  hasInvalidFolderDropTarget &&
+                    'text-foreground/70',
+                  isChildDropTarget && 'text-primary'
+                )}
               >
                 <span className='flex shrink-0 items-center gap-2'>
                   {typeof node.itemCount === 'number' ? (
@@ -1178,80 +1235,83 @@ export function Collection({
                   ) : null}
                 </span>
                 <div
-                data-testid={`folder-tree-inline-actions-${node.id}`}
-                className={cn(
-                  'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
-                  'pointer-events-none opacity-0',
-                  isActive && 'pointer-events-auto opacity-100'
-                )}
-              >
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon'
-                  tabIndex={-1}
-                  className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
-                  data-testid={`folder-tree-add-child-${node.id}`}
-                  aria-label={`Add child folder under ${node.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setFolderCreateParentID(node.id)
-                    setFolderCreateName('')
-                    setFolderCreateOpen(true)
-                  }}
+                  data-testid={`folder-tree-inline-actions-${node.id}`}
+                  data-drag-disabled='true'
+                  className={cn(
+                    'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                    'pointer-events-none opacity-0',
+                    isActive && 'pointer-events-auto opacity-100'
+                  )}
                 >
-                  <Plus className='size-4' />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      tabIndex={-1}
-                      className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
-                      data-testid={`folder-tree-row-actions-${node.id}`}
-                      aria-label={`Open folder actions for ${node.name}`}
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    tabIndex={-1}
+                    className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                    data-testid={`folder-tree-add-child-${node.id}`}
+                    data-drag-disabled='true'
+                    aria-label={`Add child folder under ${node.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setFolderCreateParentID(node.id)
+                      setFolderCreateName('')
+                      setFolderCreateOpen(true)
+                    }}
+                  >
+                    <Plus className='size-4' />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='icon'
+                        tabIndex={-1}
+                        className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                        data-testid={`folder-tree-row-actions-${node.id}`}
+                        data-drag-disabled='true'
+                        aria-label={`Open folder actions for ${node.name}`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Ellipsis className='size-4' />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align='end'
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <Ellipsis className='size-4' />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align='end'
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <DropdownMenuItem
-                      data-testid={`folder-tree-row-action-select-${node.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setActiveFolder(node.name)
-                      }}
-                    >
-                      Select folder
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      data-testid={`folder-tree-row-action-properties-${node.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        openFolderProperties(node)
-                      }}
-                    >
-                      Properties
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      data-testid={`folder-tree-row-action-add-child-${node.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setFolderCreateParentID(node.id)
-                        setFolderCreateName('')
-                        setFolderCreateOpen(true)
-                      }}
-                    >
-                      Add child folder
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <DropdownMenuItem
+                        data-testid={`folder-tree-row-action-select-${node.id}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setActiveFolder(node.name)
+                        }}
+                      >
+                        Select folder
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        data-testid={`folder-tree-row-action-properties-${node.id}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openFolderProperties(node)
+                        }}
+                      >
+                        Properties
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        data-testid={`folder-tree-row-action-add-child-${node.id}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setFolderCreateParentID(node.id)
+                          setFolderCreateName('')
+                          setFolderCreateOpen(true)
+                        }}
+                      >
+                        Add child folder
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
                 <span
                   data-testid={`folder-tree-drag-handle-${node.id}`}
@@ -1260,17 +1320,7 @@ export function Collection({
                   draggable={node.id !== 'all-items'}
                   onPointerDown={(event) => event.stopPropagation()}
                   onMouseDown={(event) => event.stopPropagation()}
-                  onDragStart={(event) => {
-                    if (node.id === 'all-items') {
-                      event.preventDefault()
-                      return
-                    }
-                    event.stopPropagation()
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('text/plain', node.id)
-                    setDragTarget(null)
-                    setDraggedFolderID(node.id)
-                  }}
+                  onDragStart={(event) => beginFolderDrag(event, node.id)}
                   onDragEnd={() => {
                     setDraggedFolderID(null)
                     setDragTarget(null)
