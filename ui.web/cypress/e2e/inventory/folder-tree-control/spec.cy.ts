@@ -34,6 +34,90 @@ describe('inventory-folder-tree-control', () => {
     return focusableElements[currentIndex + 1] ?? null
   }
 
+  function resolvePointerCoordinates(
+    element: Element,
+    mode: 'child' | 'before' | 'after' | 'center' = 'center'
+  ) {
+    const rect = element.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const edgeInset = Math.max(8, Math.min(16, rect.height * 0.2))
+
+    if (mode === 'before') {
+      return { x: centerX, y: rect.top + edgeInset }
+    }
+    if (mode === 'after') {
+      return { x: centerX, y: rect.bottom - edgeInset }
+    }
+    return { x: centerX, y: rect.top + rect.height / 2 }
+  }
+
+  function dispatchPointerDown(win: Window, selector: string, pointerId: number) {
+    const element = win.document.querySelector<HTMLElement>(selector)
+    expect(element, `${selector} exists`).to.not.equal(null)
+    const { x, y } = resolvePointerCoordinates(element as HTMLElement)
+    element?.dispatchEvent(
+      new win.PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        clientX: x,
+        clientY: y,
+      })
+    )
+  }
+
+  function dispatchPointerMove(
+    win: Window,
+    selector: string,
+    mode: 'child' | 'before' | 'after' | 'center',
+    pointerId: number
+  ) {
+    const element = win.document.querySelector<HTMLElement>(selector)
+    expect(element, `${selector} exists`).to.not.equal(null)
+    const { x, y } = resolvePointerCoordinates(element as HTMLElement, mode)
+    win.dispatchEvent(
+      new win.PointerEvent('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        clientX: x,
+        clientY: y,
+      })
+    )
+  }
+
+  function dispatchPointerUp(
+    win: Window,
+    selector: string,
+    mode: 'child' | 'before' | 'after' | 'center',
+    pointerId: number
+  ) {
+    const element = win.document.querySelector<HTMLElement>(selector)
+    expect(element, `${selector} exists`).to.not.equal(null)
+    const { x, y } = resolvePointerCoordinates(element as HTMLElement, mode)
+    win.dispatchEvent(
+      new win.PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        clientX: x,
+        clientY: y,
+      })
+    )
+  }
+
   beforeEach(() => {
     cy.visit('about:blank')
     cy.clearCookies()
@@ -329,8 +413,6 @@ describe('inventory-folder-tree-control', () => {
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-014 supports child-drop, insertion reordering, root-drop feedback, and practical handle drag coverage', () => {
-    const childTransfer = new DataTransfer()
-
     cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
     cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
     cy.get('[data-testid="folder-tree-item-store-1"]')
@@ -348,38 +430,48 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-inline-actions-store-1"]')
       .should('have.css', 'pointer-events', 'none')
 
-    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: childTransfer })
-    cy.get('[data-testid="folder-tree-item-warehouses"]')
-      .trigger('dragenter', { dataTransfer: childTransfer })
-      .trigger('dragover', { dataTransfer: childTransfer })
-      .should('have.class', 'bg-primary/20')
-      .trigger('drop', { dataTransfer: childTransfer })
+    cy.window().then((win) => {
+      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 11)
+    })
+    cy.get('[data-testid="folder-tree-root-drop-zone"]').should('be.visible')
+    cy.window().then((win) => {
+      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
+    })
+    cy.get('[data-testid="folder-tree-item-warehouses"]').should('have.class', 'bg-primary/20')
+    cy.window().then((win) => {
+      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
+    })
 
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('exist')
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
 
-    const invalidTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-drag-handle-warehouses"]').trigger('dragstart', { dataTransfer: invalidTransfer })
+    cy.window().then((win) => {
+      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-warehouses"]', 12)
+    })
     cy.get('[data-testid="folder-tree-item-store-1"]')
-      .trigger('dragenter', { dataTransfer: invalidTransfer })
-      .trigger('dragover', { dataTransfer: invalidTransfer })
       .should('have.attr', 'data-invalid-drop-target', 'true')
       .and('not.have.class', 'bg-primary/20')
-      .trigger('drop', { dataTransfer: invalidTransfer })
+    cy.window().then((win) => {
+      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-store-1"]', 'child', 12)
+      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-store-1"]', 'child', 12)
+    })
 
     cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-warehouses"]')
       .should('exist')
     cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
       .should('exist')
 
-    const reorderTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: reorderTransfer })
-    cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]')
-      .trigger('dragenter', { dataTransfer: reorderTransfer })
-      .trigger('dragover', { dataTransfer: reorderTransfer })
-      .should('have.class', 'bg-primary/25')
-      .trigger('drop', { dataTransfer: reorderTransfer })
+    cy.window().then((win) => {
+      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 13)
+    })
+    cy.window().then((win) => {
+      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
+    })
+    cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]').should('have.class', 'bg-primary/25')
+    cy.window().then((win) => {
+      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
+    })
 
     cy.get('[data-testid="folder-tree-group-warehouses"] > [role="none"]').then(($rows) => {
       const labels = [...$rows].map((row) => row.textContent ?? '')
@@ -387,14 +479,16 @@ describe('inventory-folder-tree-control', () => {
       expect(labels[1]).to.contain('Warehouse 1')
     })
 
-    const rootTransfer = new DataTransfer()
-    cy.get('[data-testid="folder-tree-drag-handle-store-1"]').trigger('dragstart', { dataTransfer: rootTransfer })
+    cy.window().then((win) => {
+      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 14)
+    })
     cy.get('[data-testid="folder-tree-root-drop-zone"]')
-      .trigger('dragenter', { dataTransfer: rootTransfer })
-      .trigger('dragover', { dataTransfer: rootTransfer })
       .should('contain.text', 'Drop here to move folder to the root level')
       .and('have.class', 'bg-primary/10')
-      .trigger('drop', { dataTransfer: rootTransfer })
+    cy.window().then((win) => {
+      dispatchPointerMove(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
+      dispatchPointerUp(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
+    })
 
     cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-store-1"]')
       .first()

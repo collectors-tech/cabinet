@@ -211,7 +211,7 @@ async function countNestedTarget(page, targetID, sourceID) {
 async function dragFolderIntoTarget(page, sourceID, targetID) {
   log('drag', `prepare ${sourceID} -> ${targetID}`)
   const handleSelector = `[data-testid="folder-tree-drag-handle-${sourceID}"]`
-  const targetSelector = `[data-testid="folder-tree-item-${targetID}"]`
+  const targetSelector = `[data-testid="folder-tree-row-shell-${targetID}"]`
   const rootHandle = page.locator(handleSelector)
   const target = page.locator(targetSelector)
 
@@ -235,17 +235,27 @@ async function dragFolderIntoTarget(page, sourceID, targetID) {
 
   await withTimeout(
     `drag step ${sourceID} -> ${targetID}`,
-    rootHandle.dragTo(target, {
-      timeout: timeoutMs,
-      sourcePosition: {
-        x: handleBox.width / 2,
-        y: handleBox.height / 2,
-      },
-      targetPosition: {
-        x: Math.max(16, Math.min(targetBox.width * 0.35, targetBox.width - 16)),
-        y: targetBox.height / 2,
-      },
-    })
+    (async () => {
+      const sourceX = handleBox.x + handleBox.width / 2
+      const sourceY = handleBox.y + handleBox.height / 2
+
+      await page.mouse.move(sourceX, sourceY)
+      await page.mouse.down()
+      await page.waitForTimeout(120)
+
+      const activeTargetBox = requireRect(
+        await target.boundingBox(),
+        `target ${targetID} after drag start`
+      )
+      const targetX =
+        activeTargetBox.x +
+        Math.max(24, Math.min(activeTargetBox.width * 0.45, activeTargetBox.width - 24))
+      const targetY = activeTargetBox.y + activeTargetBox.height / 2
+
+      await page.mouse.move(targetX, targetY, { steps: 24 })
+      await page.waitForTimeout(120)
+      await page.mouse.up()
+    })()
   )
 
   await page.waitForTimeout(1200)
