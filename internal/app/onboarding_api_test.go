@@ -73,22 +73,24 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("expected stable total_items across reruns, first=%d second=%d", firstPayload.TotalItems, secondPayload.TotalItems)
 	}
 
-	itemsResp := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
-	if itemsResp.Code != http.StatusOK {
-		t.Fatalf("list items status=%d body=%s", itemsResp.Code, itemsResp.Body.String())
-	}
-	var itemsPayload struct {
-		Items []struct {
-			Category string `json:"category"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(itemsResp.Body).Decode(&itemsPayload); err != nil {
-		t.Fatalf("decode items payload: %v", err)
-	}
 	categories := make(map[string]struct{})
-	for _, item := range itemsPayload.Items {
-		if strings.TrimSpace(item.Category) != "" {
-			categories[strings.TrimSpace(item.Category)] = struct{}{}
+	for _, status := range []string{"active", "wishlist"} {
+		itemsResp := doRequest(t, a, http.MethodGet, "/api/items?status="+status, nil, nil)
+		if itemsResp.Code != http.StatusOK {
+			t.Fatalf("list items status=%q code=%d body=%s", status, itemsResp.Code, itemsResp.Body.String())
+		}
+		var itemsPayload struct {
+			Items []struct {
+				Category string `json:"category"`
+			} `json:"items"`
+		}
+		if err := json.NewDecoder(itemsResp.Body).Decode(&itemsPayload); err != nil {
+			t.Fatalf("decode items payload for status=%q: %v", status, err)
+		}
+		for _, item := range itemsPayload.Items {
+			if strings.TrimSpace(item.Category) != "" {
+				categories[strings.TrimSpace(item.Category)] = struct{}{}
+			}
 		}
 	}
 	if len(categories) < 6 {
@@ -116,4 +118,3 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("expected seeded wishlist coverage, got %+v", firstPayload)
 	}
 }
-
