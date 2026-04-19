@@ -486,6 +486,25 @@ describe('inventory-folder-tree-control', () => {
           )
           expect(handleRect.width, 'practical handle width').to.be.gte(32)
           expect(handleRect.height, 'practical handle height').to.be.gte(32)
+
+          cy.get('[data-testid="inventory-folder-tree"]').then(($tree) => {
+            const treeRect = $tree[0].getBoundingClientRect()
+            expect(handleRect.right, 'handle should stay inside the tree viewport').to.be.lessThan(
+              treeRect.right - 4
+            )
+
+            cy.document().then((doc) => {
+              const hit = doc.elementFromPoint(
+                handleRect.left + handleRect.width / 2,
+                handleRect.top + handleRect.height / 2
+              ) as HTMLElement | null
+
+              expect(
+                hit?.closest('[data-testid="folder-tree-drag-handle-watch-list"]') ?? null,
+                'handle center should be pointer-hit-testable'
+              ).to.not.equal(null)
+            })
+          })
         })
       })
     })

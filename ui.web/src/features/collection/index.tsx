@@ -1942,7 +1942,7 @@ export function Collection({
         </div>
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-3 min-h-0'>
+          <Card className='lg:col-span-4 min-h-0'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -2206,7 +2206,7 @@ export function Collection({
             </CardContent>
           </Card>
 
-          <Card className='lg:col-span-9'>
+          <Card className='lg:col-span-8'>
             <CardHeader>
               <CardTitle>Collection Browser</CardTitle>
             </CardHeader>
