@@ -615,4 +615,33 @@ describe('inventory-folder-tree-control', () => {
       })
     })
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-019 stretches the folder tree to fill the card content height', () => {
+    cy.get('[data-testid="folder-tree-card-content"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-toolbar"]').should('be.visible')
+    cy.get('[data-testid="inventory-folder-tree"]').should('be.visible')
+
+    cy.get('[data-testid="folder-tree-card-content"]').then(($content) => {
+      const contentRect = $content[0].getBoundingClientRect()
+
+      cy.get('[data-testid="folder-tree-toolbar"]').then(($toolbar) => {
+        const toolbarRect = $toolbar[0].getBoundingClientRect()
+
+        cy.get('[data-testid="inventory-folder-tree"]').then(($tree) => {
+          const treeRect = $tree[0].getBoundingClientRect()
+          const availableHeight =
+            contentRect.height - (toolbarRect.bottom - contentRect.top) - 8
+
+          expect(
+            Math.abs(contentRect.bottom - treeRect.bottom),
+            'tree reaches the card bottom'
+          ).to.be.lte(6)
+          expect(
+            treeRect.height,
+            'tree uses the remaining card height'
+          ).to.be.gte(availableHeight - 6)
+        })
+      })
+    })
+  })
 })

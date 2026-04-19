@@ -2031,15 +2031,18 @@ export function Collection({
         </div>
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-4 min-h-0'>
+          <Card className='lg:col-span-4 flex h-full min-h-0 flex-col'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
                 Browse folders before drilling into results.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2 min-h-0'>
-              <div className='flex justify-end gap-2'>
+            <CardContent
+              data-testid='folder-tree-card-content'
+              className='flex min-h-0 flex-1 flex-col gap-2'
+            >
+              <div data-testid='folder-tree-toolbar' className='flex justify-end gap-2'>
                 <Button
                   type='button'
                   variant='ghost'
@@ -2072,7 +2075,7 @@ export function Collection({
                 tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
-                className='h-[26rem] max-h-[26rem] overflow-x-auto overflow-y-auto rounded-md border p-2'
+                className='min-h-[26rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
                 <div
                   className='min-w-full w-max space-y-2'
