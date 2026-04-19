@@ -292,8 +292,11 @@ func TestInventoryFolderTreeStructuredAffordancesContract(t *testing.T) {
 		"folder-tree-count-",
 		"folder-tree-badge-",
 		"folder-tree-row-actions-",
+		"folder-tree-trailing-",
 		"folder-tree-drag-handle-",
 		"folder-tree-sort-root-az",
+		"onPointerDown",
+		"onMouseDown",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {

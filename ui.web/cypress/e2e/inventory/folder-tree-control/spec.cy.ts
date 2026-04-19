@@ -463,4 +463,31 @@ describe('inventory-folder-tree-control', () => {
       expect(labels).to.deep.equal(['Warehouse 1', 'Warehouse 2', 'Warehouse 3'])
     })
   })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-018 keeps active-row controls in separate lanes and preserves a practical drag handle hit area', () => {
+    cy.get('[data-testid="folder-tree-item-watch-list"]').click()
+
+    cy.get('[data-testid="folder-tree-inline-actions-watch-list"]')
+      .should('have.css', 'pointer-events', 'auto')
+
+    cy.get('[data-testid="folder-tree-badge-watch-list"]').then(($badge) => {
+      const badgeRect = $badge[0].getBoundingClientRect()
+
+      cy.get('[data-testid="folder-tree-inline-actions-watch-list"]').then(($actions) => {
+        const actionsRect = $actions[0].getBoundingClientRect()
+        expect(actionsRect.left, 'actions should not overlap badge').to.be.greaterThan(
+          badgeRect.right + 4
+        )
+
+        cy.get('[data-testid="folder-tree-drag-handle-watch-list"]').then(($handle) => {
+          const handleRect = $handle[0].getBoundingClientRect()
+          expect(handleRect.left, 'handle should not overlap actions').to.be.greaterThan(
+            actionsRect.right + 4
+          )
+          expect(handleRect.width, 'practical handle width').to.be.gte(32)
+          expect(handleRect.height, 'practical handle height').to.be.gte(32)
+        })
+      })
+    })
+  })
 })

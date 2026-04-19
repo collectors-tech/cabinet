@@ -1041,6 +1041,43 @@ export function Collection({
             <div
               className='group relative flex items-center gap-1'
               style={{ paddingInlineStart: `${(level - 1) * 1}rem` }}
+              onDragEnter={(event) => {
+                const droppedFolderID = readDraggedFolderID(event)
+                if (droppedFolderID && droppedFolderID !== node.id) {
+                  event.preventDefault()
+                  if (canAcceptChildDrop) {
+                    setDragTarget({ kind: 'child', nodeID: node.id })
+                  } else {
+                    setDragTarget(null)
+                  }
+                }
+              }}
+              onDragOver={(event) => {
+                const droppedFolderID = readDraggedFolderID(event)
+                if (droppedFolderID && droppedFolderID !== node.id) {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = canAcceptChildDrop ? 'move' : 'none'
+                  if (canAcceptChildDrop) {
+                    setDragTarget({ kind: 'child', nodeID: node.id })
+                  } else {
+                    setDragTarget(null)
+                  }
+                }
+              }}
+              onDragLeave={() => {
+                if (isChildDropTarget) {
+                  setDragTarget(null)
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                const droppedID = readDraggedFolderID(event)
+                if (droppedID && droppedID !== node.id && canAcceptChildDrop) {
+                  moveDraggedFolder(droppedID, { kind: 'child', nodeID: node.id })
+                }
+                setDraggedFolderID(null)
+                setDragTarget(null)
+              }}
             >
               {hasChildren ? (
                 <Button
@@ -1089,7 +1126,7 @@ export function Collection({
                   hasInvalidFolderDropTarget ? 'true' : 'false'
                 }
                 className={cn(
-                  'relative flex w-full min-w-0 items-start justify-between gap-3 rounded-md border border-transparent px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  'relative flex min-w-0 flex-1 items-start rounded-md border border-transparent px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                   isActive
                     ? 'border-white/15 bg-white/10 text-accent-foreground font-semibold shadow-sm before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-white/85 before:content-[""]'
                     : 'text-foreground/90 hover:bg-accent/70 hover:text-foreground',
@@ -1097,43 +1134,6 @@ export function Collection({
                     'border-destructive/60 bg-destructive/10 text-foreground/70',
                   isChildDropTarget && 'border-primary bg-primary/20 text-primary'
                 )}
-                onDragEnter={(event) => {
-                  const droppedFolderID = readDraggedFolderID(event)
-                  if (droppedFolderID && droppedFolderID !== node.id) {
-                    event.preventDefault()
-                    if (canAcceptChildDrop) {
-                      setDragTarget({ kind: 'child', nodeID: node.id })
-                    } else {
-                      setDragTarget(null)
-                    }
-                  }
-                }}
-                onDragOver={(event) => {
-                  const droppedFolderID = readDraggedFolderID(event)
-                  if (droppedFolderID && droppedFolderID !== node.id) {
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = canAcceptChildDrop ? 'move' : 'none'
-                    if (canAcceptChildDrop) {
-                      setDragTarget({ kind: 'child', nodeID: node.id })
-                    } else {
-                      setDragTarget(null)
-                    }
-                  }
-                }}
-                onDragLeave={() => {
-                  if (isChildDropTarget) {
-                    setDragTarget(null)
-                  }
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const droppedID = readDraggedFolderID(event)
-                  if (droppedID && droppedID !== node.id && canAcceptChildDrop) {
-                    moveDraggedFolder(droppedID, { kind: 'child', nodeID: node.id })
-                  }
-                  setDraggedFolderID(null)
-                  setDragTarget(null)
-                }}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
               >
@@ -1153,7 +1153,12 @@ export function Collection({
                     </span>
                   ) : null}
                 </span>
-                <span className='flex shrink-0 items-center gap-2 ps-2'>
+              </button>
+              <div
+                data-testid={`folder-tree-trailing-${node.id}`}
+                className='flex shrink-0 items-center gap-2 pe-1'
+              >
+                <span className='flex shrink-0 items-center gap-2'>
                   {typeof node.itemCount === 'number' ? (
                     <span
                       data-testid={`folder-tree-count-${node.id}`}
@@ -1172,11 +1177,11 @@ export function Collection({
                     </Badge>
                   ) : null}
                 </span>
-              </button>
-              <div
+                <div
                 data-testid={`folder-tree-inline-actions-${node.id}`}
                 className={cn(
-                  'pointer-events-none absolute right-7 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                  'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                  'pointer-events-none opacity-0',
                   isActive && 'pointer-events-auto opacity-100'
                 )}
               >
@@ -1247,30 +1252,33 @@ export function Collection({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </div>
+                <span
+                  data-testid={`folder-tree-drag-handle-${node.id}`}
+                  title={`Drag ${node.name}`}
+                  className='inline-flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground active:cursor-grabbing'
+                  draggable={node.id !== 'all-items'}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onDragStart={(event) => {
+                    if (node.id === 'all-items') {
+                      event.preventDefault()
+                      return
+                    }
+                    event.stopPropagation()
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', node.id)
+                    setDragTarget(null)
+                    setDraggedFolderID(node.id)
+                  }}
+                  onDragEnd={() => {
+                    setDraggedFolderID(null)
+                    setDragTarget(null)
+                  }}
+                >
+                  <GripVertical className='size-4' />
+                </span>
               </div>
-              <span
-                data-testid={`folder-tree-drag-handle-${node.id}`}
-                title={`Drag ${node.name}`}
-                className='inline-flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground active:cursor-grabbing'
-                draggable={node.id !== 'all-items'}
-                onDragStart={(event) => {
-                  if (node.id === 'all-items') {
-                    event.preventDefault()
-                    return
-                  }
-                  event.stopPropagation()
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', node.id)
-                  setDragTarget(null)
-                  setDraggedFolderID(node.id)
-                }}
-                onDragEnd={() => {
-                  setDraggedFolderID(null)
-                  setDragTarget(null)
-                }}
-              >
-                <GripVertical className='size-4' />
-              </span>
             </div>
             {draggedFolderID ? (
               <div
