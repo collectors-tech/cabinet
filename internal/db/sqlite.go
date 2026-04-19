@@ -322,6 +322,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
 			title TEXT NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
@@ -334,6 +335,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
 			attachments_json TEXT NOT NULL DEFAULT '[]',
+			context_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
@@ -352,6 +354,22 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS chat_inbox_items (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL,
+			source TEXT NOT NULL,
+			status TEXT NOT NULL,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL DEFAULT '',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_inbox_items_profile_id ON chat_inbox_items(profile_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_inbox_items_thread_id ON chat_inbox_items(thread_id);`,
 		`CREATE TABLE IF NOT EXISTS chat_action_previews (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -547,6 +565,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure tracked_items profile index: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "chat_threads", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_threads.metadata_json: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "chat_messages", "context_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_messages.context_json: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		conn.Close()
