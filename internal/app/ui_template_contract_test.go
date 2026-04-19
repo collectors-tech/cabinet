@@ -314,15 +314,26 @@ func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
 	required := []string{
 		"inventoryTreeStorageKey",
 		"inventoryWorkspaceSettingsStorageKeyPrefix",
+		"inventory.folder-tree.v1",
 		"loadPersistedWorkspaceSnapshot",
+		"loadProfileWorkspaceSnapshot",
 		"savePersistedWorkspaceSnapshot",
+		"saveProfileWorkspaceSnapshot",
 		"parsePersistedWorkspaceSnapshot",
 		"loadInventoryTreeState",
+		"/api/profiles/${encodeURIComponent(profileID)}/settings",
 		"window.localStorage.setItem",
 		"data-draggable-row",
+		"data-invalid-drop-target",
 		"draggedFolderID",
+		"dragTarget",
+		"readDraggedFolderID",
+		"isInvalidFolderDropTarget",
 		"moveFolderNode(",
+		"moveFolderNodeRelative(",
 		"moveFolderNodeToRoot(",
+		"folder-tree-drop-before-",
+		"folder-tree-drop-after-",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {
