@@ -38,10 +38,51 @@ const { chromium } = loadPlaywright()
 const baseURL = process.env.CABINET_BASE_URL || 'http://192.168.1.53:17882'
 const email = process.env.CABINET_DEMO_EMAIL || 'demo2.owner@cabinet.local'
 const password = process.env.CABINET_DEMO_PASSWORD || 'Demo2Review!2026'
-const sourceID = process.env.CABINET_DRAG_SOURCE_ID || 'archive-b'
+const sourceID = process.env.CABINET_DRAG_SOURCE_ID || 'store-1'
 const targetID = process.env.CABINET_DRAG_TARGET_ID || 'warehouses'
 const timeoutMs = Number.parseInt(process.env.CABINET_DRAG_TIMEOUT_MS || '20000', 10)
 const folderTreeSettingsKey = 'inventory.folder-tree.v1'
+const smokeFolderTree = [
+  {
+    id: 'all-items',
+    name: 'All Items',
+    category: 'Catalog',
+    itemCount: 124,
+    secondaryLabel: 'Entire catalog',
+    statusBadge: 'Live',
+  },
+  {
+    id: 'store-1',
+    name: 'Store 1',
+    category: 'Store',
+    itemCount: 18,
+    secondaryLabel: 'Aisle A',
+  },
+  {
+    id: 'warehouses',
+    name: 'Warehouses',
+    category: 'Warehouse',
+    itemCount: 39,
+    secondaryLabel: 'Bulk storage',
+    statusBadge: 'Cold',
+    children: [
+      {
+        id: 'warehouse-1',
+        name: 'Warehouse 1',
+        category: 'Warehouse',
+        itemCount: 15,
+        secondaryLabel: 'Pallet zone A',
+      },
+    ],
+  },
+  {
+    id: 'archive-b',
+    name: 'Archive B',
+    category: 'Archive',
+    itemCount: 2,
+    secondaryLabel: 'Retired stock',
+  },
+]
 
 function log(step, detail) {
   const suffix = detail ? ` ${detail}` : ''
@@ -162,6 +203,19 @@ async function restoreFolderTreeSnapshot(page, profileID, settings) {
     },
     { profileID, settings }
   )
+}
+
+async function seedDeterministicFolderTree(page, profileID, settings) {
+  await restoreFolderTreeSnapshot(page, profileID, {
+    ...settings,
+    [folderTreeSettingsKey]: JSON.stringify(smokeFolderTree),
+  })
+  await page.goto(`${baseURL}/inventory`, {
+    waitUntil: 'domcontentloaded',
+    timeout: timeoutMs,
+  })
+  await page.waitForTimeout(1200)
+  await ensureTreeReady(page)
 }
 
 async function handleHitTest(page, handleSelector) {
@@ -302,6 +356,7 @@ try {
   profileID = await getActiveProfileID(page)
   snapshot = await readFolderTreeSnapshot(page, profileID)
   log('profile', `snapshot loaded for ${profileID}`)
+  await seedDeterministicFolderTree(page, profileID, snapshot.settings)
 
   const result = await dragFolderIntoTarget(page, sourceID, targetID)
   console.log(
