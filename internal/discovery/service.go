@@ -153,13 +153,23 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 					SET notes = ?, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
 					WHERE id = ?
 				`, mergedNotes, existingID)
+				_, _ = s.db.ExecContext(ctx, `
+					UPDATE canonical_items
+					SET status = 'wishlist', updated_at = CURRENT_TIMESTAMP, updated_by = 'discovery.service'
+					WHERE id = ? AND (? = '' OR profile_id = ?)
+				`, itemID, profileID, profileID)
 				break
 			}
 			_, _ = s.db.ExecContext(ctx, `
 				INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
-				VALUES (?, ?, ?, ?, 'normal', ?, 1)
+				VALUES (?, ?, ?, ?, 'medium', ?, 1)
 				ON CONFLICT(item_id) DO UPDATE SET notes = excluded.notes, highlight_hit = 1, updated_at = CURRENT_TIMESTAMP
 			`, uuid.NewString(), profileID, itemID, 0.0, metadata)
+			_, _ = s.db.ExecContext(ctx, `
+				UPDATE canonical_items
+				SET status = 'wishlist', priority = 'medium', updated_at = CURRENT_TIMESTAMP, updated_by = 'discovery.service'
+				WHERE id = ? AND (? = '' OR profile_id = ?)
+			`, itemID, profileID, profileID)
 		}
 	case ActionCreateItem:
 		var title, partNumber string

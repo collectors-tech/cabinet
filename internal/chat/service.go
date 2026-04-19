@@ -632,6 +632,14 @@ func (s *Service) applyCreateWishlistEntry(ctx context.Context, profileID string
 	if err != nil {
 		return "", "", fmt.Errorf("create wishlist entry: %w", err)
 	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET status = 'wishlist', priority = ?, updated_at = CURRENT_TIMESTAMP, updated_by = 'chat.service'
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(priority), itemID, strings.TrimSpace(profileID))
+	if err != nil {
+		return "", "", fmt.Errorf("sync wishlist item: %w", err)
+	}
 	return itemID, wishlistID, nil
 }
 
