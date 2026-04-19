@@ -215,6 +215,8 @@ async function dragFolderIntoTarget(page, sourceID, targetID) {
   const rootHandle = page.locator(handleSelector)
   const target = page.locator(targetSelector)
 
+  await rootHandle.scrollIntoViewIfNeeded()
+  await target.scrollIntoViewIfNeeded()
   await rootHandle.waitFor({ state: 'visible', timeout: timeoutMs })
   await target.waitFor({ state: 'visible', timeout: timeoutMs })
 

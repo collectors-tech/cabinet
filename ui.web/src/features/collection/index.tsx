@@ -713,6 +713,10 @@ export function Collection({
   const [folderCreateName, setFolderCreateName] = useState('')
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
+  const [dragPreviewPosition, setDragPreviewPosition] = useState<{
+    x: number
+    y: number
+  } | null>(null)
   const folderPointerDragRef = useRef<{
     pointerID: number
     startX: number
@@ -996,6 +1000,29 @@ export function Collection({
     [folderTree]
   )
 
+  const draggedFolderNode = useMemo(
+    () => (draggedFolderID ? findFolderNodeByID(folderTree, draggedFolderID) : null),
+    [draggedFolderID, folderTree]
+  )
+
+  const folderDropHint = useMemo(() => {
+    if (!dragTarget || !draggedFolderNode) {
+      return ''
+    }
+    if (dragTarget.kind === 'root') {
+      return `Move ${draggedFolderNode.name} to the root level`
+    }
+    const targetNode = findFolderNodeByID(folderTree, dragTarget.nodeID)
+    const targetName = targetNode?.name ?? 'this folder'
+    if (dragTarget.kind === 'child') {
+      return `Move into ${targetName}`
+    }
+    if (dragTarget.kind === 'before') {
+      return `Place before ${targetName}`
+    }
+    return `Place after ${targetName}`
+  }, [dragTarget, draggedFolderNode, folderTree])
+
   const resolvePointerFolderDropTarget = useCallback(
     (clientX: number, clientY: number, draggedID: string): FolderDropTarget | null => {
       if (typeof document === 'undefined') {
@@ -1057,6 +1084,10 @@ export function Collection({
         startY: event.clientY,
         moved: false,
       }
+      setDragPreviewPosition({
+        x: event.clientX + 18,
+        y: event.clientY + 18,
+      })
       setDragTarget(null)
       setDraggedFolderID(nodeID)
     },
@@ -1075,6 +1106,10 @@ export function Collection({
     document.body.style.cursor = 'grabbing'
 
     const updateDragTarget = (clientX: number, clientY: number) => {
+      setDragPreviewPosition({
+        x: clientX + 18,
+        y: clientY + 18,
+      })
       const nextTarget = resolvePointerFolderDropTarget(clientX, clientY, draggedFolderID)
       setDragTarget((previous) =>
         folderDropTargetsEqual(previous, nextTarget) ? previous : nextTarget
@@ -1098,6 +1133,7 @@ export function Collection({
 
     const clearFolderPointerDrag = () => {
       folderPointerDragRef.current = null
+      setDragPreviewPosition(null)
       setDraggedFolderID(null)
       setDragTarget(null)
     }
@@ -1442,8 +1478,10 @@ export function Collection({
     [
       activeFolder,
       dragTarget,
+      draggedFolderNode,
       draggedFolderID,
       expandedNodeIDs,
+      folderDropHint,
       handleTreeItemKeyDown,
       folderTree,
       openFolderProperties,
@@ -2052,6 +2090,56 @@ export function Collection({
                   {renderFolderTree(folderTree)}
                 </div>
               </div>
+              {draggedFolderNode && dragPreviewPosition ? (
+                <div
+                  data-testid='folder-tree-drag-preview'
+                  className='pointer-events-none fixed z-[70] w-64 rounded-lg border border-border/80 bg-background/95 p-3 shadow-2xl backdrop-blur'
+                  style={{
+                    left: `${dragPreviewPosition.x}px`,
+                    top: `${dragPreviewPosition.y}px`,
+                  }}
+                >
+                  <div className='flex items-start gap-3'>
+                    <span className='mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent/80 text-foreground/80'>
+                      <GripVertical className='size-4' />
+                    </span>
+                    <div className='min-w-0 flex-1'>
+                      <p className='truncate text-sm font-semibold text-foreground'>
+                        {draggedFolderNode.name}
+                      </p>
+                      {draggedFolderNode.secondaryLabel ? (
+                        <p className='truncate text-xs text-muted-foreground'>
+                          {draggedFolderNode.secondaryLabel}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className='flex shrink-0 items-center gap-2 text-xs'>
+                      {typeof draggedFolderNode.itemCount === 'number' ? (
+                        <span className='font-medium tabular-nums text-muted-foreground'>
+                          {draggedFolderNode.itemCount}
+                        </span>
+                      ) : null}
+                      {draggedFolderNode.statusBadge ? (
+                        <Badge variant='secondary' className='rounded-full px-2 py-0.5 text-[11px] font-semibold'>
+                          {draggedFolderNode.statusBadge}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {folderDropHint && dragPreviewPosition ? (
+                <div
+                  data-testid='folder-tree-drop-hint'
+                  className='pointer-events-none fixed z-[71] rounded-full border border-primary/30 bg-primary/14 px-3 py-1 text-xs font-medium text-primary shadow-lg backdrop-blur'
+                  style={{
+                    left: `${dragPreviewPosition.x}px`,
+                    top: `${dragPreviewPosition.y + 74}px`,
+                  }}
+                >
+                  {folderDropHint}
+                </div>
+              ) : null}
               <Dialog
                 open={folderCreateOpen}
                 onOpenChange={(open) => {

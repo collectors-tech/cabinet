@@ -433,11 +433,18 @@ describe('inventory-folder-tree-control', () => {
     cy.window().then((win) => {
       dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 11)
     })
+    cy.get('[data-testid="folder-tree-drag-preview"]')
+      .should('be.visible')
+      .and('contain.text', 'Store 1')
+      .and('contain.text', 'Aisle A')
     cy.get('[data-testid="folder-tree-root-drop-zone"]').should('be.visible')
     cy.window().then((win) => {
       dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
     })
     cy.get('[data-testid="folder-tree-item-warehouses"]').should('have.class', 'bg-primary/20')
+    cy.get('[data-testid="folder-tree-drop-hint"]')
+      .should('be.visible')
+      .and('contain.text', 'Move into Warehouses')
     cy.window().then((win) => {
       dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
     })
@@ -465,10 +472,14 @@ describe('inventory-folder-tree-control', () => {
     cy.window().then((win) => {
       dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 13)
     })
+    cy.get('[data-testid="folder-tree-drag-preview"]').should('be.visible')
     cy.window().then((win) => {
       dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
     })
     cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]').should('have.class', 'bg-primary/25')
+    cy.get('[data-testid="folder-tree-drop-hint"]')
+      .should('be.visible')
+      .and('contain.text', 'Place before Warehouse 1')
     cy.window().then((win) => {
       dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
     })
@@ -485,6 +496,7 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-root-drop-zone"]')
       .should('contain.text', 'Drop here to move folder to the root level')
       .and('have.class', 'bg-primary/10')
+    cy.get('[data-testid="folder-tree-drag-preview"]').should('be.visible')
     cy.window().then((win) => {
       dispatchPointerMove(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
       dispatchPointerUp(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
