@@ -83,7 +83,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 	}
 
 	for _, endpoint := range requiredPaths {
-		pathPattern := regexp.MustCompile(fmt.Sprintf(`(?m)^  %s:$`, regexp.QuoteMeta(endpoint)))
+		pathPattern := regexp.MustCompile(fmt.Sprintf(`(?m)^  %s:\r?$`, regexp.QuoteMeta(endpoint)))
 		if !pathPattern.Match(raw) {
 			t.Fatalf("openapi missing %s path in %s", endpoint, specPath)
 		}
