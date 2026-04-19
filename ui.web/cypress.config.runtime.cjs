@@ -1,4 +1,6 @@
-module.exports = {
+const { defineConfig } = require('cypress')
+
+module.exports = defineConfig({
   e2e: {
     baseUrl: 'http://127.0.0.1:17880',
     specPattern: 'cypress/e2e/**/*.cy.ts',
@@ -16,4 +18,4 @@ module.exports = {
   screenshotsFolder: 'cypress/artifacts/screenshots',
   videosFolder: 'cypress/artifacts/videos',
   fixturesFolder: 'cypress/fixtures',
-}
+})
