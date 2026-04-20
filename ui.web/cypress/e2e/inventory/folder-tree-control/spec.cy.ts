@@ -540,6 +540,7 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-sort-root-az"]')
       .should('be.visible')
       .and('have.text', 'A/Z')
+      .and('have.class', 'border')
       .click()
 
     cy.get('[data-testid="inventory-folder-tree"]').children('[role="none"]').then(($rows) => {
