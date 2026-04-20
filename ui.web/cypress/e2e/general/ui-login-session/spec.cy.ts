@@ -75,12 +75,12 @@ describe("ui-login-session", () => {
       body: { settings: {} },
     }).as("profile2Settings");
 
-    cy.visit("/sign-in?redirect=%2F");
+    cy.visit("/sign-in?redirect=%2Fdashboard");
     cy.get('input[name="email"]').type("e2e-login-session@example.com");
     cy.get('input[name="password"]').type("password123");
     cy.contains("button", "Sign in").click();
 
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
     cy.wait("@profiles");
 
     cy.get('[data-testid="team-switcher-trigger"]').click();
