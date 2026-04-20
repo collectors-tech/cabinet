@@ -11,6 +11,7 @@
     "serve:go": "go run ../cmd/cabinet",
     "e2e": "cypress run --browser electron",
     "e2e:journeys": "cypress run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/**/*.cy.ts\"",
+    "e2e:ci-smoke": "cypress run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/general/ui-login-session/spec.cy.ts\"",
     "e2e:foundation": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
     "e2e:run-smoke": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
     "e2e:run-inventory": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts -Browser chrome",

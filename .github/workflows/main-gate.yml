@@ -80,7 +80,7 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: ui.web/package-lock.json
-      - name: Run Cypress E2E journeys
+      - name: Run Cypress smoke gate
         uses: cypress-io/github-action@v6
         with:
           install-command: npm ci
@@ -88,7 +88,7 @@ jobs:
           start: npm run serve:go
           wait-on: "http://127.0.0.1:17880/healthz"
           wait-on-timeout: 120
-          command: npm run e2e:journeys
+          command: npm run e2e:ci-smoke
           browser: electron
         env:
           CABINET_E2E_MODE: "1"
