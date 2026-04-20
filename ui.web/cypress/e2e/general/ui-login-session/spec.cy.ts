@@ -4,12 +4,10 @@ describe("ui-login-session", () => {
     cy.request("POST", "/api/test/runtime/setup-status", { state: "present" })
       .its("status")
       .should("eq", 200);
+    cy.e2eEnsureSignedOut();
   });
 
   it("UI-LOGIN-SESSION-001 redirects unauthenticated access to sign-in and returns to target after login", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     cy.visit("/inventory/");
     cy.location("pathname").should("eq", "/sign-in");
     cy.location("search").should("include", "redirect=");
@@ -26,9 +24,6 @@ describe("ui-login-session", () => {
   });
 
   it("UI-LOGIN-SESSION-002 keeps inline validation errors and allows retry without refresh", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     cy.visit("/sign-in");
     cy.get('input[name="email"]').type("invalid-email");
     cy.get('input[name="password"]').type("short");
@@ -48,9 +43,6 @@ describe("ui-login-session", () => {
   });
 
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     let activeProfile = { id: "p1", name: "Default" };
 
     cy.intercept("GET", "/api/profiles", {
@@ -125,9 +117,6 @@ describe("ui-login-session", () => {
   });
 
   it("UI-LOGIN-SESSION-005 redirects base unauthenticated entry to clean sign-in while preserving deep-link redirects", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     cy.visit("/");
     cy.location("pathname").should("eq", "/sign-in");
     cy.location("search").should("eq", "");
@@ -137,8 +126,7 @@ describe("ui-login-session", () => {
     cy.contains("button", "Sign in").click();
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
 
-    cy.clearCookies();
-    cy.clearLocalStorage();
+    cy.e2eEnsureSignedOut();
 
     cy.visit("/inventory/");
     cy.location("pathname").should("eq", "/sign-in");

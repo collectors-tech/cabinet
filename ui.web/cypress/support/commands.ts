@@ -18,6 +18,7 @@ declare global {
     interface Chainable {
       e2eReset(): Chainable<void>;
       e2eBootstrap(options?: E2EBootstrapOptions): Chainable<E2EBootstrapState>;
+      e2eEnsureSignedOut(): Chainable<void>;
       e2eSetSetupState(state: E2ESetupState): Chainable<void>;
       e2eCompleteSetupHelper(overrides?: {
         instance_name?: string;
@@ -29,8 +30,36 @@ declare global {
   }
 }
 
+const AUTH_COOKIE_NAMES = ["thisisjustarandomstring", "cabinet_auth_user"] as const;
+
+function expireAuthCookies(win: Window) {
+  AUTH_COOKIE_NAMES.forEach((name) => {
+    win.document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  });
+}
+
 Cypress.Commands.add("e2eReset", () => {
   cy.request("POST", "/api/test/reset", {}).its("status").should("eq", 200);
+});
+
+Cypress.Commands.add("e2eEnsureSignedOut", () => {
+  cy.visit("/sign-out", {
+    onBeforeLoad(win) {
+      win.localStorage.clear();
+      win.sessionStorage.clear();
+      expireAuthCookies(win);
+    },
+  });
+
+  cy.clearCookies();
+  cy.clearLocalStorage();
+  cy.window({ log: false }).then((win) => {
+    win.sessionStorage.clear();
+    expireAuthCookies(win);
+  });
+  cy.getCookie("thisisjustarandomstring").should("not.exist");
+  cy.getCookie("cabinet_auth_user").should("not.exist");
+  cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
 });
 
 Cypress.Commands.add("e2eBootstrap", (options: E2EBootstrapOptions = {}) => {
