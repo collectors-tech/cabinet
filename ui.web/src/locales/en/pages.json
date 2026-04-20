@@ -1,7 +1,27 @@
 {
   "dashboard": {
     "title": "Home",
-    "subtitle": "What needs action now in your collection."
+    "subtitle": "What needs action now in your collection.",
+    "refresh": "Refresh dashboard",
+    "refreshing": "Refreshing...",
+    "unavailable": "Dashboard unavailable",
+    "attentionTitle": "Needs attention now",
+    "attentionDescription": "New discoveries, watchlist hits, and price changes.",
+    "loadingActivity": "Loading activity...",
+    "pending": "pending",
+    "openInventory": "Open inventory",
+    "open": "Open",
+    "noActionItems": "There are no action items right now.",
+    "recentlyAdded": "Recently added",
+    "recentlyAddedDescription": "Items added to inventory most recently.",
+    "loadingItems": "Loading items...",
+    "noRecentlyAdded": "No recently added items yet.",
+    "metrics": {
+      "inventoryItems": "Inventory items",
+      "inventoryUnits": "Inventory units",
+      "wishlistHits": "Wishlist hits",
+      "estimatedValue": "Estimated value"
+    }
   },
   "inventory": {
     "title": "Inventory"
