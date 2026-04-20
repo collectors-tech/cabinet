@@ -17,7 +17,8 @@ import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { TasksDialogs } from './components/tasks-dialogs'
 import { TasksProvider } from './components/tasks-provider'
 import { TasksTable } from './components/tasks-table'
@@ -46,7 +47,69 @@ export function Tasks({
   const [inlineCollectionValidationMessage, setInlineCollectionValidationMessage] =
     useState('')
   const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [wishlistActionItemID, setWishlistActionItemID] = useState<string | null>(
+    null
+  )
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+
+  const loadWishlistData = useCallback(async () => {
+    const [wishlistResponse, itemsResponse] = await Promise.all([
+      fetch('/api/wishlist'),
+      fetch('/api/items?status=wishlist'),
+    ])
+    if (!wishlistResponse.ok || !itemsResponse.ok) {
+      throw new Error('wishlist_bootstrap_failed')
+    }
+    const wishlistPayload = (await wishlistResponse.json()) as {
+      items?: Array<{
+        id?: string
+        item_id?: string
+        priority?: string
+        below_target_now?: boolean
+      }>
+    }
+    const itemsPayload = (await itemsResponse.json()) as {
+      items?: Array<{
+        id?: string
+        title?: string
+        part_number?: string
+        category?: string
+        priority?: string
+      }>
+    }
+    const wishlistByItemID = new Map<
+      string,
+      {
+        id?: string
+        priority?: string
+        below_target_now?: boolean
+      }
+    >()
+    ;(wishlistPayload.items ?? []).forEach((entry) => {
+      const itemID = entry.item_id?.trim()
+      if (!itemID) {
+        return
+      }
+      wishlistByItemID.set(itemID, entry)
+    })
+    return (itemsPayload.items ?? []).map((item, index) => {
+      const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
+      const wishlistEntry = wishlistByItemID.get(itemID)
+      return {
+        id: itemID,
+        itemID: itemID,
+        wishlistEntryID: wishlistEntry?.id?.trim(),
+        title:
+          item.title?.trim() ||
+          item.part_number?.trim() ||
+          `Wishlist item ${index + 1}`,
+        status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+        label: item.category?.trim() || 'collection',
+        priority:
+          wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
+      } satisfies Task
+    })
+  }, [])
 
   useEffect(() => {
     if (!isWishlistRoute) {
@@ -55,73 +118,50 @@ export function Tasks({
     }
 
     let cancelled = false
-    const loadWishlistData = async () => {
-      try {
-        const [wishlistResponse, itemsResponse] = await Promise.all([
-          fetch('/api/wishlist'),
-          fetch('/api/items?status=wishlist'),
-        ])
-        if (!wishlistResponse.ok || !itemsResponse.ok) {
-          throw new Error('wishlist_bootstrap_failed')
-        }
-        const wishlistPayload = (await wishlistResponse.json()) as {
-          items?: Array<{
-            item_id?: string
-            priority?: string
-            below_target_now?: boolean
-          }>
-        }
-        const itemsPayload = (await itemsResponse.json()) as {
-          items?: Array<{
-            id?: string
-            title?: string
-            part_number?: string
-            category?: string
-            priority?: string
-          }>
-        }
-        const wishlistByItemID = new Map<
-          string,
-          {
-            priority?: string
-            below_target_now?: boolean
-          }
-        >()
-        ;(wishlistPayload.items ?? []).forEach((entry) => {
-          const itemID = entry.item_id?.trim()
-          if (!itemID) {
-            return
-          }
-          wishlistByItemID.set(itemID, entry)
-        })
-        const mapped: Task[] = (itemsPayload.items ?? []).map((item, index) => {
-          const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
-          const wishlistEntry = wishlistByItemID.get(itemID)
-          return {
-            id: itemID,
-            title:
-              item.title?.trim() || item.part_number?.trim() || `Wishlist item ${index + 1}`,
-            status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
-            label: item.category?.trim() || 'collection',
-            priority:
-              wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
-          }
-        })
+    void loadWishlistData()
+      .then((mapped) => {
         if (!cancelled) {
           setTableData(mapped)
         }
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) {
           setTableData([])
         }
-      }
-    }
+      })
 
-    void loadWishlistData()
     return () => {
       cancelled = true
     }
-  }, [isWishlistRoute])
+  }, [isWishlistRoute, loadWishlistData])
+
+  const handleWishlistMarkOwned = useCallback(
+    async (task: Task) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error('Wishlist entry is missing transition metadata.')
+        return
+      }
+      setWishlistActionItemID(task.id)
+      try {
+        const response = await fetch(
+          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          throw new Error('failed_to_move_wishlist_item_to_owned')
+        }
+        const mapped = await loadWishlistData()
+        setTableData(mapped)
+        toast.success(`${task.title} moved to inventory.`)
+      } catch {
+        toast.error('Move to inventory failed. Try again.')
+      } finally {
+        setWishlistActionItemID(null)
+      }
+    },
+    [loadWishlistData]
+  )
 
   return (
     <TasksProvider>
@@ -275,7 +315,14 @@ export function Tasks({
             ) : null}
           </div>
         ) : null}
-        <TasksTable data={tableData} routePath={routePath} />
+        <TasksTable
+          data={tableData}
+          routePath={routePath}
+          onWishlistMarkOwned={
+            isWishlistRoute ? handleWishlistMarkOwned : undefined
+          }
+          wishlistActionItemID={wishlistActionItemID}
+        />
       </Main>
 
       <TasksDialogs />

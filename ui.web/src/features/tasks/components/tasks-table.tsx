@@ -52,6 +52,8 @@ type DataTableProps = {
   routePath: TasksRoutePath
   currentRecordID?: string
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
+  onWishlistMarkOwned?: (task: Task) => Promise<void>
+  wishlistActionItemID?: string | null
 }
 
 type ViewMode = 'rows' | 'cards'
@@ -61,8 +63,18 @@ export function TasksTable({
   routePath,
   currentRecordID,
   onRecordFocus,
+  onWishlistMarkOwned,
+  wishlistActionItemID,
 }: DataTableProps) {
-  const columns = useMemo(() => getTasksColumns({ routePath }), [routePath])
+  const columns = useMemo(
+    () =>
+      getTasksColumns({
+        routePath,
+        onWishlistMarkOwned,
+        wishlistActionItemID,
+      }),
+    [routePath, onWishlistMarkOwned, wishlistActionItemID]
+  )
 
   const route =
     routePath === '/_authenticated/inventory/'
@@ -108,7 +120,6 @@ export function TasksTable({
     ],
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
@@ -168,7 +179,7 @@ export function TasksTable({
 
   const visibleRecordIDs = useMemo(
     () => table.getRowModel().rows.map((row) => row.original.id),
-    [table, data, rowSelection, columnFilters, globalFilter, pagination, sorting]
+    [table]
   )
 
   const selectedVisibleIndex = selectedRecordID
