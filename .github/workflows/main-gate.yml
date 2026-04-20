@@ -80,10 +80,16 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies for Cypress
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for Cypress
+        run: npm run build
+        working-directory: ui.web
       - name: Run Cypress smoke gate
         uses: cypress-io/github-action@v6
         with:
-          install-command: npm ci
+          install: false
           working-directory: ui.web
           start: npm run serve:go
           wait-on: "http://127.0.0.1:17880/healthz"
