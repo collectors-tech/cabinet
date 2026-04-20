@@ -43,7 +43,7 @@ Cypress.Commands.add("e2eReset", () => {
 });
 
 Cypress.Commands.add("e2eEnsureSignedOut", () => {
-  cy.visit("/sign-out", {
+  cy.visit("/sign-in", {
     onBeforeLoad(win) {
       win.localStorage.clear();
       win.sessionStorage.clear();
