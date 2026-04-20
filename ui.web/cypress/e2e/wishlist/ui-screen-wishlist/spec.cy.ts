@@ -19,7 +19,7 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("wishlistItems");
-    cy.intercept("GET", "/api/items", {
+    cy.intercept("GET", "/api/items?status=wishlist", {
       statusCode: 200,
       body: {
         items: [
@@ -27,19 +27,27 @@ describe("ui-screen-wishlist", () => {
             id: "item-collector-1",
             title: "AFX Mega-G+ Camaro Wildfire",
             part_number: "22073",
+            status: "wishlist",
+            category: "Slot Cars",
+            priority: "medium",
           },
           {
             id: "item-collector-2",
             title: "F1 Silverline",
             part_number: "F1002",
+            status: "wishlist",
+            category: "Formula",
+            priority: "high",
           },
         ],
       },
     }).as("catalogItems");
   }
 
-  function signInToWishlist() {
-    stubWishlistData();
+  function signInToWishlist(options?: { skipStub?: boolean }) {
+    if (!options?.skipStub) {
+      stubWishlistData();
+    }
     cy.visit("/sign-in?redirect=%2Fwishlist%2F");
     cy.get('input[name="email"]').clear().type("e2e-wishlist@example.com");
     cy.get('input[name="password"]').clear().type("password123");
@@ -112,13 +120,105 @@ describe("ui-screen-wishlist", () => {
     );
   });
 
+  it("UI-SCREEN-WISHLIST-005 keeps inline create open and shows validation on blank save", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-inline-add-new"]').click();
+    cy.get('[data-testid="wishlist-inline-save"]').click();
+    cy.get('[data-testid="wishlist-inline-new-name"]').should(
+      "have.attr",
+      "aria-invalid",
+      "true"
+    );
+    cy.get('[data-testid="wishlist-inline-validation"]')
+      .should("be.visible")
+      .and("contain", "Collection name is required.");
+    cy.get('[data-testid="wishlist-inline-new-name"]').should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-007 renders wishlist collection semantics instead of task seed rows", () => {
     signInToWishlist();
 
     cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("th", "Item ID").should("be.visible");
+    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Watch Status").should("be.visible");
+    cy.contains("th", "Target Priority").should("be.visible");
+    cy.contains("th", "Task").should("not.exist");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("item-collector-1").should("be.visible");
+    cy.contains("Watching").should("be.visible");
+    cy.contains("Below target").should("be.visible");
     cy.contains(/TASK-\d+/).should("not.exist");
     cy.contains("Backlog").should("not.exist");
+  });
+
+  it("UI-SCREEN-WISHLIST-006 moves acquired item into inventory and keeps it out of wishlist after refresh", () => {
+    let wishlistEntries = [
+      {
+        id: "wish-1",
+        item_id: "item-collector-1",
+        priority: "high",
+        below_target_now: false,
+      },
+    ];
+    let wishlistItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "high",
+      },
+    ];
+    const inventoryItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "active",
+        category: "Slot Cars",
+        priority: "high",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("DELETE", "/api/wishlist?id=wish-1", (req) => {
+      wishlistEntries = [];
+      wishlistItems = [];
+      req.reply({ statusCode: 204, body: "" });
+    }).as("moveWishlistItemToOwned");
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: inventoryItems },
+    }).as("inventoryItems");
+
+    signInToWishlist({ skipStub: true });
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
+      cy.get('[data-testid="task-row-actions-trigger"]').click();
+    });
+    cy.get('[data-testid="wishlist-mark-owned-action"]').click();
+
+    cy.wait("@moveWishlistItemToOwned");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+
+    cy.reload();
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+
+    cy.visit("/inventory/");
+    cy.wait("@inventoryItems");
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/);
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
   });
 });

@@ -1,8 +1,8 @@
 id: cabinet-validator
 name: Cabinet Validator Lane
-version: 1
+version: 2
 description: |
-  Independent validator lane. Always validates the latest released build artifact and generates focused issues/spec gaps.
+  Independent validator lane with bounded phases: runtime prep, gate execution, metrics/report.
 
 polling:
   model: openai-codex/gpt-5.3-codex
@@ -21,37 +21,135 @@ agents:
         IDENTITY.md: agents/validator/IDENTITY.md
 
 steps:
-  - id: validate_latest_artifact
+  - id: prepare_runtime
     agent: validator
     input: |
-      Validate latest build artifact for cabinet.
+      Prepare isolated demo1 runtime for Cabinet validator.
 
       TASK:
       {{task}}
 
-      Artifact policy:
-      1) Find latest artifact manifest under `.antfarm/artifacts/release-*.json` (newest by timestamp in filename or modified time).
-      2) If no artifact exists, return STATUS: retry with blocker.
-      3) Use the latest artifact only (skip older artifacts).
-      4) Record validated artifact id/hash in `.antfarm/state/last_validated_artifact.txt`.
+      Do exactly:
+      1) Ensure latest artifact manifest exists under `.antfarm/artifacts/release-*.json`; use newest.
+      2) Enforce runtime isolation:
+         - source exe: C:\projects\collectors-tech\cabinet\bin\cabinet.exe
+         - target exe: C:\projects\collectors-tech\cabinet\tmp\demo1\bin\cabinet.exe
+         - data dir: C:\projects\collectors-tech\cabinet\tmp\demo1\data
+         - launch flags: -allow-parallel -no-open-browser -data-dir <data dir> -profile demo1-helper -instance-name demo1-helper -port 17881
+      3) Compare source/target hashes and copy source->target if different/missing.
+      4) Launch target exe with exact flags.
+      5) Persist artifact id/hash and runtime details to `.antfarm/state/validator-runtime.md`.
 
-      Runtime isolation (mandatory, exact):
-      - source exe: C:\projects\collectors-tech\cabinet\bin\cabinet.exe
-      - target exe: C:\projects\collectors-tech\cabinet\tmp\demo1\bin\cabinet.exe
-      - data dir: C:\projects\collectors-tech\cabinet\tmp\demo1\data
-      - launch flags: -allow-parallel -no-open-browser -data-dir <data dir> -profile demo1-helper -instance-name demo1-helper -port 17881
-      - compare source/target hashes; copy source -> target when different/missing before launch
+      Reply with:
+      STATUS: done
+      ARTIFACT: <artifact id/hash>
+      RUNTIME: launched
+      EVIDENCE: <hashes + launch command>
+    expects: "STATUS: done"
+    on_fail:
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
 
-      Mandatory validation mode:
-      - Run exhaustive UI validation against isolated demo1 runtime
-      - intent outcomes (route/state/data/error)
-      - form behavior + keyboard paths
-      - layering contracts (visibility/focus trap/backdrop/z-index/Esc/Close/Cancel)
-      - targeted Cypress + openspec validate --all
+  - id: run_gates
+    agent: validator
+    input: |
+      Run bounded validation gates against demo1 runtime.
 
-      For failures/spec gaps:
-      - create focused GitHub issues via gh issue create
-      - include required fields: Screen/route, Control/field type, Expected intent, Actual result, Repro, Evidence, Spec ID/SPEC_GAP, Suggested fix path
+      TASK:
+      {{task}}
+
+      Required gates:
+      - targeted Cypress for current validator scope
+      - openspec validate --all
+
+      Reply with:
+      STATUS: done
+      GATES: cypress=<pass|fail>; openspec=<pass|fail>
+      EVIDENCE: <commands + key outputs>
+    expects: "STATUS: done"
+    on_fail:
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
+
+  - id: explore_ui
+    agent: validator
+    input: |
+      Run exploratory UI validation (non-Cypress discovery pass).
+
+      TASK:
+      {{task}}
+
+      Do exactly:
+      1) Preflight Node dependencies for exploration runtime:
+         `npm ci --include=dev`
+         `node -e "import('playwright').then(()=>console.log('playwright-ok'))"`
+      2) Run exploratory sweep against demo1 runtime:
+         `node C:\projects\collectors-tech\cabinet\scripts\cabinet_ui_cycle.mjs`
+      3) Capture discovered controls/forms/layering evidence into `.antfarm/state/exploration-report.md`.
+      4) Compare findings against OpenSpec + existing Cypress coverage.
+      5) For every mismatch/spec gap, create a focused GitHub issue using `.antfarm/templates/ISSUE_BODY_TEMPLATE.md`.
+
+      Required issue fields per discovered mismatch:
+      - Screen/route
+      - Element/control type
+      - Expected behavior/intent
+      - Actual behavior/result
+      - Repro steps
+      - Evidence paths/links
+      - Spec link/ID (or SPEC_GAP)
+      - Required test adjustment (existing cypress spec to update OR new spec path)
+      - Suggested fix path/module
+
+      Reply with (strict format):
+      STATUS: done
+      EXPLORATION: completed
+      DISCOVERED_CONTROLS: <n>
+      DISCOVERED_FIELDS: <n>
+      LAYERING_CHECKS: pass=<n>; fail=<n>
+      SPEC_GAPS_FOUND: <n>
+      CYPRESS_GAPS_FOUND: <n>
+      ISSUES_CREATED: <ids or none>
+      TRACEABILITY_UPDATES: <requirement IDs / traceability row refs or none>
+      EVIDENCE: <commands + report paths>
+
+      Governance enforcement (non-negotiable):
+      - If SPEC_GAPS_FOUND > 0 OR CYPRESS_GAPS_FOUND > 0:
+        - ISSUES_CREATED must include issue IDs (new or existing referenced), and
+        - TRACEABILITY_UPDATES must include concrete IDs/rows.
+      - If either field is missing while gaps > 0, return STATUS: retry.
+      - Also persist contract file `.antfarm/state/exploration-contract.json` containing:
+        { discoveredControls, discoveredFields, layering:{pass,fail}, specGaps, cypressGaps, issuesCreated[], traceabilityUpdates[], evidence[] }
+
+      If required fields/issues are missing, return:
+      STATUS: retry
+      ISSUES:
+      - missing required exploration evidence/issue contract
+    expects: "STATUS: done"
+    on_fail:
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
+
+  - id: collect_metrics_and_report
+    agent: validator
+    input: |
+      Collect deterministic metrics and finalize validator output.
+
+      TASK:
+      {{task}}
+
+      Do exactly:
+      1) Run:
+         `pwsh -File C:\projects\collectors-tech\cabinet\.antfarm\scripts\collect-validator-metrics.ps1`
+      2) Read metrics JSON from `.antfarm/state/validator-metrics.json`.
+      3) Read exploration contract JSON from `.antfarm/state/exploration-contract.json`.
+      4) Governance check:
+         - If exploration contract has specGaps>0 OR cypressGaps>0 and issuesCreated is empty -> STATUS: retry.
+         - If exploration contract has specGaps>0 OR cypressGaps>0 and traceabilityUpdates is empty -> STATUS: retry.
+      5) For failures/spec gaps, create focused GitHub issues via gh issue create using `.antfarm/templates/ISSUE_BODY_TEMPLATE.md` sections.
+      6) Record validated artifact id/hash in `.antfarm/state/last_validated_artifact.txt`.
 
       Reply with:
       STATUS: done

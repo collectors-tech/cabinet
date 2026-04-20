@@ -278,6 +278,76 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 	})
 }
 
+func TestInventoryFolderTreeStructuredAffordancesContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read collection workspace: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"folder-tree-secondary-",
+		"folder-tree-count-",
+		"folder-tree-badge-",
+		"folder-tree-row-actions-",
+		"folder-tree-trailing-",
+		"folder-tree-drag-handle-",
+		"folder-tree-sort-root-az",
+		"onPointerDown",
+		"onMouseDown",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("collection workspace missing folder tree structured affordance token: %s", token)
+		}
+	}
+}
+
+func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read collection workspace: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"inventoryTreeStorageKey",
+		"inventoryWorkspaceSettingsStorageKeyPrefix",
+		"inventory.folder-tree.v1",
+		"loadPersistedWorkspaceSnapshot",
+		"loadProfileWorkspaceSnapshot",
+		"savePersistedWorkspaceSnapshot",
+		"saveProfileWorkspaceSnapshot",
+		"parsePersistedWorkspaceSnapshot",
+		"loadInventoryTreeState",
+		"/api/profiles/${encodeURIComponent(profileID)}/settings",
+		"window.localStorage.setItem",
+		"data-draggable-row",
+		"data-invalid-drop-target",
+		"draggedFolderID",
+		"dragTarget",
+		"folderPointerDragRef",
+		"resolvePointerFolderDropTarget",
+		"startFolderPointerDrag",
+		"window.addEventListener('pointermove'",
+		"isInvalidFolderDropTarget",
+		"moveFolderNode(",
+		"moveFolderNodeRelative(",
+		"moveFolderNodeToRoot(",
+		"folder-tree-drop-before-",
+		"folder-tree-drop-after-",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("collection workspace missing folder tree persistence/drag token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 

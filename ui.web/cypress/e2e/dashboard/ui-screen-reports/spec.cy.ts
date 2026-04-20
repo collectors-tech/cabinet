@@ -77,6 +77,26 @@ describe("UI-SCREEN-REPORTS", () => {
       .and("contain", "Export generated")
   })
 
+  it("UI-SCREEN-REPORTS-004 disables export while reports are unavailable", () => {
+    cy.intercept("GET", "/api/profiles/active", {
+      statusCode: 404,
+      body: { error: "active_profile_404" },
+    }).as("activeProfileMissing")
+    cy.intercept("GET", "/api/data/export/csv/items", {
+      statusCode: 200,
+      body: "id,title\n1,Test\n",
+      headers: { "content-type": "text/csv; charset=utf-8" },
+    }).as("exportCSV")
+
+    signInToReports()
+    cy.wait("@activeProfileMissing")
+    cy.get('[data-testid="reports-error"]').should("be.visible")
+    cy.contains("active_profile_404").should("be.visible")
+    cy.get('[data-testid="reports-export-button"]').should("be.disabled")
+    cy.get('@exportCSV.all').should('have.length', 0)
+    cy.get('[data-testid="reports-export-message"]').should("not.exist")
+  })
+
   it("UI-SCREEN-REPORTS-003 handles loading/empty/error states deterministically", () => {
     let attempts = 0
     cy.intercept("GET", "/api/profiles/active", {

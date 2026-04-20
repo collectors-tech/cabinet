@@ -1,10 +1,17 @@
 describe("UI-SCREEN-HOME", () => {
-  function signInToHome() {
-    cy.visit("/sign-in?redirect=%2F")
+  function signInToHome(redirectPath = "/dashboard") {
+    cy.request("POST", "/api/test/reset", {})
+    cy.request("POST", "/api/profiles", { name: "E2E Local" }).then((createResp) => {
+      expect(createResp.status).to.eq(201)
+      const profileId = createResp.body.id as string
+      cy.request("PUT", "/api/profiles/active", { profile_id: profileId }).its("status").should("eq", 200)
+    })
+
+    cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
     cy.get('input[name="email"]').clear().type("e2e-home@example.com")
     cy.get('input[name="password"]').clear().type("password123")
     cy.contains("button", "Sign in").click()
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/?$/)
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
   }
 
   it("UI-SCREEN-HOME-001 renders actionable priority cards with direct actions", () => {
@@ -37,6 +44,10 @@ describe("UI-SCREEN-HOME", () => {
     cy.contains("Open pricing drops").should("be.visible")
     cy.contains("Recently added").should("be.visible")
     cy.contains("AFX Camaro").should("be.visible")
+    cy.get('[data-testid="dashboard-card-link-open-pricing-drops"]')
+      .should("have.attr", "href", "/wishlist")
+    cy.get('[data-testid="dashboard-recent-item-afx-camaro"]')
+      .should("have.attr", "href", "/inventory")
   })
 
   it("UI-SCREEN-HOME-002 renders deterministic loading and empty states", () => {
@@ -80,7 +91,7 @@ describe("UI-SCREEN-HOME", () => {
       req.reply({
         statusCode: 200,
         body: {
-          new_discoveries: 1,
+          new_discoveries: 0,
           wishlist_hits: 0,
           price_drops: 0,
           low_stock_discoveries: 0,
@@ -89,7 +100,9 @@ describe("UI-SCREEN-HOME", () => {
           total_items: 1,
           total_instances: 1,
           estimated_value: 99,
-          cards: [{ title: "Review discoveries", value: 1, link: "/discoveries" }],
+          cards: [
+            { title: "Recently Added", value: 1, link: "/collections" },
+          ],
         },
       })
     }).as("dashboardRetry")
@@ -101,13 +114,80 @@ describe("UI-SCREEN-HOME", () => {
     cy.wait("@dashboardRetry")
     cy.contains("Dashboard unavailable").should("not.exist")
 
-    cy.contains("Review discoveries")
+    cy.contains("Recently Added")
       .parentsUntil("div.border")
       .parent()
       .within(() => {
         cy.contains("a", "Open").click()
       })
 
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/discoveries\/?$/)
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/collections\/?$/)
+  })
+
+  it("UI-SCREEN-HOME-003 routes dashboard action links to live Cabinet destinations", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 0,
+        wishlist_hits: 0,
+        price_drops: 1,
+        low_stock_discoveries: 0,
+        restocks: 0,
+        recently_added: ["Route Fix Item"],
+        total_items: 1,
+        total_instances: 1,
+        estimated_value: 99,
+        cards: [{ title: "Open pricing drops", value: 1, link: "/pricing" }],
+      },
+    }).as("dashboardRecentRoute")
+
+    signInToHome()
+    cy.wait("@dashboardRecentRoute")
+
+    cy.get('[data-testid="dashboard-card-link-open-pricing-drops"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/wishlist\/?$/)
+
+    cy.visit("/dashboard")
+    cy.get('[data-testid="dashboard-recent-item-route-fix-item"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
+  })
+
+  it("UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 2,
+        wishlist_hits: 1,
+        price_drops: 0,
+        low_stock_discoveries: 0,
+        restocks: 0,
+        recently_added: ["Canonical Route Item"],
+        total_items: 2,
+        total_instances: 2,
+        estimated_value: 200,
+        cards: [{ title: "Review discoveries", value: 2, link: "/discoveries" }],
+      },
+    }).as("dashboardCanonical")
+
+    signInToHome("/")
+    cy.wait("@dashboardCanonical")
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').should(
+      "have.attr",
+      "href",
+      "/dashboard"
+    )
+
+    cy.visit("/")
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+
+    cy.visit("/inventory")
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
+    cy.get('[data-testid="active-profile-name"]', { timeout: 15000 }).should("contain", "E2E Local")
+    cy.get('[data-testid="sidebar-nav-link-dashboard"]').click()
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+
+    cy.reload()
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
   })
 })

@@ -6,7 +6,7 @@ Define strict UI-to-API parity requirements so every production screen is fully 
 Each top-level authenticated screen SHALL declare the APIs it depends on for read and mutation flows.
 
 #### Scenario: Screen parity review
-- **GIVEN** an authenticated local profile session is active and the user opens `/`, `/inventory`, and `/integrations`
+- **GIVEN** an authenticated local profile session is active and the user opens `/dashboard`, `/inventory`, and `/integrations`
 - **WHEN** each route initializes
 - **THEN** dashboard SHALL call `GET /api/dashboard`, inventory SHALL call `GET /api/items*`, and integrations SHALL call `GET /api/profiles/active` + `GET /api/providers/registry` + `GET /api/profiles/{id}/settings`
 
@@ -14,7 +14,7 @@ Each top-level authenticated screen SHALL declare the APIs it depends on for rea
 For each API-backed screen section, UI SHALL define deterministic behavior for loading, empty, error, and ready states.
 
 #### Scenario: API error on screen load
-- **GIVEN** dashboard route `/` is opened with an authenticated local profile
+- **GIVEN** dashboard route `/dashboard` is opened with an authenticated local profile
 - **WHEN** `GET /api/dashboard` returns `500` then succeeds on retry with `200`
 - **THEN** UI SHALL show `Dashboard unavailable` + retry action on failure
 - **AND** retry SHALL return to ready metric cards without routing to the global fatal error page
@@ -23,9 +23,9 @@ For each API-backed screen section, UI SHALL define deterministic behavior for l
 Each mutation control SHALL declare request payload contract and expected success/failure rendering behavior.
 
 #### Scenario: Mutation failure handling
-- **GIVEN** authenticated user is on `/settings` profile form with valid editable values
+- **GIVEN** authenticated user is on `/settings/profile` form with valid editable values
 - **WHEN** `PUT /api/profiles/{id}/settings` returns `500`
-- **THEN** route context SHALL remain on `/settings`
+- **THEN** route context SHALL remain on `/settings/profile`
 - **AND** inline error feedback SHALL render with actionable retry/edit context
 
 ### Requirement UI-DATA-CONTRACT-PARITY-004: Endpoint parity SHALL include E2E verification mapping

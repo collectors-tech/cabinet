@@ -10,6 +10,13 @@ Market Watch SHALL allow creating/loading query sets and triggering manual/sched
 - **WHEN** user enters query set name/keywords and clicks `Create Query Set`
 - **THEN** query set MUST be created and displayed in Market Watch list with deterministic success/error feedback
 
+#### Scenario: Blank Create Query Set attempt
+- **GIVEN** Market Watch route is loaded and no query set has been created yet
+- **WHEN** user clicks `Create Query Set` with blank required fields
+- **THEN** Market Watch MUST keep the form in place
+- **AND** MUST show explicit inline validation for each missing required field
+- **AND** MUST surface action-specific guidance instead of silently ignoring the submit
+
 #### Scenario: Run query set
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** user runs a selected query set
@@ -30,6 +37,12 @@ The screen SHALL support loading, empty, error, and ready states for query sets 
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
 - **WHEN** no query sets exist
 - **THEN** screen SHALL provide create-first guidance
+
+#### Scenario: Scheduled refresh from empty state
+- **GIVEN** no runnable query sets exist
+- **WHEN** user clicks `Run Scheduled Refresh`
+- **THEN** Market Watch MUST block the action in-screen without issuing a generic scheduled failure
+- **AND** MUST explain that a query set with valid criteria is required before scheduled refresh can run
 
 ### Requirement UI-SCREEN-SCANNER-004: Market Watch run failures SHALL surface actionable guidance instead of raw keys
 Market Watch run and retry failures SHALL map backend taxonomy/status to user-readable guidance with deterministic recovery actions.

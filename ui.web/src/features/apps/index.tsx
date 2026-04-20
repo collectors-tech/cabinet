@@ -9,13 +9,6 @@ import {
 } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import { ArrowDownAZ, ArrowUpAZ, SlidersHorizontal, Store } from 'lucide-react'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { LanguageSwitch } from '@/components/language-switch'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -41,6 +34,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 
 const route = getRouteApi('/_authenticated/integrations/')
 
@@ -82,6 +82,11 @@ type IntegrationForm = {
   itemsPerPage: string
 }
 
+type ProfileOption = {
+  id: string
+  name: string
+}
+
 type AppsProps = {
   title?: string
   description?: string
@@ -113,7 +118,10 @@ function providerSettingsKeys(providerID: string) {
   }
 }
 
-function isConnected(provider: ProviderRecord, settings: Record<string, string>) {
+function isConnected(
+  provider: ProviderRecord,
+  settings: Record<string, string>
+) {
   if (provider.auth_mode === 'none') {
     return true
   }
@@ -140,6 +148,24 @@ function bootstrapErrorMessage(error: unknown) {
   return 'Failed to bootstrap integrations workspace.'
 }
 
+async function loadProfilesForRecovery() {
+  const profilesResp = await fetch('/api/profiles')
+  if (!profilesResp.ok) {
+    throw new Error(`profiles_${profilesResp.status}`)
+  }
+  const payload = (await profilesResp.json()) as {
+    profiles?: Array<{ id?: string; name?: string }>
+  }
+  return (payload.profiles ?? [])
+    .map((profile) => ({
+      id: profile.id?.trim() ?? '',
+      name: profile.name?.trim() ?? '',
+    }))
+    .filter((profile): profile is ProfileOption =>
+      Boolean(profile.id && profile.name)
+    )
+}
+
 export function Apps({
   title = 'Integrations',
   description = 'Configure provider credentials, health checks, and sync actions.',
@@ -161,15 +187,29 @@ export function Apps({
   const [providers, setProviders] = useState<ProviderRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
-  const [editingProviderID, setEditingProviderID] = useState<string | null>(null)
+  const [availableProfiles, setAvailableProfiles] = useState<ProfileOption[]>(
+    []
+  )
+  const [profileRecoveryLoading, setProfileRecoveryLoading] = useState(false)
+  const [createProfileName, setCreateProfileName] = useState('')
+  const [profileRecoveryError, setProfileRecoveryError] = useState<
+    string | null
+  >(null)
+  const [editingProviderID, setEditingProviderID] = useState<string | null>(
+    null
+  )
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
-  const [rowDetailsProviderID, setRowDetailsProviderID] = useState<string | null>(null)
+  const [rowDetailsProviderID, setRowDetailsProviderID] = useState<
+    string | null
+  >(null)
   const [rowDetailsOpen, setRowDetailsOpen] = useState(false)
-  const [rowEditProviderID, setRowEditProviderID] = useState<string | null>(null)
+  const [rowEditProviderID, setRowEditProviderID] = useState<string | null>(
+    null
+  )
   const [rowEditOpen, setRowEditOpen] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
@@ -183,6 +223,7 @@ export function Apps({
     setLoading(true)
     setBootstrapError(null)
     setActionMessage(null)
+    setProfileRecoveryError(null)
     try {
       const activeResp = await fetch('/api/profiles/active')
       if (!activeResp.ok) {
@@ -194,6 +235,7 @@ export function Apps({
         throw new Error('active_profile_missing')
       }
       setActiveProfileId(profileID)
+      setAvailableProfiles([])
 
       const registryResp = await fetch('/api/providers/registry')
       if (!registryResp.ok) {
@@ -213,6 +255,16 @@ export function Apps({
       }
       setSettings(settingsPayload.settings ?? {})
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith('active_profile_')
+      ) {
+        try {
+          setAvailableProfiles(await loadProfilesForRecovery())
+        } catch {
+          setAvailableProfiles([])
+        }
+      }
       setBootstrapError(bootstrapErrorMessage(error))
     } finally {
       setLoading(false)
@@ -224,15 +276,22 @@ export function Apps({
   }, [loadBootstrap])
 
   const providerByID = useMemo(
-    () => new Map(providers.map((provider) => [provider.provider_id, provider])),
+    () =>
+      new Map(providers.map((provider) => [provider.provider_id, provider])),
     [providers]
   )
   const editingProvider =
-    editingProviderID !== null ? providerByID.get(editingProviderID) ?? null : null
+    editingProviderID !== null
+      ? (providerByID.get(editingProviderID) ?? null)
+      : null
   const rowDetailsProvider =
-    rowDetailsProviderID !== null ? providerByID.get(rowDetailsProviderID) ?? null : null
+    rowDetailsProviderID !== null
+      ? (providerByID.get(rowDetailsProviderID) ?? null)
+      : null
   const rowEditProvider =
-    rowEditProviderID !== null ? providerByID.get(rowEditProviderID) ?? null : null
+    rowEditProviderID !== null
+      ? (providerByID.get(rowEditProviderID) ?? null)
+      : null
 
   const sortedProviders = useMemo(() => {
     const list = [...providers]
@@ -266,6 +325,72 @@ export function Apps({
       }),
     })
   }
+
+  const recoverWithProfile = useCallback(
+    async (profileID: string) => {
+      setProfileRecoveryLoading(true)
+      setProfileRecoveryError(null)
+      try {
+        const response = await fetch('/api/profiles/active', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile_id: profileID }),
+        })
+        if (!response.ok) {
+          throw new Error(`set_active_profile_${response.status}`)
+        }
+        await loadBootstrap()
+      } catch (error) {
+        setProfileRecoveryError(
+          error instanceof Error
+            ? 'Could not activate the selected profile. Retry or create a new profile.'
+            : 'Could not activate the selected profile.'
+        )
+      } finally {
+        setProfileRecoveryLoading(false)
+      }
+    },
+    [loadBootstrap]
+  )
+
+  const createProfileInline = useCallback(async () => {
+    const trimmedName = createProfileName.trim()
+    if (!trimmedName) {
+      setProfileRecoveryError('Enter a profile name before creating one.')
+      return
+    }
+
+    setProfileRecoveryLoading(true)
+    setProfileRecoveryError(null)
+    try {
+      const createResp = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName }),
+      })
+      if (!createResp.ok) {
+        throw new Error(`create_profile_${createResp.status}`)
+      }
+      const created = (await createResp.json()) as {
+        id?: string
+        name?: string
+      }
+      const createdProfileID = created.id?.trim() ?? ''
+      if (!createdProfileID) {
+        throw new Error('created_profile_missing')
+      }
+      setCreateProfileName('')
+      await recoverWithProfile(createdProfileID)
+    } catch (error) {
+      setProfileRecoveryError(
+        error instanceof Error
+          ? 'Could not create a profile inline. Retry and check runtime state.'
+          : 'Could not create a profile inline.'
+      )
+    } finally {
+      setProfileRecoveryLoading(false)
+    }
+  }, [createProfileName, recoverWithProfile])
 
   const handleTypeChange = (value: AppType) => {
     setAppType(value)
@@ -327,7 +452,9 @@ export function Apps({
     if (!(target instanceof HTMLElement)) {
       return false
     }
-    return Boolean(target.closest('button, a, input, select, textarea, [role="button"]'))
+    return Boolean(
+      target.closest('button, a, input, select, textarea, [role="button"]')
+    )
   }
 
   const handleRowClick = (
@@ -413,27 +540,38 @@ export function Apps({
         next[keys.tokenKey] = trimmedToken
       }
 
-      const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: next }),
-      })
+      const response = await fetch(
+        `/api/profiles/${activeProfileId}/settings`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: next }),
+        }
+      )
       if (!response.ok) {
         throw new Error(`save_failed_${response.status}`)
       }
-      const payload = (await response.json()) as { settings?: Record<string, string> }
+      const payload = (await response.json()) as {
+        settings?: Record<string, string>
+      }
       setSettings(payload.settings ?? {})
       setProviders((prev) =>
         prev.map((provider) =>
           provider.provider_id === editingProvider.provider_id
-            ? { ...provider, has_token: provider.has_token || trimmedToken !== '' }
+            ? {
+                ...provider,
+                has_token: provider.has_token || trimmedToken !== '',
+              }
             : provider
         )
       )
       setActionMessage('Provider configuration saved.')
       closeIntegration()
     } catch (err) {
-      if (err instanceof Error && err.message === 'token_required_for_provider') {
+      if (
+        err instanceof Error &&
+        err.message === 'token_required_for_provider'
+      ) {
         setSaveError('Token is required for this provider.')
       } else {
         setSaveError(err instanceof Error ? err.message : 'save_failed')
@@ -517,14 +655,92 @@ export function Apps({
           >
             <p className='font-medium'>Integrations bootstrap failed</p>
             <p className='mt-1 text-muted-foreground'>{bootstrapError}</p>
-            <Button className='mt-3' size='sm' variant='outline' onClick={() => void loadBootstrap()}>
-              Retry
-            </Button>
+            <div className='mt-3 flex flex-wrap gap-2'>
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => void loadBootstrap()}
+              >
+                Retry
+              </Button>
+            </div>
+
+            {bootstrapError.includes('active profile') ? (
+              <div
+                className='mt-4 rounded-md border border-border/60 bg-background/70 p-3'
+                data-testid='integrations-profile-recovery'
+              >
+                <p className='font-medium'>
+                  Recover profile context in this route
+                </p>
+                <p className='mt-1 text-muted-foreground'>
+                  Pick an existing profile or create one here, then reload the
+                  provider catalog in place.
+                </p>
+
+                {availableProfiles.length ? (
+                  <div className='mt-3 flex flex-wrap gap-2'>
+                    {availableProfiles.map((profile) => (
+                      <Button
+                        key={profile.id}
+                        type='button'
+                        size='sm'
+                        variant='secondary'
+                        data-testid={`integrations-recovery-profile-${profile.id}`}
+                        disabled={profileRecoveryLoading}
+                        onClick={() => void recoverWithProfile(profile.id)}
+                      >
+                        Use {profile.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p
+                    className='mt-3 text-muted-foreground'
+                    data-testid='integrations-recovery-no-profiles'
+                  >
+                    No selectable profiles were found. Create one below.
+                  </p>
+                )}
+
+                <div className='mt-3 flex flex-col gap-2 sm:flex-row'>
+                  <Input
+                    value={createProfileName}
+                    onChange={(event) =>
+                      setCreateProfileName(event.target.value)
+                    }
+                    placeholder='New profile name'
+                    data-testid='integrations-recovery-create-input'
+                    disabled={profileRecoveryLoading}
+                  />
+                  <Button
+                    type='button'
+                    size='sm'
+                    data-testid='integrations-recovery-create-submit'
+                    disabled={profileRecoveryLoading}
+                    onClick={() => void createProfileInline()}
+                  >
+                    Create profile
+                  </Button>
+                </div>
+
+                {profileRecoveryError ? (
+                  <p
+                    className='mt-2 text-destructive'
+                    data-testid='integrations-recovery-error'
+                  >
+                    {profileRecoveryError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {actionMessage ? (
-          <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm'>{actionMessage}</div>
+          <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm'>
+            {actionMessage}
+          </div>
         ) : null}
 
         <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
@@ -617,20 +833,28 @@ export function Apps({
                     <TableRow
                       key={provider.provider_id}
                       onClick={(event) => handleRowClick(provider, event)}
-                      onDoubleClick={(event) => handleRowDoubleClick(provider, event)}
+                      onDoubleClick={(event) =>
+                        handleRowDoubleClick(provider, event)
+                      }
                     >
                       <TableCell>
                         <div className='flex items-center gap-2'>
                           <div className='flex size-8 items-center justify-center rounded-md bg-muted p-1.5'>
                             <Store className='size-4' />
                           </div>
-                          <span className='font-medium'>{provider.display_name}</span>
+                          <span className='font-medium'>
+                            {provider.display_name}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {isConnected(provider, settings) ? 'Connected' : 'Not Connected'}
+                        {isConnected(provider, settings)
+                          ? 'Connected'
+                          : 'Not Connected'}
                       </TableCell>
-                      <TableCell>{provider.health?.status ?? 'unknown'}</TableCell>
+                      <TableCell>
+                        {provider.health?.status ?? 'unknown'}
+                      </TableCell>
                       <TableCell className='text-muted-foreground'>
                         {provider.integration_mode}
                       </TableCell>
@@ -668,7 +892,9 @@ export function Apps({
                 <div className='mb-6 flex items-start justify-between gap-3'>
                   <div className='space-y-1'>
                     <h2 className='font-semibold'>{provider.display_name}</h2>
-                    <p className='text-xs text-muted-foreground'>{provider.base_domain}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      {provider.base_domain}
+                    </p>
                     <p
                       className='text-xs text-muted-foreground'
                       data-testid={`provider-api-family-${provider.provider_id}`}
@@ -691,11 +917,17 @@ export function Apps({
                   <p>Last run: {provider.last_run?.status ?? 'never'}</p>
                 </div>
                 <div className='mt-3 flex flex-wrap gap-1 text-[11px] text-muted-foreground'>
-                  {provider.capabilities.search ? <span className='rounded bg-muted px-2 py-0.5'>Search</span> : null}
+                  {provider.capabilities.search ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>Search</span>
+                  ) : null}
                   {provider.capabilities.stock_observation ? (
                     <span className='rounded bg-muted px-2 py-0.5'>Stock</span>
                   ) : null}
-                  {provider.capabilities.pricing ? <span className='rounded bg-muted px-2 py-0.5'>Pricing</span> : null}
+                  {provider.capabilities.pricing ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Pricing
+                    </span>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -713,7 +945,9 @@ export function Apps({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingProvider?.display_name ?? 'Integration'}</DialogTitle>
+            <DialogTitle>
+              {editingProvider?.display_name ?? 'Integration'}
+            </DialogTitle>
             <DialogDescription>
               Manage provider credentials, validation, and sync controls.
             </DialogDescription>
@@ -726,13 +960,16 @@ export function Apps({
                   API Family: {editingProvider.api_family ?? 'custom'}
                 </p>
                 <p data-testid='provider-detail-api-support-profile'>
-                  Support Profile: {editingProvider.api_support_profile ?? 'unknown'}
+                  Support Profile:{' '}
+                  {editingProvider.api_support_profile ?? 'unknown'}
                 </p>
                 <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
                 <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
                 <p>
                   Last checked:{' '}
-                  {editingProvider.health?.last_checked_at ?? editingProvider.last_run?.finished_at ?? 'n/a'}
+                  {editingProvider.health?.last_checked_at ??
+                    editingProvider.last_run?.finished_at ??
+                    'n/a'}
                 </p>
               </div>
 
@@ -744,19 +981,25 @@ export function Apps({
               <Input
                 placeholder='Base URL'
                 value={form.baseURL}
-                onChange={(e) => setForm((prev) => ({ ...prev, baseURL: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, baseURL: e.target.value }))
+                }
               />
               <Input
                 placeholder='Marketplace / Region'
                 value={form.marketplace}
-                onChange={(e) => setForm((prev) => ({ ...prev, marketplace: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, marketplace: e.target.value }))
+                }
               />
               <Input
                 type='number'
                 min='1'
                 placeholder='Items per page'
                 value={form.itemsPerPage}
-                onChange={(e) => setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))
+                }
               />
 
               {editingProvider.auth_mode !== 'none' ? (
@@ -765,7 +1008,8 @@ export function Apps({
                     <div className='rounded-md border bg-muted/20 p-3 text-xs'>
                       <p>Token on file.</p>
                       <p className='text-muted-foreground'>
-                        Existing token is hidden. Use replace-token to update it.
+                        Existing token is hidden. Use replace-token to update
+                        it.
                       </p>
                       <Button
                         size='sm'
@@ -783,13 +1027,17 @@ export function Apps({
                       data-testid='provider-token-input'
                       placeholder='New token / API key'
                       value={form.token}
-                      onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, token: e.target.value }))
+                      }
                     />
                   )}
                 </div>
               ) : null}
 
-              {saveError ? <p className='text-sm text-destructive'>{saveError}</p> : null}
+              {saveError ? (
+                <p className='text-sm text-destructive'>{saveError}</p>
+              ) : null}
 
               <div className='flex flex-wrap justify-end gap-2'>
                 <Button
@@ -809,10 +1057,17 @@ export function Apps({
                 >
                   Sync
                 </Button>
-                <Button variant='outline' onClick={closeIntegration} disabled={saving}>
+                <Button
+                  variant='outline'
+                  onClick={closeIntegration}
+                  disabled={saving}
+                >
                   Cancel
                 </Button>
-                <Button onClick={() => void saveIntegration()} disabled={saving}>
+                <Button
+                  onClick={() => void saveIntegration()}
+                  disabled={saving}
+                >
                   {saving ? 'Saving...' : 'Save Integration'}
                 </Button>
               </div>
@@ -837,7 +1092,8 @@ export function Apps({
                 <strong>State:</strong> {rowDetailsProvider.state}
               </p>
               <p>
-                <strong>Health:</strong> {rowDetailsProvider.health?.status ?? 'unknown'}
+                <strong>Health:</strong>{' '}
+                {rowDetailsProvider.health?.status ?? 'unknown'}
               </p>
             </div>
           ) : null}

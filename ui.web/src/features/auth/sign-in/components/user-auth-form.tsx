@@ -45,6 +45,27 @@ type ProviderOptionsPayload = {
   providers?: ProviderOption[]
 }
 
+function normalizePasskeyError(error: unknown) {
+  const fallback = 'Passkey sign-in failed. Use password or provider sign-in.'
+  if (!(error instanceof Error)) {
+    return fallback
+  }
+
+  const message = error.message.trim()
+  const lower = message.toLowerCase()
+  if (
+    lower.includes('invalid domain') ||
+    lower.includes('invalid rp id') ||
+    lower.includes('relying party') ||
+    lower.includes('origin mismatch') ||
+    lower.includes('domain mismatch')
+  ) {
+    return 'Passkey sign-in is not available on this domain yet. Use password or provider sign-in.'
+  }
+
+  return message || fallback
+}
+
 export function UserAuthForm({
   className,
   redirectTo,
@@ -90,8 +111,8 @@ export function UserAuthForm({
         auth.setUser(mockUser)
         auth.setAccessToken('mock-access-token')
 
-        // Redirect to the stored location or default to dashboard
-        const targetPath = redirectTo || '/'
+        // Redirect to the stored location or default to canonical dashboard
+        const targetPath = redirectTo || '/dashboard'
         navigate({ to: targetPath, replace: true })
 
         return `Welcome back, ${data.email}!`
@@ -136,14 +157,10 @@ export function UserAuthForm({
 
       auth.setUser(mockUser)
       auth.setAccessToken('mock-passkey-access-token')
-      const targetPath = redirectTo || '/'
+      const targetPath = redirectTo || '/dashboard'
       navigate({ to: targetPath, replace: true })
     } catch (error) {
-      setPasskeyError(
-        error instanceof Error
-          ? error.message
-          : 'Passkey sign-in failed. Use password or provider sign-in.'
-      )
+      setPasskeyError(normalizePasskeyError(error))
     } finally {
       setPasskeyLoading(false)
     }
@@ -210,11 +227,12 @@ export function UserAuthForm({
             <FormItem className='relative'>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <PasswordInput placeholder='********' toggleTestId='sign-in-password-toggle' {...field} />
               </FormControl>
               <FormMessage />
               <Link
                 to='/forgot-password'
+                data-testid='sign-in-forgot-password-link'
                 className='absolute end-0 -top-0.5 text-sm font-medium text-muted-foreground hover:opacity-75'
               >
                 Forgot password?
@@ -277,10 +295,20 @@ export function UserAuthForm({
         </div>
 
         <div className='grid grid-cols-2 gap-2'>
-          <Button variant='outline' type='button' disabled={isLoading}>
+          <Button
+            variant='outline'
+            type='button'
+            disabled
+            data-testid='sign-in-provider-github'
+          >
             <IconGithub className='h-4 w-4' /> GitHub
           </Button>
-          <Button variant='outline' type='button' disabled={isLoading}>
+          <Button
+            variant='outline'
+            type='button'
+            disabled
+            data-testid='sign-in-provider-facebook'
+          >
             <IconFacebook className='h-4 w-4' /> Facebook
           </Button>
         </div>

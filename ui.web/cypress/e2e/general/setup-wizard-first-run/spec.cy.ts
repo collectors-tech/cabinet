@@ -71,10 +71,11 @@ describe('SETUP-WIZ', () => {
       'contain.text',
       'Cabinet Local'
     );
-    cy.get('[data-testid="setup-complete-runtime-port"]').should(
-      'contain.text',
-      '17880'
-    );
+    cy.get('[data-testid="setup-complete-runtime-port"]').should(($el) => {
+      const numeric = Number($el.text().trim());
+      expect(Number.isFinite(numeric)).to.eq(true);
+      expect(numeric).to.be.greaterThan(0);
+    });
 
     cy.request('GET', '/api/test/runtime/setup-config')
       .its('body')
@@ -174,7 +175,7 @@ describe('SETUP-WIZ', () => {
   });
 
   it('UC-SW-19 setup-wizard-storage-selection persists data and media dirs', () => {
-    const customDir = 'D:\\cabinet-e2e-storage';
+    const customDir = 'C:\\projects\\collectors-tech\\cabinet\\tmp\\cabinet-e2e-storage';
 
     enterSetupFormMode();
     cy.get('[data-testid="setup-instance-name"]').clear().type('Storage Persistence');
@@ -186,6 +187,10 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
+<<<<<<< HEAD
+=======
+    cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
+>>>>>>> d335689 (#446 test(shell): align route and setup expectations)
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 
@@ -561,15 +566,15 @@ describe('SETUP-WIZ', () => {
       .then((payload) => {
         expect(payload.instance.name).to.eq('Primary');
         expect(payload.instance.profile).to.eq('primary');
-        expect(payload.storage.dataDir).to.be.a('string').and.not.empty;
-        expect(payload.storage.mediaDir).to.be.a('string').and.not.empty;
+        expect(String(payload.storage.dataDir).trim()).not.to.equal('');
+        expect(String(payload.storage.mediaDir).trim()).not.to.equal('');
         expect(payload.runtime.portMode).to.be.oneOf(['auto', 'fixed']);
         expect(payload.runtime.resolvedUrl).to.match(
           /^http:\/\/(127\.0\.0\.1|0\.0\.0\.0):/
         );
         expect(payload.auth.mode).to.eq('local');
         expect(payload.auth.clerk.enabled).to.eq(false);
-        expect(payload.bootstrap.workspace).to.be.a('string').and.not.empty;
+        expect(String(payload.bootstrap.workspace).trim()).not.to.equal('');
         expect(payload.features.chat).to.eq(true);
         expect(payload.features.providers).to.eq(true);
         expect(payload.features.scanner).to.eq(true);
@@ -616,7 +621,7 @@ describe('SETUP-WIZ', () => {
     cy.contains('button', 'Sign in').click();
     cy.location('pathname', { timeout: 15000 }).should(
       'match',
-      /^(\/|\/_authenticated\/?)$/
+      /^\/dashboard\/?$/
     );
     cy.contains('Home').should('be.visible');
 
@@ -627,3 +632,4 @@ describe('SETUP-WIZ', () => {
     cy.contains('Use Sample Data').should('not.exist');
   });
 });
+

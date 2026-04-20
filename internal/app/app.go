@@ -34,6 +34,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/barcode"
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
@@ -53,6 +54,19 @@ import (
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
 
+func startupMigrationTimeout() time.Duration {
+	const defaultTimeout = 3 * time.Minute
+	value := strings.TrimSpace(os.Getenv("CABINET_STARTUP_TIMEOUT_SECONDS"))
+	if value == "" {
+		return defaultTimeout
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return defaultTimeout
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 type App struct {
 	cfg           config.Config
 	db            *sql.DB
@@ -60,6 +74,7 @@ type App struct {
 	backupSvc     *backup.Service
 	authService   *auth.Service
 	openapiSpec   []byte
+	runtimeLogs   *runtimeLogManager
 	startupNotice func(string)
 	startupIsTTY  func() bool
 }
@@ -72,7 +87,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), startupMigrationTimeout())
 	defer cancel()
 
 	conn, err := db.OpenAndMigrate(ctx, cfg.DBPath)
@@ -101,6 +116,7 @@ func New(cfg config.Config) (*App, error) {
 	matchingSvc := matching.NewService(conn)
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
+	commerceSvc := commerce.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
@@ -127,6 +143,7 @@ func New(cfg config.Config) (*App, error) {
 			VALUES('recovery_required', '1', CURRENT_TIMESTAMP)
 			ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP
 		`)
+		_ = syncRuntimeLifecycleUncleanRecovery(cfg)
 	}
 	_, _ = conn.ExecContext(ctx, `
 		INSERT INTO app_state(key, value, updated_at)
@@ -222,6 +239,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(resolveAuthProviderOptions())
 	})
+	registerFutureHookRoutes(mux)
 	mux.HandleFunc("/api/runtime/setup-status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -286,6 +304,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_write_setup_config"}`, http.StatusInternalServerError)
 			return
 		}
+		resolvedURL := strings.TrimSpace(payload.Runtime.ResolvedURL)
+		if resolvedURL == "" {
+			resolvedURL = runtimeResolvedURLFromConfig(cfg)
+		}
+		_ = syncRuntimeLifecycleStartup(cfg, resolvedURL, cfg.Addr, os.Getpid())
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":             true,
 			"setup_required": false,
@@ -954,9 +977,9 @@ func New(cfg config.Config) (*App, error) {
 			"total_count":        totalCount,
 			"completion_percent": completionPercent,
 			"breakdown": map[string]any{
-				"variant": variantBreakdown,
+				"variant":  variantBreakdown,
 				"language": languageBreakdown,
-				"graded":  gradedBreakdown,
+				"graded":   gradedBreakdown,
 			},
 		})
 	})
@@ -1026,10 +1049,10 @@ func New(cfg config.Config) (*App, error) {
 			"completion_percent": completionPercent,
 			"generated_at":       time.Now().UTC().Format(time.RFC3339),
 			"share_payload": map[string]any{
-				"headline":    fmt.Sprintf("Set %s progress", strings.ToUpper(setID)),
-				"summary":     fmt.Sprintf("%d/%d cards collected", ownedCount, totalCount),
-				"visibility":  visibility,
-				"share_link":  shareLink,
+				"headline":     fmt.Sprintf("Set %s progress", strings.ToUpper(setID)),
+				"summary":      fmt.Sprintf("%d/%d cards collected", ownedCount, totalCount),
+				"visibility":   visibility,
+				"share_link":   shareLink,
 				"profile_hint": "active_profile",
 			},
 		})
@@ -1224,10 +1247,10 @@ func New(cfg config.Config) (*App, error) {
 		})
 
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"set_id": setID,
-			"items":  consideredItemIDs,
+			"set_id":  setID,
+			"items":   consideredItemIDs,
 			"sources": sources,
-			"alerts": alerts,
+			"alerts":  alerts,
 		})
 	})
 	mux.HandleFunc("/api/integrations/pokemon/visibility-access", func(w http.ResponseWriter, r *http.Request) {
@@ -2250,13 +2273,13 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			QuerySetID      string   `json:"query_set_id"`
-			AssetURL        string   `json:"asset_url"`
-			SearchURL       string   `json:"search_url"`
-			ProviderDomain  string   `json:"provider_domain"`
+			QuerySetID        string   `json:"query_set_id"`
+			AssetURL          string   `json:"asset_url"`
+			SearchURL         string   `json:"search_url"`
+			ProviderDomain    string   `json:"provider_domain"`
 			FallbackAssetURLs []string `json:"fallback_asset_urls"`
-			Page            int      `json:"page"`
-			PageSize        int      `json:"page_size"`
+			Page              int      `json:"page"`
+			PageSize          int      `json:"page_size"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
@@ -2355,10 +2378,10 @@ func New(cfg config.Config) (*App, error) {
 			"candidates":      candidates,
 			"warning":         warning,
 			"discovery": map[string]any{
-				"store":   config.Store,
-				"zone":    config.Zone,
-				"hashid":  config.HashID,
-				"source":  config.Source,
+				"store":    config.Store,
+				"zone":     config.Zone,
+				"hashid":   config.HashID,
+				"source":   config.Source,
 				"api_base": config.APIBase,
 			},
 		})
@@ -2754,6 +2777,86 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
+	})
+	mux.HandleFunc("/api/commerce/lifecycle", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+			items, err := commerceSvc.ListLifecycleByProfile(r.Context(), profileID, itemID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_commerce_lifecycle"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+		case http.MethodPost:
+			var req commerce.LifecycleEntry
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, arrival, err := commerceSvc.CreateLifecycleForProfile(r.Context(), profileID, req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_commerce_lifecycle"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"entry": created, "expected_arrival": arrival})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/commerce/arrivals", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			itemID := strings.TrimSpace(r.URL.Query().Get("item_id"))
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			items, err := commerceSvc.ListArrivalsByProfile(r.Context(), profileID, itemID, status)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_expected_arrivals"}`, http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+		case http.MethodPost:
+			var req commerce.ExpectedArrival
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			created, err := commerceSvc.CreateArrivalForProfile(r.Context(), profileID, req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_expected_arrival"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(created)
+		case http.MethodPut:
+			var req commerce.ExpectedArrival
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if err := commerceSvc.UpdateArrivalForProfile(r.Context(), profileID, req); err != nil {
+				http.Error(w, `{"error":"failed_to_update_expected_arrival"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
 	})
 	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
 		profileID = strings.TrimSpace(profileID)
@@ -3296,14 +3399,15 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"threads": threads})
 		case http.MethodPost:
 			var req struct {
-				ProfileID string `json:"profile_id"`
-				Title     string `json:"title"`
+				ProfileID string         `json:"profile_id"`
+				Title     string         `json:"title"`
+				Metadata  map[string]any `json:"metadata"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			thread, err := chatSvc.CreateThread(r.Context(), req.ProfileID, req.Title)
+			thread, err := chatSvc.CreateThread(r.Context(), req.ProfileID, req.Title, req.Metadata)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_thread"}`, http.StatusBadRequest)
 				return
@@ -3332,25 +3436,73 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"messages": messages})
 		case http.MethodPost:
 			var req struct {
-				ProfileID string `json:"profile_id"`
-				ThreadID  string `json:"thread_id"`
-				Role      string `json:"role"`
-				Content   string `json:"content"`
+				ProfileID string         `json:"profile_id"`
+				ThreadID  string         `json:"thread_id"`
+				Role      string         `json:"role"`
+				Content   string         `json:"content"`
+				Context   map[string]any `json:"context"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
-			message, err := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content)
+			message, err := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, req.Role, req.Content, req.Context)
 			if err != nil {
 				http.Error(w, `{"error":"failed_to_create_chat_message"}`, http.StatusBadRequest)
 				return
 			}
+			response := map[string]any{"message": message}
+			if strings.EqualFold(strings.TrimSpace(req.Role), "user") {
+				if assistantContext, ok := req.Context["assistant"].(map[string]any); ok && len(assistantContext) > 0 {
+					inboxItem, inboxErr := chatSvc.CreateInboxItem(r.Context(), chat.InboxItem{
+						ProfileID: req.ProfileID,
+						ThreadID:  req.ThreadID,
+						Source:    "assistant_handoff",
+						Status:    "queued",
+						Title:     "Assistant handoff queued",
+						Summary:   strings.TrimSpace(req.Content),
+						Metadata: map[string]any{
+							"assistant": assistantContext,
+							"route":     req.Context["route"],
+							"selection": req.Context["selection"],
+						},
+					})
+					if inboxErr == nil {
+						assistantMessage, assistantErr := chatSvc.CreateMessage(r.Context(), req.ProfileID, req.ThreadID, "assistant", "Assistant handoff queued in Inbox.", map[string]any{
+							"assistant_handoff": map[string]any{
+								"status":        "queued",
+								"inbox_item_id": inboxItem.ID,
+							},
+						})
+						if assistantErr == nil {
+							response["assistant_handoff"] = map[string]any{"thread_message": assistantMessage, "inbox_item": inboxItem}
+						}
+					}
+				}
+			}
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(message)
+			_ = json.NewEncoder(w).Encode(response)
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/chat/inbox", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		items, err := chatSvc.ListInboxItems(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_chat_inbox_items"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
 	mux.HandleFunc("/api/chat/attachments", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3548,6 +3700,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/data/rebuild-thumbnails", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		rebuiltItems, rebuiltPhotos, err := mediaService.RebuildAllThumbnails(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_rebuild_thumbnails"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"rebuilt_items":  rebuiltItems,
+			"rebuilt_photos": rebuiltPhotos,
+		})
 	})
 	mux.HandleFunc("/api/data/repair", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4400,10 +4569,17 @@ func New(cfg config.Config) (*App, error) {
 		http.Error(w, `{"error":"session_locked"}`, http.StatusLocked)
 	})
 
+	runtimeLogs, err := newRuntimeLogManager(cfg)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("init runtime logs: %w", err)
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           protectedMux,
+		Handler:           runtimeLogs.wrapHandler(protectedMux),
 		ReadHeaderTimeout: 10 * time.Second,
+		ErrorLog:          log.New(runtimeLogs.errorWriter(), "", 0),
 	}
 
 	a := &App{
@@ -4413,6 +4589,7 @@ func New(cfg config.Config) (*App, error) {
 		backupSvc:   backupSvc,
 		authService: authService,
 		openapiSpec: openapiSpec,
+		runtimeLogs: runtimeLogs,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
@@ -4499,10 +4676,19 @@ type runtimeSetupFeaturesConfig struct {
 }
 
 type runtimeSetupMetaConfig struct {
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
-	WizardVersion string `json:"wizardVersion"`
-	CurrentURL    string `json:"currentUrl"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
+	WizardVersion      string `json:"wizardVersion"`
+	CurrentURL         string `json:"currentUrl"`
+	StartedAt          string `json:"startedAt,omitempty"`
+	StartedBy          string `json:"startedBy,omitempty"`
+	LaunchSource       string `json:"launchSource,omitempty"`
+	LastKnownPID       int    `json:"lastKnownPid,omitempty"`
+	LastKnownURL       string `json:"lastKnownUrl,omitempty"`
+	LastHeartbeatAt    string `json:"lastHeartbeatAt,omitempty"`
+	LastShutdownAt     string `json:"lastShutdownAt,omitempty"`
+	LastShutdownReason string `json:"lastShutdownReason,omitempty"`
+	LastRunClean       bool   `json:"lastRunClean"`
 }
 
 func runtimeSetupConfigPath(cfg config.Config) string {
@@ -5557,16 +5743,16 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 	base := []map[string]any{
 		{
-			"provider_id":      "ebay",
-			"display_name":     "eBay",
-			"base_domain":      "ebay.com",
-			"api_family":       "official_api",
+			"provider_id":         "ebay",
+			"display_name":        "eBay",
+			"base_domain":         "ebay.com",
+			"api_family":          "official_api",
 			"api_support_profile": "rest_v1",
-			"active_mode":      "official_api",
-			"integration_mode": "official_api",
-			"api_available":    true,
-			"auth_requirement": "api_key",
-			"auth_mode":        "api_key",
+			"active_mode":         "official_api",
+			"integration_mode":    "official_api",
+			"api_available":       true,
+			"auth_requirement":    "api_key",
+			"auth_mode":           "api_key",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": false,
@@ -5634,16 +5820,16 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			supportProfile = "boost_v2"
 		}
 		base = append(base, map[string]any{
-			"provider_id":      "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
-			"display_name":     d,
-			"base_domain":      d,
-			"api_family":       apiFamily,
+			"provider_id":         "au-webshop-" + strings.ReplaceAll(d, ".", "-"),
+			"display_name":        d,
+			"base_domain":         d,
+			"api_family":          apiFamily,
 			"api_support_profile": supportProfile,
-			"active_mode":      activeMode,
-			"integration_mode": integrationMode,
-			"api_available":    d == "voglers.com.au" || d == "mrtoys.com.au",
-			"auth_requirement": "none",
-			"auth_mode":        "none",
+			"active_mode":         activeMode,
+			"integration_mode":    integrationMode,
+			"api_available":       d == "voglers.com.au" || d == "mrtoys.com.au",
+			"auth_requirement":    "none",
+			"auth_mode":           "none",
 			"capabilities": map[string]bool{
 				"search":            true,
 				"stock_observation": true,
@@ -5874,12 +6060,12 @@ type hobbytechBoostConfig struct {
 }
 
 type bonzaProductResponse struct {
-	ID               int    `json:"id"`
-	Name             string `json:"name"`
-	Permalink        string `json:"permalink"`
-	Price            string `json:"prices"`
-	IsInStock        *bool  `json:"is_in_stock"`
-	LowStockRemaining *int  `json:"low_stock_remaining"`
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	Permalink         string `json:"permalink"`
+	Price             string `json:"prices"`
+	IsInStock         *bool  `json:"is_in_stock"`
+	LowStockRemaining *int   `json:"low_stock_remaining"`
 }
 
 type bonzaSearchResult struct {
@@ -6366,7 +6552,7 @@ func runBigCommerceTokenSearch(
 								} `json:"price"`
 							} `json:"prices"`
 							Inventory struct {
-								IsInStock bool `json:"isInStock"`
+								IsInStock  bool `json:"isInStock"`
 								Aggregated struct {
 									AvailableToSell int `json:"availableToSell"`
 								} `json:"aggregated"`
@@ -6983,13 +7169,13 @@ func detectProviderFamily(ctx context.Context, client *http.Client, providerURL,
 		"glgoliasearch":  strings.Contains(lower, "glgoliasearch"),
 	})
 	buildEvidence("shopify_json", map[string]bool{
-		"/products.json":              strings.Contains(lower, "/products.json"),
+		"/products.json":               strings.Contains(lower, "/products.json"),
 		"/collections/*/products.json": strings.Contains(lower, "/collections/") && strings.Contains(lower, "/products.json"),
 	})
 	buildEvidence("doofinder", map[string]bool{
-		"cdn.doofinder.com":         strings.Contains(lower, "cdn.doofinder.com"),
-		"hashid/search_engines":     strings.Contains(lower, "hashid") && strings.Contains(lower, "search_engines"),
-		"doofinder loader/config":   strings.Contains(lower, "doofinder"),
+		"cdn.doofinder.com":       strings.Contains(lower, "cdn.doofinder.com"),
+		"hashid/search_engines":   strings.Contains(lower, "hashid") && strings.Contains(lower, "search_engines"),
+		"doofinder loader/config": strings.Contains(lower, "doofinder"),
 	})
 
 	if len(candidates) == 0 {
@@ -7041,10 +7227,14 @@ func runtimeBuildMetadata() (string, string) {
 }
 
 func (a *App) Run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return a.close()
+	}
 	if a.backupSvc != nil {
 		a.backupSvc.Start(ctx)
 	}
-	if err := writeRuntimePIDFile(a.cfg, os.Getpid()); err != nil {
+	pid := os.Getpid()
+	if err := writeRuntimePIDFile(a.cfg, pid); err != nil {
 		return fmt.Errorf("write runtime pid file: %w", err)
 	}
 	defer func() {
@@ -7052,12 +7242,20 @@ func (a *App) Run(ctx context.Context) error {
 	}()
 	listener, err := listenWithPortFallback(a.srv.Addr, 50)
 	if err != nil {
-		_ = a.close()
+		_ = a.closeRuntime(false, "listen_error", "")
 		return err
 	}
 	resolvedAddr := listener.Addr().String()
 	resolvedURL := startupURLFromResolvedAddr(resolvedAddr)
 	_ = syncRuntimeSetupCurrentURLWithURL(a.cfg, resolvedURL)
+	_ = syncRuntimeLifecycleStartup(a.cfg, resolvedURL, resolvedAddr, pid)
+	if a.runtimeLogs != nil {
+		a.runtimeLogs.writeRuntimeEvent("info", "startup", "runtime started", map[string]any{
+			"url":           resolvedURL,
+			"requestedAddr": strings.TrimSpace(a.cfg.Addr),
+			"resolvedAddr":  strings.TrimSpace(resolvedAddr),
+		})
+	}
 	if a.startupNotice != nil {
 		for _, line := range buildStartupConsoleLines(a.cfg, resolvedAddr, a.isTTYRuntimeOutput()) {
 			a.startupNotice(line)
@@ -7074,12 +7272,15 @@ func (a *App) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = a.srv.Shutdown(shutdownCtx)
-		return a.close()
+		return a.closeRuntime(true, "shutdown", resolvedURL)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
-			return a.close()
+			return a.closeRuntime(true, "server_closed", resolvedURL)
 		}
-		_ = a.close()
+		if a.runtimeLogs != nil {
+			a.runtimeLogs.writeErrorEvent("serve_error", err.Error(), map[string]any{"url": resolvedURL})
+		}
+		_ = a.closeRuntime(false, "serve_error", resolvedURL)
 		return err
 	}
 }
@@ -7260,10 +7461,50 @@ func (a *App) isTTYRuntimeOutput() bool {
 	return a.startupIsTTY()
 }
 
-func (a *App) close() error {
+func (a *App) closeRuntime(clean bool, reason, resolvedURL string) error {
+	if a.runtimeLogs != nil {
+		level := "info"
+		event := "shutdown"
+		message := "runtime stopped"
+		if !clean {
+			level = "error"
+			event = "shutdown_unclean"
+			message = "runtime stopped unexpectedly"
+		}
+		a.runtimeLogs.writeRuntimeEvent(level, event, message, map[string]any{
+			"reason": cleanReason(reason),
+			"url":    strings.TrimSpace(resolvedURL),
+		})
+	}
+	_ = syncRuntimeLifecycleShutdown(a.cfg, resolvedURL, cleanReason(reason), clean)
 	if a.db == nil {
+		if a.runtimeLogs != nil {
+			_ = a.runtimeLogs.Close()
+		}
 		return nil
 	}
-	_, _ = a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('clean_shutdown','1',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP`)
-	return a.db.Close()
+	cleanValue := "0"
+	if clean {
+		cleanValue = "1"
+	}
+	_, _ = a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('clean_shutdown', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`, cleanValue)
+	err := a.db.Close()
+	if a.runtimeLogs != nil {
+		if closeErr := a.runtimeLogs.Close(); err == nil {
+			err = closeErr
+		}
+	}
+	return err
+}
+
+func cleanReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "shutdown"
+	}
+	return reason
+}
+
+func (a *App) close() error {
+	return a.closeRuntime(true, "shutdown", "")
 }

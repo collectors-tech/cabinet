@@ -77,10 +77,46 @@ Cabinet SHALL support a pre-seeded showcase database profile for demos/testing w
 - **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
-When user moves menu items up/down in nav edit mode, edit dialog list order MUST update immediately to match resulting navigation order.
+When user reorders items in nav edit mode through move buttons or a drag handle, edit dialog list order MUST update immediately to match resulting navigation order.
 
 #### Scenario: Move menu item and verify edit list order
 - **GIVEN** navigation edit dialog is open with reorder controls
 - **WHEN** user moves an item up or down
 - **THEN** edit dialog list MUST re-render in new order immediately
 - **AND** resulting saved order MUST match what was shown in edit dialog before save
+
+#### Scenario: Drag nav row from left-side handle and reorder with visible insertion feedback
+- **GIVEN** navigation edit dialog is open with drag handles on the left side of each row label
+- **WHEN** user drags a row by its handle and reorders it within the list
+- **THEN** the edit dialog MUST show visible insertion feedback during drag
+- **AND** the list MUST re-render immediately in the dropped order
+- **AND** move up, move down, and hide controls MUST remain available on the same row
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-011: Authenticated shell content SHALL default to full-width workspace fill
+Authenticated shell pages SHALL let the main content region expand to the full available workspace width beside the sidebar unless a screen explicitly opts into a constrained document-style layout.
+
+#### Scenario: Inventory workspace fills available shell width on wide viewport
+- **GIVEN** an authenticated user opens the inventory workspace on a wide desktop viewport with the shell sidebar visible
+- **WHEN** the main content region renders beside the sidebar
+- **THEN** the primary shell content container MUST expand to nearly the full available width beside the sidebar
+- **AND** the shell MUST NOT apply an implicit centered `max-width` cap to the workspace container by default
+- **AND** inventory panels MUST retain their grid structure while using the wider workspace area
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-012: Sidebar count pills SHALL render as trailing nav badges
+Sidebar navigation rows that expose notification or count pills SHALL render them as right-aligned trailing badges using the shell nav badge pattern instead of inline label chips.
+
+#### Scenario: Chats row renders count pill as trailing sidebar badge
+- **GIVEN** the authenticated shell sidebar includes a navigation row with a count pill such as `Chats`
+- **WHEN** the row renders in desktop expanded-sidebar mode
+- **THEN** the label text MUST remain left-aligned in the row body
+- **AND** the count pill MUST render as a trailing right-aligned badge near the row end
+- **AND** the label text MUST NOT collapse into or overlap the badge area
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-013: Authenticated routes SHALL set product-first browser titles
+Authenticated shell routes SHALL keep `document.title` in the format `Cabinet - <Page Title>`.
+
+#### Scenario: Browser title updates across representative routes
+- **GIVEN** an authenticated user navigates between primary shell routes
+- **WHEN** the active route changes
+- **THEN** the browser title MUST update to `Cabinet - <Page Title>` for that route
+- **AND** the title MUST NOT be blank or leak raw route ids/translation keys

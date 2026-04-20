@@ -80,6 +80,11 @@ const MARKET_WATCH_PROVIDER_OPTIONS = [
 
 type ProviderMode = 'single' | 'multi'
 
+type CreateQueryValidation = {
+  name?: string
+  keywords?: string
+}
+
 function parseErrorCode(payload: unknown, fallback: string): string {
   if (payload && typeof payload === 'object' && 'error' in payload) {
     const value = (payload as { error?: unknown }).error
@@ -149,6 +154,7 @@ export function Scanner() {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
   const [newScheduleCron, setNewScheduleCron] = useState('0 */6 * * *')
+  const [createValidation, setCreateValidation] = useState<CreateQueryValidation>({})
   const [providerMode, setProviderMode] = useState<ProviderMode>('single')
   const [singleProvider, setSingleProvider] = useState('ebay')
   const [multiProviders, setMultiProviders] = useState<string[]>(['ebay', 'amazon'])
@@ -227,19 +233,36 @@ export function Scanner() {
   }
 
   const createQuerySet = async () => {
+    const keywords = newKeywords
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const nextValidation: CreateQueryValidation = {}
     if (!newName.trim()) {
+      nextValidation.name = 'Query set name is required.'
+    }
+    if (keywords.length === 0) {
+      nextValidation.keywords = 'Enter at least one keyword before creating a query set.'
+    }
+    if (nextValidation.name || nextValidation.keywords) {
+      setCreateValidation(nextValidation)
+      setActionStatus('create_query_set_validation_failed')
+      setActionFeedback({
+        summary: 'Create Query Set requires the highlighted fields.',
+        actions: [
+          nextValidation.name ?? 'Provide a query set name.',
+          nextValidation.keywords ?? 'Provide at least one keyword.',
+        ],
+      })
       return
     }
+    setCreateValidation({})
     const providerScope = resolveProviderScope()
     if (providerScope.length === 0) {
       setProviderValidation('Select at least one provider')
       return
     }
     setProviderValidation(null)
-    const keywords = newKeywords
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean)
     const response = await fetch('/api/scanner/query-sets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -263,6 +286,7 @@ export function Scanner() {
     setActionStatus('query_set_created')
     setActionFeedback(null)
     setQuerySets((current) => [...current, createdQuerySet])
+    setCreateValidation({})
     setRunMetaByQuerySet((current) => ({
       ...current,
       [createdQuerySet.id]: { status: 'never' },
@@ -334,6 +358,17 @@ export function Scanner() {
   }
 
   const runScheduledRefresh = async () => {
+    if (querySets.length === 0) {
+      setActionStatus('scheduled_run_blocked_empty')
+      setActionFeedback({
+        summary: 'Run Scheduled Refresh needs at least one runnable query set.',
+        actions: [
+          'Create a query set first.',
+          'Add keywords so the first scheduled run has valid criteria.',
+        ],
+      })
+      return
+    }
     const response = await fetch('/api/scanner/run/scheduled', {
       method: 'POST',
     })
@@ -692,18 +727,40 @@ export function Scanner() {
         </div>
 
         <section className='grid gap-2 md:grid-cols-3'>
-          <Input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder='Query set name'
-            data-testid='scanner-new-query-name'
-          />
-          <Input
-            value={newKeywords}
-            onChange={(event) => setNewKeywords(event.target.value)}
-            placeholder='Keywords (comma-separated)'
-            data-testid='scanner-new-query-keywords'
-          />
+          <div className='space-y-1'>
+            <Input
+              value={newName}
+              onChange={(event) => {
+                setNewName(event.target.value)
+                setCreateValidation((current) => ({ ...current, name: undefined }))
+              }}
+              placeholder='Query set name'
+              aria-invalid={createValidation.name ? 'true' : 'false'}
+              data-testid='scanner-new-query-name'
+            />
+            {createValidation.name ? (
+              <p className='text-xs text-destructive' data-testid='scanner-new-query-name-validation'>
+                {createValidation.name}
+              </p>
+            ) : null}
+          </div>
+          <div className='space-y-1'>
+            <Input
+              value={newKeywords}
+              onChange={(event) => {
+                setNewKeywords(event.target.value)
+                setCreateValidation((current) => ({ ...current, keywords: undefined }))
+              }}
+              placeholder='Keywords (comma-separated)'
+              aria-invalid={createValidation.keywords ? 'true' : 'false'}
+              data-testid='scanner-new-query-keywords'
+            />
+            {createValidation.keywords ? (
+              <p className='text-xs text-destructive' data-testid='scanner-new-query-keywords-validation'>
+                {createValidation.keywords}
+              </p>
+            ) : null}
+          </div>
           <Input
             value={newScheduleCron}
             onChange={(event) => setNewScheduleCron(event.target.value)}

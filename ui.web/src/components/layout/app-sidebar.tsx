@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Pencil, X } from 'lucide-react'
-import { useLayout } from '@/context/layout-provider'
-import { useAuthStore } from '@/stores/auth-store'
+import { useEffect, useState, type DragEvent } from 'react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Inbox,
+  MessageSquare,
+  PanelLeft,
+  Pencil,
+  X,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { useLayout } from '@/context/layout-provider'
+import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
   Sidebar,
   SidebarContent,
@@ -10,12 +22,14 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
-import { type NavCollapsible, type NavItem } from './types'
+import { InboxWorkspacePanel } from './inbox-workspace-panel'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
+import { type NavCollapsible, type NavItem } from './types'
 
 type NavPreference = {
   order: number
@@ -28,9 +42,30 @@ function navKeyForTitle(title: string): string {
   return title.trim().toLowerCase().replace(/\s+/g, '-')
 }
 
+function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
+  const fromIndex = order.findIndex((itemKey) => itemKey === key)
+  if (fromIndex < 0) {
+    return order
+  }
+
+  const clampedTargetIndex = Math.max(
+    0,
+    Math.min(targetIndex, order.length - 1)
+  )
+  if (fromIndex === clampedTargetIndex) {
+    return order
+  }
+
+  const next = [...order]
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(clampedTargetIndex, 0, moved)
+  return next
+}
+
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { t } = useTranslation('nav')
+  const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const authUser = useAuthStore((state) => state.auth.user)
   const sidebarUser = authUser
     ? {
@@ -43,7 +78,14 @@ export function AppSidebar() {
   const normalizeNavKey = (title: string) => navKeyForTitle(title)
   const [navEditMode, setNavEditMode] = useState(false)
   const [navEditOrder, setNavEditOrder] = useState<string[]>([])
-  const [navPreferences, setNavPreferences] = useState<Record<string, NavPreference>>(() => {
+  const [draggedNavKey, setDraggedNavKey] = useState<string | null>(null)
+  const [dragOverNavTarget, setDragOverNavTarget] = useState<{
+    key: string
+    position: 'before' | 'after'
+  } | null>(null)
+  const [navPreferences, setNavPreferences] = useState<
+    Record<string, NavPreference>
+  >(() => {
     try {
       const raw = window.localStorage.getItem(GLOBAL_NAV_PREFERENCES_KEY)
       if (!raw) {
@@ -95,29 +137,42 @@ export function AppSidebar() {
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
     const storageKey = `cabinet.nav.preferences.${profileScope}`
-    try {
-      const raw = window.localStorage.getItem(storageKey)
-      if (!raw) {
-        return
+    const syncPreferences = () => {
+      try {
+        const raw = window.localStorage.getItem(storageKey)
+        if (!raw) {
+          setNavPreferences({})
+          return
+        }
+        const parsed = JSON.parse(raw) as Record<string, NavPreference>
+        setNavPreferences(parsed && typeof parsed === 'object' ? parsed : {})
+      } catch {
+        setNavPreferences({})
       }
-      const parsed = JSON.parse(raw) as Record<string, NavPreference>
-      if (parsed && typeof parsed === 'object') {
-        setNavPreferences(parsed)
-      }
-    } catch {}
+    }
+
+    const timeoutId = window.setTimeout(syncPreferences, 0)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
   }, [authUser?.accountNo, authUser?.email])
 
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
     const storageKey = `cabinet.nav.preferences.${profileScope}`
-    window.localStorage.setItem(GLOBAL_NAV_PREFERENCES_KEY, JSON.stringify(navPreferences))
+    window.localStorage.setItem(
+      GLOBAL_NAV_PREFERENCES_KEY,
+      JSON.stringify(navPreferences)
+    )
     window.localStorage.setItem(storageKey, JSON.stringify(navPreferences))
   }, [authUser?.accountNo, authUser?.email, navPreferences])
 
   const primaryItems = sidebarData.navGroups[0]?.items ?? []
   const orderForPrimaryItem = (item: NavItem) => {
     const key = navKeyForTitle(item.title)
-    const defaultOrder = primaryItems.findIndex((candidate) => candidate.title === item.title)
+    const defaultOrder = primaryItems.findIndex(
+      (candidate) => candidate.title === item.title
+    )
     return navPreferences[key]?.order ?? defaultOrder
   }
 
@@ -133,11 +188,60 @@ export function AppSidebar() {
         return current
       }
 
-      const swapped = [...current]
-      const [moved] = swapped.splice(fromIndex, 1)
-      swapped.splice(toIndex, 0, moved)
-      return swapped
+      return moveKeyToIndex(current, key, toIndex)
     })
+  }
+
+  const handleNavDragStart = (
+    key: string,
+    event: DragEvent<HTMLButtonElement>
+  ) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', key)
+    setDraggedNavKey(key)
+  }
+
+  const handleNavDragOver = (key: string, event: DragEvent<HTMLDivElement>) => {
+    if (!draggedNavKey || draggedNavKey === key) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const midpoint = bounds.top + bounds.height / 2
+    const position = event.clientY < midpoint ? 'before' : 'after'
+    setDragOverNavTarget({ key, position })
+  }
+
+  const handleNavDrop = (key: string, event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const droppedKey = event.dataTransfer.getData('text/plain') || draggedNavKey
+    if (!droppedKey || droppedKey === key) {
+      setDraggedNavKey(null)
+      setDragOverNavTarget(null)
+      return
+    }
+
+    setNavEditOrder((current) => {
+      const targetIndex = current.findIndex((itemKey) => itemKey === key)
+      if (targetIndex < 0) {
+        return current
+      }
+      const insertionIndex =
+        dragOverNavTarget?.key === key && dragOverNavTarget.position === 'after'
+          ? targetIndex + 1
+          : targetIndex
+      return moveKeyToIndex(current, droppedKey, insertionIndex)
+    })
+    setDraggedNavKey(null)
+    setDragOverNavTarget(null)
+  }
+
+  const clearNavDragState = () => {
+    setDraggedNavKey(null)
+    setDragOverNavTarget(null)
   }
 
   const togglePrimaryVisibility = (key: string) => {
@@ -155,16 +259,17 @@ export function AppSidebar() {
   const orderedPrimaryItems = [...primaryItems].sort(
     (left, right) => orderForPrimaryItem(left) - orderForPrimaryItem(right)
   )
-  const orderedPrimaryKeys = orderedPrimaryItems.map((item) => navKeyForTitle(item.title))
+  const orderedPrimaryKeys = orderedPrimaryItems.map((item) =>
+    navKeyForTitle(item.title)
+  )
   const primaryItemsByKey = new Map(
     primaryItems.map((item) => [navKeyForTitle(item.title), item] as const)
   )
 
-  const configuredPrimaryItems = orderedPrimaryItems
-    .filter((item) => {
-      const key = navKeyForTitle(item.title)
-      return !navPreferences[key]?.hidden
-    })
+  const configuredPrimaryItems = orderedPrimaryItems.filter((item) => {
+    const key = navKeyForTitle(item.title)
+    return !navPreferences[key]?.hidden
+  })
 
   const translateItem = (item: NavItem): NavItem => {
     if ('items' in item) {
@@ -191,14 +296,18 @@ export function AppSidebar() {
     }
   }
 
-  const sidebarGroupsWithPreferences = sidebarData.navGroups.map((group, index) => ({
-    ...group,
-    items: index === 0 ? configuredPrimaryItems : group.items,
-  }))
+  const sidebarGroupsWithPreferences = sidebarData.navGroups.map(
+    (group, index) => ({
+      ...group,
+      items: index === 0 ? configuredPrimaryItems : group.items,
+    })
+  )
 
   const translatedNavGroups = sidebarGroupsWithPreferences.map((group) => ({
     ...group,
-    title: t(`groups.${normalizeNavKey(group.title)}`, { defaultValue: group.title }),
+    title: t(`groups.${normalizeNavKey(group.title)}`, {
+      defaultValue: group.title,
+    }),
     items: group.items.map(translateItem),
   }))
 
@@ -206,15 +315,56 @@ export function AppSidebar() {
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
         <TeamSwitcher teams={sidebarData.teams} />
+        <div className='px-2 pb-2' data-testid='shell-workspace-switcher'>
+          <p className='mb-2 text-xs font-medium text-muted-foreground'>
+            Workspace
+          </p>
+          <div className='grid grid-cols-3 gap-2'>
+            <button
+              type='button'
+              data-testid='shell-workspace-navigation'
+              data-active={activeWorkspace === 'navigation' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('navigation')}
+            >
+              <PanelLeft className='h-3.5 w-3.5' />
+              Nav
+            </button>
+            <button
+              type='button'
+              data-testid='shell-workspace-assistant'
+              data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('assistant')}
+            >
+              <MessageSquare className='h-3.5 w-3.5' />
+              Assistant
+            </button>
+            <button
+              type='button'
+              data-testid='shell-workspace-inbox'
+              data-active={activeWorkspace === 'inbox' ? 'true' : 'false'}
+              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+              onClick={() => setActiveWorkspace('inbox')}
+            >
+              <Inbox className='h-3.5 w-3.5' />
+              Inbox
+            </button>
+          </div>
+        </div>
 
         {/* Replace <TeamSwitch /> with the following <AppTitle />
          /* if you want to use the normal app title instead of TeamSwitch dropdown */}
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {translatedNavGroups.map((props) => (
-          <NavGroup key={props.title} {...props} />
-        ))}
+        {activeWorkspace === 'navigation'
+          ? translatedNavGroups.map((props) => (
+              <NavGroup key={props.title} {...props} />
+            ))
+          : null}
+        {activeWorkspace === 'assistant' ? <AssistantWorkspacePanel /> : null}
+        {activeWorkspace === 'inbox' ? <InboxWorkspacePanel /> : null}
       </SidebarContent>
       <SidebarFooter>
         <div className='px-2 pb-2'>
@@ -225,6 +375,7 @@ export function AppSidebar() {
             onClick={() => {
               setNavEditMode((open) => {
                 const nextOpen = !open
+                clearNavDragState()
                 if (nextOpen) {
                   setNavEditOrder(orderedPrimaryKeys)
                 } else {
@@ -243,7 +394,11 @@ export function AppSidebar() {
               })
             }}
           >
-            {navEditMode ? <X className='h-4 w-4' /> : <Pencil className='h-4 w-4' />}
+            {navEditMode ? (
+              <X className='h-4 w-4' />
+            ) : (
+              <Pencil className='h-4 w-4' />
+            )}
           </button>
           {navEditMode ? (
             <div
@@ -256,43 +411,93 @@ export function AppSidebar() {
                   return null
                 }
                 const hidden = navPreferences[key]?.hidden ?? false
+                const dragPosition =
+                  dragOverNavTarget?.key === key
+                    ? dragOverNavTarget.position
+                    : null
                 return (
                   <div
                     key={key}
-                    className='flex items-center justify-between gap-1'
-                    data-testid={`sidebar-nav-edit-item-${key}`}
+                    className='relative'
+                    data-testid={`sidebar-nav-edit-dropzone-${key}`}
+                    onDragOver={(event) => handleNavDragOver(key, event)}
+                    onDrop={(event) => handleNavDrop(key, event)}
+                    onDragLeave={() => {
+                      if (dragOverNavTarget?.key === key) {
+                        setDragOverNavTarget(null)
+                      }
+                    }}
                   >
-                    <span className={hidden ? 'opacity-50' : ''}>{item.title}</span>
-                    <div className='flex items-center gap-1'>
-                      <button
-                        type='button'
-                        data-testid={`sidebar-nav-move-up-${key}`}
-                        className='rounded border p-1 hover:bg-muted'
-                        onClick={() => movePrimaryItem(key, 'up')}
-                      >
-                        <ArrowUp className='h-3 w-3' />
-                      </button>
-                      <button
-                        type='button'
-                        data-testid={`sidebar-nav-move-down-${key}`}
-                        className='rounded border p-1 hover:bg-muted'
-                        onClick={() => movePrimaryItem(key, 'down')}
-                      >
-                        <ArrowDown className='h-3 w-3' />
-                      </button>
-                      <button
-                        type='button'
-                        data-testid={`sidebar-nav-visibility-${key}`}
-                        className='rounded border p-1 hover:bg-muted'
-                        onClick={() => togglePrimaryVisibility(key)}
-                      >
-                        {hidden ? (
-                          <EyeOff className='h-3 w-3' />
-                        ) : (
-                          <Eye className='h-3 w-3' />
-                        )}
-                      </button>
+                    {dragPosition === 'before' ? (
+                      <div
+                        className='absolute inset-x-1 -top-1 h-0.5 rounded-full bg-primary'
+                        data-testid={`sidebar-nav-drop-indicator-before-${key}`}
+                      />
+                    ) : null}
+                    <div
+                      className='flex items-center justify-between gap-2 rounded-md border border-transparent px-1 py-1'
+                      data-testid={`sidebar-nav-edit-item-${key}`}
+                      data-dragging={draggedNavKey === key ? 'true' : 'false'}
+                    >
+                      <div className='flex min-w-0 items-center gap-2'>
+                        <button
+                          type='button'
+                          draggable
+                          aria-label={`Drag ${item.title}`}
+                          data-testid={`sidebar-nav-drag-handle-${key}`}
+                          className='cursor-grab rounded border p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing'
+                          onDragStart={(event) =>
+                            handleNavDragStart(key, event)
+                          }
+                          onDragEnd={clearNavDragState}
+                        >
+                          <GripVertical className='h-3 w-3' />
+                        </button>
+                        <span
+                          className={
+                            hidden ? 'truncate opacity-50' : 'truncate'
+                          }
+                        >
+                          {item.title}
+                        </span>
+                      </div>
+                      <div className='flex items-center gap-1'>
+                        <button
+                          type='button'
+                          data-testid={`sidebar-nav-move-up-${key}`}
+                          className='rounded border p-1 hover:bg-muted'
+                          onClick={() => movePrimaryItem(key, 'up')}
+                        >
+                          <ArrowUp className='h-3 w-3' />
+                        </button>
+                        <button
+                          type='button'
+                          data-testid={`sidebar-nav-move-down-${key}`}
+                          className='rounded border p-1 hover:bg-muted'
+                          onClick={() => movePrimaryItem(key, 'down')}
+                        >
+                          <ArrowDown className='h-3 w-3' />
+                        </button>
+                        <button
+                          type='button'
+                          data-testid={`sidebar-nav-visibility-${key}`}
+                          className='rounded border p-1 hover:bg-muted'
+                          onClick={() => togglePrimaryVisibility(key)}
+                        >
+                          {hidden ? (
+                            <EyeOff className='h-3 w-3' />
+                          ) : (
+                            <Eye className='h-3 w-3' />
+                          )}
+                        </button>
+                      </div>
                     </div>
+                    {dragPosition === 'after' ? (
+                      <div
+                        className='absolute inset-x-1 -bottom-1 h-0.5 rounded-full bg-primary'
+                        data-testid={`sidebar-nav-drop-indicator-after-${key}`}
+                      />
+                    ) : null}
                   </div>
                 )
               })}
@@ -305,10 +510,16 @@ export function AppSidebar() {
           data-testid='sidebar-runtime-meta'
         >
           <p>
-            Version: <span data-testid='sidebar-app-version'>{runtimeMeta.appVersion}</span>
+            Version:{' '}
+            <span data-testid='sidebar-app-version'>
+              {runtimeMeta.appVersion}
+            </span>
           </p>
           <p>
-            Build Date: <span data-testid='sidebar-build-date'>{runtimeMeta.buildDate}</span>
+            Build Date:{' '}
+            <span data-testid='sidebar-build-date'>
+              {runtimeMeta.buildDate}
+            </span>
           </p>
         </div>
       </SidebarFooter>

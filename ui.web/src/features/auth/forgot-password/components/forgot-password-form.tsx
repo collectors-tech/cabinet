@@ -44,7 +44,6 @@ export function ForgotPasswordForm({
       loading: 'Sending email...',
       success: () => {
         setIsLoading(false)
-        form.reset()
         navigate({ to: '/otp' })
         return `Email sent to ${data.email}`
       },
@@ -72,7 +71,11 @@ export function ForgotPasswordForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        <Button
+          className='mt-2'
+          disabled={isLoading}
+          data-testid='forgot-password-submit'
+        >
           Continue
           {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
         </Button>

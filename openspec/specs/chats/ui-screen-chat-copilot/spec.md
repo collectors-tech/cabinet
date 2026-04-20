@@ -36,6 +36,16 @@ Chat SHALL support loading, empty, error, and ready states for threads/messages.
 - **WHEN** thread/message API fails
 - **THEN** chat SHALL show actionable error state with retry
 
+### Requirement UI-SCREEN-CHAT-COPILOT-009: Chat Copilot SHALL disable contradictory thread-creation controls while bootstrap context is unavailable
+When active profile or bootstrap chat context is unavailable, Chats SHALL not present enabled thread-creation controls that imply usable chat state.
+
+#### Scenario: Active profile bootstrap failure blocks thread creation
+- **GIVEN** user opens `/chats` and active profile bootstrap fails (for example `active_profile_404`)
+- **WHEN** unavailable state renders
+- **THEN** UI MUST show the unavailable/retry state
+- **AND** `New thread title` input MUST be disabled
+- **AND** `Create` MUST remain disabled until chat context recovers
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-004: Chat Copilot SHALL support AI-enabled photo analysis conversations
 When AI is enabled, chat SHALL support photo-driven analysis prompts and return structured suggestions linked to media assets.
 
@@ -75,6 +85,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
 
+#### Scenario: Empty thread cannot preview actions without source context
+- **GIVEN** a chat thread has no messages and no uploaded attachment context
+- **WHEN** the user opens Action Preview controls
+- **THEN** `Preview Action` MUST remain disabled until source conversation context exists
+- **AND** the UI MUST NOT generate preview artifacts from seeded defaults alone
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -92,6 +108,15 @@ Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (n
 - **THEN** trigger MUST render as icon-only control
 - **AND** visible text label next to the icon MUST NOT render in header row
 - **AND** control MUST retain accessible name via `aria-label` and/or tooltip
+
+### Requirement UI-SCREEN-CHAT-COPILOT-009: Top-level `/inbox` SHALL resolve to a real communications surface
+Cabinet SHALL provide a reachable authenticated `/inbox` route for communications access instead of falling through to the not-found page.
+
+#### Scenario: Open top-level inbox route
+- **GIVEN** an authenticated actor has an active local profile
+- **WHEN** user navigates directly to `/inbox`
+- **THEN** Cabinet MUST render a communications surface
+- **AND** route MUST NOT render the app 404 page
 
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
@@ -114,4 +139,7 @@ Header chat/copilot trigger in Cabinet shell SHALL render as icon-only action (n
 | UC-CHAT-04 | Preview and apply action | Confirm-before-apply enforced | planned: `cypress/e2e/ui/chat.cy.ts` `chat-guarded-apply` |
 | UC-CHAT-05 | Chat API failure | Error + retry appears | planned: `cypress/e2e/ui/chat.cy.ts` `chat-error-state` |
 | UC-CHAT-06 | Upload attachment | `Upload` links file to chat context | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-upload-attachment` |
-| UC-CHAT-07 | Preview action | `Preview Action` renders dry-run output before apply | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-preview-action` |
+| UC-CHAT-07 | Empty-thread preview gating | `Preview Action` stays disabled until source chat context exists | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-007 keeps Preview Action gated until thread context exists` |
+| UC-CHAT-08 | Preview action | `Preview Action` renders dry-run output before apply | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations` |
+| UC-CHAT-09 | Mobile image attachment flow | image attachment supports confirm-before-apply workflow | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow` |
+| UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |

@@ -4,7 +4,7 @@ describe('settings/profile', () => {
     cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/?$/)
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
   }
 
   beforeEach(() => {
@@ -14,6 +14,10 @@ describe('settings/profile', () => {
   })
 
   it('UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API', () => {
+    cy.contains('Profile settings').should('be.visible')
+    cy.contains('Manage your account profile and public display details.').should('be.visible')
+    cy.contains('settings.profile.title').should('not.exist')
+    cy.contains('settings.profile.description').should('not.exist')
     cy.contains('button', 'Update profile').should('not.be.disabled')
     cy.get('input[name="username"]').clear().type('collector-profile')
     cy.get('[data-testid="settings-profile-email-trigger"]').click()

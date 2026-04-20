@@ -56,7 +56,7 @@ export function ProfileDropdown() {
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem asChild>
-              <Link to='/settings'>
+              <Link to='/settings/profile'>
                 Profile
                 <DropdownMenuShortcut data-testid='profile-shortcut-profile'>
                   {shortcuts.profile}
@@ -64,7 +64,7 @@ export function ProfileDropdown() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to='/settings'>
+              <Link to='/settings/profile'>
                 Settings
                 <DropdownMenuShortcut data-testid='profile-shortcut-settings'>
                   {shortcuts.settings}

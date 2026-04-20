@@ -23,7 +23,10 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 		t.Fatalf("insert profile: %v", err)
 	}
 
-	thread, err := svc.CreateThread(ctx, profileID, "Main")
+	thread, err := svc.CreateThread(ctx, profileID, "Main", map[string]any{
+		"provider": "openai",
+		"model":    "gpt-4o-mini",
+	})
 	if err != nil {
 		t.Fatalf("CreateThread() error = %v", err)
 	}
@@ -31,7 +34,10 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 		t.Fatalf("expected thread ID")
 	}
 
-	if _, err := svc.CreateMessage(ctx, profileID, thread.ID, "user", "hello"); err != nil {
+	if _, err := svc.CreateMessage(ctx, profileID, thread.ID, "user", "hello", map[string]any{
+		"route":   map[string]any{"pathname": "/inventory"},
+		"profile": map[string]any{"id": profileID},
+	}); err != nil {
 		t.Fatalf("CreateMessage() error = %v", err)
 	}
 	msgs, err := svc.ListMessages(ctx, profileID, thread.ID)

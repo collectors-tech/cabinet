@@ -31,6 +31,7 @@ export function ForgotPassword() {
             Don't have an account?{' '}
             <Link
               to='/sign-up'
+              data-testid='forgot-password-sign-up-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Sign up

@@ -43,6 +43,10 @@ func TestHourlyUIValidationScriptContract(t *testing.T) {
 		"ui.web/cypress/e2e",
 		"pwsh -File ./cypress.ps1",
 		"gh issue create",
+		"control_intent_results",
+		"form_field_results",
+		"intent_pass_count",
+		"field_pass_count",
 	}
 
 	for _, fragment := range requiredFragments {

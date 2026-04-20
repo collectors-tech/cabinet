@@ -2,33 +2,38 @@
 
 Desktop-first collector intelligence app.
 
-## 🤖 Antfarm Automation (24/7)
+## 🚧 Current Delivery Mode
 
-This repo is configured to run through Antfarm with issue-fed workflow execution.
+This repo is currently worked **direct/manual**.
 
-### Source of truth
-- Workflow definition: `.antfarm/workflows/cabinet/`
-- Dispatcher script: `.antfarm/scripts/issue-dispatcher.ps1`
-- Dispatcher docs: `.antfarm/DISPATCHER.md`
+### Current source of truth
+- GitHub issue backlog + project board decide what gets worked next
+- OpenSpec + traceability define the required behavior
+- Validation evidence is mandatory before completion claims
+- Branch/deploy workflow is enforced through repo rules
 
-### How work flows (two lanes)
-1. **Build lane dispatcher** selects next eligible issue (`ready` OR `priority:p*` OR `high-priority`, excluding `blocked`) and starts `antfarm workflow run cabinet ...`.
-2. Build lane executes coding pipeline (`plan -> setup -> implement -> verify -> test -> pr -> review`) and publishes artifact manifests under `.antfarm/artifacts/`.
-3. **Validator lane dispatcher** watches artifact manifests and starts `antfarm workflow run cabinet-validator ...` for the latest artifact.
-4. Validator lane runs exhaustive UI validation (intent/form/layering), gates, and creates focused GitHub issues for failures/spec gaps.
-   - Cabinet validator runs in strict demo1 isolation with fixed runtime params:
-     - source exe: `C:\projects\collectors-tech\cabinet\bin\cabinet.exe`
-     - target exe: `C:\projects\collectors-tech\cabinet\tmp\demo1\bin\cabinet.exe`
-     - data dir: `C:\projects\collectors-tech\cabinet\tmp\demo1\data`
-     - flags: `-allow-parallel -no-open-browser -data-dir ... -profile demo1-helper -instance-name demo1-helper -port 17881`
-     - hash compare + copy source->target before launch when different/missing
-5. Validator always prefers latest artifact and may skip stale ones intentionally.
+### How work flows now
+1. Pick the next real backlog issue.
+2. Claim the issue with a comment and durable backlog/project state.
+3. Bind or update the relevant spec/governance requirement(s).
+4. Implement the issue on **one focused issue branch**.
+5. Validate with the required checks for the touched scope.
+6. Commit with an issue-prefixed message.
+7. Push and update the issue with evidence.
+8. Open a PR from the issue branch into `develop`.
+9. Manually run the local pipeline on the local dev instance, deploy locally, and run the full regression suite.
+10. Comment in the PR with the validation/deploy report and upload the report artifact there.
+11. Merge the PR into `develop`.
+12. Pull/update local `develop` and deploy demo/review lanes from `develop`.
+13. Merge `develop` into `main` only after Max explicitly approves.
 
 ### Workflow policy (enforced)
 - Issue -> Spec -> Validate -> Commit
-- UI checks must verify control intent outcomes, form-field behavior, and dialog/layering contracts
-- OpenSpec validation gate required (`openspec validate --all`)
-- Evidence-first reporting and issue templates required for failures
+- One focused branch per issue/fix whenever possible
+- UI checks must verify control intent outcomes, form-field behavior, dialog/layering behavior, and persistence/data outcomes where relevant
+- OpenSpec validation gate required for implementation work
+- No “done” claims without command/test evidence
+- Do the active work directly in-repo using the current manual delivery flow
 
 ## Current Status
 - Runtime scaffold implemented (issue `#1` in GitHub):
@@ -58,6 +63,18 @@ This repo is configured to run through Antfarm with issue-fed workflow execution
 - `http://127.0.0.1:17880/`
 - `http://127.0.0.1:17880/healthz`
 - `http://127.0.0.1:17880/api/runtime`
+
+### Isolated demo / helper instance
+- Runbook: `references/demo-instance-plan.md`
+- One-command helper launcher: `./scripts/runtime/start-demo2.ps1`
+
+## Branch / Demo Promotion Workflow
+- Create one focused branch per issue/fix.
+- Validate on that issue branch first.
+- Merge validated issue branches into `develop`.
+- Deploy demo/review lanes from `develop`, not from ad hoc branch heads or dirty working trees.
+- Every demo checkpoint should state the deployed branch and commit hash.
+- Merge `develop` into `main` only after Max explicitly says testing is complete and approves the merge.
 
 ## Frontend Development
 - Frontend source: `ui.web/` (shadcn-admin aligned)
@@ -176,6 +193,11 @@ openspec validate --changes --strict --no-interactive
 - `CABINET_WEBAUTHN_RP_NAME` default: `Cabinet`
 - `CABINET_BACKUP_INTERVAL_MINUTES` default: `60`
 - `VITE_CLERK_PUBLISHABLE_KEY` enables Clerk sign-in gate and cloud entitlement bootstrap in the web UI
+
+Exploratory auth setup guide:
+- `docs/auth/exploration-auth-setup.md`
+- preferred local exploration launcher: `scripts/runtime/start-exploration-local.ps1`
+- preferred Clerk exploration launcher: `scripts/runtime/start-exploration-clerk.ps1`
 
 eBay provider settings are stored per profile via `PUT /api/profiles/{profileID}/settings`:
 - `ebay_bearer_token`

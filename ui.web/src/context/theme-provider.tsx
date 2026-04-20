@@ -38,16 +38,10 @@ export function ThemeProvider({
   storageKey = THEME_COOKIE_NAME,
   ...props
 }: ThemeProviderProps) {
-  const [theme, _setTheme] = useState<Theme>(
-    () => (getCookie(storageKey) as Theme) || defaultTheme
-  )
-
-  useEffect(() => {
-    const storedTheme = getCookie(storageKey)
-    if (!storedTheme && theme !== 'dark') {
-      _setTheme('dark')
-    }
-  }, [storageKey, theme])
+  const [theme, _setTheme] = useState<Theme>(() => {
+    const storedTheme = getCookie(storageKey) as Theme | null
+    return storedTheme ?? defaultTheme
+  })
 
   // Optimized: Memoize the resolved theme calculation to prevent unnecessary re-computations
   const resolvedTheme = useMemo((): ResolvedTheme => {

@@ -1,3 +1,4 @@
+import { useSearch } from '@tanstack/react-router'
 import { Logo } from '@/assets/logo'
 import { cn } from '@/lib/utils'
 import dashboardDark from './assets/dashboard-dark.png'
@@ -5,6 +6,7 @@ import dashboardLight from './assets/dashboard-light.png'
 import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn2() {
+  const { redirect } = useSearch({ from: '/(auth)/sign-in-2' })
   return (
     <div className='relative container grid h-svh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0'>
       <div className='lg:p-8'>
@@ -22,11 +24,12 @@ export function SignIn2() {
               to log into your account
             </p>
           </div>
-          <UserAuthForm />
+          <UserAuthForm redirectTo={redirect} />
           <p className='px-8 text-center text-sm text-muted-foreground'>
             By clicking sign in, you agree to our{' '}
             <a
               href='/terms'
+              data-testid='sign-in-2-terms-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Terms of Service
@@ -34,6 +37,7 @@ export function SignIn2() {
             and{' '}
             <a
               href='/privacy'
+              data-testid='sign-in-2-privacy-link'
               className='underline underline-offset-4 hover:text-primary'
             >
               Privacy Policy

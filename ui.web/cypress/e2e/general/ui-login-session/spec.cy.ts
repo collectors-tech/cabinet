@@ -4,12 +4,10 @@ describe("ui-login-session", () => {
     cy.request("POST", "/api/test/runtime/setup-status", { state: "present" })
       .its("status")
       .should("eq", 200);
+    cy.e2eEnsureSignedOut();
   });
 
   it("UI-LOGIN-SESSION-001 redirects unauthenticated access to sign-in and returns to target after login", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     cy.visit("/inventory/");
     cy.location("pathname").should("eq", "/sign-in");
     cy.location("search").should("include", "redirect=");
@@ -26,9 +24,6 @@ describe("ui-login-session", () => {
   });
 
   it("UI-LOGIN-SESSION-002 keeps inline validation errors and allows retry without refresh", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     cy.visit("/sign-in");
     cy.get('input[name="email"]').type("invalid-email");
     cy.get('input[name="password"]').type("short");
@@ -44,16 +39,10 @@ describe("ui-login-session", () => {
     cy.get('input[name="password"]').clear().type("password123");
     cy.contains("button", "Sign in").click();
 
-    cy.location("pathname", { timeout: 15000 }).should(
-      "match",
-      /^(\/|\/inventory\/?|\/_authenticated\/?)$/
-    );
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
   });
 
   it("UI-LOGIN-SESSION-003 switches active profile after login and uses selected profile scope for subsequent API calls", () => {
-    cy.clearCookies();
-    cy.clearLocalStorage();
-
     let activeProfile = { id: "p1", name: "Default" };
 
     cy.intercept("GET", "/api/profiles", {
@@ -86,12 +75,12 @@ describe("ui-login-session", () => {
       body: { settings: {} },
     }).as("profile2Settings");
 
-    cy.visit("/sign-in?redirect=%2F");
+    cy.visit("/sign-in?redirect=%2Fdashboard");
     cy.get('input[name="email"]').type("e2e-login-session@example.com");
     cy.get('input[name="password"]').type("password123");
     cy.contains("button", "Sign in").click();
 
-    cy.location("pathname", { timeout: 15000 }).should("eq", "/");
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
     cy.wait("@profiles");
 
     cy.get('[data-testid="team-switcher-trigger"]').click();
@@ -125,5 +114,59 @@ describe("ui-login-session", () => {
       );
       cy.contains(/active_profile_404|active_profile_not_set/i).should("not.exist");
     });
+  });
+
+  it("UI-LOGIN-SESSION-005 redirects base unauthenticated entry to clean sign-in while preserving deep-link redirects", () => {
+    cy.visit("/");
+    cy.location("pathname").should("eq", "/sign-in");
+    cy.location("search").should("eq", "");
+
+    cy.get('input[name="email"]').type("e2e-clean-root-entry@example.com");
+    cy.get('input[name="password"]').type("password123");
+    cy.contains("button", "Sign in").click();
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/dashboard\/?$/);
+
+    cy.e2eEnsureSignedOut();
+
+    cy.visit("/inventory/");
+    cy.location("pathname").should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=");
+    cy.location("search").should("include", "%2Finventory%2F");
+  });
+
+  it("UI-LOGIN-SESSION-006 clears session state on direct sign-out route and re-gates protected routes", () => {
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
+    });
+
+    cy.visit("/sign-out?redirect=%2Finventory%2F");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=");
+    cy.location("search").should("include", "%2Finventory%2F");
+    cy.getCookie("thisisjustarandomstring").should("not.exist");
+
+    cy.visit("/inventory/");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=");
+    cy.location("search").should("include", "%2Finventory%2F");
+  });
+
+  it("UI-LOGIN-SESSION-007 re-gates the dashboard after sign-out", () => {
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/dashboard" });
+    });
+
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard");
+    cy.contains(/dashboard/i).should("be.visible");
+
+    cy.visit("/sign-out?redirect=%2Fdashboard");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=%2Fdashboard");
+    cy.getCookie("thisisjustarandomstring").should("not.exist");
+
+    cy.visit("/dashboard");
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=%2Fdashboard");
+    cy.contains(/dashboard/i).should("not.exist");
   });
 });

@@ -16,17 +16,25 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { labels } from '../data/data'
-import { taskSchema } from '../data/schema'
+import { type Task, taskSchema } from '../data/schema'
 import { useTasks } from './tasks-provider'
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
+  routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+  onWishlistMarkOwned?: (task: Task) => Promise<void>
+  wishlistActionItemID?: string | null
 }
 
 export function DataTableRowActions<TData>({
   row,
+  routePath,
+  onWishlistMarkOwned,
+  wishlistActionItemID,
 }: DataTableRowActionsProps<TData>) {
   const task = taskSchema.parse(row.original)
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+  const isWishlistActionPending = wishlistActionItemID === task.id
 
   const { setOpen, setCurrentRow } = useTasks()
 
@@ -36,12 +44,29 @@ export function DataTableRowActions<TData>({
         <Button
           variant='ghost'
           className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
+          data-testid='task-row-actions-trigger'
         >
           <DotsHorizontalIcon className='h-4 w-4' />
           <span className='sr-only'>Open menu</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-[160px]'>
+        {isWishlistRoute ? (
+          <>
+            <DropdownMenuItem
+              data-testid='wishlist-mark-owned-action'
+              disabled={!task.wishlistEntryID || isWishlistActionPending}
+              onClick={() => {
+                if (onWishlistMarkOwned) {
+                  void onWishlistMarkOwned(task)
+                }
+              }}
+            >
+              {isWishlistActionPending ? 'Moving...' : 'Mark owned'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem
           onClick={() => {
             setCurrentRow(task)

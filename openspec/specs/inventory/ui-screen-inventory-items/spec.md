@@ -69,6 +69,16 @@ Inventory browser controls SHALL expose `Status`, `Priority`, `View`, and list/c
 - **THEN** `Status`, `Priority`, and `View` controls MUST be available and operable
 - **AND** `Rows`/`Cards` mode toggles MUST switch presentation consistently
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-009: Inventory rows SHALL use inventory item semantics and MUST NOT leak task-template headers
+Inventory rows view MUST render Cabinet inventory item semantics instead of generic task-template columns.
+
+#### Scenario: Inventory semantics in rows view
+- **GIVEN** `/api/items` returns canonical inventory item metadata
+- **WHEN** user opens inventory rows view
+- **THEN** rows header semantics MUST render `Part #`, `Title`, `Condition`, and `Category`
+- **AND** row identity MUST align to inventory `part_number` values when available
+- **AND** UI MUST NOT render generic task-template headers such as `Task` or `Priority`
+
 #### Scenario: Quick-create collection while assigning inventory item
 - **GIVEN** user edits inventory item and opens collection picker
 - **WHEN** user creates a new collection from picker

@@ -107,6 +107,8 @@ export function Chats() {
     [selectedThreadId, threads]
   )
 
+  const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
+
   const loadMessages = useCallback(async (profileID: string, threadID: string) => {
     if (!profileID || !threadID) {
       setMessages([])
@@ -254,7 +256,7 @@ export function Chats() {
   }
 
   const previewCreateItemAction = async () => {
-    if (!activeProfileId || !selectedThreadId) {
+    if (!activeProfileId || !selectedThreadId || messages.length === 0) {
       return
     }
     setSendError(null)
@@ -344,8 +346,11 @@ export function Chats() {
           <h1 className='text-2xl font-bold tracking-tight'>Chats</h1>
           <MessagesSquare className='h-5 w-5 text-muted-foreground' />
         </div>
-        <p className='text-muted-foreground'>
+        <p className='text-muted-foreground' data-testid='chat-workspace-description'>
           Persistent profile-scoped conversation threads backed by Cabinet runtime.
+        </p>
+        <p className='text-sm text-muted-foreground' data-testid='chat-workspace-boundary-note'>
+          Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.
         </p>
         <Separator className='my-4' />
 
@@ -375,11 +380,12 @@ export function Chats() {
                 placeholder='New thread title'
                 value={threadTitle}
                 onChange={(event) => setThreadTitle(event.target.value)}
+                disabled={threadCreationDisabled}
               />
               <Button
                 data-testid='chat-create-thread-button'
                 onClick={() => void createThread()}
-                disabled={!threadTitle.trim() || loading}
+                disabled={threadCreationDisabled || !threadTitle.trim()}
               >
                 Create
               </Button>
@@ -544,7 +550,12 @@ export function Chats() {
                   type='button'
                   data-testid='chat-preview-action-button'
                   onClick={() => void previewCreateItemAction()}
-                  disabled={!selectedThreadId || !actionPartNumber.trim() || !actionTitle.trim()}
+                  disabled={
+                    !selectedThreadId ||
+                    messages.length === 0 ||
+                    !actionPartNumber.trim() ||
+                    !actionTitle.trim()
+                  }
                 >
                   Preview Action
                 </Button>

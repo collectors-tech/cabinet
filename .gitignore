@@ -5,6 +5,7 @@ ui.web/playwright-report/
 ui.web/test-results/
 ui.web/cypress/artifacts/
 bin/
+.idea/
 dist/
 cabinet.exe
 *.tmp
@@ -15,3 +16,13 @@ cabinet.exe
 internal/ui/static/assets/
 data/
 tmp/
+
+# Antfarm runtime/generated state (do not commit)
+.antfarm/state/
+.antfarm/artifacts/
+.antfarm/logs/
+progress-*.txt
+
+node_modules/
+review/
+workdocs/

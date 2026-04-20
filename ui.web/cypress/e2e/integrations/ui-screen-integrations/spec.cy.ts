@@ -73,6 +73,13 @@ describe('ui-screen-integrations', () => {
     cy.wait('@registry')
     cy.wait('@settings')
 
+    cy.contains('h1', 'Integrations').should('be.visible')
+    cy.contains('Configure providers, credentials, and connector actions.').should(
+      'be.visible'
+    )
+    cy.contains('integrations.title').should('not.exist')
+    cy.contains('integrations.description').should('not.exist')
+
     cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
     cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
       'be.visible'
@@ -237,6 +244,73 @@ describe('ui-screen-integrations', () => {
     cy.wait('@registryFail')
     cy.get('[data-testid="integrations-bootstrap-error"]').should('be.visible')
     cy.contains('button', 'Retry').should('be.visible')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context', () => {
+    let activeProfileCalls = 0
+
+    cy.intercept('GET', '/api/profiles/active', (req) => {
+      activeProfileCalls += 1
+      if (activeProfileCalls === 1) {
+        req.reply({ statusCode: 404, body: { error: 'active_profile_not_set' } })
+        return
+      }
+      req.reply({ statusCode: 200, body: { id: 'profile-e2e-002', name: 'Recovered Profile' } })
+    }).as('activeProfile')
+
+    cy.intercept('GET', '/api/profiles', {
+      statusCode: 200,
+      body: {
+        profiles: [{ id: 'profile-e2e-002', name: 'Recovered Profile' }],
+      },
+    }).as('profilesList')
+
+    cy.intercept('PUT', '/api/profiles/active', (req) => {
+      expect(req.body.profile_id).to.eq('profile-e2e-002')
+      req.reply({ statusCode: 200, body: { id: 'profile-e2e-002', name: 'Recovered Profile' } })
+    }).as('setActiveProfile')
+
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+        ],
+      },
+    }).as('registryRecovered')
+
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    }).as('settingsRecovered')
+
+    signIn()
+
+    cy.wait('@profilesList')
+    cy.get('[data-testid="integrations-profile-recovery"]').should('be.visible')
+    cy.get('[data-testid="integrations-recovery-profile-profile-e2e-002"]').click()
+    cy.wait('@setActiveProfile')
+    cy.wait('@registryRecovered')
+    cy.wait('@settingsRecovered')
+    cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
+    cy.get('[data-testid="integrations-bootstrap-error"]').should('not.exist')
   })
 
   it('INTEGRATION-018 + INTEGRATION-019: runtime provider registry includes configured shop domains and capability classification fields', () => {

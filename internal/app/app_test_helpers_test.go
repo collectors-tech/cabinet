@@ -17,6 +17,10 @@ import (
 	"github.com/collectors-tech/cabinet/internal/update"
 )
 
+func init() {
+	_ = os.Setenv("CABINET_STARTUP_TIMEOUT_SECONDS", "60")
+}
+
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 

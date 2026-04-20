@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -71,5 +72,49 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	if secondPayload.TotalItems != firstPayload.TotalItems {
 		t.Fatalf("expected stable total_items across reruns, first=%d second=%d", firstPayload.TotalItems, secondPayload.TotalItems)
 	}
-}
 
+	categories := make(map[string]struct{})
+	for _, status := range []string{"active", "wishlist"} {
+		itemsResp := doRequest(t, a, http.MethodGet, "/api/items?status="+status, nil, nil)
+		if itemsResp.Code != http.StatusOK {
+			t.Fatalf("list items status=%q code=%d body=%s", status, itemsResp.Code, itemsResp.Body.String())
+		}
+		var itemsPayload struct {
+			Items []struct {
+				Category string `json:"category"`
+			} `json:"items"`
+		}
+		if err := json.NewDecoder(itemsResp.Body).Decode(&itemsPayload); err != nil {
+			t.Fatalf("decode items payload for status=%q: %v", status, err)
+		}
+		for _, item := range itemsPayload.Items {
+			if strings.TrimSpace(item.Category) != "" {
+				categories[strings.TrimSpace(item.Category)] = struct{}{}
+			}
+		}
+	}
+	if len(categories) < 6 {
+		keys := make([]string, 0, len(categories))
+		for category := range categories {
+			keys = append(keys, category)
+		}
+		sort.Strings(keys)
+		t.Fatalf("expected representative seeded category coverage (>=6 categories), got %d: %v", len(categories), keys)
+	}
+	for _, required := range []string{"Diecast", "Slot Car", "Trading Card", "Action Figure", "Comic", "Model Kit"} {
+		if _, ok := categories[required]; !ok {
+			keys := make([]string, 0, len(categories))
+			for category := range categories {
+				keys = append(keys, category)
+			}
+			sort.Strings(keys)
+			t.Fatalf("expected seeded category %q, got %v", required, keys)
+		}
+	}
+	if firstPayload.TotalItems < 6 {
+		t.Fatalf("expected at least 6 seeded items for representative sample content, got %+v", firstPayload)
+	}
+	if firstPayload.TotalWishlist < 3 {
+		t.Fatalf("expected seeded wishlist coverage, got %+v", firstPayload)
+	}
+}

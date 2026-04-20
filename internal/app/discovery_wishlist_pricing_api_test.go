@@ -88,6 +88,22 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	if wid == "" {
 		t.Fatal("expected wishlist id")
 	}
+	itemsWishlist := doRequest(t, a, http.MethodGet, "/api/items?status=wishlist", nil, nil)
+	if itemsWishlist.Code != http.StatusOK {
+		t.Fatalf("wishlist items status=%d body=%s", itemsWishlist.Code, itemsWishlist.Body.String())
+	}
+	var wishlistItemsPayload struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(itemsWishlist.Body).Decode(&wishlistItemsPayload); err != nil {
+		t.Fatalf("decode wishlist items payload: %v", err)
+	}
+	if len(wishlistItemsPayload.Items) != 1 || wishlistItemsPayload.Items[0].ID != "i1" || wishlistItemsPayload.Items[0].Status != "wishlist" {
+		t.Fatalf("expected i1 in wishlist item listing, got %+v", wishlistItemsPayload.Items)
+	}
 	listWish := doRequest(t, a, http.MethodGet, "/api/wishlist", nil, nil)
 	if listWish.Code != http.StatusOK {
 		t.Fatalf("list wishlist status=%d body=%s", listWish.Code, listWish.Body.String())
@@ -145,5 +161,36 @@ func TestWishlistAndPricingEndpoints(t *testing.T) {
 	delWish := doRequest(t, a, http.MethodDelete, "/api/wishlist?id="+wid, nil, nil)
 	if delWish.Code != http.StatusNoContent {
 		t.Fatalf("delete wishlist status=%d body=%s", delWish.Code, delWish.Body.String())
+	}
+	itemsActive := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if itemsActive.Code != http.StatusOK {
+		t.Fatalf("active items status=%d body=%s", itemsActive.Code, itemsActive.Body.String())
+	}
+	var activeItemsPayload struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(itemsActive.Body).Decode(&activeItemsPayload); err != nil {
+		t.Fatalf("decode active items payload: %v", err)
+	}
+	if len(activeItemsPayload.Items) != 1 || activeItemsPayload.Items[0].ID != "i1" || activeItemsPayload.Items[0].Status != "active" {
+		t.Fatalf("expected i1 restored to active item listing after wishlist delete, got %+v", activeItemsPayload.Items)
+	}
+	itemsWishlistAfterDelete := doRequest(t, a, http.MethodGet, "/api/items?status=wishlist", nil, nil)
+	if itemsWishlistAfterDelete.Code != http.StatusOK {
+		t.Fatalf("wishlist items after delete status=%d body=%s", itemsWishlistAfterDelete.Code, itemsWishlistAfterDelete.Body.String())
+	}
+	var wishlistItemsAfterDeletePayload struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(itemsWishlistAfterDelete.Body).Decode(&wishlistItemsAfterDeletePayload); err != nil {
+		t.Fatalf("decode wishlist items after delete payload: %v", err)
+	}
+	if len(wishlistItemsAfterDeletePayload.Items) != 0 {
+		t.Fatalf("expected wishlist item listing empty after delete, got %+v", wishlistItemsAfterDeletePayload.Items)
 	}
 }

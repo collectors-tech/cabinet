@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "general": "常规",
+    "other": "其他"
+  },
+  "items": {
+    "dashboard": "首页",
+    "inventory": "库存",
+    "wishlist": "心愿单",
+    "collections": "合集",
+    "discoveries": "发现",
+    "market-watch": "市场观察",
+    "integrations": "集成",
+    "chats": "聊天",
+    "users": "用户",
+    "reports": "报告",
+    "settings": "设置",
+    "profile": "个人资料",
+    "account": "账户",
+    "appearance": "外观",
+    "notifications": "通知",
+    "display": "显示",
+    "help-center": "帮助中心",
+    "storage": "存储"
+  }
+}

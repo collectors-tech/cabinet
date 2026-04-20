@@ -65,13 +65,13 @@ describe('scanner/ui-screen-card-scanner', () => {
 
     cy.get('[data-testid="card-scanner-quick-category"]').should('be.visible')
     cy.get('[data-testid="card-scanner-quick-category-view-cards"]').click()
-    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^=\"card-scanner-unlinked-item-\"]')
+    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^="card-scanner-unlinked-item-"]')
       .should('have.length', 2)
       .first()
       .should('contain', 'photo-2.jpg')
 
     cy.get('[data-testid="card-scanner-mark-linked-photo-2.jpg"]').click()
-    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^=\"card-scanner-unlinked-item-\"]')
+    cy.get('[data-testid="card-scanner-unlinked-cards-list"] [data-testid^="card-scanner-unlinked-item-"]')
       .should('have.length', 1)
       .first()
       .should('contain', 'photo-1.jpg')

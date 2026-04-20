@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { useSearch } from '@tanstack/react-router'
+import { Link, useSearch } from '@tanstack/react-router'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { AuthLayout } from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
 
@@ -57,15 +56,18 @@ export function SignIn() {
   const [setupRequired, setSetupRequired] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setupConfigPath, setSetupConfigPath] = useState('')
-  const [setupDefaultStorageDataDir, setSetupDefaultStorageDataDir] = useState('')
-  const [setupDefaultRuntimeHost, setSetupDefaultRuntimeHost] = useState('127.0.0.1')
+  const [setupDefaultStorageDataDir, setSetupDefaultStorageDataDir] =
+    useState('')
+  const [setupDefaultRuntimeHost, setSetupDefaultRuntimeHost] =
+    useState('127.0.0.1')
   const [setupDefaultRuntimePort, setSetupDefaultRuntimePort] = useState(17880)
   const [completingSetup, setCompletingSetup] = useState(false)
   const [setupStep, setSetupStep] = useState(0)
   const [setupCompleteState, setSetupCompleteState] =
     useState<RuntimeSetupCompletePayload | null>(null)
   const [setupCompleteFeedback, setSetupCompleteFeedback] = useState('')
-  const [setupEntryMode, setSetupEntryMode] = useState<SetupEntryMode>('welcome')
+  const [setupEntryMode, setSetupEntryMode] =
+    useState<SetupEntryMode>('welcome')
   const [setupImportSourcePath, setSetupImportSourcePath] = useState('')
   const [setupForm, setSetupForm] = useState<SetupFormState>({
     instanceName: 'Primary',
@@ -100,7 +102,9 @@ export function SignIn() {
           setSetupRequired(Boolean(payload.setup_required))
           setSetupConfigPath(payload.config_path ?? '')
           setSetupDefaultStorageDataDir(payload.default_storage_data_dir ?? '')
-          setSetupDefaultRuntimeHost(payload.default_runtime_host ?? '127.0.0.1')
+          setSetupDefaultRuntimeHost(
+            payload.default_runtime_host ?? '127.0.0.1'
+          )
           setSetupDefaultRuntimePort(payload.default_runtime_port ?? 17880)
           setSetupForm((previous) => ({
             ...previous,
@@ -168,7 +172,10 @@ export function SignIn() {
       return
     }
     if (setupStep === 1) {
-      if (setupForm.storageMode === 'custom' && setupForm.customDataDir.trim() === '') {
+      if (
+        setupForm.storageMode === 'custom' &&
+        setupForm.customDataDir.trim() === ''
+      ) {
         setSetupError('Custom storage path is required.')
         return
       }
@@ -199,13 +206,21 @@ export function SignIn() {
       }
     }
     if (setupStep === 2) {
-      if (setupForm.runtimePortMode === 'fixed' && setupForm.runtimeFixedPort <= 0) {
-        setSetupError('Fixed port value is required when runtime port mode is fixed.')
+      if (
+        setupForm.runtimePortMode === 'fixed' &&
+        setupForm.runtimeFixedPort <= 0
+      ) {
+        setSetupError(
+          'Fixed port value is required when runtime port mode is fixed.'
+        )
         return
       }
     }
     if (setupStep === 3) {
-      if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
+      if (
+        setupForm.authMode === 'clerk' &&
+        setupForm.clerkPublishableKey.trim() === ''
+      ) {
         setSetupError('Clerk publishable key is required.')
         return
       }
@@ -245,7 +260,8 @@ export function SignIn() {
         }
         throw new Error(message)
       }
-      const completePayload = (await response.json()) as RuntimeSetupCompletePayload
+      const completePayload =
+        (await response.json()) as RuntimeSetupCompletePayload
       setSetupCompleteState(completePayload)
       setSetupCompleteFeedback(
         options?.defaultsApplied
@@ -262,7 +278,10 @@ export function SignIn() {
   }
 
   async function completeSetup() {
-    if (setupForm.authMode === 'clerk' && setupForm.clerkPublishableKey.trim() === '') {
+    if (
+      setupForm.authMode === 'clerk' &&
+      setupForm.clerkPublishableKey.trim() === ''
+    ) {
       setSetupError('Clerk publishable key is required.')
       return
     }
@@ -289,7 +308,7 @@ export function SignIn() {
     })
   }
 
-  async function useDefaultsSetup() {
+  async function applyDefaultsSetup() {
     await submitSetupComplete(
       {
         instance_name: 'Cabinet Local',
@@ -357,7 +376,9 @@ export function SignIn() {
       setSetupStep(0)
       setSetupImportSourcePath('')
     } catch (error) {
-      setSetupError(error instanceof Error ? error.message : 'setup_import_failed')
+      setSetupError(
+        error instanceof Error ? error.message : 'setup_import_failed'
+      )
     } finally {
       setCompletingSetup(false)
     }
@@ -372,7 +393,9 @@ export function SignIn() {
 
   function openConfigFolderFromSetup() {
     const targetPath = setupCompleteState?.config_path ?? 'unknown path'
-    setSetupCompleteFeedback(`Config folder action requested for ${targetPath}.`)
+    setSetupCompleteFeedback(
+      `Config folder action requested for ${targetPath}.`
+    )
   }
 
   if (setupLoading) {
@@ -380,7 +403,9 @@ export function SignIn() {
       <AuthLayout>
         <Card className='gap-4'>
           <CardHeader>
-            <CardTitle className='text-lg tracking-tight'>Setup Wizard</CardTitle>
+            <CardTitle className='text-lg tracking-tight'>
+              Setup Wizard
+            </CardTitle>
             <CardDescription>Checking startup configuration...</CardDescription>
           </CardHeader>
         </Card>
@@ -394,7 +419,9 @@ export function SignIn() {
         <AuthLayout>
           <Card className='gap-4' data-testid='setup-wizard-complete-state'>
             <CardHeader>
-              <CardTitle className='text-lg tracking-tight'>Config complete</CardTitle>
+              <CardTitle className='text-lg tracking-tight'>
+                Config complete
+              </CardTitle>
               <CardDescription>
                 Setup is complete. Start Cabinet with your configuration.
               </CardDescription>
@@ -402,37 +429,55 @@ export function SignIn() {
             <CardContent className='space-y-3'>
               <p className='text-sm text-muted-foreground'>
                 Instance:{' '}
-                <span className='font-medium' data-testid='setup-complete-instance-name'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-instance-name'
+                >
                   {setupCompleteState.instance_name ?? 'unknown'}
                 </span>
               </p>
               <p className='text-sm text-muted-foreground'>
                 Config path:{' '}
-                <span className='font-medium' data-testid='setup-complete-config-path'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-config-path'
+                >
                   {setupCompleteState.config_path ?? 'unknown'}
                 </span>
               </p>
               <p className='text-sm text-muted-foreground'>
                 Data directory:{' '}
-                <span className='font-medium' data-testid='setup-complete-data-dir'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-data-dir'
+                >
                   {setupCompleteState.data_dir ?? 'unknown'}
                 </span>
               </p>
               <p className='text-sm text-muted-foreground'>
                 Media directory:{' '}
-                <span className='font-medium' data-testid='setup-complete-media-dir'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-media-dir'
+                >
                   {setupCompleteState.media_dir ?? 'unknown'}
                 </span>
               </p>
               <p className='text-sm text-muted-foreground'>
                 Runtime URL:{' '}
-                <span className='font-medium' data-testid='setup-complete-runtime-url'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-runtime-url'
+                >
                   {setupCompleteState.runtime_url ?? 'unknown'}
                 </span>
               </p>
               <p className='text-sm text-muted-foreground'>
                 Runtime port:{' '}
-                <span className='font-medium' data-testid='setup-complete-runtime-port'>
+                <span
+                  className='font-medium'
+                  data-testid='setup-complete-runtime-port'
+                >
                   {setupCompleteState.runtime_port ?? 0}
                 </span>
               </p>
@@ -445,7 +490,10 @@ export function SignIn() {
                 </p>
               ) : null}
               <div className='flex flex-wrap items-center gap-2'>
-                <Button data-testid='setup-open-cabinet' onClick={startAppFromSetup}>
+                <Button
+                  data-testid='setup-open-cabinet'
+                  onClick={startAppFromSetup}
+                >
                   Open Cabinet
                 </Button>
                 <Button
@@ -473,21 +521,28 @@ export function SignIn() {
       <AuthLayout>
         <Card className='gap-4' data-testid='setup-wizard'>
           <CardHeader>
-            <CardTitle className='text-lg tracking-tight'>Setup Wizard</CardTitle>
+            <CardTitle className='text-lg tracking-tight'>
+              Setup Wizard
+            </CardTitle>
             <CardDescription>
               Complete initial runtime setup before continuing to sign in.
             </CardDescription>
             {setupEntryMode === 'form' ? (
               <>
                 <p
-                  className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+                  className='text-xs font-semibold tracking-wide text-muted-foreground uppercase'
                   data-testid='setup-step-indicator'
                 >
                   STEP {setupStep + 1} OF {totalSteps}
                 </p>
                 <div className='flex items-center justify-between gap-2'>
-                  <p className='text-sm text-muted-foreground'>Setup Progress</p>
-                  <p className='text-sm font-medium' data-testid='setup-step-percent'>
+                  <p className='text-sm text-muted-foreground'>
+                    Setup Progress
+                  </p>
+                  <p
+                    className='text-sm font-medium'
+                    data-testid='setup-step-percent'
+                  >
                     {progressPercent}%
                   </p>
                 </div>
@@ -509,8 +564,8 @@ export function SignIn() {
           </CardHeader>
           <CardContent className='space-y-3'>
             <p className='text-sm text-muted-foreground'>
-              Cabinet detected missing startup configuration. Create the setup file
-              to unlock login.
+              Cabinet detected missing startup configuration. Create the setup
+              file to unlock login.
             </p>
             {setupEntryMode === 'welcome' ? (
               <div className='flex flex-wrap items-center gap-2'>
@@ -521,7 +576,7 @@ export function SignIn() {
                   variant='secondary'
                   data-testid='setup-use-defaults'
                   disabled={completingSetup}
-                  onClick={() => void useDefaultsSetup()}
+                  onClick={() => void applyDefaultsSetup()}
                 >
                   {completingSetup ? 'Applying Defaults...' : 'Use Defaults'}
                 </Button>
@@ -541,7 +596,9 @@ export function SignIn() {
                   <input
                     className='h-9 rounded-md border bg-background px-3'
                     value={setupImportSourcePath}
-                    onChange={(event) => setSetupImportSourcePath(event.target.value)}
+                    onChange={(event) =>
+                      setSetupImportSourcePath(event.target.value)
+                    }
                     data-testid='setup-import-source-path'
                   />
                 </label>
@@ -551,7 +608,9 @@ export function SignIn() {
                     disabled={completingSetup}
                     onClick={() => void importExistingSetupConfig()}
                   >
-                    {completingSetup ? 'Importing...' : 'Import Existing Config'}
+                    {completingSetup
+                      ? 'Importing...'
+                      : 'Import Existing Config'}
                   </Button>
                   <Button
                     variant='outline'
@@ -596,7 +655,10 @@ export function SignIn() {
                 </label>
                 <p className='text-xs text-muted-foreground'>
                   Config path preview:{' '}
-                  <span className='font-medium' data-testid='setup-config-path-preview'>
+                  <span
+                    className='font-medium'
+                    data-testid='setup-config-path-preview'
+                  >
                     {setupConfigPath || 'unknown'}
                   </span>
                 </p>
@@ -613,7 +675,9 @@ export function SignIn() {
                       setSetupForm((previous) => ({
                         ...previous,
                         storageMode:
-                          event.target.value === 'custom' ? 'custom' : 'exe_local',
+                          event.target.value === 'custom'
+                            ? 'custom'
+                            : 'exe_local',
                       }))
                     }
                     data-testid='setup-storage-mode'
@@ -703,7 +767,10 @@ export function SignIn() {
                 ) : null}
                 <p className='text-xs text-muted-foreground'>
                   Resolved URL preview:{' '}
-                  <span className='font-medium' data-testid='setup-runtime-url-preview'>
+                  <span
+                    className='font-medium'
+                    data-testid='setup-runtime-url-preview'
+                  >
                     {selectedRuntimeURL()}
                   </span>
                 </p>
@@ -711,8 +778,8 @@ export function SignIn() {
                   className='text-xs text-muted-foreground'
                   data-testid='setup-runtime-fallback-message'
                 >
-                  Auto mode allows runtime port fallback when another local instance is
-                  already using the default port.
+                  Auto mode allows runtime port fallback when another local
+                  instance is already using the default port.
                 </p>
               </div>
             ) : null}
@@ -726,7 +793,8 @@ export function SignIn() {
                     onChange={(event) =>
                       setSetupForm((previous) => ({
                         ...previous,
-                        authMode: event.target.value === 'clerk' ? 'clerk' : 'local',
+                        authMode:
+                          event.target.value === 'clerk' ? 'clerk' : 'local',
                         clerkPublishableKey:
                           event.target.value === 'clerk'
                             ? previous.clerkPublishableKey
@@ -765,9 +833,12 @@ export function SignIn() {
             ) : null}
             {setupEntryMode === 'form' && setupStep === 4 ? (
               <div className='grid gap-3'>
-                <p className='text-xs text-muted-foreground' data-testid='setup-integrations-guidance'>
-                  Optional baseline toggles. You can edit integrations any time later in
-                  Settings.
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='setup-integrations-guidance'
+                >
+                  Optional baseline toggles. You can edit integrations any time
+                  later in Settings.
                 </p>
                 <label className='flex items-center gap-2 text-sm'>
                   <input
@@ -816,19 +887,23 @@ export function SignIn() {
             {setupEntryMode === 'form' && setupStep === 5 ? (
               <div className='rounded-md border bg-muted/40 p-3 text-sm'>
                 <p>
-                  <strong>Instance:</strong> {setupForm.instanceName || 'Not set'}
+                  <strong>Instance:</strong>{' '}
+                  {setupForm.instanceName || 'Not set'}
                 </p>
                 <p>
-                  <strong>Profile Key:</strong> {setupForm.profileKey || 'Not set'}
+                  <strong>Profile Key:</strong>{' '}
+                  {setupForm.profileKey || 'Not set'}
                 </p>
                 <p>
                   <strong>Storage Mode:</strong> {setupForm.storageMode}
                 </p>
                 <p>
-                  <strong>Data Dir:</strong> {selectedStorageDataDir() || 'Not set'}
+                  <strong>Data Dir:</strong>{' '}
+                  {selectedStorageDataDir() || 'Not set'}
                 </p>
                 <p>
-                  <strong>Portable:</strong> {setupForm.portableMode ? 'enabled' : 'disabled'}
+                  <strong>Portable:</strong>{' '}
+                  {setupForm.portableMode ? 'enabled' : 'disabled'}
                 </p>
                 <p>
                   <strong>Runtime Mode:</strong> {setupForm.runtimePortMode}
@@ -861,7 +936,10 @@ export function SignIn() {
               </div>
             ) : null}
             {setupError ? (
-              <p className='text-sm text-destructive' data-testid='setup-wizard-error'>
+              <p
+                className='text-sm text-destructive'
+                data-testid='setup-wizard-error'
+              >
                 {setupError}
               </p>
             ) : null}
@@ -889,7 +967,9 @@ export function SignIn() {
                     disabled={completingSetup}
                     data-testid='setup-complete'
                   >
-                    {completingSetup ? 'Creating Config...' : 'Create Config & Launch'}
+                    {completingSetup
+                      ? 'Creating Config...'
+                      : 'Create Config & Launch'}
                   </Button>
                 )}
               </div>
@@ -917,7 +997,10 @@ export function SignIn() {
           <div className='w-full space-y-3 px-8 text-center text-sm text-muted-foreground'>
             <p>
               New to Cabinet?{' '}
-              <Link to='/sign-up' className='underline underline-offset-4 hover:text-primary'>
+              <Link
+                to='/sign-up'
+                className='underline underline-offset-4 hover:text-primary'
+              >
                 Create account
               </Link>
             </p>

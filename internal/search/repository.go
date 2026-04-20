@@ -92,7 +92,7 @@ func (r *Repository) SearchItemsByProfile(ctx context.Context, profileID string,
 		args = append(args, status)
 	}
 	if t := strings.TrimSpace(q.Text); t != "" {
-		where = append(where, "(EXISTS (SELECT 1 FROM canonical_items_fts WHERE item_id = c.id AND canonical_items_fts MATCH ?) OR EXISTS (SELECT 1 FROM instances it WHERE it.item_id = c.id AND (it.notes LIKE ? OR it.storage_location LIKE ? OR it.status LIKE ? OR it.condition LIKE ?)))")
+		where = append(where, "c.id IN (SELECT item_id FROM canonical_items_fts WHERE canonical_items_fts MATCH ? UNION SELECT it.item_id FROM instances it WHERE it.notes LIKE ? OR it.storage_location LIKE ? OR it.status LIKE ? OR it.condition LIKE ?)")
 		like := "%" + t + "%"
 		args = append(args, t, like, like, like, like)
 	}

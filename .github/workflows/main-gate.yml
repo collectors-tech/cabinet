@@ -1,0 +1,108 @@
+name: Main Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-ci:
+    name: Go CI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install OpenSpec CLI
+        run: npm install -g @fission-ai/openspec@latest
+      - name: Validate OpenSpec
+        run: openspec validate --all --strict --no-interactive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test ./...
+
+  openapi:
+    name: OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Verify critical API/OpenAPI parity tests
+        run: go test ./internal/app -run TestOpenAPIDocumentsOnboardingSampleDataEndpoint
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@latest lint docs/api/openapi.yaml
+      - name: Build API docs
+        run: npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html
+
+  ui-build:
+    name: UI Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build ui.web bundle
+        run: npm run build
+        working-directory: ui.web
+
+  cypress:
+    name: Cypress
+    needs: ui-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: ui.web/package-lock.json
+      - name: Install ui.web dependencies for Cypress
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for Cypress
+        run: npm run build
+        working-directory: ui.web
+      - name: Run Cypress smoke gate
+        uses: cypress-io/github-action@v6
+        with:
+          install: false
+          working-directory: ui.web
+          start: npm run serve:go
+          wait-on: "http://127.0.0.1:17880/healthz"
+          wait-on-timeout: 120
+          command: npm run e2e:ci-smoke
+          browser: electron
+        env:
+          CABINET_E2E_MODE: "1"
+          CABINET_OPEN_BROWSER: "0"
+      - name: Upload Cypress artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-artifacts
+          path: |
+            ui.web/cypress/artifacts

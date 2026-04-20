@@ -20,21 +20,23 @@ type Service struct {
 }
 
 type Thread struct {
-	ID        string `json:"id"`
-	ProfileID string `json:"profile_id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        string         `json:"id"`
+	ProfileID string         `json:"profile_id"`
+	Title     string         `json:"title"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
 }
 
 type Message struct {
-	ID          string `json:"id"`
-	ProfileID   string `json:"profile_id"`
-	ThreadID    string `json:"thread_id"`
-	Role        string `json:"role"`
-	Content     string `json:"content"`
-	Attachments string `json:"attachments_json"`
-	CreatedAt   string `json:"created_at"`
+	ID          string         `json:"id"`
+	ProfileID   string         `json:"profile_id"`
+	ThreadID    string         `json:"thread_id"`
+	Role        string         `json:"role"`
+	Content     string         `json:"content"`
+	Attachments string         `json:"attachments_json"`
+	Context     map[string]any `json:"context,omitempty"`
+	CreatedAt   string         `json:"created_at"`
 }
 
 type Attachment struct {
@@ -46,6 +48,19 @@ type Attachment struct {
 	SizeBytes int64  `json:"size_bytes"`
 	Path      string `json:"path"`
 	CreatedAt string `json:"created_at"`
+}
+
+type InboxItem struct {
+	ID        string         `json:"id"`
+	ProfileID string         `json:"profile_id"`
+	ThreadID  string         `json:"thread_id"`
+	Source    string         `json:"source"`
+	Status    string         `json:"status"`
+	Title     string         `json:"title"`
+	Summary   string         `json:"summary"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
 }
 
 type PreviewActionInput struct {
@@ -85,7 +100,7 @@ func NewService(db *sql.DB, dataDir string) *Service {
 	return &Service{db: db, dataDir: dataDir}
 }
 
-func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Thread, error) {
+func (s *Service) CreateThread(ctx context.Context, profileID, title string, metadata map[string]any) (Thread, error) {
 	profileID = strings.TrimSpace(profileID)
 	title = strings.TrimSpace(title)
 	if profileID == "" {
@@ -95,10 +110,11 @@ func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Th
 		return Thread{}, fmt.Errorf("title is required")
 	}
 	id := uuid.NewString()
+	metadataJSON := marshalContextJSON(metadata)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO chat_threads(id, profile_id, title)
-		VALUES (?, ?, ?)
-	`, id, profileID, title); err != nil {
+		INSERT INTO chat_threads(id, profile_id, title, metadata_json)
+		VALUES (?, ?, ?, ?)
+	`, id, profileID, title, metadataJSON); err != nil {
 		return Thread{}, fmt.Errorf("create thread: %w", err)
 	}
 	return s.GetThread(ctx, profileID, id)
@@ -107,7 +123,7 @@ func (s *Service) CreateThread(ctx context.Context, profileID, title string) (Th
 func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, error) {
 	profileID = strings.TrimSpace(profileID)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, profile_id, title, created_at, updated_at
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
 		FROM chat_threads
 		WHERE profile_id = ?
 		ORDER BY updated_at DESC, created_at DESC
@@ -119,9 +135,11 @@ func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, 
 	var out []Thread
 	for rows.Next() {
 		var t Thread
-		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		var metadataJSON string
+		if err := rows.Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
+		t.Metadata = parseContextJSON(metadataJSON)
 		out = append(out, t)
 	}
 	return out, rows.Err()
@@ -129,21 +147,23 @@ func (s *Service) ListThreads(ctx context.Context, profileID string) ([]Thread, 
 
 func (s *Service) GetThread(ctx context.Context, profileID, threadID string) (Thread, error) {
 	var t Thread
+	var metadataJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, title, created_at, updated_at
+		SELECT id, profile_id, title, metadata_json, created_at, updated_at
 		FROM chat_threads
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(threadID), strings.TrimSpace(profileID)).Scan(&t.ID, &t.ProfileID, &t.Title, &t.CreatedAt, &t.UpdatedAt)
+	`, strings.TrimSpace(threadID), strings.TrimSpace(profileID)).Scan(&t.ID, &t.ProfileID, &t.Title, &metadataJSON, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Thread{}, fmt.Errorf("thread not found")
 		}
 		return Thread{}, err
 	}
+	t.Metadata = parseContextJSON(metadataJSON)
 	return t, nil
 }
 
-func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string) (Message, error) {
+func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (Message, error) {
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	role = strings.TrimSpace(strings.ToLower(role))
@@ -161,10 +181,11 @@ func (s *Service) CreateMessage(ctx context.Context, profileID, threadID, role, 
 		return Message{}, err
 	}
 	id := uuid.NewString()
+	contextJSON := marshalContextJSON(messageContext)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json)
-		VALUES (?, ?, ?, ?, ?, '[]')
-	`, id, profileID, threadID, role, content); err != nil {
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES (?, ?, ?, ?, ?, '[]', ?)
+	`, id, profileID, threadID, role, content, contextJSON); err != nil {
 		return Message{}, fmt.Errorf("create message: %w", err)
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, threadID)
@@ -175,7 +196,7 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	profileID = strings.TrimSpace(profileID)
 	threadID = strings.TrimSpace(threadID)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE profile_id = ? AND thread_id = ?
 		ORDER BY created_at ASC
@@ -187,9 +208,11 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 	var out []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt); err != nil {
+		var contextJSON string
+		if err := rows.Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt); err != nil {
 			return nil, err
 		}
+		m.Context = parseContextJSON(contextJSON)
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -197,18 +220,119 @@ func (s *Service) ListMessages(ctx context.Context, profileID, threadID string) 
 
 func (s *Service) getMessage(ctx context.Context, profileID, messageID string) (Message, error) {
 	var m Message
+	var contextJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, thread_id, role, content, attachments_json, created_at
+		SELECT id, profile_id, thread_id, role, content, attachments_json, context_json, created_at
 		FROM chat_messages
 		WHERE id = ? AND profile_id = ?
-	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &m.CreatedAt)
+	`, strings.TrimSpace(messageID), strings.TrimSpace(profileID)).Scan(&m.ID, &m.ProfileID, &m.ThreadID, &m.Role, &m.Content, &m.Attachments, &contextJSON, &m.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Message{}, fmt.Errorf("message not found")
 		}
 		return Message{}, err
 	}
+	m.Context = parseContextJSON(contextJSON)
 	return m, nil
+}
+
+func marshalContextJSON(messageContext map[string]any) string {
+	if len(messageContext) == 0 {
+		return "{}"
+	}
+	raw, err := json.Marshal(messageContext)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func parseContextJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxItem, error) {
+	item.ProfileID = strings.TrimSpace(item.ProfileID)
+	item.ThreadID = strings.TrimSpace(item.ThreadID)
+	item.Source = strings.TrimSpace(item.Source)
+	item.Status = strings.TrimSpace(item.Status)
+	item.Title = strings.TrimSpace(item.Title)
+	item.Summary = strings.TrimSpace(item.Summary)
+	if item.ProfileID == "" || item.ThreadID == "" {
+		return InboxItem{}, fmt.Errorf("profile_id and thread_id are required")
+	}
+	if item.Source == "" {
+		item.Source = "assistant_handoff"
+	}
+	if item.Status == "" {
+		item.Status = "queued"
+	}
+	if item.Title == "" {
+		item.Title = "Assistant handoff queued"
+	}
+	if _, err := s.GetThread(ctx, item.ProfileID, item.ThreadID); err != nil {
+		return InboxItem{}, err
+	}
+	item.ID = uuid.NewString()
+	metadataJSON := marshalContextJSON(item.Metadata)
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_inbox_items(id, profile_id, thread_id, source, status, title, summary, metadata_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, item.ID, item.ProfileID, item.ThreadID, item.Source, item.Status, item.Title, item.Summary, metadataJSON); err != nil {
+		return InboxItem{}, fmt.Errorf("create inbox item: %w", err)
+	}
+	return s.getInboxItem(ctx, item.ProfileID, item.ID)
+}
+
+func (s *Service) ListInboxItems(ctx context.Context, profileID string) ([]InboxItem, error) {
+	profileID = strings.TrimSpace(profileID)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE profile_id = ?
+		ORDER BY updated_at DESC, created_at DESC
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []InboxItem
+	for rows.Next() {
+		var item InboxItem
+		var metadataJSON string
+		if err := rows.Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		item.Metadata = parseContextJSON(metadataJSON)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) getInboxItem(ctx context.Context, profileID, inboxID string) (InboxItem, error) {
+	var item InboxItem
+	var metadataJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, thread_id, source, status, title, summary, metadata_json, created_at, updated_at
+		FROM chat_inbox_items
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(inboxID), strings.TrimSpace(profileID)).Scan(&item.ID, &item.ProfileID, &item.ThreadID, &item.Source, &item.Status, &item.Title, &item.Summary, &metadataJSON, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return InboxItem{}, fmt.Errorf("inbox item not found")
+		}
+		return InboxItem{}, err
+	}
+	item.Metadata = parseContextJSON(metadataJSON)
+	return item, nil
 }
 
 func (s *Service) SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (Attachment, error) {
@@ -507,6 +631,14 @@ func (s *Service) applyCreateWishlistEntry(ctx context.Context, profileID string
 	`, wishlistID, strings.TrimSpace(profileID), itemID, targetPrice, strings.TrimSpace(priority), strings.TrimSpace(notes))
 	if err != nil {
 		return "", "", fmt.Errorf("create wishlist entry: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET status = 'wishlist', priority = ?, updated_at = CURRENT_TIMESTAMP, updated_by = 'chat.service'
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(priority), itemID, strings.TrimSpace(profileID))
+	if err != nil {
+		return "", "", fmt.Errorf("sync wishlist item: %w", err)
 	}
 	return itemID, wishlistID, nil
 }

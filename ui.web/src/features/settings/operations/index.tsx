@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
+import { useTranslation } from 'react-i18next'
 import { ContentSection } from '../components/content-section'
 
 export function SettingsOperations() {
+  const { t } = useTranslation('pages')
+
   return (
     <ContentSection
-      title='Operations'
-      desc='Configure runtime maintenance and operational controls.'
+      title={t('settings.operations.title')}
+      desc={t('settings.operations.description')}
     >
       <div className='space-y-4 text-sm'>
         <div className='rounded-md border p-3'>

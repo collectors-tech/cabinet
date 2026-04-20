@@ -137,3 +137,41 @@ Runtime startup MUST keep `cabinet.pid` as PID-only lock signal and MUST resolve
 - **WHEN** attach resolution executes
 - **THEN** runtime MUST remove stale PID file and continue with fresh startup
 - **AND** no attach/open action MUST occur for stale lock state
+
+### Requirement RUNTIME-CORE-013: Runtime SHALL persist lifecycle metadata in `cabinet.json` after setup configuration exists
+When runtime setup config exists, Cabinet MUST enrich `cabinet.json` with last-known lifecycle provenance for startup and shutdown without over-claiming current liveness.
+
+#### Scenario: Lifecycle metadata after clean run
+- **GIVEN** `cabinet.json` already exists for the runtime data directory
+- **WHEN** Cabinet starts, serves requests, and shuts down cleanly
+- **THEN** `cabinet.json` MUST persist `startedAt`, `startedBy`, `launchSource`, `lastKnownPid`, `lastKnownUrl`, `lastHeartbeatAt`, `lastShutdownAt`, `lastShutdownReason`, and `lastRunClean`
+- **AND** `lastRunClean` MUST be `true` after clean shutdown
+- **AND** metadata MUST be treated as last-known run facts, not proof of live process state
+
+### Requirement RUNTIME-CORE-014: Runtime SHALL write structured durable runtime/access/error logs under the active data directory
+Cabinet MUST write machine-readable JSONL log files for runtime lifecycle, request access, and runtime/server errors.
+
+#### Scenario: Structured runtime log files during local execution
+- **GIVEN** Cabinet starts successfully with writable data directory
+- **WHEN** runtime lifecycle events occur and HTTP requests are served
+- **THEN** Cabinet MUST create a fresh timestamped JSONL log set under the active data directory's `logs/` subfolder for runtime, access, and error streams on every process start
+- **AND** runtime log entries MUST append only to that process start's own runtime log file and include timestamp, level, event/type, and process/runtime context
+- **AND** access log entries MUST include method, path, status, and duration
+- **AND** fixed shared filenames like `cabinet.runtime.log`, `cabinet.access.log`, and `cabinet.error.log` MUST NOT be reused across multiple starts, and the timestamped files MUST live under that `logs/` subfolder
+
+### Requirement RUNTIME-CORE-015: Runtime startup SHALL remain deterministic under parallel local validation load
+Parallel local validation runs that create many fresh runtime instances concurrently MUST avoid self-inflicted migration deadline failures.
+
+#### Scenario: Parallel fresh-db startup in local validation
+- **GIVEN** multiple local validation/test workers create fresh Cabinet data directories and SQLite paths concurrently
+- **WHEN** each worker opens and migrates its own fresh runtime database
+- **THEN** runtime migration/open behavior MUST complete without deterministic deadline failures caused only by local parallel startup pressure
+
+### Requirement RUNTIME-CORE-016: Runtime run loop SHALL fast-exit when startup context is already canceled
+If the supplied runtime context is already canceled before run-loop startup begins, Cabinet MUST not bind/listen/start the server just to shut it down again.
+
+#### Scenario: Pre-canceled startup context
+- **GIVEN** caller invokes runtime `Run` with a context that is already canceled
+- **WHEN** run-loop startup begins
+- **THEN** runtime MUST return quickly without binding a listener or writing startup lifecycle artifacts
+- **AND** local NFR/startup checks MUST observe the fast-exit behavior rather than an unnecessary shutdown timeout path

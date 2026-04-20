@@ -17,7 +17,8 @@ import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { TasksDialogs } from './components/tasks-dialogs'
 import { TasksProvider } from './components/tasks-provider'
 import { TasksTable } from './components/tasks-table'
@@ -43,8 +44,72 @@ export function Tasks({
   } = useWorkspaceCollections()
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
+  const [inlineCollectionValidationMessage, setInlineCollectionValidationMessage] =
+    useState('')
   const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [wishlistActionItemID, setWishlistActionItemID] = useState<string | null>(
+    null
+  )
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+
+  const loadWishlistData = useCallback(async () => {
+    const [wishlistResponse, itemsResponse] = await Promise.all([
+      fetch('/api/wishlist'),
+      fetch('/api/items?status=wishlist'),
+    ])
+    if (!wishlistResponse.ok || !itemsResponse.ok) {
+      throw new Error('wishlist_bootstrap_failed')
+    }
+    const wishlistPayload = (await wishlistResponse.json()) as {
+      items?: Array<{
+        id?: string
+        item_id?: string
+        priority?: string
+        below_target_now?: boolean
+      }>
+    }
+    const itemsPayload = (await itemsResponse.json()) as {
+      items?: Array<{
+        id?: string
+        title?: string
+        part_number?: string
+        category?: string
+        priority?: string
+      }>
+    }
+    const wishlistByItemID = new Map<
+      string,
+      {
+        id?: string
+        priority?: string
+        below_target_now?: boolean
+      }
+    >()
+    ;(wishlistPayload.items ?? []).forEach((entry) => {
+      const itemID = entry.item_id?.trim()
+      if (!itemID) {
+        return
+      }
+      wishlistByItemID.set(itemID, entry)
+    })
+    return (itemsPayload.items ?? []).map((item, index) => {
+      const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
+      const wishlistEntry = wishlistByItemID.get(itemID)
+      return {
+        id: itemID,
+        itemID: itemID,
+        wishlistEntryID: wishlistEntry?.id?.trim(),
+        title:
+          item.title?.trim() ||
+          item.part_number?.trim() ||
+          `Wishlist item ${index + 1}`,
+        status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+        label: item.category?.trim() || 'collection',
+        priority:
+          wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
+      } satisfies Task
+    })
+  }, [])
 
   useEffect(() => {
     if (!isWishlistRoute) {
@@ -53,64 +118,50 @@ export function Tasks({
     }
 
     let cancelled = false
-    const loadWishlistData = async () => {
-      try {
-        const [wishlistResponse, itemsResponse] = await Promise.all([
-          fetch('/api/wishlist'),
-          fetch('/api/items'),
-        ])
-        if (!wishlistResponse.ok || !itemsResponse.ok) {
-          throw new Error('wishlist_bootstrap_failed')
-        }
-        const wishlistPayload = (await wishlistResponse.json()) as {
-          items?: Array<{
-            id?: string
-            item_id?: string
-            priority?: string
-            below_target_now?: boolean
-          }>
-        }
-        const itemsPayload = (await itemsResponse.json()) as {
-          items?: Array<{
-            id?: string
-            title?: string
-            part_number?: string
-          }>
-        }
-        const itemTitleByID = new Map<string, string>()
-        ;(itemsPayload.items ?? []).forEach((item) => {
-          const itemID = item.id?.trim()
-          if (!itemID) {
-            return
-          }
-          const label = item.title?.trim() || item.part_number?.trim() || itemID
-          itemTitleByID.set(itemID, label)
-        })
-        const mapped: Task[] = (wishlistPayload.items ?? []).map((entry, index) => {
-          const itemID = entry.item_id?.trim() || `wishlist-item-${index + 1}`
-          return {
-            id: itemID,
-            title: itemTitleByID.get(itemID) || `Wishlist item ${index + 1}`,
-            status: entry.below_target_now ? 'discovered' : 'wishlist',
-            label: 'collection',
-            priority: entry.priority?.trim() || 'medium',
-          }
-        })
+    void loadWishlistData()
+      .then((mapped) => {
         if (!cancelled) {
           setTableData(mapped)
         }
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) {
           setTableData([])
         }
-      }
-    }
+      })
 
-    void loadWishlistData()
     return () => {
       cancelled = true
     }
-  }, [isWishlistRoute])
+  }, [isWishlistRoute, loadWishlistData])
+
+  const handleWishlistMarkOwned = useCallback(
+    async (task: Task) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error('Wishlist entry is missing transition metadata.')
+        return
+      }
+      setWishlistActionItemID(task.id)
+      try {
+        const response = await fetch(
+          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          throw new Error('failed_to_move_wishlist_item_to_owned')
+        }
+        const mapped = await loadWishlistData()
+        setTableData(mapped)
+        toast.success(`${task.title} moved to inventory.`)
+      } catch {
+        toast.error('Move to inventory failed. Try again.')
+      } finally {
+        setWishlistActionItemID(null)
+      }
+    },
+    [loadWishlistData]
+  )
 
   return (
     <TasksProvider>
@@ -161,7 +212,10 @@ export function Tasks({
                 {isWishlistRoute ? (
                   <DropdownMenuItem
                     data-testid='wishlist-create-menu-collection'
-                    onClick={() => setInlineCollectionInputOpen(true)}
+                    onClick={() => {
+                      setInlineCollectionValidationMessage('')
+                      setInlineCollectionInputOpen(true)
+                    }}
                   >
                     New Collection
                   </DropdownMenuItem>
@@ -203,38 +257,72 @@ export function Tasks({
                 type='button'
                 variant='outline'
                 data-testid='wishlist-inline-add-new'
-                onClick={() => setInlineCollectionInputOpen((open) => !open)}
+                onClick={() => {
+                  setInlineCollectionValidationMessage('')
+                  setInlineCollectionInputOpen((open) => !open)
+                }}
               >
                 + New Collection
               </Button>
             </div>
             {inlineCollectionInputOpen ? (
-              <div className='mt-2 flex gap-2'>
-                <Input
-                  data-testid='wishlist-inline-new-name'
-                  placeholder='Collection name'
-                  value={inlineCollectionName}
-                  onChange={(event) => setInlineCollectionName(event.target.value)}
-                />
-                <Button
-                  type='button'
-                  data-testid='wishlist-inline-save'
-                  onClick={() => {
-                    const created = addCollection(inlineCollectionName)
-                    if (created) {
-                      setActiveWorkspaceCollection(created)
+              <div className='mt-2'>
+                <div className='flex gap-2'>
+                  <Input
+                    data-testid='wishlist-inline-new-name'
+                    placeholder='Collection name'
+                    aria-invalid={
+                      inlineCollectionValidationMessage ? 'true' : 'false'
                     }
-                    setInlineCollectionName('')
-                    setInlineCollectionInputOpen(false)
-                  }}
-                >
-                  Save
-                </Button>
+                    value={inlineCollectionName}
+                    onChange={(event) => {
+                      setInlineCollectionName(event.target.value)
+                      if (inlineCollectionValidationMessage) {
+                        setInlineCollectionValidationMessage('')
+                      }
+                    }}
+                  />
+                  <Button
+                    type='button'
+                    data-testid='wishlist-inline-save'
+                    onClick={() => {
+                      const created = addCollection(inlineCollectionName)
+                      if (!created) {
+                        setInlineCollectionValidationMessage(
+                          'Collection name is required.'
+                        )
+                        return
+                      }
+                      setInlineCollectionValidationMessage('')
+                      setActiveWorkspaceCollection(created)
+                      setInlineCollectionName('')
+                      setInlineCollectionInputOpen(false)
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+                {inlineCollectionValidationMessage ? (
+                  <p
+                    className='mt-2 text-sm text-destructive'
+                    data-testid='wishlist-inline-validation'
+                    role='alert'
+                  >
+                    {inlineCollectionValidationMessage}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
         ) : null}
-        <TasksTable data={tableData} routePath={routePath} />
+        <TasksTable
+          data={tableData}
+          routePath={routePath}
+          onWishlistMarkOwned={
+            isWishlistRoute ? handleWishlistMarkOwned : undefined
+          }
+          wishlistActionItemID={wishlistActionItemID}
+        />
       </Main>
 
       <TasksDialogs />

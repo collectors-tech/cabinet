@@ -46,9 +46,8 @@ func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Ent
 	if strings.TrimSpace(in.ItemID) == "" {
 		return Entry{}, fmt.Errorf("item_id is required")
 	}
-	if strings.TrimSpace(in.Priority) == "" {
-		in.Priority = "normal"
-	}
+	trimmedProfileID := strings.TrimSpace(profileID)
+	in.Priority = normalizeWishlistPriority(in.Priority)
 	in.ID = uuid.NewString()
 	highlight := 0
 	if in.HighlightHit {
@@ -57,11 +56,14 @@ func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Ent
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
+	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
 	if err != nil {
 		return Entry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
-	return s.GetByIDForProfile(ctx, strings.TrimSpace(profileID), in.ID)
+	if err := s.syncItemWishlistState(ctx, trimmedProfileID, in.ItemID, "wishlist", in.Priority); err != nil {
+		return Entry{}, err
+	}
+	return s.GetByIDForProfile(ctx, trimmedProfileID, in.ID)
 }
 
 func (s *Service) Update(ctx context.Context, in Entry) error {
@@ -72,16 +74,25 @@ func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Ent
 	if strings.TrimSpace(in.ID) == "" {
 		return fmt.Errorf("id is required")
 	}
+	trimmedProfileID := strings.TrimSpace(profileID)
+	in.Priority = normalizeWishlistPriority(in.Priority)
+	itemID, err := s.itemIDForEntry(ctx, trimmedProfileID, in.ID)
+	if err != nil {
+		return err
+	}
 	highlight := 0
 	if in.HighlightHit {
 		highlight = 1
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		UPDATE wishlist_entries
 		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
-	return err
+	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID, trimmedProfileID, trimmedProfileID)
+	if err != nil {
+		return err
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "wishlist", in.Priority)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
@@ -89,8 +100,16 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 }
 
 func (s *Service) DeleteForProfile(ctx context.Context, profileID, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
-	return err
+	trimmedProfileID := strings.TrimSpace(profileID)
+	itemID, _ := s.itemIDForEntry(ctx, trimmedProfileID, id)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, id, trimmedProfileID, trimmedProfileID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "active", "")
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
@@ -186,4 +205,46 @@ func (s *Service) isBelowTarget(ctx context.Context, itemID string, target float
 		return false
 	}
 	return minPrice > 0 && minPrice <= target
+}
+
+func normalizeWishlistPriority(raw string) string {
+	priority := strings.ToLower(strings.TrimSpace(raw))
+	if priority == "" || priority == "normal" {
+		return "medium"
+	}
+	return priority
+}
+
+func (s *Service) itemIDForEntry(ctx context.Context, profileID, entryID string) (string, error) {
+	var itemID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT item_id
+		FROM wishlist_entries
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, entryID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&itemID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("wishlist entry not found")
+		}
+		return "", err
+	}
+	return strings.TrimSpace(itemID), nil
+}
+
+func (s *Service) syncItemWishlistState(ctx context.Context, profileID, itemID, status, priority string) error {
+	if strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE canonical_items
+		SET status = ?,
+			priority = CASE WHEN ? = '' THEN priority ELSE ? END,
+			updated_at = CURRENT_TIMESTAMP,
+			updated_by = 'wishlist.service'
+		WHERE id = ? AND (? = '' OR profile_id = ?)
+	`, strings.TrimSpace(status), strings.TrimSpace(priority), strings.TrimSpace(priority), strings.TrimSpace(itemID), strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+	if err != nil {
+		return fmt.Errorf("sync wishlist item status: %w", err)
+	}
+	return nil
 }

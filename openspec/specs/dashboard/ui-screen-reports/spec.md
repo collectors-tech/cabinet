@@ -22,9 +22,14 @@ Reports toolbar SHALL expose `Refresh Reports` and `Export CSV` actions with det
 - **THEN** reports data MUST re-fetch without route transition
 
 #### Scenario: Export CSV action
-- **GIVEN** reports route is loaded
+- **GIVEN** reports route is loaded with a valid active profile and report context
 - **WHEN** user clicks `Export CSV`
 - **THEN** export operation MUST execute for active report context and return deterministic success/error feedback
+
+#### Scenario: Reports unavailable blocks contradictory export action
+- **GIVEN** reports route is showing an unavailable/error state for active profile or report loading
+- **WHEN** user reviews toolbar actions
+- **THEN** `Export CSV` MUST be disabled until report context recovers and MUST NOT surface contradictory success feedback while the route remains unavailable
 
 #### Scenario: Export report output
 - **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
@@ -60,3 +65,4 @@ Reports SHALL support loading, empty, error, and ready states.
 | UC-REP-04 | Reports API failure | Error + retry appears | planned: `cypress/e2e/ui/reports.cy.ts` `reports-error-state` |
 | UC-REP-05 | Refresh reports toolbar action | `Refresh Reports` re-fetches analytics without route change | planned: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `reports-refresh-action` |
 | UC-REP-06 | Export CSV toolbar action | `Export CSV` triggers export with deterministic feedback | planned: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `reports-export-csv-action` |
+| UC-REP-07 | Unavailable reports state | `Export CSV` stays disabled while report context is unavailable | planned: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `reports-unavailable-disables-export` |

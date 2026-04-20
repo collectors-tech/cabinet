@@ -219,6 +219,54 @@ func (s *Service) RebuildThumbnails(ctx context.Context, itemID string) error {
 	return nil
 }
 
+func (s *Service) RebuildAllThumbnails(ctx context.Context) (int, int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT item_id
+		FROM item_photos
+		WHERE TRIM(COALESCE(item_id, '')) <> ''
+		ORDER BY item_id ASC
+	`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("list photo items: %w", err)
+	}
+	defer rows.Close()
+
+	itemIDs := make([]string, 0)
+	for rows.Next() {
+		var itemID string
+		if err := rows.Scan(&itemID); err != nil {
+			return 0, 0, fmt.Errorf("scan photo item: %w", err)
+		}
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" {
+			continue
+		}
+		itemIDs = append(itemIDs, itemID)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, 0, fmt.Errorf("iterate photo items: %w", err)
+	}
+
+	rebuiltItems := 0
+	rebuiltPhotos := 0
+	for _, itemID := range itemIDs {
+		photos, err := s.ListByItem(ctx, itemID)
+		if err != nil {
+			return rebuiltItems, rebuiltPhotos, err
+		}
+		if len(photos) == 0 {
+			continue
+		}
+		if err := s.RebuildThumbnails(ctx, itemID); err != nil {
+			return rebuiltItems, rebuiltPhotos, err
+		}
+		rebuiltItems += 1
+		rebuiltPhotos += len(photos)
+	}
+
+	return rebuiltItems, rebuiltPhotos, nil
+}
+
 func (s *Service) ResolveVariantPath(ctx context.Context, itemID, photoID, variant string) (string, error) {
 	p, err := s.GetByID(ctx, photoID)
 	if err != nil {

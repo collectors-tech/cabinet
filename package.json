@@ -1,0 +1,12 @@
+{
+  "name": "cabinet-validator-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "smoke:inventory-folder-tree-drag": "node scripts/inventory_folder_tree_drag_smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.2"
+  }
+}

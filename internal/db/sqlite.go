@@ -10,7 +10,21 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type queryRower interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+type execer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
+	_, statErr := os.Stat(path)
+	freshDB := os.IsNotExist(statErr)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("stat db path: %w", statErr)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
@@ -25,6 +39,13 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer tx.Rollback()
 
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -85,6 +106,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_profile_id ON webauthn_credentials(profile_id);`,
 		`CREATE TABLE IF NOT EXISTS canonical_items (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			brand TEXT NOT NULL,
 			category TEXT NOT NULL,
 			part_number TEXT NOT NULL,
@@ -179,6 +201,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_item_photos_item_id ON item_photos(item_id);`,
 		`CREATE TABLE IF NOT EXISTS scanner_query_sets (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			keywords_json TEXT NOT NULL,
 			exclusions_json TEXT NOT NULL DEFAULT '[]',
@@ -196,6 +219,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS scanner_candidates (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			query_set_id TEXT NOT NULL,
 			listing_id TEXT NOT NULL UNIQUE,
 			title TEXT NOT NULL,
@@ -251,6 +275,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS wishlist_entries (
 			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			item_id TEXT NOT NULL UNIQUE,
 			target_price REAL NOT NULL DEFAULT 0,
 			priority TEXT NOT NULL DEFAULT 'normal',
@@ -262,6 +287,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS tracked_items (
 			item_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
@@ -278,6 +304,44 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_price_snapshots_item_id ON price_snapshots(item_id);`,
+		`CREATE TABLE IF NOT EXISTS commerce_lifecycle_entries (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			item_id TEXT NOT NULL,
+			state TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT '',
+			external_ref TEXT NOT NULL DEFAULT '',
+			quantity INTEGER NOT NULL DEFAULT 1,
+			amount REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'AUD',
+			notes TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_commerce_lifecycle_entries_profile_item ON commerce_lifecycle_entries(profile_id, item_id, created_at);`,
+		`CREATE TABLE IF NOT EXISTS expected_arrivals (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			item_id TEXT NOT NULL,
+			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			external_ref TEXT NOT NULL DEFAULT '',
+			quantity INTEGER NOT NULL DEFAULT 1,
+			amount REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'AUD',
+			status TEXT NOT NULL DEFAULT 'expected',
+			expected_on TEXT NOT NULL DEFAULT '',
+			delivered_on TEXT NOT NULL DEFAULT '',
+			reconciled_instance_id TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE,
+			FOREIGN KEY (lifecycle_entry_id) REFERENCES commerce_lifecycle_entries(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_expected_arrivals_profile_item_status ON expected_arrivals(profile_id, item_id, status, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_expected_arrivals_lifecycle_entry_id ON expected_arrivals(lifecycle_entry_id);`,
 		`CREATE TABLE IF NOT EXISTS ai_failures (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -296,6 +360,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
 			title TEXT NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
@@ -308,6 +373,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
 			attachments_json TEXT NOT NULL DEFAULT '[]',
+			context_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
@@ -326,6 +392,22 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS chat_inbox_items (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			thread_id TEXT NOT NULL,
+			source TEXT NOT NULL,
+			status TEXT NOT NULL,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL DEFAULT '',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_inbox_items_profile_id ON chat_inbox_items(profile_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_inbox_items_thread_id ON chat_inbox_items(thread_id);`,
 		`CREATE TABLE IF NOT EXISTS chat_action_previews (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -369,138 +451,177 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	}
 
 	for _, q := range queries {
-		if _, err := conn.ExecContext(ctx, q); err != nil {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("run migration: %w", err)
 		}
 	}
 
-	if err := ensureColumn(ctx, conn, "canonical_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if freshDB {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure wishlist_entries profile index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure scanner_query_sets profile index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ensure tracked_items profile index: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("commit migration tx: %w", err)
+		}
+		return conn, nil
+	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.profile_id: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "status", "TEXT NOT NULL DEFAULT 'active'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "status", "TEXT NOT NULL DEFAULT 'active'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.status: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "priority", "TEXT NOT NULL DEFAULT 'medium'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "priority", "TEXT NOT NULL DEFAULT 'medium'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.priority: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "grading_status", "TEXT NOT NULL DEFAULT 'ungraded'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "grading_status", "TEXT NOT NULL DEFAULT 'ungraded'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.grading_status: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "grader", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "grader", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.grader: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "grade_numeric", "REAL NOT NULL DEFAULT 0"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "grade_numeric", "REAL NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.grade_numeric: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "slabbed", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "slabbed", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.slabbed: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "collector_classification", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "collector_classification", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.collector_classification: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "car_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "car_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.car_grade_type: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "packaging_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "packaging_grade_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.packaging_grade_type: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "created_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "created_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.created_by: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "updated_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "updated_by", "TEXT NOT NULL DEFAULT 'system'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.updated_by: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "deleted_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "deleted_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.deleted_at: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "canonical_items", "deleted_by", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "deleted_by", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.deleted_by: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "wishlist_entries", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.profile_id: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries profile index: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_query_sets", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_query_sets", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_query_sets.profile_id: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_query_sets", "provider_scope_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_query_sets", "provider_scope_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_query_sets.provider_scope_json: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_query_sets", "items_per_page", "INTEGER NOT NULL DEFAULT 24"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_query_sets", "items_per_page", "INTEGER NOT NULL DEFAULT 24"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_query_sets.items_per_page: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_query_sets_profile_id ON scanner_query_sets(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_query_sets profile index: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_candidates", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.profile_id: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_candidates", "stock_state", "TEXT NOT NULL DEFAULT 'unknown'"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "stock_state", "TEXT NOT NULL DEFAULT 'unknown'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.stock_state: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_candidates", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.stock_count: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure item_photos.display_order: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_candidates_profile_id ON scanner_candidates(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates profile index: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "scanner_failures", "query_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "scanner_failures", "query_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_failures.query_set_id: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "tracked_items", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure tracked_items.profile_id: %w", err)
 	}
-	if err := ensureColumn(ctx, conn, "price_snapshots", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
+	if err := ensureColumn(ctx, tx, tx, "price_snapshots", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure price_snapshots.stock_count: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tracked_items_profile_id ON tracked_items(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure tracked_items profile index: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "chat_threads", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_threads.metadata_json: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "chat_messages", "context_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure chat_messages.context_json: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("commit migration tx: %w", err)
 	}
 
 	return conn, nil
 }
 
-func ensureColumn(ctx context.Context, conn *sql.DB, table, column, definition string) error {
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+func ensureColumn(ctx context.Context, query queryRower, exec execer, table, column, definition string) error {
+	rows, err := query.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
 		return fmt.Errorf("pragma table_info %s: %w", table, err)
 	}
@@ -524,7 +645,7 @@ func ensureColumn(ctx context.Context, conn *sql.DB, table, column, definition s
 		return fmt.Errorf("iterate pragma table_info %s: %w", table, err)
 	}
 
-	if _, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+	if _, err := exec.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
 		return fmt.Errorf("alter table %s add column %s: %w", table, column, err)
 	}
 	return nil

@@ -43,18 +43,39 @@ import {
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { tasksColumns as columns } from './tasks-columns'
+import { getTasksColumns } from './tasks-columns'
 
 type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
 
 type DataTableProps = {
   data: Task[]
   routePath: TasksRoutePath
+  currentRecordID?: string
+  onRecordFocus?: (itemID: string, recordID: string, title: string) => void
+  onWishlistMarkOwned?: (task: Task) => Promise<void>
+  wishlistActionItemID?: string | null
 }
 
 type ViewMode = 'rows' | 'cards'
 
-export function TasksTable({ data, routePath }: DataTableProps) {
+export function TasksTable({
+  data,
+  routePath,
+  currentRecordID,
+  onRecordFocus,
+  onWishlistMarkOwned,
+  wishlistActionItemID,
+}: DataTableProps) {
+  const columns = useMemo(
+    () =>
+      getTasksColumns({
+        routePath,
+        onWishlistMarkOwned,
+        wishlistActionItemID,
+      }),
+    [routePath, onWishlistMarkOwned, wishlistActionItemID]
+  )
+
   const route =
     routePath === '/_authenticated/inventory/'
       ? getRouteApi('/_authenticated/inventory/')
@@ -99,7 +120,6 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     ],
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
@@ -159,7 +179,7 @@ export function TasksTable({ data, routePath }: DataTableProps) {
 
   const visibleRecordIDs = useMemo(
     () => table.getRowModel().rows.map((row) => row.original.id),
-    [table, data, rowSelection, columnFilters, globalFilter, pagination, sorting]
+    [table]
   )
 
   const selectedVisibleIndex = selectedRecordID
@@ -199,6 +219,10 @@ export function TasksTable({ data, routePath }: DataTableProps) {
     if (isInteractiveTarget(event.target)) {
       return
     }
+    const record = data.find((item) => item.id === id)
+    if (record) {
+      onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
+    }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
     }
@@ -213,6 +237,10 @@ export function TasksTable({ data, routePath }: DataTableProps) {
   ) => {
     if (isInteractiveTarget(event.target)) {
       return
+    }
+    const record = data.find((item) => item.id === id)
+    if (record) {
+      onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
@@ -322,6 +350,11 @@ export function TasksTable({ data, routePath }: DataTableProps) {
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
+                    className={cn(
+                      currentRecordID === (row.original.itemID ?? row.original.id)
+                        ? 'bg-primary/5'
+                        : undefined
+                    )}
                     onClick={(event) => handleRowClick(row.original.id, event)}
                     onDoubleClick={(event) =>
                       handleRowDoubleClick(row.original.id, event)
@@ -362,8 +395,17 @@ export function TasksTable({ data, routePath }: DataTableProps) {
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
-                className='space-y-2 rounded-md border p-4'
+                className={cn(
+                  'space-y-2 rounded-md border p-4',
+                  currentRecordID === (row.original.itemID ?? row.original.id)
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'cursor-pointer'
+                )}
                 data-state={row.getIsSelected() && 'selected'}
+                onClick={(event) => handleRowClick(row.original.id, event)}
+                onDoubleClick={(event) =>
+                  handleRowDoubleClick(row.original.id, event)
+                }
               >
                 <div className='flex items-start justify-between gap-2'>
                   <div className='space-y-1'>

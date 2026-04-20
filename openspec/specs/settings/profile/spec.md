@@ -6,9 +6,10 @@ Define Profile settings screen behavior.
 Profile screen SHALL allow editing username, display email, bio, and URL list with inline validation.
 
 #### Scenario: Save profile details
-- **GIVEN** user opens `/settings`
+- **GIVEN** user opens `/settings/profile`
 - **WHEN** user submits valid profile values
 - **THEN** runtime MUST persist values and UI MUST show deterministic success state
+- **AND** the screen title/description MUST resolve to user-facing copy instead of raw translation keys
 
 ### Requirement UI-SCREEN-SETTINGS-PROFILE-002: Profile screen SHALL handle deterministic error states
 

@@ -55,4 +55,18 @@ func TestSummaryIncludesCoreSignals(t *testing.T) {
 	if len(s.Cards) == 0 || s.Cards[0].Link == "" {
 		t.Fatalf("expected dashboard deep-link cards, got %+v", s.Cards)
 	}
+
+	foundRecentlyAdded := false
+	for _, card := range s.Cards {
+		if card.Title != "Recently Added" {
+			continue
+		}
+		foundRecentlyAdded = true
+		if card.Link != "/collections" {
+			t.Fatalf("expected Recently Added card to target /collections, got %q", card.Link)
+		}
+	}
+	if !foundRecentlyAdded {
+		t.Fatalf("expected Recently Added dashboard card, got %+v", s.Cards)
+	}
 }

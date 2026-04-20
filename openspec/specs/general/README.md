@@ -12,6 +12,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `documentation-governance` -> `openspec/specs/general/documentation-governance/spec.md`
 - `entitlements` -> `openspec/specs/general/entitlements/spec.md`
 - `errors` -> `openspec/specs/general/errors/spec.md`
+- `exploration-auth-setup` -> `openspec/specs/general/exploration-auth-setup/spec.md`
 - `future-hooks` -> `openspec/specs/general/future-hooks/spec.md`
 - `licensing` -> `openspec/specs/general/licensing/spec.md`
 - `logging` -> `openspec/specs/general/logging/spec.md`
@@ -30,7 +31,6 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `ui-foundation-shell-navigation` -> `openspec/specs/general/ui-foundation-shell-navigation/spec.md`
 - `audit-metadata-history` -> `openspec/specs/general/audit-metadata-history/spec.md`
 - `auth-permissions-test-matrix` -> `openspec/specs/general/auth-permissions-test-matrix/spec.md`
-- `antfarm-workflow-portability` -> `openspec/specs/general/antfarm-workflow-portability/spec.md`
 - `setup-wizard-first-run` -> `openspec/specs/general/setup-wizard-first-run/spec.md`
 - `startup-console-banner` -> `openspec/specs/general/startup-console-banner/spec.md`
 - `ui-foundation-theme-rtl-i18n` -> `openspec/specs/general/ui-foundation-theme-rtl-i18n/spec.md`
@@ -47,7 +47,6 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 
 ## Requirement ID Namespaces
 - `AUTH-*`
-- `ANTFARM-WORKFLOW-*`
 - `API-DOCS-*`
 - `CLOUD-AUTH-BILLING-*`
 - `DATA-MANAGEMENT-*`
@@ -55,6 +54,7 @@ Contains cross-cutting platform, security, runtime, and UI foundation capabiliti
 - `DOCUMENTATION-GOVERNANCE-*`
 - `ENTITLEMENTS-*`
 - `ERRORS-*`
+- `EXPLORATION-AUTH-SETUP-*`
 - `FUTURE-HOOKS-*`
 - `LICENSING-*`
 - `LOGGING-*`
