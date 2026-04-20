@@ -10,6 +10,8 @@ export type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wis
 
 type TasksColumnsOptions = {
   routePath: TasksRoutePath
+  onWishlistMarkOwned?: (task: Task) => Promise<void>
+  wishlistActionItemID?: string | null
 }
 
 const wishlistStatusLabels: Record<string, string> = {
@@ -17,7 +19,11 @@ const wishlistStatusLabels: Record<string, string> = {
   discovered: 'Below target',
 }
 
-export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<Task>[] {
+export function getTasksColumns({
+  routePath,
+  onWishlistMarkOwned,
+  wishlistActionItemID,
+}: TasksColumnsOptions): ColumnDef<Task>[] {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
 
@@ -165,7 +171,14 @@ export function getTasksColumns({ routePath }: TasksColumnsOptions): ColumnDef<T
     },
     {
       id: 'actions',
-      cell: ({ row }) => <DataTableRowActions row={row} />,
+      cell: ({ row }) => (
+        <DataTableRowActions
+          row={row}
+          routePath={routePath}
+          onWishlistMarkOwned={onWishlistMarkOwned}
+          wishlistActionItemID={wishlistActionItemID}
+        />
+      ),
     },
   ]
 }
