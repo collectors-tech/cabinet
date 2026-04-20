@@ -2045,8 +2045,9 @@ export function Collection({
               <div data-testid='folder-tree-toolbar' className='flex justify-end gap-2'>
                 <Button
                   type='button'
-                  variant='ghost'
+                  variant='outline'
                   size='sm'
+                  className='min-w-11 font-semibold'
                   data-testid='folder-tree-sort-root-az'
                   aria-label='Sort root folders A to Z'
                   onClick={() => {
