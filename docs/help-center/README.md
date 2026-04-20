@@ -3,6 +3,8 @@
 This folder contains user-facing Help Center content drafts.
 
 ## Structure
+- `../PRODUCT-OVERVIEW.md`
+  - top-level feature map, product intent, and expected working behavior
 - `getting-started/`
   - login, database/profile switching, first-run setup
 - `sections/`
