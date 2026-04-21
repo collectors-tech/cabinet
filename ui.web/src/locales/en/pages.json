@@ -24,7 +24,8 @@
     }
   },
   "inventory": {
-    "title": "Inventory"
+    "title": "Inventory",
+    "description": "Browse, organize, and update the items you already own."
   },
   "wishlist": {
     "title": "Wishlist"
