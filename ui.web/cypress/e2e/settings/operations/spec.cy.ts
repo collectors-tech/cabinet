@@ -120,4 +120,132 @@ describe('settings/operations', () => {
       'No recovery required'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-003 exports snapshot data and shows dry-run conflicts', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-export',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/data/export/json', {
+      statusCode: 200,
+      body: {
+        schema_version: 1,
+        exported_at: '2026-04-22T12:00:00Z',
+        items: [
+          {
+            brand: 'AFX',
+            category: 'Slot',
+            part_number: 'OPS-001',
+            title: 'Exported Item',
+            instances: [],
+          },
+        ],
+      },
+    }).as('exportJson')
+    cy.intercept('POST', '/api/data/import/json/dry-run', {
+      statusCode: 200,
+      body: {
+        total_items: 2,
+        new_items: 1,
+        conflicts: 1,
+        conflict_details: [
+          {
+            part_number: 'OPS-001',
+            existing_id: 'item-1',
+          },
+        ],
+      },
+    }).as('importDryRun')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-export-json"]').click()
+    cy.wait('@exportJson')
+    cy.get('[data-testid="settings-operations-data-status"]').should(
+      'contain',
+      'Exported 1 item snapshot.'
+    )
+
+    cy.get('[data-testid="settings-operations-import-json-input"]')
+      .clear()
+      .type(
+        '{"snapshot":{"schema_version":1,"items":[{"brand":"AFX","category":"Slot","part_number":"OPS-001","title":"Conflict"},{"brand":"AFX","category":"Slot","part_number":"OPS-NEW","title":"New Item"}]}}',
+        { parseSpecialCharSequences: false }
+      )
+    cy.get('[data-testid="settings-operations-import-json-dry-run"]').click()
+    cy.wait('@importDryRun')
+    cy.get('[data-testid="settings-operations-import-summary"]').should(
+      'contain',
+      '2 items'
+    )
+    cy.get('[data-testid="settings-operations-import-summary"]').should(
+      'contain',
+      '1 conflict'
+    )
+    cy.get('[data-testid="settings-operations-import-summary"]').should(
+      'contain',
+      'OPS-001'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-004 reports dry-run failure without route reload', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-import-error',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/json/dry-run', {
+      statusCode: 400,
+      body: {
+        error: 'failed_to_dry_run_import',
+      },
+    }).as('importDryRun')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-json-input"]')
+      .clear()
+      .type(
+        '{"snapshot":{"schema_version":1,"items":[{"brand":"AFX","category":"Slot","part_number":"OPS-ERR","title":"Broken"}]}}',
+        { parseSpecialCharSequences: false }
+      )
+    cy.get('[data-testid="settings-operations-import-json-dry-run"]').click()
+    cy.wait('@importDryRun')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-data-status"]').should(
+      'contain',
+      'Import dry-run failed.'
+    )
+  })
 })
