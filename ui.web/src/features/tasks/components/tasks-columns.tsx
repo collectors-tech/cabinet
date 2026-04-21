@@ -10,6 +10,8 @@ export type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wis
 
 type TasksColumnsOptions = {
   routePath: TasksRoutePath
+  onEditRow?: (task: Task) => void
+  onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   wishlistActionItemID?: string | null
 }
@@ -25,6 +27,8 @@ function formatWishlistStatus(status: string) {
 
 export function getTasksColumns({
   routePath,
+  onEditRow,
+  onDeleteRow,
   onWishlistMarkOwned,
   wishlistActionItemID,
 }: TasksColumnsOptions): ColumnDef<Task>[] {
@@ -186,6 +190,8 @@ export function getTasksColumns({
         <DataTableRowActions
           row={row}
           routePath={routePath}
+          onEditRow={onEditRow}
+          onDeleteRow={onDeleteRow}
           onWishlistMarkOwned={onWishlistMarkOwned}
           wishlistActionItemID={wishlistActionItemID}
         />

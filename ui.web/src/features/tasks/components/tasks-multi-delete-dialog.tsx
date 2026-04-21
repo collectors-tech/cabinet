@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { AlertTriangle } from 'lucide-react'
@@ -9,11 +7,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { type Task } from '../data/schema'
 
 type TaskMultiDeleteDialogProps<TData> = {
   open: boolean
   onOpenChange: (open: boolean) => void
   table: Table<TData>
+  routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+  onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
+  isLoading?: boolean
 }
 
 const CONFIRM_WORD = 'DELETE'
@@ -22,14 +24,26 @@ export function TasksMultiDeleteDialog<TData>({
   open,
   onOpenChange,
   table,
+  routePath,
+  onWishlistBulkDelete,
+  isLoading = false,
 }: TaskMultiDeleteDialogProps<TData>) {
   const [value, setValue] = useState('')
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
+  const selectedTasks = selectedRows.map((row) => row.original as Task)
 
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
       toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)
+      return
+    }
+
+    if (isWishlistRoute && onWishlistBulkDelete) {
+      void onWishlistBulkDelete(selectedTasks)
+      setValue('')
+      onOpenChange(false)
       return
     }
 
@@ -54,6 +68,7 @@ export function TasksMultiDeleteDialog<TData>({
       onOpenChange={onOpenChange}
       handleConfirm={handleDelete}
       disabled={value.trim() !== CONFIRM_WORD}
+      isLoading={isLoading}
       title={
         <span className='text-destructive'>
           <AlertTriangle
@@ -61,18 +76,27 @@ export function TasksMultiDeleteDialog<TData>({
             size={18}
           />{' '}
           Delete {selectedRows.length}{' '}
-          {selectedRows.length > 1 ? 'tasks' : 'task'}
+          {selectedRows.length > 1
+            ? isWishlistRoute
+              ? 'wishlist entries'
+              : 'tasks'
+            : isWishlistRoute
+              ? 'wishlist entry'
+              : 'task'}
         </span>
       }
       desc={
         <div className='space-y-4'>
           <p className='mb-2'>
-            Are you sure you want to delete the selected tasks? <br />
+            {isWishlistRoute
+              ? 'Are you sure you want to delete the selected wishlist entries?'
+              : 'Are you sure you want to delete the selected tasks?'}{' '}
+            <br />
             This action cannot be undone.
           </p>
 
           <Label className='my-4 flex flex-col items-start gap-1.5'>
-            <span className=''>Confirm by typing "{CONFIRM_WORD}":</span>
+            <span>Confirm by typing "{CONFIRM_WORD}":</span>
             <Input
               value={value}
               onChange={(e) => setValue(e.target.value)}

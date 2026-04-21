@@ -48,14 +48,13 @@ describe("ui-screen-wishlist", () => {
     if (!options?.skipStub) {
       stubWishlistData();
     }
-    cy.visit("/sign-in?redirect=%2Fwishlist%2F");
-    cy.get('input[name="email"]').clear().type("e2e-wishlist@example.com");
-    cy.get('input[name="password"]').clear().type("password123");
-    cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should(
-      "match",
-      /^\/wishlist\/?$/
-    );
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: "/wishlist/",
+      });
+    });
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
   }
@@ -85,8 +84,8 @@ describe("ui-screen-wishlist", () => {
     cy.contains(/selected/i).should("be.visible");
     cy.get('button[aria-label="Update status"]').should("be.visible");
     cy.get('button[aria-label="Update priority"]').should("be.visible");
-    cy.get('button[aria-label="Export tasks"]').should("be.visible");
-    cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
+    cy.get('button[aria-label="Export wishlist entries"]').should("be.visible");
+    cy.get('button[aria-label="Delete selected wishlist entries"]').should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-002 opens create and import actions from Create menu", () => {
@@ -340,5 +339,128 @@ describe("ui-screen-wishlist", () => {
     );
     cy.contains("F1 Silverline").should("be.visible");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+  });
+
+  it("UI-SCREEN-WISHLIST-009 wires New and Create actions into real wishlist dialogs", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-new-action"]').click();
+    cy.contains("Create Wishlist Entry").should("be.visible");
+
+    cy.contains("button", "Close").click();
+
+    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
+    cy.get('[data-testid="wishlist-create-menu-entry"]').click();
+    cy.contains("Create Wishlist Entry").should("be.visible");
+
+    cy.contains("button", "Close").click();
+
+    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
+    cy.get('[data-testid="wishlist-create-menu-import"]').click();
+    cy.contains("Import Wishlist Entries").should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-010 persists wishlist edit and delete actions", () => {
+    let wishlistEntries = [
+      {
+        id: "wish-edit-1",
+        item_id: "item-collector-1",
+        priority: "medium",
+        below_target_now: false,
+        notes: "Original watch note",
+        target_price: 20,
+      },
+    ];
+    let wishlistItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "medium",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === req.body.id
+          ? {
+              ...entry,
+              priority: req.body.priority,
+              notes: req.body.notes,
+              target_price: req.body.target_price,
+            }
+          : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistEntry");
+    cy.intercept("PUT", "/api/items/item-collector-1", (req) => {
+      wishlistItems = wishlistItems.map((item) =>
+        item.id === "item-collector-1"
+          ? {
+              ...item,
+              title: req.body.title,
+              category: req.body.category,
+            }
+          : item
+      );
+      req.reply({
+        statusCode: 200,
+        body: {
+          ...wishlistItems[0],
+          title: req.body.title,
+          category: req.body.category,
+        },
+      });
+    }).as("updateWishlistItem");
+    cy.intercept("DELETE", "/api/wishlist?id=wish-edit-1", (req) => {
+      wishlistEntries = [];
+      wishlistItems = [];
+      req.reply({ statusCode: 204, body: "" });
+    }).as("deleteWishlistEntry");
+
+    signInToWishlist({ skipStub: true });
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
+      cy.get('[data-testid="task-row-actions-trigger"]').click();
+    });
+    cy.contains('[role="menuitem"]', "Edit").click();
+
+    cy.contains("Edit Wishlist Entry").should("be.visible");
+    cy.get('input[name="title"]').clear().type("AFX Mega-G+ Camaro Updated");
+    cy.get('textarea[name="notes"]').clear().type("Updated watch note");
+    cy.contains("button", "Save changes").click();
+
+    cy.wait("@updateWishlistItem");
+    cy.wait("@updateWishlistEntry");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("AFX Mega-G+ Camaro Updated").should("be.visible");
+    cy.contains("Updated watch note").should("be.visible");
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Updated").within(() => {
+      cy.get('[data-testid="task-row-actions-trigger"]').click();
+    });
+    cy.get('[role="menu"]')
+      .should("be.visible")
+      .within(() => {
+        cy.contains('[role="menuitem"]', /^Delete$/)
+          .should("be.visible")
+          .click({ force: true });
+      });
+    cy.contains("Delete this wishlist entry").should("be.visible");
+    cy.contains("button", "Delete").click();
+
+    cy.wait("@deleteWishlistEntry");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("AFX Mega-G+ Camaro Updated").should("not.exist");
   });
 });

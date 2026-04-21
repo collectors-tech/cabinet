@@ -52,8 +52,15 @@ type DataTableProps = {
   routePath: TasksRoutePath
   currentRecordID?: string
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
+  onEditRow?: (task: Task) => void
+  onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
+  onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
+  onWishlistBulkPriorityChange?: (tasks: Task[], priority: string) => Promise<void>
+  onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
+  onWishlistExport?: (tasks: Task[]) => void
   wishlistActionItemID?: string | null
+  isWishlistMutating?: boolean
 }
 
 type ViewMode = 'rows' | 'cards'
@@ -73,17 +80,26 @@ export function TasksTable({
   routePath,
   currentRecordID,
   onRecordFocus,
+  onEditRow,
+  onDeleteRow,
   onWishlistMarkOwned,
+  onWishlistBulkStatusChange,
+  onWishlistBulkPriorityChange,
+  onWishlistBulkDelete,
+  onWishlistExport,
   wishlistActionItemID,
+  isWishlistMutating,
 }: DataTableProps) {
   const columns = useMemo(
     () =>
       getTasksColumns({
         routePath,
+        onEditRow,
+        onDeleteRow,
         onWishlistMarkOwned,
         wishlistActionItemID,
       }),
-    [routePath, onWishlistMarkOwned, wishlistActionItemID]
+    [routePath, onEditRow, onDeleteRow, onWishlistMarkOwned, wishlistActionItemID]
   )
 
   const route =
@@ -281,6 +297,13 @@ export function TasksTable({
     setSelectedRecordContext(visibleRecordIDs[nextIndex] ?? selectedRecordID ?? '')
   }
 
+  const statusFilterOptions = routePath === '/_authenticated/wishlist/'
+    ? [
+        { label: 'Watching', value: 'wishlist' },
+        { label: 'Below target', value: 'discovered' },
+      ]
+    : statuses
+
   return (
     <div
       className={cn(
@@ -295,7 +318,7 @@ export function TasksTable({
           {
             columnId: 'status',
             title: 'Status',
-            options: statuses,
+            options: statusFilterOptions,
           },
           {
             columnId: 'priority',
@@ -458,7 +481,15 @@ export function TasksTable({
       )}
 
       <DataTablePagination table={table} className='mt-auto' />
-      <DataTableBulkActions table={table} />
+      <DataTableBulkActions
+        table={table}
+        routePath={routePath}
+        onWishlistBulkStatusChange={onWishlistBulkStatusChange}
+        onWishlistBulkPriorityChange={onWishlistBulkPriorityChange}
+        onWishlistBulkDelete={onWishlistBulkDelete}
+        onWishlistExport={onWishlistExport}
+        isWishlistMutating={isWishlistMutating}
+      />
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent data-testid='row-details-modal'>
           <DialogHeader>

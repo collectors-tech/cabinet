@@ -47,7 +47,10 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
-import { TasksDialogs } from '@/features/tasks/components/tasks-dialogs'
+import {
+  TasksDialogs,
+  type TasksDialogType,
+} from '@/features/tasks/components/tasks-dialogs'
 import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { tasks } from '@/features/tasks/data/tasks'
 import { type Task } from '@/features/tasks/data/schema'
@@ -749,6 +752,9 @@ export function Collection({
   const [itemSaveBusy, setItemSaveBusy] = useState(false)
   const [itemSaveError, setItemSaveError] = useState<string | null>(null)
   const [itemSaveSuccess, setItemSaveSuccess] = useState<string | null>(null)
+  const [tasksDialogOpen, setTasksDialogOpen] =
+    useState<TasksDialogType | null>(null)
+  const [tasksDialogRow, setTasksDialogRow] = useState<Task | null>(null)
   const [barcodeAddInput, setBarcodeAddInput] = useState('')
   const [barcodeLookupInput, setBarcodeLookupInput] = useState('')
   const [barcodeAddBusy, setBarcodeAddBusy] = useState(false)
@@ -3126,7 +3132,13 @@ export function Collection({
           </DialogContent>
         </Dialog>
       </Main>
-      <TasksDialogs />
+      <TasksDialogs
+        routePath='/_authenticated/inventory/'
+        open={tasksDialogOpen}
+        setOpen={setTasksDialogOpen}
+        currentRow={tasksDialogRow}
+        setCurrentRow={setTasksDialogRow}
+      />
     </TasksProvider>
   )
 }

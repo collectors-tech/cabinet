@@ -6,22 +6,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { labels } from '../data/data'
 import { type Task, taskSchema } from '../data/schema'
-import { useTasks } from './tasks-provider'
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
   routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+  onEditRow?: (task: Task) => void
+  onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   wishlistActionItemID?: string | null
 }
@@ -29,14 +24,14 @@ type DataTableRowActionsProps<TData> = {
 export function DataTableRowActions<TData>({
   row,
   routePath,
+  onEditRow,
+  onDeleteRow,
   onWishlistMarkOwned,
   wishlistActionItemID,
 }: DataTableRowActionsProps<TData>) {
   const task = taskSchema.parse(row.original)
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
   const isWishlistActionPending = wishlistActionItemID === task.id
-
-  const { setOpen, setCurrentRow } = useTasks()
 
   return (
     <DropdownMenu modal={false}>
@@ -45,18 +40,31 @@ export function DataTableRowActions<TData>({
           variant='ghost'
           className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
           data-testid='task-row-actions-trigger'
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+          onPointerDown={(event) => {
+            event.stopPropagation()
+          }}
         >
           <DotsHorizontalIcon className='h-4 w-4' />
           <span className='sr-only'>Open menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-[160px]'>
+      <DropdownMenuContent
+        align='end'
+        className='w-[160px]'
+        onClick={(event) => {
+          event.stopPropagation()
+        }}
+      >
         {isWishlistRoute ? (
           <>
             <DropdownMenuItem
               data-testid='wishlist-mark-owned-action'
               disabled={!task.wishlistEntryID || isWishlistActionPending}
-              onClick={() => {
+              onSelect={(event) => {
+                event.stopPropagation()
                 if (onWishlistMarkOwned) {
                   void onWishlistMarkOwned(task)
                 }
@@ -68,33 +76,24 @@ export function DataTableRowActions<TData>({
           </>
         ) : null}
         <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(task)
-            setOpen('update')
+          onSelect={(event) => {
+            event.stopPropagation()
+            onEditRow?.(task)
           }}
         >
           Edit
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>Make a copy</DropdownMenuItem>
-        <DropdownMenuItem disabled>Favorite</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Labels</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={task.label}>
-              {labels.map((label) => (
-                <DropdownMenuRadioItem key={label.value} value={label.value}>
-                  {label.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
+        {!isWishlistRoute ? (
+          <>
+            <DropdownMenuItem disabled>Make a copy</DropdownMenuItem>
+            <DropdownMenuItem disabled>Favorite</DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(task)
-            setOpen('delete')
+          onSelect={(event) => {
+            event.stopPropagation()
+            onDeleteRow?.(task)
           }}
         >
           Delete
