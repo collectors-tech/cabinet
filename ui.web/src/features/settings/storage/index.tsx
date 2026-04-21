@@ -4,6 +4,13 @@ import { Link } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type ActiveProfileResponse = {
   id?: string
@@ -12,6 +19,10 @@ type ActiveProfileResponse = {
 type StorageResponse = {
   db_path?: string
   media_dir?: string
+}
+
+type BackupListResponse = {
+  backups?: string[]
 }
 
 const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
@@ -24,6 +35,13 @@ export function SettingsStorage() {
   const [mediaDir, setMediaDir] = useState('')
   const [reindexPending, setReindexPending] = useState(false)
   const [rebuildPending, setRebuildPending] = useState(false)
+  const [backupList, setBackupList] = useState<string[]>([])
+  const [backupsLoading, setBackupsLoading] = useState(true)
+  const [backupPending, setBackupPending] = useState(false)
+  const [restorePending, setRestorePending] = useState(false)
+  const [backupError, setBackupError] = useState<string | null>(null)
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
+  const [selectedBackupPath, setSelectedBackupPath] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
   const [actionTone, setActionTone] = useState<'default' | 'destructive'>('default')
   const [lastKnown, setLastKnown] = useState<StorageResponse | null>(() => {
@@ -89,6 +107,32 @@ export function SettingsStorage() {
     void loadStorage()
   }, [loadStorage])
 
+  const loadBackups = useCallback(async () => {
+    setBackupsLoading(true)
+    setBackupError(null)
+    try {
+      const response = await fetch('/api/backup/list')
+      if (!response.ok) {
+        throw new Error('failed_to_list_backups')
+      }
+      const payload = (await response.json()) as BackupListResponse
+      setBackupList(
+        (payload.backups ?? []).filter(
+          (backupPath) => typeof backupPath === 'string' && backupPath.trim() !== ''
+        )
+      )
+    } catch {
+      setBackupList([])
+      setBackupError('Backup information is unavailable right now.')
+    } finally {
+      setBackupsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadBackups()
+  }, [loadBackups])
+
   const runReindex = useCallback(async () => {
     setReindexPending(true)
     setActionStatus(null)
@@ -135,7 +179,62 @@ export function SettingsStorage() {
     }
   }, [])
 
-  const actionsDisabled = loading || Boolean(error) || reindexPending || rebuildPending
+  const runBackup = useCallback(async () => {
+    setBackupPending(true)
+    setActionStatus(null)
+    setActionTone('default')
+    try {
+      const response = await fetch('/api/backup/run', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('failed_to_create_backup')
+      }
+      setActionStatus('Backup created successfully.')
+      await loadBackups()
+    } catch {
+      setActionTone('destructive')
+      setActionStatus('Backup creation failed. Try again when runtime storage is healthy.')
+    } finally {
+      setBackupPending(false)
+    }
+  }, [loadBackups])
+
+  const runRestore = useCallback(async () => {
+    if (!selectedBackupPath) {
+      return
+    }
+    setRestorePending(true)
+    setActionStatus(null)
+    setActionTone('default')
+    try {
+      const response = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup_path: selectedBackupPath }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_restore_backup')
+      }
+      setRestoreConfirmOpen(false)
+      setSelectedBackupPath(null)
+      setActionStatus('Backup restored successfully.')
+      await Promise.all([loadStorage(), loadBackups()])
+    } catch {
+      setRestoreConfirmOpen(false)
+      setSelectedBackupPath(null)
+      setActionTone('destructive')
+      setActionStatus('Backup restore failed. Verify the backup and try again.')
+    } finally {
+      setRestorePending(false)
+    }
+  }, [loadBackups, loadStorage, selectedBackupPath])
+
+  const actionsDisabled =
+    loading ||
+    Boolean(error) ||
+    reindexPending ||
+    rebuildPending ||
+    backupPending ||
+    restorePending
 
   return (
     <ContentSection
@@ -143,82 +242,178 @@ export function SettingsStorage() {
       desc={t('settings.storage.description')}
     >
       <div className='space-y-4 text-sm'>
-        {error ? (
-          <div className='rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive'>
-            <p className='font-medium'>{error}</p>
-            <p className='mt-1 text-xs text-muted-foreground'>
-              Check active profile selection and runtime connectivity, then retry.
+        <div className='space-y-4 text-sm'>
+          {error ? (
+            <div className='rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive'>
+              <p className='font-medium'>{error}</p>
+              <p className='mt-1 text-xs text-muted-foreground'>
+                Check active profile selection and runtime connectivity, then retry.
+              </p>
+              <Button
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => {
+                  void loadStorage()
+                }}
+              >
+                Retry
+              </Button>
+              <Button asChild variant='default' size='sm' className='mt-3 ml-2'>
+                <Link to='/'>Create or Select Profile</Link>
+              </Button>
+            </div>
+          ) : null}
+          <div className='rounded-md border p-3'>
+            <p className='font-medium'>Database location</p>
+            <p className='text-muted-foreground'>
+              {loading ? 'Loading storage paths...' : dbPath}
             </p>
+          </div>
+          <div className='rounded-md border p-3'>
+            <p className='font-medium'>Media location</p>
+            <p className='text-muted-foreground'>
+              {loading ? 'Loading storage paths...' : mediaDir}
+            </p>
+          </div>
+          <div className='rounded-md border border-amber-300/40 bg-amber-50/20 p-3 text-amber-950 dark:text-amber-200'>
+            <div className='flex items-start gap-2'>
+              <AlertTriangle className='mt-0.5 h-4 w-4' />
+              <p>
+                Storage repair and migration actions are restricted to diagnostics workflows.
+              </p>
+            </div>
+          </div>
+          <div className='flex gap-2'>
             <Button
               variant='outline'
               size='sm'
-              className='mt-3'
+              disabled={actionsDisabled}
               onClick={() => {
-                void loadStorage()
+                void runReindex()
               }}
             >
-              Retry
+              {reindexPending ? 'Reindexing Search…' : 'Reindex Search'}
             </Button>
-            <Button asChild variant='default' size='sm' className='mt-3 ml-2'>
-              <Link to='/'>Create or Select Profile</Link>
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={actionsDisabled}
+              onClick={() => {
+                void runRebuild()
+              }}
+            >
+              {rebuildPending ? 'Rebuilding Thumbnails…' : 'Rebuild Thumbnails'}
             </Button>
           </div>
-        ) : null}
-        <div className='rounded-md border p-3'>
-          <p className='font-medium'>Database location</p>
-          <p className='text-muted-foreground'>
-            {loading ? 'Loading storage paths...' : dbPath}
-          </p>
-        </div>
-        <div className='rounded-md border p-3'>
-          <p className='font-medium'>Media location</p>
-          <p className='text-muted-foreground'>
-            {loading ? 'Loading storage paths...' : mediaDir}
-          </p>
-        </div>
-        <div className='rounded-md border border-amber-300/40 bg-amber-50/20 p-3 text-amber-950 dark:text-amber-200'>
-          <div className='flex items-start gap-2'>
-            <AlertTriangle className='mt-0.5 h-4 w-4' />
-            <p>
-              Storage repair and migration actions are restricted to diagnostics workflows.
+          {actionStatus ? (
+            <p
+              data-testid='settings-storage-action-status'
+              className={actionTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            >
+              {actionStatus}
             </p>
+          ) : null}
+          <div className='rounded-md border p-3 space-y-3'>
+            <div className='flex items-start justify-between gap-3'>
+              <div>
+                <p className='font-medium'>Backups</p>
+                <p className='text-xs text-muted-foreground'>
+                  Create a backup snapshot and restore an existing backup when needed.
+                </p>
+              </div>
+              <Button
+                variant='outline'
+                size='sm'
+                data-testid='settings-storage-backup-run'
+                disabled={actionsDisabled || backupsLoading}
+                onClick={() => {
+                  void runBackup()
+                }}
+              >
+                {backupPending ? 'Creating Backup…' : 'Create Backup'}
+              </Button>
+            </div>
+            {backupsLoading ? (
+              <p className='text-sm text-muted-foreground'>Loading backups...</p>
+            ) : null}
+            {backupError ? (
+              <p className='text-sm text-destructive'>{backupError}</p>
+            ) : null}
+            {!backupsLoading && !backupError && backupList.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>
+                No backups available yet. Create one to capture the current workspace.
+              </p>
+            ) : null}
+            {!backupsLoading && backupList.length > 0 ? (
+              <div className='space-y-2'>
+                {backupList.map((backupPath) => (
+                  <div
+                    key={backupPath}
+                    className='flex items-center justify-between gap-3 rounded-md border p-2'
+                    data-testid='settings-storage-backup-row'
+                  >
+                    <div className='min-w-0 text-sm text-muted-foreground'>
+                      <p className='truncate'>{backupPath}</p>
+                    </div>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      data-testid='settings-storage-backup-restore'
+                      disabled={actionsDisabled}
+                      onClick={() => {
+                        setSelectedBackupPath(backupPath)
+                        setRestoreConfirmOpen(true)
+                      }}
+                    >
+                      Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
+          {error ? (
+            <p className='text-xs text-muted-foreground'>
+              Diagnostics actions are unavailable while storage info is degraded.
+            </p>
+          ) : null}
         </div>
-        <div className='flex gap-2'>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={actionsDisabled}
-            onClick={() => {
-              void runReindex()
-            }}
-          >
-            {reindexPending ? 'Reindexing Search…' : 'Reindex Search'}
-          </Button>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={actionsDisabled}
-            onClick={() => {
-              void runRebuild()
-            }}
-          >
-            {rebuildPending ? 'Rebuilding Thumbnails…' : 'Rebuild Thumbnails'}
-          </Button>
-        </div>
-        {actionStatus ? (
-          <p
-            data-testid='settings-storage-action-status'
-            className={actionTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
-          >
-            {actionStatus}
-          </p>
-        ) : null}
-        {error ? (
-          <p className='text-xs text-muted-foreground'>
-            Diagnostics actions are unavailable while storage info is degraded.
-          </p>
-        ) : null}
+        <Dialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
+          <DialogContent data-testid='settings-storage-restore-confirm'>
+            <div className='space-y-4'>
+              <DialogHeader>
+                <DialogTitle>Restore Backup</DialogTitle>
+              </DialogHeader>
+              <p className='text-sm text-muted-foreground'>
+                Restore the selected backup snapshot? This replaces the current runtime database with the selected backup.
+              </p>
+              <p className='rounded-md border p-2 text-xs text-muted-foreground break-all'>
+                {selectedBackupPath ?? 'No backup selected'}
+              </p>
+              <DialogFooter>
+                <Button
+                  variant='outline'
+                  onClick={() => {
+                    setRestoreConfirmOpen(false)
+                    setSelectedBackupPath(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  data-testid='settings-storage-restore-submit'
+                  disabled={restorePending || !selectedBackupPath}
+                  onClick={() => {
+                    void runRestore()
+                  }}
+                >
+                  {restorePending ? 'Restoring…' : 'Restore Backup'}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </ContentSection>
   )
