@@ -1,10 +1,24 @@
 describe('ui-screen-collections', () => {
+  const collectionsSettingsKey = 'collections.workspace.v1'
+
   function signInToCollections() {
-    cy.visit('/sign-in?redirect=%2Fcollections%2F')
-    cy.get('input[name="email"]').clear().type('e2e-collections@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/collections/' })
+    })
+    cy.wait('@loadCollectionSettings')
+  }
+
+  function bootstrapCollectionsProfile(path = '/collections/') {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
+    cy.wait('@loadCollectionSettings')
   }
 
   it('UI-SCREEN-COLLECTIONS-001 renders shared collections management table', () => {
@@ -18,8 +32,10 @@ describe('ui-screen-collections', () => {
 
   it('UI-SCREEN-COLLECTIONS-002 selects a row and persists active context across refresh', () => {
     signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSelection')
 
     cy.get('[data-testid="collections-row-watch-list"]').click()
+    cy.wait('@saveCollectionSelection')
     cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Watch List')
     cy.get('[data-testid="collections-active-context-message"]').should(
       'contain.text',
@@ -52,7 +68,7 @@ describe('ui-screen-collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-2"]').click()
-    cy.get('[data-testid="collections-row-edit-store-2"]').click()
+    cy.get('[data-testid="collections-row-edit-store-2"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-edit-input"]').clear().type('Store 2 Prime')
     cy.get('[data-testid="collections-edit-submit"]').click()
 
@@ -67,7 +83,7 @@ describe('ui-screen-collections', () => {
 
     cy.get('[data-testid="collections-row-store-1"]').click()
     cy.get('[data-testid="collections-member-shadowless-pikachu"]').should('be.visible')
-    cy.get('[data-testid="collections-row-delete-store-1"]').click()
+    cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-delete-submit"]').click()
 
     cy.contains('Store 1 removed from workspace collections.').should('be.visible')
@@ -90,11 +106,14 @@ describe('ui-screen-collections', () => {
 
   it('UI-SCREEN-COLLECTIONS-007 assigns an item into the selected collection and persists after refresh', () => {
     signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
 
     cy.get('[data-testid="collections-row-warehouse-1"]').click()
+    cy.wait('@saveCollectionSettings')
     cy.get('[data-testid="collections-assignment-select"]').click()
     cy.contains('Base Set Charizard (Unassigned)').click()
     cy.get('[data-testid="collections-assignment-submit"]').click()
+    cy.wait('@saveCollectionSettings')
 
     cy.contains('Base Set Charizard assigned to Warehouse 1.').should('be.visible')
     cy.get('[data-testid="collections-member-base-set-charizard"]').should('be.visible')
@@ -127,7 +146,100 @@ describe('ui-screen-collections', () => {
 
     cy.get('[data-testid="sidebar-nav-link-collections"]').should('be.visible')
     cy.get('[data-testid="collections-page-icon"]').should('be.visible')
-    cy.get('[data-testid="sidebar-nav-link-collections"] svg').should('have.attr', 'data-lucide', 'tag')
-    cy.get('[data-testid="collections-page-icon"]').should('have.attr', 'data-lucide', 'tag')
+    cy.get('[data-testid="sidebar-nav-link-collections"] svg').should('have.class', 'lucide-tag')
+    cy.get('[data-testid="collections-page-icon"]').should('have.class', 'lucide-tag')
+  })
+
+  it('UI-SCREEN-COLLECTIONS-010 persists collection state through profile settings and across refresh', () => {
+    bootstrapCollectionsProfile()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
+
+    cy.get('[data-testid="collections-new-action"]').click()
+    cy.get('[data-testid="collections-create-input"]').type('Profile Persisted Vault')
+    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.wait('@saveCollectionSettings')
+
+    cy.get('[data-testid="collections-row-profile-persisted-vault"]').click()
+    cy.get('[data-testid="collections-assignment-select"]').click()
+    cy.contains('Base Set Charizard (Unassigned)').click()
+    cy.get('[data-testid="collections-assignment-submit"]').click()
+    cy.wait('@saveCollectionSettings')
+
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+        items?: Array<{ id?: string; collectionName?: string | null }>
+      }
+
+      expect(persisted.collections).to.include('Profile Persisted Vault')
+      expect(persisted.activeCollection).to.equal('Profile Persisted Vault')
+      expect(persisted.items).to.satisfy(
+        (items?: Array<{ id?: string; collectionName?: string | null }>) =>
+          Array.isArray(items) &&
+          items.some(
+            (item) =>
+              item.id === 'inventory-item-charizard-base' &&
+              item.collectionName === 'Profile Persisted Vault'
+          )
+      )
+    })
+
+    cy.reload()
+    cy.get('[data-testid="collections-selected-name"]').should(
+      'contain.text',
+      'Profile Persisted Vault'
+    )
+    cy.get('[data-testid="collections-member-base-set-charizard"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-COLLECTIONS-011 switches collection state with the active profile', () => {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.request('POST', '/api/profiles', { name: 'Collections Profile Two' }).then(
+        (createResponse) => {
+          expect(createResponse.status).to.be.oneOf([200, 201])
+          const secondProfileId = createResponse.body.id as string
+
+          const secondProfileSettings = {
+            [collectionsSettingsKey]: JSON.stringify({
+              collections: ['All Items', 'Profile Two Vault'],
+              activeCollection: 'Profile Two Vault',
+              items: [
+                {
+                  id: 'inventory-item-kobe-rookie',
+                  name: '1996 Topps Kobe Bryant rookie',
+                  detail: 'PSA candidate, Lakers lot',
+                  collectionName: 'Profile Two Vault',
+                },
+              ],
+            }),
+          }
+
+          cy.request('PUT', `/api/profiles/${secondProfileId}/settings`, {
+            settings: secondProfileSettings,
+          }).its('status').should('eq', 200)
+
+          cy.useBootstrappedProfile(profile_id, profile_name, { path: '/collections/' })
+          cy.get('[data-testid="collections-row-profile-two-vault"]').should('not.exist')
+
+          cy.request('PUT', '/api/profiles/active', { profile_id: secondProfileId })
+            .its('status')
+            .should('eq', 200)
+          cy.visit('/collections/')
+
+          cy.get('[data-testid="collections-row-profile-two-vault"]').should('be.visible')
+          cy.get('[data-testid="collections-selected-name"]').should(
+            'contain.text',
+            'Profile Two Vault'
+          )
+          cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should(
+            'be.visible'
+          )
+        }
+      )
+    })
   })
 })

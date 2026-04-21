@@ -705,9 +705,9 @@ export function Tasks({
               <select
                 className='h-9 rounded-md border bg-background px-2 text-sm'
                 value={activeWorkspaceCollection}
-                onChange={(event) =>
-                  setActiveWorkspaceCollection(event.target.value)
-                }
+                onChange={(event) => {
+                  void setActiveWorkspaceCollection(event.target.value)
+                }}
               >
                 {workspaceCollections.map((collection) => (
                   <option
@@ -757,8 +757,8 @@ export function Tasks({
                   <Button
                     type='button'
                     data-testid='wishlist-inline-save'
-                    onClick={() => {
-                      const created = addCollection(inlineCollectionName)
+                    onClick={async () => {
+                      const created = await addCollection(inlineCollectionName)
                       if (!created) {
                         setInlineCollectionValidationMessage(
                           'Collection name is required.'
@@ -766,7 +766,7 @@ export function Tasks({
                         return
                       }
                       setInlineCollectionValidationMessage('')
-                      setActiveWorkspaceCollection(created)
+                      await setActiveWorkspaceCollection(created)
                       setInlineCollectionName('')
                       setInlineCollectionInputOpen(false)
                     }}
