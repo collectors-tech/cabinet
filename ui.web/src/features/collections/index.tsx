@@ -227,13 +227,13 @@ export function Collections() {
 
   const filteredCount = table.getFilteredRowModel().rows.length
 
-  function handleSelectCollection(row: CollectionRow) {
+  async function handleSelectCollection(row: CollectionRow) {
     setSelectedCollectionID(row.key)
-    setActiveWorkspaceCollection(row.name)
+    await setActiveWorkspaceCollection(row.name)
   }
 
-  function handleCreateCollection() {
-    const created = addCollection(createValue)
+  async function handleCreateCollection() {
+    const created = await addCollection(createValue)
     if (!created) {
       toast.error('Collection name must be unique and non-empty.')
       return
@@ -244,11 +244,11 @@ export function Collections() {
     toast.success(`${created} created and set as the active collection.`)
   }
 
-  function handleRenameCollection() {
+  async function handleRenameCollection() {
     if (!selectedRow) {
       return
     }
-    const renamed = renameCollection(selectedRow.name, editValue)
+    const renamed = await renameCollection(selectedRow.name, editValue)
     if (!renamed) {
       toast.error('Rename failed. Use a unique non-empty collection name.')
       return
@@ -258,12 +258,12 @@ export function Collections() {
     toast.success(`${selectedRow.name} renamed to ${renamed}.`)
   }
 
-  function handleDeleteCollection() {
+  async function handleDeleteCollection() {
     if (!selectedRow) {
       return
     }
     const removedName = selectedRow.name
-    const removed = removeCollection(removedName)
+    const removed = await removeCollection(removedName)
     if (!removed) {
       toast.error('Collection removal failed.')
       return
@@ -273,11 +273,11 @@ export function Collections() {
     toast.success(`${removedName} removed from workspace collections.`)
   }
 
-  function handleAssignToSelectedCollection() {
+  async function handleAssignToSelectedCollection() {
     if (!assignmentItemID || !selectedRow || isProtectedCollection) {
       return
     }
-    const updated = assignItemToCollection(assignmentItemID, selectedRow.name)
+    const updated = await assignItemToCollection(assignmentItemID, selectedRow.name)
     if (!updated) {
       toast.error('Select an item and a valid collection before saving.')
       return
@@ -286,13 +286,13 @@ export function Collections() {
     toast.success(`${updated.name} assigned to ${selectedRow.name}.`)
   }
 
-  function handleMoveItem(item: WorkspaceCollectionItem) {
+  async function handleMoveItem(item: WorkspaceCollectionItem) {
     const destination = moveTargets[item.id]
     if (!destination) {
       toast.error('Choose a destination collection before moving the item.')
       return
     }
-    const updated = assignItemToCollection(item.id, destination)
+    const updated = await assignItemToCollection(item.id, destination)
     if (!updated) {
       toast.error('Item move failed.')
       return
@@ -379,7 +379,9 @@ export function Collections() {
                             className='cursor-pointer'
                             data-state={isSelected ? 'selected' : undefined}
                             data-testid={`collections-row-${row.original.key}`}
-                            onClick={() => handleSelectCollection(row.original)}
+                            onClick={() => {
+                              void handleSelectCollection(row.original)
+                            }}
                           >
                             {row.getVisibleCells().map((cell) => (
                               <TableCell key={cell.id}>
@@ -460,7 +462,9 @@ export function Collections() {
                     </Select>
                     <Button
                       type='button'
-                      onClick={handleAssignToSelectedCollection}
+                      onClick={() => {
+                        void handleAssignToSelectedCollection()
+                      }}
                       data-testid='collections-assignment-submit'
                     >
                       Assign to {selectedCollectionName}
@@ -519,7 +523,9 @@ export function Collections() {
                           type='button'
                           variant='outline'
                           data-testid={`collections-move-submit-${collectionKey(item.name)}`}
-                          onClick={() => handleMoveItem(item)}
+                          onClick={() => {
+                            void handleMoveItem(item)
+                          }}
                         >
                           <ArrowRightLeft className='mr-2 h-4 w-4' />
                           Move item
@@ -554,7 +560,13 @@ export function Collections() {
             <Button type='button' variant='outline' onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button type='button' onClick={handleCreateCollection} data-testid='collections-create-submit'>
+            <Button
+              type='button'
+              onClick={() => {
+                void handleCreateCollection()
+              }}
+              data-testid='collections-create-submit'
+            >
               Save collection
             </Button>
           </DialogFooter>
@@ -577,7 +589,13 @@ export function Collections() {
             <Button type='button' variant='outline' onClick={() => setEditOpen(false)}>
               Cancel
             </Button>
-            <Button type='button' onClick={handleRenameCollection} data-testid='collections-edit-submit'>
+            <Button
+              type='button'
+              onClick={() => {
+                void handleRenameCollection()
+              }}
+              data-testid='collections-edit-submit'
+            >
               Save rename
             </Button>
           </DialogFooter>
@@ -601,7 +619,14 @@ export function Collections() {
             <Button type='button' variant='outline' onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
-            <Button type='button' variant='destructive' onClick={handleDeleteCollection} data-testid='collections-delete-submit'>
+            <Button
+              type='button'
+              variant='destructive'
+              onClick={() => {
+                void handleDeleteCollection()
+              }}
+              data-testid='collections-delete-submit'
+            >
               Delete collection
             </Button>
           </DialogFooter>

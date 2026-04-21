@@ -2369,7 +2369,7 @@ export function Collection({
                     value={activeWorkspaceCollection}
                     onChange={(event) => {
                       const selected = event.target.value
-                      setActiveWorkspaceCollection(selected)
+                      void setActiveWorkspaceCollection(selected)
                       setActiveFolder(selected)
                     }}
                   >
@@ -2409,8 +2409,8 @@ export function Collection({
                     <Button
                       type='button'
                       data-testid='collection-inline-save'
-                      onClick={() => {
-                        const created = addCollection(inlineCollectionName)
+                      onClick={async () => {
+                        const created = await addCollection(inlineCollectionName)
                         if (created) {
                           setActiveFolder(created)
                         }
