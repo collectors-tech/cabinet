@@ -81,11 +81,19 @@ export function SettingsOperations() {
   const [exportPending, setExportPending] = useState(false)
   const [importDryRunPending, setImportDryRunPending] = useState(false)
   const [importApplyPending, setImportApplyPending] = useState(false)
+  const [exportCsvPending, setExportCsvPending] = useState(false)
+  const [importCsvDryRunPending, setImportCsvDryRunPending] = useState(false)
   const [importJsonInput, setImportJsonInput] = useState(
     '{\n  "snapshot": {\n    "schema_version": 1,\n    "items": []\n  }\n}'
   )
+  const [importCsvInput, setImportCsvInput] = useState(
+    'brand,category,part_number,title\nAFX,Slot,CSV-001,Example Item'
+  )
   const [lastExportSummary, setLastExportSummary] = useState<ExportSnapshotResponse | null>(null)
   const [importSummary, setImportSummary] = useState<ImportDryRunSummaryResponse | null>(null)
+  const [csvStatus, setCsvStatus] = useState<string>('No CSV import or export action has run yet.')
+  const [csvTone, setCsvTone] = useState<'default' | 'destructive'>('default')
+  const [csvSummary, setCsvSummary] = useState<ImportDryRunSummaryResponse | null>(null)
   const [importDefaultAction, setImportDefaultAction] =
     useState<ImportApplyAction>('merge')
   const [lastDryRunRequest, setLastDryRunRequest] = useState<ImportSnapshotRequest | null>(null)
@@ -201,6 +209,62 @@ export function SettingsOperations() {
     }
   }, [importDefaultAction, lastDryRunRequest])
 
+  const runExportCsv = useCallback(async () => {
+    setExportCsvPending(true)
+    setCsvTone('default')
+    try {
+      const response = await fetch('/api/data/export/csv/items')
+      if (!response.ok) {
+        throw new Error('failed_to_export_csv')
+      }
+      const csvText = await response.text()
+      const rowCount = Math.max(
+        0,
+        csvText
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line !== '').length - 1
+      )
+      setCsvStatus(`Exported CSV with ${rowCount} item row${rowCount === 1 ? '' : 's'}.`)
+    } catch {
+      setCsvTone('destructive')
+      setCsvStatus('CSV export failed.')
+    } finally {
+      setExportCsvPending(false)
+    }
+  }, [])
+
+  const runImportCsvDryRun = useCallback(async () => {
+    setImportCsvDryRunPending(true)
+    setCsvSummary(null)
+    setCsvTone('default')
+    try {
+      const response = await fetch('/api/data/import/csv/dry-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv: importCsvInput,
+          mapping: {},
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_dry_run_csv_import')
+      }
+      const payload = (await response.json()) as ImportDryRunSummaryResponse
+      setCsvSummary(payload)
+      const conflictCount = Number(payload.conflicts ?? 0)
+      setCsvStatus(
+        `CSV dry-run completed with ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}.`
+      )
+    } catch {
+      setCsvSummary(null)
+      setCsvTone('destructive')
+      setCsvStatus('CSV dry-run failed.')
+    } finally {
+      setImportCsvDryRunPending(false)
+    }
+  }, [importCsvInput])
+
   const runtimeAddress = runtimeInfo
     ? `${runtimeInfo.runtime_host?.trim() || '127.0.0.1'}:${runtimeInfo.runtime_port ?? 17880}`
     : 'Unavailable'
@@ -213,6 +277,11 @@ export function SettingsOperations() {
     exportPending ||
     importDryRunPending ||
     importApplyPending
+  const csvActionsDisabled =
+    loading ||
+    Boolean(error) ||
+    exportCsvPending ||
+    importCsvDryRunPending
 
   return (
     <ContentSection
@@ -377,17 +446,17 @@ export function SettingsOperations() {
                 >
                   {importApplyPending ? 'Applying…' : 'Apply Import'}
                 </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                data-testid='settings-operations-import-json-dry-run'
-                disabled={importActionsDisabled}
-                onClick={() => {
-                  void runImportJsonDryRun()
-                }}
-              >
-                {importDryRunPending ? 'Running Dry-Run…' : 'Run Dry-Run'}
-              </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  data-testid='settings-operations-import-json-dry-run'
+                  disabled={importActionsDisabled}
+                  onClick={() => {
+                    void runImportJsonDryRun()
+                  }}
+                >
+                  {importDryRunPending ? 'Running Dry-Run…' : 'Run Dry-Run'}
+                </Button>
               </div>
             </div>
           </div>
@@ -418,6 +487,100 @@ export function SettingsOperations() {
               </div>
             ) : (
               <p>No dry-run summary yet. Paste a snapshot and run a dry-run to review conflicts.</p>
+            )}
+          </div>
+        </div>
+
+        <div
+          className='rounded-md border p-3 space-y-3'
+          data-testid='settings-operations-csv-card'
+        >
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>CSV import and export</p>
+              <p className='text-muted-foreground'>
+                Export item rows as CSV and dry-run CSV imports with the default item column mapping.
+              </p>
+            </div>
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-export-csv'
+              disabled={csvActionsDisabled}
+              onClick={() => {
+                void runExportCsv()
+              }}
+            >
+              {exportCsvPending ? 'Exporting…' : 'Export CSV'}
+            </Button>
+          </div>
+
+          <p
+            data-testid='settings-operations-csv-status'
+            className={csvTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          >
+            {csvStatus}
+          </p>
+
+          <div className='space-y-2'>
+            <label
+              htmlFor='settings-operations-import-csv-input'
+              className='text-sm font-medium'
+            >
+              CSV import dry-run
+            </label>
+            <Textarea
+              id='settings-operations-import-csv-input'
+              data-testid='settings-operations-import-csv-input'
+              value={importCsvInput}
+              onChange={(event) => {
+                setImportCsvInput(event.target.value)
+                setCsvSummary(null)
+              }}
+              className='min-h-36 font-mono text-xs'
+              spellCheck={false}
+            />
+            <div className='flex justify-end'>
+              <Button
+                variant='outline'
+                size='sm'
+                data-testid='settings-operations-import-csv-dry-run'
+                disabled={csvActionsDisabled}
+                onClick={() => {
+                  void runImportCsvDryRun()
+                }}
+              >
+                {importCsvDryRunPending ? 'Running CSV Dry-Run…' : 'Run CSV Dry-Run'}
+              </Button>
+            </div>
+          </div>
+
+          <div
+            className='rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground'
+            data-testid='settings-operations-csv-summary'
+          >
+            {csvSummary ? (
+              <div className='space-y-2'>
+                <p>
+                  {csvSummary.total_items ?? 0} items, {csvSummary.new_items ?? 0} new,{' '}
+                  {csvSummary.conflicts ?? 0} conflict
+                  {(csvSummary.conflicts ?? 0) === 1 ? '' : 's'}.
+                </p>
+                {csvSummary.conflict_details?.length ? (
+                  <div className='space-y-1'>
+                    {csvSummary.conflict_details.map((detail) => (
+                      <p key={`csv-${detail.part_number || 'unknown'}-${detail.existing_id || 'missing'}`}>
+                        {detail.part_number || 'Unknown part'} already exists as{' '}
+                        {detail.existing_id || 'unknown item'}.
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No conflicts detected.</p>
+                )}
+              </div>
+            ) : (
+              <p>No CSV dry-run summary yet. Paste CSV rows and run a dry-run to review conflicts.</p>
             )}
           </div>
         </div>
