@@ -221,4 +221,124 @@ describe("ui-screen-wishlist", () => {
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/);
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
   });
+
+  it("UI-SCREEN-WISHLIST-008 surfaces planning summary and persists selected focus across refresh and route return", () => {
+    cy.intercept("GET", "/api/wishlist", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "wish-1",
+            item_id: "item-collector-1",
+            priority: "medium",
+            below_target_now: false,
+            notes: "Wait for convention restock",
+          },
+          {
+            id: "wish-2",
+            item_id: "item-collector-2",
+            priority: "high",
+            below_target_now: true,
+            notes: "Buy if price drops again",
+          },
+          {
+            id: "wish-3",
+            item_id: "item-collector-3",
+            priority: "critical",
+            below_target_now: false,
+            notes: "Need before championship season",
+          },
+        ],
+      },
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-collector-1",
+            title: "AFX Mega-G+ Camaro Wildfire",
+            part_number: "22073",
+            status: "wishlist",
+            category: "Slot Cars",
+            priority: "medium",
+          },
+          {
+            id: "item-collector-2",
+            title: "F1 Silverline",
+            part_number: "F1002",
+            status: "wishlist",
+            category: "Formula",
+            priority: "high",
+          },
+          {
+            id: "item-collector-3",
+            title: "Team Transport Hauler",
+            part_number: "TT-88",
+            status: "wishlist",
+            category: "Haulers",
+            priority: "critical",
+          },
+        ],
+      },
+    }).as("catalogItems");
+
+    signInToWishlist({ skipStub: true });
+
+    cy.get('[data-testid="wishlist-planning-summary"]').should("be.visible");
+    cy.get('[data-testid="wishlist-planning-focus-all"]').should(
+      "contain",
+      "3"
+    );
+    cy.get('[data-testid="wishlist-planning-focus-high-priority"]').should(
+      "contain",
+      "2"
+    );
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
+      "contain",
+      "1"
+    );
+    cy.get('[data-testid="wishlist-planning-focus-watchlist"]').should(
+      "contain",
+      "1"
+    );
+
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').click();
+    cy.window()
+      .its("localStorage")
+      .invoke("getItem", "cabinet.wishlistPlanningFocus")
+      .should("eq", "below-target");
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
+      "have.attr",
+      "aria-pressed",
+      "true"
+    );
+    cy.contains("F1 Silverline").should("be.visible");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+    cy.contains("Team Transport Hauler").should("not.exist");
+
+    cy.reload();
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
+      "have.attr",
+      "aria-pressed",
+      "true"
+    );
+    cy.contains("F1 Silverline").should("be.visible");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+
+    cy.visit("/inventory/");
+    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/);
+    cy.visit("/wishlist/");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
+      "have.attr",
+      "aria-pressed",
+      "true"
+    );
+    cy.contains("F1 Silverline").should("be.visible");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+  });
 });

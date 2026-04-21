@@ -58,6 +58,16 @@ type DataTableProps = {
 
 type ViewMode = 'rows' | 'cards'
 
+function formatWishlistStatus(status: string) {
+  if (status === 'wishlist') {
+    return 'Watching'
+  }
+  if (status === 'discovered') {
+    return 'Below target'
+  }
+  return status
+}
+
 export function TasksTable({
   data,
   routePath,
@@ -423,10 +433,20 @@ export function TasksTable({
                   />
                 </div>
                 <div className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
-                  <span>Status: {row.original.status}</span>
+                  <span>
+                    Status:{' '}
+                    {routePath === '/_authenticated/wishlist/'
+                      ? formatWishlistStatus(row.original.status)
+                      : row.original.status}
+                  </span>
                   <span>Priority: {row.original.priority}</span>
                   <span>Type: {row.original.label}</span>
                 </div>
+                {routePath === '/_authenticated/wishlist/' && row.original.notes ? (
+                  <p className='text-xs text-muted-foreground'>
+                    Notes: {row.original.notes}
+                  </p>
+                ) : null}
               </div>
             ))
           ) : (
@@ -458,6 +478,11 @@ export function TasksTable({
               <p>
                 <strong>Status:</strong> {selectedRecord.status}
               </p>
+              {selectedRecord.notes ? (
+                <p>
+                  <strong>Notes:</strong> {selectedRecord.notes}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </DialogContent>

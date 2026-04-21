@@ -17,7 +17,7 @@ import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { TasksDialogs } from './components/tasks-dialogs'
 import { TasksProvider } from './components/tasks-provider'
@@ -29,6 +29,72 @@ type TasksProps = {
   title?: string
   description?: string
   routePath?: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+}
+
+const WISHLIST_PLANNING_FOCUS_STORAGE_KEY = 'cabinet.wishlistPlanningFocus'
+
+type WishlistPlanningFocus =
+  | 'all'
+  | 'high-priority'
+  | 'below-target'
+  | 'watchlist'
+
+const wishlistPlanningFocusConfig: Array<{
+  id: WishlistPlanningFocus
+  label: string
+  description: string
+}> = [
+  {
+    id: 'all',
+    label: 'All planned',
+    description: 'Everything currently being tracked.',
+  },
+  {
+    id: 'high-priority',
+    label: 'High priority',
+    description: 'High and critical items that need active attention.',
+  },
+  {
+    id: 'below-target',
+    label: 'Below target',
+    description: 'Items currently priced at or below target.',
+  },
+  {
+    id: 'watchlist',
+    label: 'Steady watch',
+    description: 'Items to monitor without immediate urgency.',
+  },
+]
+
+function normalizeWishlistPlanningFocus(
+  value: string | null | undefined
+): WishlistPlanningFocus {
+  switch (value) {
+    case 'high-priority':
+    case 'below-target':
+    case 'watchlist':
+      return value
+    default:
+      return 'all'
+  }
+}
+
+function matchesWishlistPlanningFocus(
+  task: Task,
+  focus: WishlistPlanningFocus
+): boolean {
+  const priority = task.priority.trim().toLowerCase()
+  const isBelowTarget = Boolean(task.belowTargetNow)
+  switch (focus) {
+    case 'high-priority':
+      return priority === 'high' || priority === 'critical'
+    case 'below-target':
+      return isBelowTarget
+    case 'watchlist':
+      return !isBelowTarget && priority !== 'high' && priority !== 'critical'
+    default:
+      return true
+  }
 }
 
 export function Tasks({
@@ -50,6 +116,15 @@ export function Tasks({
   const [wishlistActionItemID, setWishlistActionItemID] = useState<string | null>(
     null
   )
+  const [wishlistPlanningFocus, setWishlistPlanningFocus] =
+    useState<WishlistPlanningFocus>(() => {
+      if (typeof window === 'undefined') {
+        return 'all'
+      }
+      return normalizeWishlistPlanningFocus(
+        window.localStorage.getItem(WISHLIST_PLANNING_FOCUS_STORAGE_KEY)
+      )
+    })
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
 
   const loadWishlistData = useCallback(async () => {
@@ -65,6 +140,7 @@ export function Tasks({
         id?: string
         item_id?: string
         priority?: string
+        notes?: string
         below_target_now?: boolean
       }>
     }
@@ -82,6 +158,7 @@ export function Tasks({
       {
         id?: string
         priority?: string
+        notes?: string
         below_target_now?: boolean
       }
     >()
@@ -107,6 +184,8 @@ export function Tasks({
         label: item.category?.trim() || 'collection',
         priority:
           wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
+        notes: wishlistEntry?.notes?.trim(),
+        belowTargetNow: Boolean(wishlistEntry?.below_target_now),
       } satisfies Task
     })
   }, [])
@@ -162,6 +241,37 @@ export function Tasks({
     },
     [loadWishlistData]
   )
+
+  useEffect(() => {
+    if (!isWishlistRoute || typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(
+      WISHLIST_PLANNING_FOCUS_STORAGE_KEY,
+      wishlistPlanningFocus
+    )
+  }, [isWishlistRoute, wishlistPlanningFocus])
+
+  const wishlistPlanningSummary = useMemo(() => {
+    if (!isWishlistRoute) {
+      return []
+    }
+    return wishlistPlanningFocusConfig.map((focus) => ({
+      ...focus,
+      count: tableData.filter((task) =>
+        matchesWishlistPlanningFocus(task, focus.id)
+      ).length,
+    }))
+  }, [isWishlistRoute, tableData])
+
+  const displayedData = useMemo(() => {
+    if (!isWishlistRoute) {
+      return tableData
+    }
+    return tableData.filter((task) =>
+      matchesWishlistPlanningFocus(task, wishlistPlanningFocus)
+    )
+  }, [isWishlistRoute, tableData, wishlistPlanningFocus])
 
   return (
     <TasksProvider>
@@ -224,6 +334,37 @@ export function Tasks({
             </DropdownMenu>
           </div>
         </div>
+        {isWishlistRoute ? (
+          <div
+            className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'
+            data-testid='wishlist-planning-summary'
+          >
+            {wishlistPlanningSummary.map((focus) => (
+              <button
+                key={focus.id}
+                type='button'
+                data-testid={`wishlist-planning-focus-${focus.id}`}
+                className={`rounded-lg border p-4 text-left transition-colors ${
+                  wishlistPlanningFocus === focus.id
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-accent/40'
+                }`}
+                aria-pressed={wishlistPlanningFocus === focus.id}
+                onClick={() => setWishlistPlanningFocus(focus.id)}
+              >
+                <div className='flex items-start justify-between gap-3'>
+                  <div>
+                    <p className='text-sm font-medium'>{focus.label}</p>
+                    <p className='mt-1 text-xs text-muted-foreground'>
+                      {focus.description}
+                    </p>
+                  </div>
+                  <span className='text-2xl font-semibold'>{focus.count}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {isWishlistRoute ? (
           <div
             className='rounded-md border p-3'
@@ -316,7 +457,7 @@ export function Tasks({
           </div>
         ) : null}
         <TasksTable
-          data={tableData}
+          data={displayedData}
           routePath={routePath}
           onWishlistMarkOwned={
             isWishlistRoute ? handleWishlistMarkOwned : undefined
