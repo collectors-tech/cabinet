@@ -779,6 +779,7 @@ export function Collection({
     null
   )
   const aiApplyTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const inventoryPhotoRequestIDRef = useRef(0)
   const {
     workspaceCollections,
     activeWorkspaceCollection,
@@ -1523,19 +1524,24 @@ export function Collection({
 
   const loadInventoryPhotos = useCallback(async () => {
     if (!isInventoryRoute) {
+      inventoryPhotoRequestIDRef.current += 1
       setInventoryPhotos([])
       setPhotosError(null)
       setPhotosLoading(false)
       return
     }
     if (!selectedItemID) {
+      inventoryPhotoRequestIDRef.current += 1
       setInventoryPhotos([])
       setPhotosError(null)
       setPhotosLoading(false)
       return
     }
+    const requestID = inventoryPhotoRequestIDRef.current + 1
+    inventoryPhotoRequestIDRef.current = requestID
     setPhotosLoading(true)
     setPhotosError(null)
+    setInventoryPhotos([])
     try {
       const response = await fetch(
         `/api/items/${encodeURIComponent(selectedItemID)}/photos`
@@ -1555,18 +1561,30 @@ export function Collection({
         filename: photo.filename?.trim() || 'photo.jpg',
         is_primary: photo.is_primary ?? false,
       }))
+      if (inventoryPhotoRequestIDRef.current !== requestID) {
+        return
+      }
       setInventoryPhotos(mapped.filter((photo) => photo.id !== ''))
     } catch {
+      if (inventoryPhotoRequestIDRef.current !== requestID) {
+        return
+      }
       setInventoryPhotos([])
       setPhotosError('Photos could not be loaded for this item. Retry to continue.')
     } finally {
-      setPhotosLoading(false)
+      if (inventoryPhotoRequestIDRef.current === requestID) {
+        setPhotosLoading(false)
+      }
     }
   }, [isInventoryRoute, selectedItemID])
 
   useEffect(() => {
     void loadInventoryPhotos()
   }, [loadInventoryPhotos])
+
+  useEffect(() => {
+    setSelectedPhotoIndex(null)
+  }, [selectedItemID])
 
   useEffect(() => {
     if (

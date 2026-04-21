@@ -123,4 +123,116 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.get('[data-testid="inventory-photo-fullscreen-close"]').click()
     cy.get('[data-testid="inventory-photo-fullscreen"]').should('not.exist')
   })
+
+  it('PHOTOS-MEDIA-005 keeps photos scoped to the currently selected item when switching rows', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-a',
+            part_number: 'PN-PHOTO-A',
+            title: 'Photo Item A',
+            status: 'active',
+            category: 'Cars',
+          },
+          {
+            id: 'item-photo-b',
+            part_number: 'PN-PHOTO-B',
+            title: 'Photo Item B',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-a/photos', {
+      delay: 700,
+      statusCode: 200,
+      body: {
+        photos: [{ id: 'photo-a-1', filename: 'item-a.jpg', is_primary: true }],
+      },
+    }).as('itemAPhotos')
+    cy.intercept('GET', '/api/items/item-photo-b/photos', {
+      statusCode: 200,
+      body: {
+        photos: [{ id: 'photo-b-1', filename: 'item-b.jpg', is_primary: true }],
+      },
+    }).as('itemBPhotos')
+
+    signIn()
+    cy.wait('@items')
+
+    cy.contains('td', 'PN-PHOTO-B').closest('tr').click()
+    cy.wait('@itemBPhotos')
+
+    cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-B')
+    cy.contains('[data-testid="inventory-photo-row"]', 'item-b.jpg').should('be.visible')
+    cy.contains('[data-testid="inventory-photo-row"]', 'item-a.jpg').should('not.exist')
+
+    cy.wait('@itemAPhotos')
+    cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-B')
+    cy.contains('[data-testid="inventory-photo-row"]', 'item-b.jpg').should('be.visible')
+    cy.contains('[data-testid="inventory-photo-row"]', 'item-a.jpg').should('not.exist')
+  })
+
+  it('PHOTOS-MEDIA-006 reloads the selected item photo state without losing the primary badge', () => {
+    const photos = [
+      { id: 'reload-p1', filename: 'reload-one.jpg', is_primary: true },
+      { id: 'reload-p2', filename: 'reload-two.jpg', is_primary: false },
+    ]
+
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-reload',
+            part_number: 'PN-PHOTO-RELOAD',
+            title: 'Reload Photo Item',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-reload/photos', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { photos },
+      })
+    }).as('reloadPhotos')
+    cy.intercept('PUT', '/api/items/item-photo-reload/photos/reload-p2/primary', (req) => {
+      photos[0] = { ...photos[0], is_primary: false }
+      photos[1] = { ...photos[1], is_primary: true }
+      req.reply({
+        statusCode: 204,
+        body: '',
+      })
+    }).as('reloadSetPrimary')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@reloadPhotos')
+
+    cy.contains('[data-testid="inventory-photo-row"]', 'reload-two.jpg')
+      .find('[data-testid="inventory-photo-set-primary"]')
+      .click()
+    cy.wait('@reloadSetPrimary')
+    cy.wait('@reloadPhotos')
+    cy.contains('[data-testid="inventory-photo-row"]', 'reload-two.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('exist')
+
+    cy.reload()
+    cy.wait('@items')
+    cy.wait('@reloadPhotos')
+    cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-RELOAD')
+    cy.contains('[data-testid="inventory-photo-row"]', 'reload-two.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('exist')
+    cy.contains('[data-testid="inventory-photo-row"]', 'reload-one.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('not.exist')
+  })
 })
