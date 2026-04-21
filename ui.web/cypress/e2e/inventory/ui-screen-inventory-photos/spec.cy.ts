@@ -7,6 +7,18 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function photoRowNames() {
+    return cy.get('[data-testid="inventory-photo-row"]').then(($rows) =>
+      $rows
+        .map((_, row) => {
+          const filename =
+            row.querySelector('span')?.textContent?.trim() ?? ''
+          return filename
+        })
+        .get()
+    )
+  }
+
   it('UI-SCREEN-INVENTORY-PHOTOS-001 supports upload + primary + delete lifecycle', () => {
     let listCall = 0
     cy.intercept('GET', '/api/items', {
@@ -165,15 +177,12 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
 
     cy.contains('td', 'PN-PHOTO-B').closest('tr').click()
     cy.wait('@itemBPhotos')
-
     cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-B')
-    cy.contains('[data-testid="inventory-photo-row"]', 'item-b.jpg').should('be.visible')
-    cy.contains('[data-testid="inventory-photo-row"]', 'item-a.jpg').should('not.exist')
+    photoRowNames().should('deep.equal', ['item-b.jpg'])
 
     cy.wait('@itemAPhotos')
     cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-B')
-    cy.contains('[data-testid="inventory-photo-row"]', 'item-b.jpg').should('be.visible')
-    cy.contains('[data-testid="inventory-photo-row"]', 'item-a.jpg').should('not.exist')
+    photoRowNames().should('deep.equal', ['item-b.jpg'])
   })
 
   it('PHOTOS-MEDIA-006 reloads the selected item photo state without losing the primary badge', () => {
@@ -234,5 +243,133 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.contains('[data-testid="inventory-photo-row"]', 'reload-one.jpg')
       .find('[data-testid="inventory-photo-primary-badge"]')
       .should('not.exist')
+  })
+
+  it('PHOTOS-MEDIA-007 reorders item photos and keeps the new order after refresh', () => {
+    const photos = [
+      { id: 'order-p1', filename: 'order-one.jpg', is_primary: true },
+      { id: 'order-p2', filename: 'order-two.jpg', is_primary: false },
+      { id: 'order-p3', filename: 'order-three.jpg', is_primary: false },
+    ]
+
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-order',
+            part_number: 'PN-PHOTO-ORDER',
+            title: 'Ordered Photo Item',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-order/photos', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { photos },
+      })
+    }).as('orderedPhotos')
+    cy.intercept('POST', '/api/items/item-photo-order/photos/reorder', (req) => {
+      expect(req.body).to.deep.equal({
+        photo_ids: ['order-p2', 'order-p1', 'order-p3'],
+      })
+      photos.splice(
+        0,
+        photos.length,
+        { id: 'order-p2', filename: 'order-two.jpg', is_primary: false },
+        { id: 'order-p1', filename: 'order-one.jpg', is_primary: true },
+        { id: 'order-p3', filename: 'order-three.jpg', is_primary: false }
+      )
+      req.reply({
+        statusCode: 200,
+        body: { ok: true },
+      })
+    }).as('reorderPhotos')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@orderedPhotos')
+
+    photoRowNames().should('deep.equal', [
+      'order-one.jpg',
+      'order-two.jpg',
+      'order-three.jpg',
+    ])
+
+    cy.contains('[data-testid="inventory-photo-row"]', 'order-two.jpg')
+      .find('[data-testid="inventory-photo-move-up"]')
+      .click()
+    cy.wait('@reorderPhotos')
+    cy.wait('@orderedPhotos')
+
+    photoRowNames().should('deep.equal', [
+      'order-two.jpg',
+      'order-one.jpg',
+      'order-three.jpg',
+    ])
+
+    cy.reload()
+    cy.wait('@items')
+    cy.wait('@orderedPhotos')
+    photoRowNames().should('deep.equal', [
+      'order-two.jpg',
+      'order-one.jpg',
+      'order-three.jpg',
+    ])
+  })
+
+  it('PHOTOS-MEDIA-008 rebuilds photo derivatives with retry-safe feedback', () => {
+    let rebuildAttempts = 0
+
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-rebuild',
+            part_number: 'PN-PHOTO-REBUILD',
+            title: 'Rebuild Photo Item',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-rebuild/photos', {
+      statusCode: 200,
+      body: {
+        photos: [{ id: 'rebuild-p1', filename: 'rebuild-one.jpg', is_primary: true }],
+      },
+    }).as('rebuildPhotos')
+    cy.intercept('POST', '/api/items/item-photo-rebuild/photos-rebuild', (req) => {
+      rebuildAttempts += 1
+      if (rebuildAttempts === 1) {
+        req.reply({
+          statusCode: 500,
+          body: { error: 'failed_to_rebuild_thumbnails' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: { ok: true },
+      })
+    }).as('rebuildRequest')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@rebuildPhotos')
+
+    cy.get('[data-testid="inventory-photo-rebuild"]').click()
+    cy.wait('@rebuildRequest')
+    cy.get('[data-testid="inventory-photo-rebuild-error"]').should('be.visible')
+    cy.get('[data-testid="inventory-photo-rebuild-retry"]').click()
+    cy.wait('@rebuildRequest')
+    cy.wait('@rebuildPhotos')
+    cy.get('[data-testid="inventory-photo-rebuild-success"]').should('be.visible')
+    cy.contains('[data-testid="inventory-photo-row"]', 'rebuild-one.jpg').should('be.visible')
   })
 })
