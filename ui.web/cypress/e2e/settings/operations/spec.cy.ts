@@ -652,4 +652,161 @@ describe('settings/operations', () => {
       'CSV import apply failed.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-011 runs CSV dry-run with custom column mapping', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv-mapping',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', (req) => {
+      expect(req.body).to.deep.equal({
+        csv: 'maker,kind,pn,name\nAFX,Slot,MAP-001,Mapped Item',
+        mapping: {
+          brand: 'maker',
+          category: 'kind',
+          part_number: 'pn',
+          title: 'name',
+        },
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          total_items: 1,
+          new_items: 1,
+          conflicts: 0,
+          conflict_details: [],
+        },
+      })
+    }).as('importCsvDryRun')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type('maker,kind,pn,name\nAFX,Slot,MAP-001,Mapped Item', {
+        parseSpecialCharSequences: false,
+      })
+    cy.get('[data-testid="settings-operations-import-csv-mapping-brand"]')
+      .clear()
+      .type('maker')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-category"]')
+      .clear()
+      .type('kind')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-part-number"]')
+      .clear()
+      .type('pn')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-title"]')
+      .clear()
+      .type('name')
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      '1 items'
+    )
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      '0 conflicts'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-012 applies CSV import with the selected custom mapping', () => {
+    const mappedCsv = 'maker,kind,pn,name\nAFX,Slot,MAP-APPLY-001,Mapped Apply Item'
+
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv-mapping-apply',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', {
+      statusCode: 200,
+      body: {
+        total_items: 1,
+        new_items: 1,
+        conflicts: 0,
+        conflict_details: [],
+      },
+    }).as('importCsvDryRun')
+    cy.intercept('POST', '/api/data/import/csv/apply', (req) => {
+      expect(req.body).to.deep.equal({
+        csv_import: {
+          csv: mappedCsv,
+          mapping: {
+            brand: 'maker',
+            category: 'kind',
+            part_number: 'pn',
+            title: 'name',
+          },
+        },
+        options: {
+          default_action: 'merge',
+        },
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+        },
+      })
+    }).as('importCsvApply')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type(mappedCsv, {
+        parseSpecialCharSequences: false,
+      })
+    cy.get('[data-testid="settings-operations-import-csv-mapping-brand"]')
+      .clear()
+      .type('maker')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-category"]')
+      .clear()
+      .type('kind')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-part-number"]')
+      .clear()
+      .type('pn')
+    cy.get('[data-testid="settings-operations-import-csv-mapping-title"]')
+      .clear()
+      .type('name')
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.get('[data-testid="settings-operations-import-csv-apply"]').click()
+    cy.wait('@importCsvApply')
+    cy.get('[data-testid="settings-operations-csv-status"]').should(
+      'contain',
+      'CSV import applied successfully.'
+    )
+  })
 })
