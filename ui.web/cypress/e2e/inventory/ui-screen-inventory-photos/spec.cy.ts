@@ -1,4 +1,19 @@
 describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
+  const validPhotoJPEGBase64 =
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD7B8CfDHwdceB/D0svhPQ5JX063ZnfTYSzExKSSdvJooorip/AvQ+SqfG/U//Z'
+
+  function bootstrapInventoryPhotos(path = '/inventory/') {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/items').as('inventoryItems')
+    cy.intercept('GET', /\/api\/items\/.*\/photos/).as('inventoryPhotos')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path })
+    })
+    cy.wait('@inventoryItems')
+    cy.wait('@inventoryPhotos')
+  }
+
   function signIn() {
     cy.visit('/sign-in?redirect=%2Finventory%2F')
     cy.get('input[name="email"]').clear().type('e2e-photos@example.com')
@@ -11,8 +26,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     return cy.get('[data-testid="inventory-photo-row"]').then(($rows) =>
       $rows
         .map((_, row) => {
-          const filename =
-            row.querySelector('span')?.textContent?.trim() ?? ''
+          const filename = row.querySelector('span')?.textContent?.trim() ?? ''
           return filename
         })
         .get()
@@ -60,9 +74,18 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
         },
       })
     }).as('listPhotos')
-    cy.intercept('POST', '/api/items/item-photo-1/photos', { statusCode: 201, body: { id: 'p3', filename: 'three.jpg', is_primary: false } }).as('uploadPhoto')
-    cy.intercept('PUT', '/api/items/item-photo-1/photos/p2/primary', { statusCode: 204, body: '' }).as('setPrimary')
-    cy.intercept('DELETE', '/api/items/item-photo-1/photos/p1', { statusCode: 204, body: '' }).as('deletePhoto')
+    cy.intercept('POST', '/api/items/item-photo-1/photos', {
+      statusCode: 201,
+      body: { id: 'p3', filename: 'three.jpg', is_primary: false },
+    }).as('uploadPhoto')
+    cy.intercept('PUT', '/api/items/item-photo-1/photos/p2/primary', {
+      statusCode: 204,
+      body: '',
+    }).as('setPrimary')
+    cy.intercept('DELETE', '/api/items/item-photo-1/photos/p1', {
+      statusCode: 204,
+      body: '',
+    }).as('deletePhoto')
 
     signIn()
     cy.wait('@items')
@@ -371,5 +394,81 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.wait('@rebuildPhotos')
     cy.get('[data-testid="inventory-photo-rebuild-success"]').should('be.visible')
     cy.contains('[data-testid="inventory-photo-row"]', 'rebuild-one.jpg').should('be.visible')
+  })
+
+  it('PHOTOS-MEDIA-009 persists uploaded photos through reload and keeps them profile-scoped', () => {
+    bootstrapInventoryPhotos()
+
+    cy.get('[data-testid="inventory-photos-section"]').should('be.visible')
+    cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
+      contents: Cypress.Buffer.from(validPhotoJPEGBase64, 'base64'),
+      fileName: 'profile-scoped-photo.jpg',
+      mimeType: 'image/jpeg',
+    })
+    cy.wait('@inventoryPhotos')
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
+      'be.visible'
+    )
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('exist')
+
+    cy.reload()
+    cy.wait('@inventoryItems')
+    cy.wait('@inventoryPhotos')
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
+      'be.visible'
+    )
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('exist')
+
+    let secondProfileId = ''
+    cy.request('POST', '/api/profiles', { name: 'Inventory Photos Profile Two' }).then(
+      (createResp) => {
+        expect(createResp.status).to.be.oneOf([200, 201])
+        secondProfileId = createResp.body.id as string
+        cy.request('PUT', '/api/profiles/active', { profile_id: secondProfileId })
+          .its('status')
+          .should('eq', 200)
+        cy.request('POST', '/api/items', {
+          part_number: 'P2-PHOTO-001',
+          title: 'Profile Two Photo Item',
+        })
+          .its('status')
+          .should('eq', 201)
+      }
+    )
+
+    cy.visit('/inventory/', {
+      onBeforeLoad(win) {
+        if (secondProfileId) {
+          win.localStorage.setItem(`cabinet.workspace.${secondProfileId}`, '1')
+        }
+      },
+    })
+    cy.wait('@inventoryItems')
+    cy.wait('@inventoryPhotos')
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="inventory-photos-empty"]').should('be.visible')
+
+    cy.request('PUT', '/api/profiles/active', { profile_id: 'e2e-profile-001' })
+      .its('status')
+      .should('eq', 200)
+    cy.visit('/inventory/', {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('cabinet.workspace.e2e-profile-001', '1')
+      },
+    })
+    cy.wait('@inventoryItems')
+    cy.wait('@inventoryPhotos')
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
+      'be.visible'
+    )
+    cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg')
+      .find('[data-testid="inventory-photo-primary-badge"]')
+      .should('exist')
   })
 })
