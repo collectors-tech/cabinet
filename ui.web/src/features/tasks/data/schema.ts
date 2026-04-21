@@ -7,11 +7,14 @@ export const taskSchema = z.object({
   itemID: z.string().optional(),
   wishlistEntryID: z.string().optional(),
   title: z.string(),
+  partNumber: z.string().optional(),
   status: z.string(),
   label: z.string(),
   priority: z.string(),
   notes: z.string().optional(),
   belowTargetNow: z.boolean().optional(),
+  targetPrice: z.number().optional(),
+  highlightHit: z.boolean().optional(),
 })
 
 export type Task = z.infer<typeof taskSchema>

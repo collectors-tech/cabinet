@@ -19,9 +19,9 @@ import {
 } from '@/features/collections/use-workspace-collections'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { TasksDialogs } from './components/tasks-dialogs'
-import { TasksProvider } from './components/tasks-provider'
+import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { TasksTable } from './components/tasks-table'
+import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
 import { tasks } from './data/tasks'
 import { type Task } from './data/schema'
 
@@ -97,6 +97,121 @@ function matchesWishlistPlanningFocus(
   }
 }
 
+type WishlistItemPayload = {
+  id?: string
+  title?: string
+  part_number?: string
+  category?: string
+  priority?: string
+}
+
+type WishlistEntryPayload = {
+  id?: string
+  item_id?: string
+  priority?: string
+  notes?: string
+  below_target_now?: boolean
+  target_price?: number
+  highlight_hit?: boolean
+}
+
+function normalizeWishlistPriority(raw: string) {
+  const trimmed = raw.trim().toLowerCase()
+  return trimmed || 'medium'
+}
+
+function normalizeTargetPrice(raw: string) {
+  if (raw.trim() === '') {
+    return 0
+  }
+  const parsed = Number(raw)
+  if (Number.isNaN(parsed) || parsed < 0) {
+    throw new Error('invalid_target_price')
+  }
+  return parsed
+}
+
+function buildWishlistCsv(tasksToExport: Task[]) {
+  const escapeCell = (value: string | number | undefined) => {
+    const text = String(value ?? '')
+    if (/[",\n]/.test(text)) {
+      return `"${text.split('"').join('""')}"`
+    }
+    return text
+  }
+
+  return [
+    ['title', 'part_number', 'category', 'priority', 'notes', 'target_price'].join(','),
+    ...tasksToExport.map((task) =>
+      [
+        escapeCell(task.title),
+        escapeCell(task.partNumber),
+        escapeCell(task.label),
+        escapeCell(task.priority),
+        escapeCell(task.notes),
+        escapeCell(task.targetPrice ?? ''),
+      ].join(',')
+    ),
+  ].join('\n')
+}
+
+function TasksHeaderActions({
+  isWishlistRoute,
+  onOpenCollectionCreate,
+  onCreate,
+  onImport,
+}: {
+  isWishlistRoute: boolean
+  onOpenCollectionCreate: () => void
+  onCreate: () => void
+  onImport: () => void
+}) {
+  return (
+    <div className='flex items-center gap-2'>
+      <Button
+        type='button'
+        data-testid='wishlist-new-action'
+        onClick={onCreate}
+      >
+        New
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type='button'
+            variant='outline'
+            data-testid='wishlist-create-menu-trigger'
+          >
+            Create
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end'>
+          <DropdownMenuItem
+            data-testid='wishlist-create-menu-entry'
+            onClick={onCreate}
+          >
+            New Wishlist Entry
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            data-testid='wishlist-create-menu-import'
+            onClick={onImport}
+          >
+            Import Wishlist
+          </DropdownMenuItem>
+          {isWishlistRoute ? (
+            <DropdownMenuItem
+              data-testid='wishlist-create-menu-collection'
+              onClick={onOpenCollectionCreate}
+            >
+              New Collection
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
 export function Tasks({
   title = 'Tasks',
   description = "Here's a list of your tasks for this month!",
@@ -113,9 +228,12 @@ export function Tasks({
   const [inlineCollectionValidationMessage, setInlineCollectionValidationMessage] =
     useState('')
   const [tableData, setTableData] = useState<Task[]>(tasks)
+  const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
+  const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [wishlistActionItemID, setWishlistActionItemID] = useState<string | null>(
     null
   )
+  const [isWishlistMutating, setIsWishlistMutating] = useState(false)
   const [wishlistPlanningFocus, setWishlistPlanningFocus] =
     useState<WishlistPlanningFocus>(() => {
       if (typeof window === 'undefined') {
@@ -136,32 +254,12 @@ export function Tasks({
       throw new Error('wishlist_bootstrap_failed')
     }
     const wishlistPayload = (await wishlistResponse.json()) as {
-      items?: Array<{
-        id?: string
-        item_id?: string
-        priority?: string
-        notes?: string
-        below_target_now?: boolean
-      }>
+      items?: WishlistEntryPayload[]
     }
     const itemsPayload = (await itemsResponse.json()) as {
-      items?: Array<{
-        id?: string
-        title?: string
-        part_number?: string
-        category?: string
-        priority?: string
-      }>
+      items?: WishlistItemPayload[]
     }
-    const wishlistByItemID = new Map<
-      string,
-      {
-        id?: string
-        priority?: string
-        notes?: string
-        below_target_now?: boolean
-      }
-    >()
+    const wishlistByItemID = new Map<string, WishlistEntryPayload>()
     ;(wishlistPayload.items ?? []).forEach((entry) => {
       const itemID = entry.item_id?.trim()
       if (!itemID) {
@@ -180,12 +278,18 @@ export function Tasks({
           item.title?.trim() ||
           item.part_number?.trim() ||
           `Wishlist item ${index + 1}`,
+        partNumber: item.part_number?.trim(),
         status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
         label: item.category?.trim() || 'collection',
         priority:
           wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
         notes: wishlistEntry?.notes?.trim(),
         belowTargetNow: Boolean(wishlistEntry?.below_target_now),
+        targetPrice:
+          typeof wishlistEntry?.target_price === 'number'
+            ? wishlistEntry.target_price
+            : undefined,
+        highlightHit: Boolean(wishlistEntry?.highlight_hit),
       } satisfies Task
     })
   }, [])
@@ -242,6 +346,260 @@ export function Tasks({
     [loadWishlistData]
   )
 
+  const refreshWishlistTable = useCallback(async () => {
+    const mapped = await loadWishlistData()
+    setTableData(mapped)
+  }, [loadWishlistData])
+
+  const saveWishlistDraft = useCallback(
+    async (draft: WishlistEntryDraft, currentRow?: Task) => {
+      const itemResponse = currentRow?.itemID
+        ? await fetch(`/api/items/${encodeURIComponent(currentRow.itemID)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: draft.title,
+              part_number: draft.partNumber,
+              category: draft.category,
+            }),
+          })
+        : await fetch('/api/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: draft.title,
+              part_number: draft.partNumber,
+              category: draft.category,
+              priority: normalizeWishlistPriority(draft.priority),
+            }),
+          })
+
+      if (!itemResponse.ok) {
+        throw new Error('wishlist_item_save_failed')
+      }
+
+      const savedItem = (await itemResponse.json()) as { id?: string }
+      const itemID = currentRow?.itemID ?? savedItem.id?.trim()
+      if (!itemID) {
+        throw new Error('wishlist_item_id_missing')
+      }
+
+      const wishlistResponse = await fetch('/api/wishlist', {
+        method: currentRow?.wishlistEntryID ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentRow?.wishlistEntryID ?? undefined,
+          item_id: itemID,
+          priority: normalizeWishlistPriority(draft.priority),
+          notes: draft.notes,
+          target_price: normalizeTargetPrice(draft.targetPrice),
+          highlight_hit: currentRow?.highlightHit ?? false,
+        }),
+      })
+
+      if (!wishlistResponse.ok) {
+        throw new Error('wishlist_entry_save_failed')
+      }
+    },
+    []
+  )
+
+  const handleWishlistSubmit = useCallback(
+    async (draft: WishlistEntryDraft, currentRow?: Task) => {
+      setIsWishlistMutating(true)
+      try {
+        await saveWishlistDraft(draft, currentRow)
+        await refreshWishlistTable()
+        toast.success(
+          currentRow ? `${draft.title} updated.` : `${draft.title} added to wishlist.`
+        )
+      } catch (error) {
+        if (error instanceof Error && error.message === 'invalid_target_price') {
+          toast.error('Target price must be a positive number.')
+        } else {
+          toast.error('Wishlist save failed. Try again.')
+        }
+        throw error
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable, saveWishlistDraft]
+  )
+
+  const handleWishlistDelete = useCallback(
+    async (task: Task) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error('Wishlist entry is missing delete metadata.')
+        return
+      }
+
+      setIsWishlistMutating(true)
+      try {
+        const response = await fetch(
+          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          throw new Error('wishlist_delete_failed')
+        }
+        await refreshWishlistTable()
+        toast.success(`${task.title} removed from wishlist.`)
+      } catch {
+        toast.error('Wishlist delete failed. Try again.')
+        throw new Error('wishlist_delete_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistImport = useCallback(
+    async (entries: WishlistEntryDraft[]) => {
+      setIsWishlistMutating(true)
+      try {
+        for (const entry of entries) {
+          await saveWishlistDraft(entry)
+        }
+        await refreshWishlistTable()
+        toast.success(`Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`)
+      } catch (error) {
+        if (error instanceof Error && error.message === 'invalid_target_price') {
+          toast.error('Target price must be a positive number.')
+        } else {
+          toast.error('Wishlist import failed. Try again.')
+        }
+        throw error
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable, saveWishlistDraft]
+  )
+
+  const handleWishlistBulkPriorityChange = useCallback(
+    async (selectedTasks: Task[], priority: string) => {
+      setIsWishlistMutating(true)
+      try {
+        for (const task of selectedTasks) {
+          const wishlistEntryID = task.wishlistEntryID?.trim()
+          if (!wishlistEntryID) {
+            continue
+          }
+          const response = await fetch('/api/wishlist', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: wishlistEntryID,
+              item_id: task.itemID,
+              priority: normalizeWishlistPriority(priority),
+              notes: task.notes ?? '',
+              target_price: task.targetPrice ?? 0,
+              highlight_hit: task.highlightHit ?? false,
+            }),
+          })
+          if (!response.ok) {
+            throw new Error('wishlist_bulk_priority_failed')
+          }
+        }
+        await refreshWishlistTable()
+        toast.success(`Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+      } catch {
+        toast.error('Bulk priority update failed. Try again.')
+        throw new Error('wishlist_bulk_priority_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistBulkStatusChange = useCallback(
+    async (selectedTasks: Task[], status: string) => {
+      const belowTargetNow = status === 'discovered'
+      setIsWishlistMutating(true)
+      try {
+        for (const task of selectedTasks) {
+          const wishlistEntryID = task.wishlistEntryID?.trim()
+          if (!wishlistEntryID) {
+            continue
+          }
+          const response = await fetch('/api/wishlist', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: wishlistEntryID,
+              item_id: task.itemID,
+              priority: normalizeWishlistPriority(task.priority),
+              notes: task.notes ?? '',
+              target_price: task.targetPrice ?? 0,
+              highlight_hit: task.highlightHit ?? false,
+              below_target_now: belowTargetNow,
+            }),
+          })
+          if (!response.ok) {
+            throw new Error('wishlist_bulk_status_failed')
+          }
+        }
+        await refreshWishlistTable()
+        toast.success(
+          `Updated watch status for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+        )
+      } catch {
+        toast.error('Bulk watch status update failed. Try again.')
+        throw new Error('wishlist_bulk_status_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistBulkDelete = useCallback(
+    async (selectedTasks: Task[]) => {
+      setIsWishlistMutating(true)
+      try {
+        for (const task of selectedTasks) {
+          const wishlistEntryID = task.wishlistEntryID?.trim()
+          if (!wishlistEntryID) {
+            continue
+          }
+          const response = await fetch(
+            `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
+            { method: 'DELETE' }
+          )
+          if (!response.ok) {
+            throw new Error('wishlist_bulk_delete_failed')
+          }
+        }
+        await refreshWishlistTable()
+        toast.success(`Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+      } catch {
+        toast.error('Bulk delete failed. Try again.')
+        throw new Error('wishlist_bulk_delete_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
+  )
+
+  const handleWishlistExport = useCallback((selectedTasks: Task[]) => {
+    const csv = buildWishlistCsv(selectedTasks)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'wishlist-export.csv'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.URL.revokeObjectURL(url)
+    toast.success(`Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+  }, [])
+
   useEffect(() => {
     if (!isWishlistRoute || typeof window === 'undefined') {
       return
@@ -274,7 +632,7 @@ export function Tasks({
   }, [isWishlistRoute, tableData, wishlistPlanningFocus])
 
   return (
-    <TasksProvider>
+    <>
       <Header fixed>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
@@ -291,48 +649,21 @@ export function Tasks({
             <h2 className='text-2xl font-bold tracking-tight'>{title}</h2>
             <p className='text-muted-foreground'>{description}</p>
           </div>
-          <div className='flex items-center gap-2'>
-            <Button
-              type='button'
-              data-testid='wishlist-new-action'
-            >
-              New
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type='button'
-                  variant='outline'
-                  data-testid='wishlist-create-menu-trigger'
-                >
-                  Create
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
-                <DropdownMenuItem
-                  data-testid='wishlist-create-menu-entry'
-                >
-                  New Wishlist Entry
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid='wishlist-create-menu-import'
-                >
-                  Import Wishlist
-                </DropdownMenuItem>
-                {isWishlistRoute ? (
-                  <DropdownMenuItem
-                    data-testid='wishlist-create-menu-collection'
-                    onClick={() => {
-                      setInlineCollectionValidationMessage('')
-                      setInlineCollectionInputOpen(true)
-                    }}
-                  >
-                    New Collection
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <TasksHeaderActions
+            isWishlistRoute={isWishlistRoute}
+            onOpenCollectionCreate={() => {
+              setInlineCollectionValidationMessage('')
+              setInlineCollectionInputOpen(true)
+            }}
+            onCreate={() => {
+              setCurrentDialogRow(null)
+              setDialogOpen('create')
+            }}
+            onImport={() => {
+              setCurrentDialogRow(null)
+              setDialogOpen('import')
+            }}
+          />
         </div>
         {isWishlistRoute ? (
           <div
@@ -459,14 +790,43 @@ export function Tasks({
         <TasksTable
           data={displayedData}
           routePath={routePath}
+          onEditRow={(task) => {
+            setCurrentDialogRow(task)
+            setDialogOpen('update')
+          }}
+          onDeleteRow={(task) => {
+            setCurrentDialogRow(task)
+            setDialogOpen('delete')
+          }}
           onWishlistMarkOwned={
             isWishlistRoute ? handleWishlistMarkOwned : undefined
           }
+          onWishlistBulkStatusChange={
+            isWishlistRoute ? handleWishlistBulkStatusChange : undefined
+          }
+          onWishlistBulkPriorityChange={
+            isWishlistRoute ? handleWishlistBulkPriorityChange : undefined
+          }
+          onWishlistBulkDelete={
+            isWishlistRoute ? handleWishlistBulkDelete : undefined
+          }
+          onWishlistExport={isWishlistRoute ? handleWishlistExport : undefined}
           wishlistActionItemID={wishlistActionItemID}
+          isWishlistMutating={isWishlistMutating}
         />
       </Main>
 
-      <TasksDialogs />
-    </TasksProvider>
+      <TasksDialogs
+        routePath={routePath}
+        open={dialogOpen}
+        setOpen={setDialogOpen}
+        currentRow={currentDialogRow}
+        setCurrentRow={setCurrentDialogRow}
+        onWishlistSubmit={isWishlistRoute ? handleWishlistSubmit : undefined}
+        onWishlistDelete={isWishlistRoute ? handleWishlistDelete : undefined}
+        onWishlistImport={isWishlistRoute ? handleWishlistImport : undefined}
+        isWishlistMutating={isWishlistMutating}
+      />
+    </>
   )
 }
