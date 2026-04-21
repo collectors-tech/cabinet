@@ -264,4 +264,60 @@ describe('ui-screen-collections', () => {
       )
     })
   })
+
+  it('UI-SCREEN-COLLECTIONS-012 reflects inventory inline collection create inside the collections manager', () => {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/inventory/' })
+    })
+    cy.wait('@loadCollectionSettings')
+
+    cy.get('[data-testid="collection-inline-add-new"]').click()
+    cy.get('[data-testid="collection-inline-new-name"]').type('Inventory Sync Shelf')
+    cy.get('[data-testid="collection-inline-save"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collection-inline-picker-selected"]').should(
+      'contain.text',
+      'Inventory Sync Shelf'
+    )
+
+    cy.visit('/collections/')
+    cy.wait('@loadCollectionSettings')
+    cy.get('[data-testid="collections-row-inventory-sync-shelf"]').should('be.visible')
+    cy.get('[data-testid="collections-selected-name"]').should(
+      'contain.text',
+      'Inventory Sync Shelf'
+    )
+  })
+
+  it('UI-SCREEN-COLLECTIONS-013 reflects wishlist inline collection create inside the collections manager', () => {
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/wishlist/' })
+    })
+    cy.wait('@loadCollectionSettings')
+
+    cy.get('[data-testid="wishlist-inline-add-new"]').click()
+    cy.get('[data-testid="wishlist-inline-new-name"]').type('Wishlist Sync Shelf')
+    cy.get('[data-testid="wishlist-inline-save"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+      'contain.text',
+      'Wishlist Sync Shelf'
+    )
+
+    cy.visit('/collections/')
+    cy.wait('@loadCollectionSettings')
+    cy.get('[data-testid="collections-row-wishlist-sync-shelf"]').should('be.visible')
+    cy.get('[data-testid="collections-selected-name"]').should(
+      'contain.text',
+      'Wishlist Sync Shelf'
+    )
+  })
 })

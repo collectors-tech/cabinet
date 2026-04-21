@@ -766,7 +766,6 @@ export function Tasks({
                         return
                       }
                       setInlineCollectionValidationMessage('')
-                      await setActiveWorkspaceCollection(created)
                       setInlineCollectionName('')
                       setInlineCollectionInputOpen(false)
                     }}
