@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ContentSection } from '../components/content-section'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
 type RuntimeResponse = {
@@ -39,6 +46,30 @@ type ImportDryRunSummaryResponse = {
   conflict_details?: ImportConflictDetail[]
 }
 
+type ImportSnapshotRequest = {
+  snapshot: {
+    schema_version?: number
+    items?: unknown[]
+  }
+}
+
+type ImportApplyAction = 'merge' | 'create' | 'skip'
+
+function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
+  const parsed = JSON.parse(rawInput) as {
+    snapshot?: {
+      schema_version?: number
+      items?: unknown[]
+    }
+    schema_version?: number
+    items?: unknown[]
+  }
+  if (parsed && typeof parsed === 'object' && parsed.snapshot) {
+    return parsed as ImportSnapshotRequest
+  }
+  return { snapshot: parsed }
+}
+
 export function SettingsOperations() {
   const { t } = useTranslation('pages')
   const [loading, setLoading] = useState(true)
@@ -49,11 +80,15 @@ export function SettingsOperations() {
   const [dataTone, setDataTone] = useState<'default' | 'destructive'>('default')
   const [exportPending, setExportPending] = useState(false)
   const [importDryRunPending, setImportDryRunPending] = useState(false)
+  const [importApplyPending, setImportApplyPending] = useState(false)
   const [importJsonInput, setImportJsonInput] = useState(
     '{\n  "snapshot": {\n    "schema_version": 1,\n    "items": []\n  }\n}'
   )
   const [lastExportSummary, setLastExportSummary] = useState<ExportSnapshotResponse | null>(null)
   const [importSummary, setImportSummary] = useState<ImportDryRunSummaryResponse | null>(null)
+  const [importDefaultAction, setImportDefaultAction] =
+    useState<ImportApplyAction>('merge')
+  const [lastDryRunRequest, setLastDryRunRequest] = useState<ImportSnapshotRequest | null>(null)
 
   const loadOperations = useCallback(async () => {
     setLoading(true)
@@ -107,20 +142,10 @@ export function SettingsOperations() {
   const runImportJsonDryRun = useCallback(async () => {
     setImportDryRunPending(true)
     setImportSummary(null)
+    setLastDryRunRequest(null)
     setDataTone('default')
     try {
-      const parsed = JSON.parse(importJsonInput) as {
-        snapshot?: {
-          schema_version?: number
-          items?: unknown[]
-        }
-        schema_version?: number
-        items?: unknown[]
-      }
-      const body =
-        parsed && typeof parsed === 'object' && parsed.snapshot
-          ? parsed
-          : { snapshot: parsed }
+      const body = parseImportSnapshotRequest(importJsonInput)
       const response = await fetch('/api/data/import/json/dry-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,6 +156,7 @@ export function SettingsOperations() {
       }
       const payload = (await response.json()) as ImportDryRunSummaryResponse
       setImportSummary(payload)
+      setLastDryRunRequest(body)
       const conflictCount = Number(payload.conflicts ?? 0)
       setDataStatus(
         `Import dry-run completed with ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}.`
@@ -144,12 +170,49 @@ export function SettingsOperations() {
     }
   }, [importJsonInput])
 
+  const runImportJsonApply = useCallback(async () => {
+    if (!lastDryRunRequest) {
+      return
+    }
+    setImportApplyPending(true)
+    setDataTone('default')
+    try {
+      const response = await fetch('/api/data/import/json/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snapshot: lastDryRunRequest.snapshot,
+          options: {
+            default_action: importDefaultAction,
+          },
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_apply_import')
+      }
+      setDataStatus('Import applied successfully.')
+      setImportSummary(null)
+      setLastDryRunRequest(null)
+    } catch {
+      setDataTone('destructive')
+      setDataStatus('Import apply failed.')
+    } finally {
+      setImportApplyPending(false)
+    }
+  }, [importDefaultAction, lastDryRunRequest])
+
   const runtimeAddress = runtimeInfo
     ? `${runtimeInfo.runtime_host?.trim() || '127.0.0.1'}:${runtimeInfo.runtime_port ?? 17880}`
     : 'Unavailable'
   const updateKeyStatus = runtimeInfo?.update_public_key_configured
     ? 'Configured'
     : 'Missing'
+  const importActionsDisabled =
+    loading ||
+    Boolean(error) ||
+    exportPending ||
+    importDryRunPending ||
+    importApplyPending
 
   return (
     <ContentSection
@@ -232,7 +295,7 @@ export function SettingsOperations() {
               variant='outline'
               size='sm'
               data-testid='settings-operations-export-json'
-              disabled={loading || Boolean(error) || exportPending || importDryRunPending}
+              disabled={importActionsDisabled}
               onClick={() => {
                 void runExportJson()
               }}
@@ -272,22 +335,60 @@ export function SettingsOperations() {
               value={importJsonInput}
               onChange={(event) => {
                 setImportJsonInput(event.target.value)
+                setImportSummary(null)
+                setLastDryRunRequest(null)
               }}
               className='min-h-36 font-mono text-xs'
               spellCheck={false}
             />
-            <div className='flex justify-end'>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-muted-foreground'>
+                  Conflict default action
+                </label>
+                <Select
+                  value={importDefaultAction}
+                  onValueChange={(value) => {
+                    setImportDefaultAction(value as ImportApplyAction)
+                  }}
+                >
+                  <SelectTrigger
+                    className='w-44'
+                    data-testid='settings-operations-import-default-action'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='merge'>Merge into existing item</SelectItem>
+                    <SelectItem value='create'>Create new item</SelectItem>
+                    <SelectItem value='skip'>Skip conflicting item</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='flex gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  data-testid='settings-operations-import-json-apply'
+                  disabled={importActionsDisabled || !lastDryRunRequest || !importSummary}
+                  onClick={() => {
+                    void runImportJsonApply()
+                  }}
+                >
+                  {importApplyPending ? 'Applying…' : 'Apply Import'}
+                </Button>
               <Button
                 variant='outline'
                 size='sm'
                 data-testid='settings-operations-import-json-dry-run'
-                disabled={loading || Boolean(error) || exportPending || importDryRunPending}
+                disabled={importActionsDisabled}
                 onClick={() => {
                   void runImportJsonDryRun()
                 }}
               >
                 {importDryRunPending ? 'Running Dry-Run…' : 'Run Dry-Run'}
               </Button>
+              </div>
             </div>
           </div>
 
