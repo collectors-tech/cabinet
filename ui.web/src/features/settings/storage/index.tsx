@@ -35,6 +35,9 @@ export function SettingsStorage() {
   const [mediaDir, setMediaDir] = useState('')
   const [reindexPending, setReindexPending] = useState(false)
   const [rebuildPending, setRebuildPending] = useState(false)
+  const [repairPending, setRepairPending] = useState(false)
+  const [repairResult, setRepairResult] = useState<string | null>(null)
+  const [repairTone, setRepairTone] = useState<'default' | 'destructive'>('default')
   const [backupList, setBackupList] = useState<string[]>([])
   const [backupsLoading, setBackupsLoading] = useState(true)
   const [backupPending, setBackupPending] = useState(false)
@@ -179,6 +182,32 @@ export function SettingsStorage() {
     }
   }, [])
 
+  const runRepair = useCallback(async () => {
+    setRepairPending(true)
+    setRepairResult(null)
+    setRepairTone('default')
+    try {
+      const response = await fetch('/api/data/repair', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('failed_to_repair_check')
+      }
+      const payload = (await response.json()) as {
+        integrity_check?: string
+      }
+      const integrityCheck = payload.integrity_check?.trim() || 'unknown'
+      if (integrityCheck.toLowerCase() === 'ok') {
+        setRepairResult(`Database integrity check passed. Result: ${integrityCheck}`)
+      } else {
+        setRepairResult(`Database integrity check reported issues. Result: ${integrityCheck}`)
+      }
+    } catch {
+      setRepairTone('destructive')
+      setRepairResult('Database integrity check failed. Check diagnostics and try again.')
+    } finally {
+      setRepairPending(false)
+    }
+  }, [])
+
   const runBackup = useCallback(async () => {
     setBackupPending(true)
     setActionStatus(null)
@@ -233,6 +262,7 @@ export function SettingsStorage() {
     Boolean(error) ||
     reindexPending ||
     rebuildPending ||
+    repairPending ||
     backupPending ||
     restorePending
 
@@ -283,6 +313,33 @@ export function SettingsStorage() {
                 Storage repair and migration actions are restricted to diagnostics workflows.
               </p>
             </div>
+          </div>
+          <div className='rounded-md border p-3 space-y-3'>
+            <div className='flex items-start justify-between gap-3'>
+              <div>
+                <p className='font-medium'>Database integrity</p>
+                <p className='text-xs text-muted-foreground'>
+                  Run an integrity check before deeper diagnostics or restore workflows.
+                </p>
+              </div>
+              <Button
+                variant='outline'
+                size='sm'
+                data-testid='settings-storage-repair-run'
+                disabled={actionsDisabled}
+                onClick={() => {
+                  void runRepair()
+                }}
+              >
+                {repairPending ? 'Running Integrity Check…' : 'Run Integrity Check'}
+              </Button>
+            </div>
+            <p
+              data-testid='settings-storage-repair-result'
+              className={repairTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            >
+              {repairResult ?? 'No integrity check has been run yet.'}
+            </p>
           </div>
           <div className='flex gap-2'>
             <Button

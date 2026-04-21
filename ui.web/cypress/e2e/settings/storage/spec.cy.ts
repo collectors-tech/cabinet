@@ -254,4 +254,77 @@ describe('settings/storage', () => {
     )
     cy.get('[data-testid="settings-storage-restore-confirm"]').should('not.exist')
   })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-009 runs storage integrity check and shows healthy result', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/data/repair', {
+      statusCode: 200,
+      body: { integrity_check: 'ok' },
+    }).as('repairCheck')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-repair-run"]').click()
+    cy.wait('@repairCheck')
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'Database integrity check passed.'
+    )
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'ok'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-010 reports integrity-check failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/data/repair', {
+      statusCode: 500,
+      body: { error: 'failed_to_repair_check' },
+    }).as('repairCheck')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-repair-run"]').click()
+    cy.wait('@repairCheck')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'Database integrity check failed.'
+    )
+  })
 })
