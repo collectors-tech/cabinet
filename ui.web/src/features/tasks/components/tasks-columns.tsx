@@ -19,6 +19,10 @@ const wishlistStatusLabels: Record<string, string> = {
   discovered: 'Below target',
 }
 
+function formatWishlistStatus(status: string) {
+  return wishlistStatusLabels[status] ?? status
+}
+
 export function getTasksColumns({
   routePath,
   onWishlistMarkOwned,
@@ -77,9 +81,16 @@ export function getTasksColumns({
         const label = labels.find((label) => label.value === row.original.label)
 
         return (
-          <div className='flex space-x-2'>
+          <div className='flex min-w-0 flex-col gap-1'>
             {!isInventoryRoute && !isWishlistRoute && label ? <Badge variant='outline'>{label.label}</Badge> : null}
-            <span className='truncate font-medium'>{row.getValue('title')}</span>
+            <div className='flex space-x-2'>
+              <span className='truncate font-medium'>{row.getValue('title')}</span>
+            </div>
+            {isWishlistRoute && row.original.notes ? (
+              <span className='truncate text-xs text-muted-foreground'>
+                {row.original.notes}
+              </span>
+            ) : null}
           </div>
         )
       },
@@ -105,7 +116,7 @@ export function getTasksColumns({
         if (isWishlistRoute) {
           return (
             <div className='flex min-w-[120px] items-center gap-2'>
-              <span>{wishlistStatusLabels[row.original.status] ?? row.original.status}</span>
+              <span>{formatWishlistStatus(row.original.status)}</span>
             </div>
           )
         }
