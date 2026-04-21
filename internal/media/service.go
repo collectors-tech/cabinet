@@ -47,7 +47,11 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	}
 
 	photoID := uuid.NewString()
-	itemDir := filepath.Join(s.mediaDir, itemID)
+	rootMediaDir, err := s.resolveMediaDirForItem(ctx, itemID)
+	if err != nil {
+		return Photo{}, err
+	}
+	itemDir := filepath.Join(rootMediaDir, itemID)
 	if err := os.MkdirAll(itemDir, 0o755); err != nil {
 		return Photo{}, fmt.Errorf("create item media dir: %w", err)
 	}
@@ -100,6 +104,40 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	}
 
 	return s.GetByID(ctx, photoID)
+}
+
+func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (string, error) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return "", fmt.Errorf("item_id is required")
+	}
+
+	var configuredMediaDir sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+		SELECT ps.value
+		FROM canonical_items ci
+		LEFT JOIN profile_settings ps
+			ON ps.profile_id = ci.profile_id
+			AND ps.key = 'storage.media_dir'
+		WHERE ci.id = ?
+		`,
+		itemID,
+	).Scan(&configuredMediaDir)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("item not found")
+		}
+		return "", fmt.Errorf("resolve item media dir: %w", err)
+	}
+
+	mediaDir := strings.TrimSpace(configuredMediaDir.String)
+	if mediaDir != "" {
+		return mediaDir, nil
+	}
+
+	return s.mediaDir, nil
 }
 
 func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error) {
