@@ -396,6 +396,29 @@ export function useWorkspaceCollections() {
     }).then(() => updatedItem)
   }
 
+  const unassignItemFromCollection = (
+    itemID: string
+  ): Promise<WorkspaceCollectionItem | null> => {
+    if (!itemID) {
+      return Promise.resolve(null)
+    }
+
+    const updatedItems = workspaceItems.map((item) =>
+      item.id === itemID ? { ...item, collectionName: null } : item
+    )
+    const updatedItem = updatedItems.find((item) => item.id === itemID) ?? null
+
+    if (!updatedItem) {
+      return Promise.resolve(null)
+    }
+
+    return persistWorkspaceCollectionsState({
+      collections: workspaceCollections,
+      activeCollection: activeWorkspaceCollection,
+      items: updatedItems,
+    }).then(() => updatedItem)
+  }
+
   const collectionItems = useMemo(() => workspaceItems, [workspaceItems])
 
   return {
@@ -421,5 +444,6 @@ export function useWorkspaceCollections() {
     collectionSummaries,
     collectionItems,
     assignItemToCollection,
+    unassignItemFromCollection,
   }
 }
