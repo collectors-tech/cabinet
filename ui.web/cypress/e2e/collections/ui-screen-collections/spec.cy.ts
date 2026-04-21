@@ -141,6 +141,28 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
   })
 
+  it('UI-SCREEN-COLLECTIONS-008A unassigns an item directly from the selected collection and persists after refresh', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
+
+    cy.get('[data-testid="collections-row-watch-list"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
+    cy.get('[data-testid="collections-unassign-submit-1996-topps-kobe-bryant-rookie"]').click()
+    cy.wait('@saveCollectionSettings')
+
+    cy.contains('1996 Topps Kobe Bryant rookie removed from Watch List.').should('be.visible')
+    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
+
+    cy.get('[data-testid="collections-assignment-select"]').click()
+    cy.contains('1996 Topps Kobe Bryant rookie (Unassigned)').should('be.visible')
+
+    cy.reload()
+    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
+    cy.get('[data-testid="collections-assignment-select"]').click()
+    cy.contains('1996 Topps Kobe Bryant rookie (Unassigned)').should('be.visible')
+  })
+
   it('UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity', () => {
     signInToCollections()
 

@@ -143,6 +143,7 @@ export function Collections() {
     collectionItems,
     collectionSummaries,
     assignItemToCollection,
+    unassignItemFromCollection,
   } = useWorkspaceCollections()
 
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
@@ -303,6 +304,20 @@ export function Collections() {
       return next
     })
     toast.success(`${item.name} moved to ${destination}.`)
+  }
+
+  async function handleUnassignItem(item: WorkspaceCollectionItem) {
+    const updated = await unassignItemFromCollection(item.id)
+    if (!updated) {
+      toast.error('Item release failed.')
+      return
+    }
+    setMoveTargets((current) => {
+      const next = { ...current }
+      delete next[item.id]
+      return next
+    })
+    toast.success(`${item.name} removed from ${selectedCollectionName}.`)
   }
 
   return (
@@ -529,6 +544,17 @@ export function Collections() {
                         >
                           <ArrowRightLeft className='mr-2 h-4 w-4' />
                           Move item
+                        </Button>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          data-testid={`collections-unassign-submit-${collectionKey(item.name)}`}
+                          onClick={() => {
+                            void handleUnassignItem(item)
+                          }}
+                        >
+                          <Trash2 className='mr-2 h-4 w-4' />
+                          Unassign
                         </Button>
                       </div>
                     </div>
