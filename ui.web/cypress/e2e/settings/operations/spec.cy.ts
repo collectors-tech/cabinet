@@ -396,4 +396,126 @@ describe('settings/operations', () => {
       'Import apply failed.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-007 exports CSV and reports CSV dry-run summary', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/data/export/csv/items', {
+      statusCode: 200,
+      body: 'brand,category,part_number,title,make,model,year,scale,series,description\nAFX,Slot,CSV-001,CSV Item,,,,,,\n',
+      headers: {
+        'content-type': 'text/csv',
+      },
+    }).as('exportCsv')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', (req) => {
+      expect(req.body).to.deep.equal({
+        csv: 'brand,category,part_number,title\nAFX,Slot,CSV-001,Existing Item\nAFX,Slot,CSV-NEW,New Item',
+        mapping: {},
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          total_items: 2,
+          new_items: 1,
+          conflicts: 1,
+          conflict_details: [
+            {
+              part_number: 'CSV-001',
+              existing_id: 'item-csv-1',
+            },
+          ],
+        },
+      })
+    }).as('importCsvDryRun')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-export-csv"]').click()
+    cy.wait('@exportCsv')
+    cy.get('[data-testid="settings-operations-csv-status"]').should(
+      'contain',
+      'Exported CSV with 1 item row.'
+    )
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type(
+        'brand,category,part_number,title\nAFX,Slot,CSV-001,Existing Item\nAFX,Slot,CSV-NEW,New Item',
+        { parseSpecialCharSequences: false }
+      )
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      '2 items'
+    )
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      '1 conflict'
+    )
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      'CSV-001'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-008 reports CSV dry-run failure without route reload', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv-error',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', {
+      statusCode: 400,
+      body: {
+        error: 'failed_to_parse_csv',
+      },
+    }).as('importCsvDryRun')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type('broken csv body', { parseSpecialCharSequences: false })
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-csv-status"]').should(
+      'contain',
+      'CSV dry-run failed.'
+    )
+  })
 })
