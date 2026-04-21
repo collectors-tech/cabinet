@@ -320,4 +320,41 @@ describe('ui-screen-collections', () => {
       'Wishlist Sync Shelf'
     )
   })
+
+  it('UI-SCREEN-COLLECTIONS-014 propagates rename into inventory and wishlist pickers', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-row-store-2"]').click()
+    cy.get('[data-testid="collections-row-edit-store-2"]').scrollIntoView().click({ force: true })
+    cy.get('[data-testid="collections-edit-input"]').clear().type('Store 2 Routed')
+    cy.get('[data-testid="collections-edit-submit"]').click()
+    cy.contains('Store 2 renamed to Store 2 Routed.').should('be.visible')
+
+    cy.visit('/inventory/')
+    cy.get('[data-testid="collection-inline-picker-option-store-2-routed"]').should('be.visible')
+    cy.get('[data-testid="collection-inline-picker-option-store-2"]').should('not.exist')
+
+    cy.visit('/wishlist/')
+    cy.get('[data-testid="wishlist-inline-picker-option-store-2-routed"]').should('be.visible')
+    cy.get('[data-testid="wishlist-inline-picker-option-store-2"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-COLLECTIONS-015 propagates delete fallback into inventory and wishlist pickers', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
+
+    cy.get('[data-testid="collections-row-store-1"]').click()
+    cy.wait('@saveCollectionSettings')
+    cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
+    cy.get('[data-testid="collections-delete-submit"]').click()
+    cy.contains('Store 1 removed from workspace collections.').should('be.visible')
+
+    cy.visit('/inventory/')
+    cy.get('[data-testid="collection-inline-picker-selected"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="collection-inline-picker-option-store-1"]').should('not.exist')
+
+    cy.visit('/wishlist/')
+    cy.get('[data-testid="wishlist-inline-picker-selected"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="wishlist-inline-picker-option-store-1"]').should('not.exist')
+  })
 })
