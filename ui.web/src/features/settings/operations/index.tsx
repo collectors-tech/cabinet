@@ -55,6 +55,11 @@ type ImportSnapshotRequest = {
 
 type ImportApplyAction = 'merge' | 'create' | 'skip'
 
+type CSVImportRequest = {
+  csv: string
+  mapping: Record<string, string>
+}
+
 function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
   const parsed = JSON.parse(rawInput) as {
     snapshot?: {
@@ -83,6 +88,7 @@ export function SettingsOperations() {
   const [importApplyPending, setImportApplyPending] = useState(false)
   const [exportCsvPending, setExportCsvPending] = useState(false)
   const [importCsvDryRunPending, setImportCsvDryRunPending] = useState(false)
+  const [importCsvApplyPending, setImportCsvApplyPending] = useState(false)
   const [importJsonInput, setImportJsonInput] = useState(
     '{\n  "snapshot": {\n    "schema_version": 1,\n    "items": []\n  }\n}'
   )
@@ -96,7 +102,10 @@ export function SettingsOperations() {
   const [csvSummary, setCsvSummary] = useState<ImportDryRunSummaryResponse | null>(null)
   const [importDefaultAction, setImportDefaultAction] =
     useState<ImportApplyAction>('merge')
+  const [importCsvDefaultAction, setImportCsvDefaultAction] =
+    useState<ImportApplyAction>('merge')
   const [lastDryRunRequest, setLastDryRunRequest] = useState<ImportSnapshotRequest | null>(null)
+  const [lastCsvDryRunRequest, setLastCsvDryRunRequest] = useState<CSVImportRequest | null>(null)
 
   const loadOperations = useCallback(async () => {
     setLoading(true)
@@ -237,21 +246,24 @@ export function SettingsOperations() {
   const runImportCsvDryRun = useCallback(async () => {
     setImportCsvDryRunPending(true)
     setCsvSummary(null)
+    setLastCsvDryRunRequest(null)
     setCsvTone('default')
     try {
+      const body: CSVImportRequest = {
+        csv: importCsvInput,
+        mapping: {},
+      }
       const response = await fetch('/api/data/import/csv/dry-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          csv: importCsvInput,
-          mapping: {},
-        }),
+        body: JSON.stringify(body),
       })
       if (!response.ok) {
         throw new Error('failed_to_dry_run_csv_import')
       }
       const payload = (await response.json()) as ImportDryRunSummaryResponse
       setCsvSummary(payload)
+      setLastCsvDryRunRequest(body)
       const conflictCount = Number(payload.conflicts ?? 0)
       setCsvStatus(
         `CSV dry-run completed with ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}.`
@@ -264,6 +276,37 @@ export function SettingsOperations() {
       setImportCsvDryRunPending(false)
     }
   }, [importCsvInput])
+
+  const runImportCsvApply = useCallback(async () => {
+    if (!lastCsvDryRunRequest) {
+      return
+    }
+    setImportCsvApplyPending(true)
+    setCsvTone('default')
+    try {
+      const response = await fetch('/api/data/import/csv/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv_import: lastCsvDryRunRequest,
+          options: {
+            default_action: importCsvDefaultAction,
+          },
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_apply_csv_import')
+      }
+      setCsvStatus('CSV import applied successfully.')
+      setCsvSummary(null)
+      setLastCsvDryRunRequest(null)
+    } catch {
+      setCsvTone('destructive')
+      setCsvStatus('CSV import apply failed.')
+    } finally {
+      setImportCsvApplyPending(false)
+    }
+  }, [importCsvDefaultAction, lastCsvDryRunRequest])
 
   const runtimeAddress = runtimeInfo
     ? `${runtimeInfo.runtime_host?.trim() || '127.0.0.1'}:${runtimeInfo.runtime_port ?? 17880}`
@@ -281,7 +324,8 @@ export function SettingsOperations() {
     loading ||
     Boolean(error) ||
     exportCsvPending ||
-    importCsvDryRunPending
+    importCsvDryRunPending ||
+    importCsvApplyPending
 
   return (
     <ContentSection
@@ -536,22 +580,59 @@ export function SettingsOperations() {
               onChange={(event) => {
                 setImportCsvInput(event.target.value)
                 setCsvSummary(null)
+                setLastCsvDryRunRequest(null)
               }}
               className='min-h-36 font-mono text-xs'
               spellCheck={false}
             />
-            <div className='flex justify-end'>
-              <Button
-                variant='outline'
-                size='sm'
-                data-testid='settings-operations-import-csv-dry-run'
-                disabled={csvActionsDisabled}
-                onClick={() => {
-                  void runImportCsvDryRun()
-                }}
-              >
-                {importCsvDryRunPending ? 'Running CSV Dry-Run…' : 'Run CSV Dry-Run'}
-              </Button>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
+              <div className='space-y-1'>
+                <label className='text-xs font-medium text-muted-foreground'>
+                  Conflict default action
+                </label>
+                <Select
+                  value={importCsvDefaultAction}
+                  onValueChange={(value) => {
+                    setImportCsvDefaultAction(value as ImportApplyAction)
+                  }}
+                >
+                  <SelectTrigger
+                    className='w-44'
+                    data-testid='settings-operations-import-csv-default-action'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='merge'>Merge into existing item</SelectItem>
+                    <SelectItem value='create'>Create new item</SelectItem>
+                    <SelectItem value='skip'>Skip conflicting item</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='flex gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  data-testid='settings-operations-import-csv-apply'
+                  disabled={csvActionsDisabled || !lastCsvDryRunRequest || !csvSummary}
+                  onClick={() => {
+                    void runImportCsvApply()
+                  }}
+                >
+                  {importCsvApplyPending ? 'Applying CSV…' : 'Apply CSV Import'}
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  data-testid='settings-operations-import-csv-dry-run'
+                  disabled={csvActionsDisabled}
+                  onClick={() => {
+                    void runImportCsvDryRun()
+                  }}
+                >
+                  {importCsvDryRunPending ? 'Running CSV Dry-Run…' : 'Run CSV Dry-Run'}
+                </Button>
+              </div>
             </div>
           </div>
 

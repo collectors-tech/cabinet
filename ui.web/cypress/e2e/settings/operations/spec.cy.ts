@@ -518,4 +518,138 @@ describe('settings/operations', () => {
       'CSV dry-run failed.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-009 applies a reviewed CSV import with the selected conflict action', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv-apply',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', {
+      statusCode: 200,
+      body: {
+        total_items: 2,
+        new_items: 1,
+        conflicts: 1,
+        conflict_details: [
+          {
+            part_number: 'CSV-APPLY-001',
+            existing_id: 'item-csv-apply-1',
+          },
+        ],
+      },
+    }).as('importCsvDryRun')
+    cy.intercept('POST', '/api/data/import/csv/apply', (req) => {
+      expect(req.body).to.deep.equal({
+        csv_import: {
+          csv: 'brand,category,part_number,title\nAFX,Slot,CSV-APPLY-001,Conflict\nAFX,Slot,CSV-APPLY-NEW,New Item',
+          mapping: {},
+        },
+        options: {
+          default_action: 'create',
+        },
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+        },
+      })
+    }).as('importCsvApply')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type(
+        'brand,category,part_number,title\nAFX,Slot,CSV-APPLY-001,Conflict\nAFX,Slot,CSV-APPLY-NEW,New Item',
+        { parseSpecialCharSequences: false }
+      )
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.get('[data-testid="settings-operations-import-csv-default-action"]').click()
+    cy.get('[role="option"]').contains('Create new item').click()
+    cy.get('[data-testid="settings-operations-import-csv-apply"]').click()
+    cy.wait('@importCsvApply')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-csv-status"]').should(
+      'contain',
+      'CSV import applied successfully.'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-010 reports CSV import apply failure without route reload', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-csv-apply-error',
+        build_date: '2026-04-22',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/data/import/csv/dry-run', {
+      statusCode: 200,
+      body: {
+        total_items: 1,
+        new_items: 0,
+        conflicts: 1,
+        conflict_details: [
+          {
+            part_number: 'CSV-APPLY-ERR',
+            existing_id: 'item-csv-apply-err',
+          },
+        ],
+      },
+    }).as('importCsvDryRun')
+    cy.intercept('POST', '/api/data/import/csv/apply', {
+      statusCode: 400,
+      body: {
+        error: 'failed_to_apply_import',
+      },
+    }).as('importCsvApply')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-import-csv-input"]')
+      .clear()
+      .type('brand,category,part_number,title\nAFX,Slot,CSV-APPLY-ERR,Broken', {
+        parseSpecialCharSequences: false,
+      })
+    cy.get('[data-testid="settings-operations-import-csv-dry-run"]').click()
+    cy.wait('@importCsvDryRun')
+    cy.get('[data-testid="settings-operations-import-csv-apply"]').click()
+    cy.wait('@importCsvApply')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-csv-status"]').should(
+      'contain',
+      'CSV import apply failed.'
+    )
+  })
 })
