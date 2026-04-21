@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
 type RuntimeResponse = {
@@ -60,6 +61,13 @@ type CSVImportRequest = {
   mapping: Record<string, string>
 }
 
+type CSVImportMappingState = {
+  brand: string
+  category: string
+  part_number: string
+  title: string
+}
+
 function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
   const parsed = JSON.parse(rawInput) as {
     snapshot?: {
@@ -95,6 +103,12 @@ export function SettingsOperations() {
   const [importCsvInput, setImportCsvInput] = useState(
     'brand,category,part_number,title\nAFX,Slot,CSV-001,Example Item'
   )
+  const [importCsvMapping, setImportCsvMapping] = useState<CSVImportMappingState>({
+    brand: '',
+    category: '',
+    part_number: '',
+    title: '',
+  })
   const [lastExportSummary, setLastExportSummary] = useState<ExportSnapshotResponse | null>(null)
   const [importSummary, setImportSummary] = useState<ImportDryRunSummaryResponse | null>(null)
   const [csvStatus, setCsvStatus] = useState<string>('No CSV import or export action has run yet.')
@@ -134,6 +148,19 @@ export function SettingsOperations() {
   useEffect(() => {
     void loadOperations()
   }, [loadOperations])
+
+  const buildCsvImportRequest = useCallback((): CSVImportRequest => {
+    const mapping = Object.fromEntries(
+      Object.entries(importCsvMapping)
+        .map(([field, value]) => [field, value.trim()])
+        .filter(([, value]) => value !== '')
+    ) as Record<string, string>
+
+    return {
+      csv: importCsvInput,
+      mapping,
+    }
+  }, [importCsvInput, importCsvMapping])
 
   const runExportJson = useCallback(async () => {
     setExportPending(true)
@@ -249,10 +276,7 @@ export function SettingsOperations() {
     setLastCsvDryRunRequest(null)
     setCsvTone('default')
     try {
-      const body: CSVImportRequest = {
-        csv: importCsvInput,
-        mapping: {},
-      }
+      const body = buildCsvImportRequest()
       const response = await fetch('/api/data/import/csv/dry-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -275,7 +299,7 @@ export function SettingsOperations() {
     } finally {
       setImportCsvDryRunPending(false)
     }
-  }, [importCsvInput])
+  }, [buildCsvImportRequest])
 
   const runImportCsvApply = useCallback(async () => {
     if (!lastCsvDryRunRequest) {
@@ -585,6 +609,104 @@ export function SettingsOperations() {
               className='min-h-36 font-mono text-xs'
               spellCheck={false}
             />
+            <div className='space-y-2'>
+              <p className='text-xs font-medium text-muted-foreground'>
+                CSV column mapping
+              </p>
+              <div className='grid gap-2 md:grid-cols-2'>
+                <div className='space-y-1'>
+                  <label
+                    htmlFor='settings-operations-import-csv-mapping-brand'
+                    className='text-xs text-muted-foreground'
+                  >
+                    Brand column
+                  </label>
+                  <Input
+                    id='settings-operations-import-csv-mapping-brand'
+                    data-testid='settings-operations-import-csv-mapping-brand'
+                    value={importCsvMapping.brand}
+                    onChange={(event) => {
+                      setImportCsvMapping((current) => ({
+                        ...current,
+                        brand: event.target.value,
+                      }))
+                      setCsvSummary(null)
+                      setLastCsvDryRunRequest(null)
+                    }}
+                    placeholder='brand'
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <label
+                    htmlFor='settings-operations-import-csv-mapping-category'
+                    className='text-xs text-muted-foreground'
+                  >
+                    Category column
+                  </label>
+                  <Input
+                    id='settings-operations-import-csv-mapping-category'
+                    data-testid='settings-operations-import-csv-mapping-category'
+                    value={importCsvMapping.category}
+                    onChange={(event) => {
+                      setImportCsvMapping((current) => ({
+                        ...current,
+                        category: event.target.value,
+                      }))
+                      setCsvSummary(null)
+                      setLastCsvDryRunRequest(null)
+                    }}
+                    placeholder='category'
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <label
+                    htmlFor='settings-operations-import-csv-mapping-part-number'
+                    className='text-xs text-muted-foreground'
+                  >
+                    Part number column
+                  </label>
+                  <Input
+                    id='settings-operations-import-csv-mapping-part-number'
+                    data-testid='settings-operations-import-csv-mapping-part-number'
+                    value={importCsvMapping.part_number}
+                    onChange={(event) => {
+                      setImportCsvMapping((current) => ({
+                        ...current,
+                        part_number: event.target.value,
+                      }))
+                      setCsvSummary(null)
+                      setLastCsvDryRunRequest(null)
+                    }}
+                    placeholder='part_number'
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <label
+                    htmlFor='settings-operations-import-csv-mapping-title'
+                    className='text-xs text-muted-foreground'
+                  >
+                    Title column
+                  </label>
+                  <Input
+                    id='settings-operations-import-csv-mapping-title'
+                    data-testid='settings-operations-import-csv-mapping-title'
+                    value={importCsvMapping.title}
+                    onChange={(event) => {
+                      setImportCsvMapping((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                      setCsvSummary(null)
+                      setLastCsvDryRunRequest(null)
+                    }}
+                    placeholder='title'
+                  />
+                </div>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                Leave fields blank to use the default CSV headers.
+              </p>
+            </div>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <div className='space-y-1'>
                 <label className='text-xs font-medium text-muted-foreground'>
