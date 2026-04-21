@@ -739,6 +739,8 @@ export function Collection({
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState<string | null>(null)
   const [photosBusy, setPhotosBusy] = useState(false)
+  const [photoRebuildError, setPhotoRebuildError] = useState<string | null>(null)
+  const [photoRebuildSuccess, setPhotoRebuildSuccess] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraSuccess, setCameraSuccess] = useState<string | null>(null)
   const [activeProfileID, setActiveProfileID] = useState('')
@@ -780,6 +782,7 @@ export function Collection({
   )
   const aiApplyTriggerRef = useRef<HTMLButtonElement | null>(null)
   const inventoryPhotoRequestIDRef = useRef(0)
+  const selectedItemIDRef = useRef('')
   const {
     workspaceCollections,
     activeWorkspaceCollection,
@@ -791,6 +794,10 @@ export function Collection({
     setSelectedItemID(item?.id ?? '')
     setSelectedItemLabel(item ? item.part_number || item.id : '')
   }, [])
+
+  useEffect(() => {
+    selectedItemIDRef.current = selectedItemID
+  }, [selectedItemID])
 
   const startCreateItem = useCallback(() => {
     setItemEditorMode('create')
@@ -853,7 +860,7 @@ export function Collection({
         items.find(
           (item) =>
             item.id ===
-            (preferredSelectedItemID?.trim() || selectedItemID.trim())
+            (preferredSelectedItemID?.trim() || selectedItemIDRef.current.trim())
         ) ?? items[0] ?? null
       setInventoryItems(items)
       setTableData(mapped)
@@ -868,7 +875,7 @@ export function Collection({
     } finally {
       setLoading(false)
     }
-  }, [routePath, selectInventoryItem, selectedItemID])
+  }, [routePath, selectInventoryItem])
 
   useEffect(() => {
     void loadInventoryItems()
@@ -1587,6 +1594,11 @@ export function Collection({
   }, [selectedItemID])
 
   useEffect(() => {
+    setPhotoRebuildError(null)
+    setPhotoRebuildSuccess(null)
+  }, [selectedItemID])
+
+  useEffect(() => {
     if (
       selectedPhotoIndex !== null &&
       (selectedPhotoIndex < 0 || selectedPhotoIndex >= inventoryPhotos.length)
@@ -1829,6 +1841,79 @@ export function Collection({
     },
     [loadInventoryPhotos, selectedItemID]
   )
+
+  const handleReorderPhotos = useCallback(
+    async (photoID: string, direction: 'up' | 'down') => {
+      if (!selectedItemID || !photoID) {
+        return
+      }
+      const currentIndex = inventoryPhotos.findIndex((photo) => photo.id === photoID)
+      if (currentIndex < 0) {
+        return
+      }
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+      if (targetIndex < 0 || targetIndex >= inventoryPhotos.length) {
+        return
+      }
+
+      const reordered = [...inventoryPhotos]
+      const [moved] = reordered.splice(currentIndex, 1)
+      reordered.splice(targetIndex, 0, moved)
+
+      setPhotosBusy(true)
+      setPhotosError(null)
+      try {
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(selectedItemID)}/photos/reorder`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              photo_ids: reordered.map((photo) => photo.id),
+            }),
+          }
+        )
+        if (!response.ok) {
+          throw new Error(`reorder_photos_${response.status}`)
+        }
+        await loadInventoryPhotos()
+      } catch {
+        setPhotosError('Unable to reorder photos right now. Retry this action.')
+      } finally {
+        setPhotosBusy(false)
+      }
+    },
+    [inventoryPhotos, loadInventoryPhotos, selectedItemID]
+  )
+
+  const handleRebuildPhotos = useCallback(async () => {
+    if (!selectedItemID) {
+      return
+    }
+    setPhotosBusy(true)
+    setPhotosError(null)
+    setPhotoRebuildError(null)
+    setPhotoRebuildSuccess(null)
+    try {
+      const response = await fetch(
+        `/api/items/${encodeURIComponent(selectedItemID)}/photos-rebuild`,
+        {
+          method: 'POST',
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`rebuild_photos_${response.status}`)
+      }
+      setPhotoRebuildSuccess('Photo previews rebuilt successfully.')
+      await loadInventoryPhotos()
+    } catch {
+      setPhotoRebuildError(
+        'Unable to rebuild photo previews right now. Retry this action.'
+      )
+    } finally {
+      setPhotosBusy(false)
+    }
+  }, [loadInventoryPhotos, selectedItemID])
 
   const handleTakePhoto = useCallback(async () => {
     setCameraError(null)
@@ -2675,6 +2760,15 @@ export function Collection({
                           event.currentTarget.value = ''
                         }}
                       />
+                      <Button
+                        type='button'
+                        variant='outline'
+                        data-testid='inventory-photo-rebuild'
+                        onClick={() => void handleRebuildPhotos()}
+                        disabled={photosBusy || selectedItemID === ''}
+                      >
+                        Rebuild Photos
+                      </Button>
                       {photosBusy ? (
                         <span className='text-xs text-muted-foreground'>Working...</span>
                       ) : null}
@@ -2693,6 +2787,32 @@ export function Collection({
                         data-testid='inventory-camera-success'
                       >
                         {cameraSuccess}
+                      </div>
+                    ) : null}
+                    {photoRebuildError ? (
+                      <div
+                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                        data-testid='inventory-photo-rebuild-error'
+                      >
+                        <p className='font-medium'>Photo rebuild failed.</p>
+                        <p className='mt-1 text-muted-foreground'>{photoRebuildError}</p>
+                        <Button
+                          className='mt-3'
+                          size='sm'
+                          variant='outline'
+                          data-testid='inventory-photo-rebuild-retry'
+                          onClick={() => void handleRebuildPhotos()}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : null}
+                    {photoRebuildSuccess ? (
+                      <div
+                        className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
+                        data-testid='inventory-photo-rebuild-success'
+                      >
+                        {photoRebuildSuccess}
                       </div>
                     ) : null}
                     {photosLoading ? (
@@ -2751,7 +2871,7 @@ export function Collection({
                           ))}
                         </div>
                         <div className='space-y-2'>
-                          {inventoryPhotos.map((photo) => (
+                          {inventoryPhotos.map((photo, index) => (
                             <div
                               key={`row-${photo.id}`}
                               className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
@@ -2769,6 +2889,26 @@ export function Collection({
                                 ) : null}
                               </div>
                               <div className='flex gap-2'>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='inventory-photo-move-up'
+                                  onClick={() => void handleReorderPhotos(photo.id, 'up')}
+                                  disabled={photosBusy || index === 0}
+                                >
+                                  Move Up
+                                </Button>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='inventory-photo-move-down'
+                                  onClick={() => void handleReorderPhotos(photo.id, 'down')}
+                                  disabled={
+                                    photosBusy || index === inventoryPhotos.length - 1
+                                  }
+                                >
+                                  Move Down
+                                </Button>
                                 <Button
                                   size='sm'
                                   variant='outline'
