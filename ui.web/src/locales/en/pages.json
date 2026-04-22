@@ -28,7 +28,8 @@
     "description": "Browse, organize, and update the items you already own."
   },
   "wishlist": {
-    "title": "Wishlist"
+    "title": "Wishlist",
+    "description": "Track wanted items, target prices, and planning decisions before they become owned inventory."
   },
   "integrations": {
     "title": "Integrations",
