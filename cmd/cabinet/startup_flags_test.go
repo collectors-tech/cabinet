@@ -17,6 +17,7 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 		"--profile", "demo-profile",
 		"--auth-mode", "clerk",
 		"--base-url", "http://127.0.0.1:19090",
+		"--restart",
 		"--allow-parallel",
 		"--log-level", "debug",
 	})
@@ -38,6 +39,9 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 	}
 	if overrides.Env["CABINET_BASE_URL"] != "http://127.0.0.1:19090" {
 		t.Fatalf("expected CABINET_BASE_URL override")
+	}
+	if overrides.Env["CABINET_RESTART"] != "true" {
+		t.Fatalf("expected CABINET_RESTART=true")
 	}
 	if overrides.Env["CABINET_ALLOW_PARALLEL"] != "true" {
 		t.Fatalf("expected CABINET_ALLOW_PARALLEL=true")
@@ -126,5 +130,23 @@ func TestApplyStartupOverridesSetsEnvironmentVariables(t *testing.T) {
 	applyStartupOverrides(overrides)
 	if got := os.Getenv("CABINET_LOG_LEVEL"); got != "info" {
 		t.Fatalf("expected CABINET_LOG_LEVEL=info, got %q", got)
+	}
+}
+
+func TestValidateStartupOverridesRejectsRestartWithAllowParallel(t *testing.T) {
+	t.Parallel()
+
+	err := validateStartupOverrides(startupOverrides{
+		Env: map[string]string{
+			"CABINET_RESTART":       "true",
+			"CABINET_ALLOW_PARALLEL": "true",
+			"CABINET_PROFILE":       "demo",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected restart/allow-parallel validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "restart") {
+		t.Fatalf("expected restart validation error, got %v", err)
 	}
 }
