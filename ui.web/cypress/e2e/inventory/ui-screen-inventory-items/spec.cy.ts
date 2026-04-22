@@ -1,13 +1,10 @@
 describe("inventory-management", () => {
   function signIn() {
-    cy.visit("/sign-in?redirect=%2Finventory%2F");
-    cy.get('input[name="email"]').clear().type("e2e-inventory@example.com");
-    cy.get('input[name="password"]').clear().type("password123");
-    cy.contains("button", "Sign in").click();
-    cy.location("pathname", { timeout: 15000 }).should(
-      "match",
-      /^\/inventory\/?$/
-    );
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
+    });
   }
 
   it("renders inventory workspace, supports view toggle and filtering, and avoids 500", () => {
@@ -380,5 +377,110 @@ describe("inventory-management", () => {
     cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
       "be.visible"
     );
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-010 saves and reapplies inventory views with real condition/category filters", () => {
+    const items = [
+      {
+        id: "item-view-1",
+        part_number: "PN-VIEW-001",
+        title: "Road Alpha",
+        status: "used",
+        category: "Cars",
+      },
+      {
+        id: "item-view-2",
+        part_number: "PN-VIEW-002",
+        title: "Road Zeta",
+        status: "used",
+        category: "Cars",
+      },
+      {
+        id: "item-view-3",
+        part_number: "PN-VIEW-003",
+        title: "Road Bravo",
+        status: "active",
+        category: "Cars",
+      },
+      {
+        id: "item-view-4",
+        part_number: "PN-VIEW-004",
+        title: "Plane Delta",
+        status: "used",
+        category: "Planes",
+      },
+    ];
+    let profileSettings: Record<string, string> = {};
+
+    cy.intercept("GET", "/api/profiles/active", {
+      statusCode: 200,
+      body: { id: "inventory-profile-1" },
+    }).as("activeProfile");
+
+    cy.intercept("GET", "/api/profiles/inventory-profile-1/settings", () => {
+      return {
+        statusCode: 200,
+        body: { settings: profileSettings },
+      };
+    }).as("inventoryProfileSettings");
+
+    cy.intercept("PUT", "/api/profiles/inventory-profile-1/settings", (req) => {
+      profileSettings = req.body.settings ?? {};
+      req.reply({
+        statusCode: 200,
+        body: { settings: profileSettings },
+      });
+    }).as("saveInventorySettings");
+
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items },
+    }).as("inventorySavedViewsItems");
+
+    signIn();
+    cy.wait("@activeProfile");
+    cy.wait("@inventoryProfileSettings");
+    cy.wait("@inventorySavedViewsItems");
+
+    cy.contains("button", "Condition").click();
+    cy.contains('[cmdk-item]', "Used").click();
+    cy.contains("button", "Category").click();
+    cy.contains('[cmdk-item]', "Cars").click();
+    cy.get('input[placeholder="Filter by title or part number..."]').type("Road");
+
+    cy.contains("th", "Title").find("button").click();
+    cy.contains('[role="menuitem"]', "Desc").click();
+
+    cy.get('[data-testid="inventory-saved-view-save"]').click();
+    cy.get('[data-testid="inventory-saved-view-name"]').type("Used Road Cars");
+    cy.get('[data-testid="inventory-saved-view-submit"]').click();
+    cy.wait("@saveInventorySettings")
+      .its("request.body.settings")
+      .then((settings) => {
+        expect(settings["inventory.saved-views.v1"]).to.contain("Used Road Cars");
+      });
+
+    cy.contains("button", "Reset").click();
+    cy.contains("button", "Cards").click();
+    cy.contains("Road Bravo").should("be.visible");
+    cy.contains("Plane Delta").should("be.visible");
+
+    cy.reload();
+    cy.wait("@activeProfile");
+    cy.wait("@inventoryProfileSettings");
+    cy.wait("@inventorySavedViewsItems");
+
+    cy.get('[data-testid="inventory-saved-view-select"]').select("Used Road Cars");
+
+    cy.contains("button", "Rows").should("have.attr", "aria-pressed", "true");
+    cy.get('input[placeholder="Filter by title or part number..."]').should(
+      "have.value",
+      "Road"
+    );
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Bravo").should("not.exist");
+    cy.contains("Plane Delta").should("not.exist");
+    cy.get("table tbody tr").eq(0).should("contain", "PN-VIEW-002");
   });
 });
