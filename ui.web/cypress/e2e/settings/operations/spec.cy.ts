@@ -214,6 +214,98 @@ describe('settings/operations', () => {
     cy.get('[data-testid="settings-operations-queue-pause"]').should('not.be.disabled')
   })
 
+  it('UI-SCREEN-SETTINGS-OPERATIONS-002B sets recovery passphrase and begins reset without route reload', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-auth-recovery',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: true,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: {
+        id: 'profile-ops-recovery',
+      },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/profile-ops-recovery/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          scanner_schedule: 'manual',
+        },
+      },
+    }).as('profileSettings')
+    cy.intercept('POST', '/api/auth/recovery/passphrase', (req) => {
+      expect(req.body).to.deep.equal({
+        profile_id: 'profile-ops-recovery',
+        passphrase: 'reset-hunter2',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+        },
+      })
+    }).as('setRecoveryPassphrase')
+    cy.intercept('POST', '/api/auth/recovery/reset/begin', (req) => {
+      expect(req.body).to.deep.equal({
+        profile_id: 'profile-ops-recovery',
+        passphrase: 'reset-hunter2',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          session_id: 'recovery-session-1',
+        },
+      })
+    }).as('beginRecoveryReset')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+    cy.wait('@activeProfile')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="settings-operations-auth-recovery-card"]').should(
+      'contain',
+      'Recovery Access'
+    )
+    cy.get('[data-testid="settings-operations-recovery-passphrase-input"]')
+      .clear()
+      .type('reset-hunter2')
+    cy.get('[data-testid="settings-operations-recovery-passphrase-submit"]').click()
+    cy.wait('@setRecoveryPassphrase')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-auth-recovery-status"]').should(
+      'contain',
+      'Recovery passphrase saved.'
+    )
+
+    cy.get('[data-testid="settings-operations-recovery-reset-submit"]').click()
+    cy.wait('@beginRecoveryReset')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-auth-recovery-status"]').should(
+      'contain',
+      'Recovery reset session started.'
+    )
+    cy.get('[data-testid="settings-operations-auth-recovery-summary"]').should(
+      'contain',
+      'recovery-session-1'
+    )
+  })
+
   it('UI-SCREEN-SETTINGS-OPERATIONS-003 exports snapshot data and shows dry-run conflicts', () => {
     cy.intercept('GET', '/api/runtime', {
       statusCode: 200,

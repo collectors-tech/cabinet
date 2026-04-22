@@ -37,6 +37,10 @@ type RuntimeSetupImportResponse = {
   runtime_port?: number
 }
 
+type RecoveryResetResponse = {
+  session_id?: string
+}
+
 type ExportSnapshotResponse = {
   schema_version?: number
   exported_at?: string
@@ -184,6 +188,17 @@ export function SettingsOperations() {
   const [queuePendingAction, setQueuePendingAction] = useState<'pause' | 'resume' | null>(null)
   const [queueStatusOverride, setQueueStatusOverride] = useState<string | null>(null)
   const [queueTone, setQueueTone] = useState<'default' | 'destructive'>('default')
+  const [recoveryPassphraseInput, setRecoveryPassphraseInput] = useState('')
+  const [recoveryPassphrasePending, setRecoveryPassphrasePending] = useState(false)
+  const [recoveryResetPending, setRecoveryResetPending] = useState(false)
+  const [authRecoveryStatus, setAuthRecoveryStatus] = useState(
+    'No recovery passphrase or reset action has run yet.'
+  )
+  const [authRecoveryTone, setAuthRecoveryTone] = useState<'default' | 'destructive'>(
+    'default'
+  )
+  const [authRecoverySummary, setAuthRecoverySummary] =
+    useState<RecoveryResetResponse | null>(null)
 
   const loadOperations = useCallback(async () => {
     setLoading(true)
@@ -523,6 +538,70 @@ export function SettingsOperations() {
     }
   }, [activeProfileId, profileSettings, queueResumeSchedule, saveSettings])
 
+  const runSetRecoveryPassphrase = useCallback(async () => {
+    if (!activeProfileId) {
+      setAuthRecoveryTone('destructive')
+      setAuthRecoveryStatus('Recovery access is unavailable without an active profile.')
+      return
+    }
+
+    setRecoveryPassphrasePending(true)
+    setAuthRecoveryTone('default')
+    try {
+      const response = await fetch('/api/auth/recovery/passphrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          passphrase: recoveryPassphraseInput,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_set_recovery_passphrase')
+      }
+      setAuthRecoverySummary(null)
+      setAuthRecoveryStatus('Recovery passphrase saved.')
+    } catch {
+      setAuthRecoveryTone('destructive')
+      setAuthRecoveryStatus('Recovery passphrase save failed.')
+    } finally {
+      setRecoveryPassphrasePending(false)
+    }
+  }, [activeProfileId, recoveryPassphraseInput])
+
+  const runBeginRecoveryReset = useCallback(async () => {
+    if (!activeProfileId) {
+      setAuthRecoveryTone('destructive')
+      setAuthRecoveryStatus('Recovery access is unavailable without an active profile.')
+      return
+    }
+
+    setRecoveryResetPending(true)
+    setAuthRecoveryTone('default')
+    try {
+      const response = await fetch('/api/auth/recovery/reset/begin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          passphrase: recoveryPassphraseInput,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_begin_recovery_reset')
+      }
+      const payload = (await response.json()) as RecoveryResetResponse
+      setAuthRecoverySummary(payload)
+      setAuthRecoveryStatus('Recovery reset session started.')
+    } catch {
+      setAuthRecoverySummary(null)
+      setAuthRecoveryTone('destructive')
+      setAuthRecoveryStatus('Recovery reset could not be started.')
+    } finally {
+      setRecoveryResetPending(false)
+    }
+  }, [activeProfileId, recoveryPassphraseInput])
+
   const runtimeAddress = runtimeInfo
     ? `${runtimeInfo.runtime_host?.trim() || '127.0.0.1'}:${runtimeInfo.runtime_port ?? 17880}`
     : 'Unavailable'
@@ -551,6 +630,14 @@ export function SettingsOperations() {
     Boolean(profileSettingsError) ||
     profileSettingsSaving ||
     queuePendingAction !== null
+  const authRecoveryActionsDisabled =
+    loading ||
+    Boolean(error) ||
+    profileSettingsLoading ||
+    Boolean(profileSettingsError) ||
+    recoveryPassphraseInput.trim() === '' ||
+    recoveryPassphrasePending ||
+    recoveryResetPending
 
   return (
     <ContentSection
@@ -671,6 +758,83 @@ export function SettingsOperations() {
                 <p>No imported setup summary yet.</p>
               )}
             </div>
+          </div>
+        </div>
+
+        <div
+          className='rounded-md border p-3 space-y-3'
+          data-testid='settings-operations-auth-recovery-card'
+        >
+          <div className='space-y-1'>
+            <p className='font-medium'>Recovery Access</p>
+            <p className='text-muted-foreground'>
+              Set a recovery passphrase and begin a recovery reset session for the active profile without leaving Operations.
+            </p>
+          </div>
+
+          <div className='space-y-2'>
+            <label
+              htmlFor='settings-operations-recovery-passphrase-input'
+              className='text-sm font-medium'
+            >
+              Recovery passphrase
+            </label>
+            <Input
+              id='settings-operations-recovery-passphrase-input'
+              data-testid='settings-operations-recovery-passphrase-input'
+              type='password'
+              value={recoveryPassphraseInput}
+              onChange={(event) => {
+                setRecoveryPassphraseInput(event.target.value)
+              }}
+              placeholder='Enter recovery passphrase'
+            />
+          </div>
+
+          <div className='flex gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-recovery-passphrase-submit'
+              disabled={authRecoveryActionsDisabled}
+              onClick={() => {
+                void runSetRecoveryPassphrase()
+              }}
+            >
+              {recoveryPassphrasePending ? 'Saving Passphrase…' : 'Save Recovery Passphrase'}
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-recovery-reset-submit'
+              disabled={authRecoveryActionsDisabled}
+              onClick={() => {
+                void runBeginRecoveryReset()
+              }}
+            >
+              {recoveryResetPending ? 'Starting Recovery Reset…' : 'Begin Recovery Reset'}
+            </Button>
+          </div>
+
+          <p
+            data-testid='settings-operations-auth-recovery-status'
+            className={authRecoveryTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          >
+            {authRecoveryStatus}
+          </p>
+
+          <div
+            className='rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground'
+            data-testid='settings-operations-auth-recovery-summary'
+          >
+            {authRecoverySummary ? (
+              <div className='space-y-1'>
+                <p>Recovery session: {authRecoverySummary.session_id || 'Unknown session'}</p>
+                <p>Profile: {activeProfileId || 'Unknown profile'}</p>
+              </div>
+            ) : (
+              <p>No recovery reset session has been started yet.</p>
+            )}
           </div>
         </div>
 
