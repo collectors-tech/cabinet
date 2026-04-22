@@ -114,6 +114,10 @@ export function SettingsOperations() {
   const [csvStatus, setCsvStatus] = useState<string>('No CSV import or export action has run yet.')
   const [csvTone, setCsvTone] = useState<'default' | 'destructive'>('default')
   const [csvSummary, setCsvSummary] = useState<ImportDryRunSummaryResponse | null>(null)
+  const [logsExportPending, setLogsExportPending] = useState(false)
+  const [logsStatus, setLogsStatus] = useState<string>('No diagnostics export has run yet.')
+  const [logsTone, setLogsTone] = useState<'default' | 'destructive'>('default')
+  const [logsPreview, setLogsPreview] = useState<string | null>(null)
   const [importDefaultAction, setImportDefaultAction] =
     useState<ImportApplyAction>('merge')
   const [importCsvDefaultAction, setImportCsvDefaultAction] =
@@ -270,6 +274,27 @@ export function SettingsOperations() {
     }
   }, [])
 
+  const runExportLogs = useCallback(async () => {
+    setLogsExportPending(true)
+    setLogsTone('default')
+    try {
+      const response = await fetch('/api/logs/export')
+      if (!response.ok) {
+        throw new Error('failed_to_export_logs')
+      }
+      const text = await response.text()
+      const preview = text.trim()
+      setLogsPreview(preview || null)
+      setLogsStatus('Exported runtime logs successfully.')
+    } catch {
+      setLogsPreview(null)
+      setLogsTone('destructive')
+      setLogsStatus('Runtime logs export failed.')
+    } finally {
+      setLogsExportPending(false)
+    }
+  }, [])
+
   const runImportCsvDryRun = useCallback(async () => {
     setImportCsvDryRunPending(true)
     setCsvSummary(null)
@@ -350,6 +375,7 @@ export function SettingsOperations() {
     exportCsvPending ||
     importCsvDryRunPending ||
     importCsvApplyPending
+  const logsActionsDisabled = loading || Boolean(error) || logsExportPending
 
   return (
     <ContentSection
@@ -415,6 +441,45 @@ export function SettingsOperations() {
                 ? 'Recovery required'
               : 'No recovery required'}
           </p>
+        </div>
+
+        <div
+          className='rounded-md border p-3 space-y-3'
+          data-testid='settings-operations-logs-card'
+        >
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>Diagnostics logs</p>
+              <p className='text-muted-foreground'>
+                Export the current redacted runtime log snapshot for recovery and support workflows.
+              </p>
+            </div>
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-export-logs'
+              disabled={logsActionsDisabled}
+              onClick={() => {
+                void runExportLogs()
+              }}
+            >
+              {logsExportPending ? 'Exporting Logs…' : 'Export Logs'}
+            </Button>
+          </div>
+
+          <p
+            data-testid='settings-operations-logs-status'
+            className={logsTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          >
+            {logsStatus}
+          </p>
+
+          <div
+            className='rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground'
+            data-testid='settings-operations-logs-preview'
+          >
+            {logsPreview ?? 'No log export preview yet. Export logs to review the current redacted snapshot.'}
+          </div>
         </div>
 
         <div
