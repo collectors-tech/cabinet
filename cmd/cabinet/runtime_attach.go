@@ -170,6 +170,27 @@ func runtimeAttachLogLine(decision runtimeAttachDecision, dataDir string) string
 	)
 }
 
+func runtimeAttachUserMessage(decision runtimeAttachDecision) string {
+	reason := attachReasonOrDefault(decision.Reason)
+	switch reason {
+	case "requested_endpoint_healthy":
+		return fmt.Sprintf(
+			"Cabinet is already running on %s. Reusing the existing instance and exiting. Use --restart to replace it or --allow-parallel to run another instance.",
+			strings.TrimSpace(decision.URL),
+		)
+	case "same_data_dir":
+		return fmt.Sprintf(
+			"Cabinet is already running for this data directory at %s. Reusing the existing instance and exiting.",
+			strings.TrimSpace(decision.URL),
+		)
+	default:
+		return fmt.Sprintf(
+			"Cabinet reused the existing runtime at %s and exited.",
+			strings.TrimSpace(decision.URL),
+		)
+	}
+}
+
 func resolveRequestedRuntimeAttach(
 	cfg config.Config,
 	allowParallel bool,
