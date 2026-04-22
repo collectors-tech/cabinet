@@ -28,6 +28,7 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	var instanceName string
 	var authMode string
 	var baseURL string
+	var restart bool
 	var allowParallel bool
 	var logLevel string
 	var noOpenBrowser bool
@@ -39,6 +40,7 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	fs.StringVar(&instanceName, "instance-name", "", "Instance/profile alias override.")
 	fs.StringVar(&authMode, "auth-mode", "", "Auth mode override (local|clerk).")
 	fs.StringVar(&baseURL, "base-url", "", "Base URL override for runtime callbacks/origin.")
+	fs.BoolVar(&restart, "restart", false, "Restart an already-running Cabinet instance on the requested endpoint.")
 	fs.BoolVar(&allowParallel, "allow-parallel", false, "Allow parallel runtime instances.")
 	fs.StringVar(&logLevel, "log-level", "", "Log level override (debug|info|warn|error).")
 	fs.BoolVar(&noOpenBrowser, "no-open-browser", false, "Disable browser auto-open on startup.")
@@ -105,6 +107,10 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 		env["CABINET_BASE_URL"] = baseURL
 	}
 
+	if restart {
+		env["CABINET_RESTART"] = "true"
+	}
+
 	if allowParallel {
 		env["CABINET_ALLOW_PARALLEL"] = "true"
 	}
@@ -157,6 +163,11 @@ func envOrDefault(key, fallback string) string {
 }
 
 func validateStartupOverrides(overrides startupOverrides) error {
+	if _, ok := overrides.Env["CABINET_RESTART"]; ok {
+		if _, parallel := overrides.Env["CABINET_ALLOW_PARALLEL"]; parallel {
+			return errors.New("restart cannot be combined with allow-parallel")
+		}
+	}
 	if _, ok := overrides.Env["CABINET_ALLOW_PARALLEL"]; ok {
 		if strings.TrimSpace(overrides.Env["CABINET_PROFILE"]) == "" && strings.TrimSpace(os.Getenv("CABINET_PROFILE")) == "" {
 			return errors.New("allow-parallel requires --profile or --instance-name")

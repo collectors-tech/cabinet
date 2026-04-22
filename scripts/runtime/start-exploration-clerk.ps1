@@ -3,6 +3,8 @@ param(
   [switch]$Rebuild,
   [switch]$FreshData,
   [switch]$Background,
+  [switch]$Restart,
+  [switch]$AllowParallel,
   [int]$Port = 17883
 )
 
@@ -45,16 +47,13 @@ try {
     Remove-Item -Recurse -Force $dataDir
   }
 
-  New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-
-  $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-  if ($existing) {
-    $pids = @($existing | Select-Object -ExpandProperty OwningProcess -Unique)
-    throw "Port $Port is already in use by PID(s): $($pids -join ', '). Stop the existing listener first."
+  if ($Restart -and $AllowParallel) {
+    throw 'Restart cannot be combined with AllowParallel.'
   }
 
+  New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+
   $args = @(
-    '--allow-parallel',
     '--no-open-browser',
     '--data-dir', $dataDir,
     '--profile', $profile,
@@ -62,10 +61,28 @@ try {
     '--port', $Port
   )
 
+  $mode = 'reuse-or-attach'
+  $parallelNote = 'singleton endpoint guard enabled'
+  if ($Restart) {
+    $mode = 'restart'
+  }
+  if ($AllowParallel) {
+    $mode = 'parallel'
+    $parallelNote = 'explicit parallel mode enabled'
+  }
+  if ($Restart) {
+    $args += '--restart'
+  }
+  if ($AllowParallel) {
+    $args += '--allow-parallel'
+  }
+
   Write-Host "[start-exploration-clerk] Executable: $exePath"
   Write-Host "[start-exploration-clerk] Data dir:   $dataDir"
   Write-Host "[start-exploration-clerk] Port:       $Port"
   Write-Host "[start-exploration-clerk] URL:        $url"
+  Write-Host "[start-exploration-clerk] Mode:       $mode"
+  Write-Host "[start-exploration-clerk] Guard:      $parallelNote"
   Write-Host '[start-exploration-clerk] Effective auth env:'
   Write-Host '  CABINET_AUTH_IDENTITY_MODE=clerk'
   Write-Host ('  VITE_CLERK_PUBLISHABLE_KEY=' + $ClerkPublishableKey)

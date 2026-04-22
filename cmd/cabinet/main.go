@@ -39,6 +39,28 @@ func main() {
 	log.Printf("%s", buildEffectiveStartupConfigLine(cfg))
 	browserLaunch := resolveBrowserLaunch(os.Args[1:], openBrowserValue, openBrowserSet)
 	allowParallel := startupAllowsParallel()
+	restartRequested := startupWantsRestart()
+	requestedProbe := resolveRequestedRuntimeProbe(cfg, fetchRuntimeEndpointProbe, isRuntimeAddrInUse)
+	log.Printf("%s", runtimeEndpointStatusLogLine(requestedProbe))
+	if restartRequested {
+		switch requestedProbe.Status {
+		case "occupied":
+			log.Fatalf("runtime restart failed: requested endpoint %s is occupied by a non-Cabinet listener", requestedProbe.URL)
+		case "cabinet":
+			restartResult, err := restartRequestedRuntime(
+				requestedProbe,
+				cfg.Addr,
+				requestRuntimeShutdown,
+				waitForRuntimeRestartReady,
+				isRuntimeProcessAlive,
+				terminateRuntimeProcess,
+			)
+			if err != nil {
+				log.Fatalf("runtime restart failed: %v", err)
+			}
+			log.Printf("%s", runtimeRestartLogLine(restartResult, cfg.DataDir))
+		}
+	}
 	attachDecision, attachErr := resolveRunningRuntimeAttach(cfg.DataDir, isRuntimeProcessAlive, isRuntimeEndpointHealthy)
 	if attachErr != nil {
 		log.Printf("runtime attach check skipped: %v", attachErr)
@@ -55,7 +77,10 @@ func main() {
 		}
 		return
 	}
-	requestedAttachDecision := resolveRequestedRuntimeAttach(cfg, allowParallel, isRuntimeEndpointHealthy)
+	requestedAttachDecision := runtimeAttachDecision{}
+	if !restartRequested && requestedProbe.Status == "cabinet" {
+		requestedAttachDecision = resolveRequestedRuntimeAttach(cfg, allowParallel, isRuntimeEndpointHealthy)
+	}
 	if requestedAttachDecision.Attach {
 		log.Printf("%s", runtimeAttachLogLine(requestedAttachDecision, cfg.DataDir))
 		if !browserLaunch.Enabled {

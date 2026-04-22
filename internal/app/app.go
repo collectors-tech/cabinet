@@ -75,6 +75,7 @@ type App struct {
 	authService   *auth.Service
 	openapiSpec   []byte
 	runtimeLogs   *runtimeLogManager
+	runtimeStopCh chan string
 	startupNotice func(string)
 	startupIsTTY  func() bool
 }
@@ -130,6 +131,7 @@ func New(cfg config.Config) (*App, error) {
 	}
 	cloudLeases := newCloudLeaseStore()
 	cloudEntitlements := newCloudEntitlementStore()
+	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
 	if isE2EHooksEnabled(cfg) {
@@ -229,6 +231,40 @@ func New(cfg config.Config) (*App, error) {
 			"bind_mode":                    strings.TrimSpace(strings.ToLower(cfg.BindMode)),
 			"runtime_host":                 host,
 			"runtime_port":                 port,
+			"pid":                          os.Getpid(),
+			"data_dir":                     cfg.DataDir,
+		})
+	})
+	mux.HandleFunc("/api/runtime/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !requestIsLoopback(r) {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var payload struct {
+			Reason string `json:"reason"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+		}
+		reason := strings.TrimSpace(payload.Reason)
+		if reason == "" {
+			reason = "api_shutdown"
+		}
+		select {
+		case runtimeStopCh <- reason:
+		default:
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"pid":    os.Getpid(),
+			"reason": reason,
 		})
 	})
 	mux.HandleFunc("/api/auth/provider-options", func(w http.ResponseWriter, r *http.Request) {
@@ -4583,13 +4619,14 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	a := &App{
-		cfg:         cfg,
-		db:          conn,
-		srv:         srv,
-		backupSvc:   backupSvc,
-		authService: authService,
-		openapiSpec: openapiSpec,
-		runtimeLogs: runtimeLogs,
+		cfg:           cfg,
+		db:            conn,
+		srv:           srv,
+		backupSvc:     backupSvc,
+		authService:   authService,
+		openapiSpec:   openapiSpec,
+		runtimeLogs:   runtimeLogs,
+		runtimeStopCh: runtimeStopCh,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
@@ -7273,6 +7310,11 @@ func (a *App) Run(ctx context.Context) error {
 		defer cancel()
 		_ = a.srv.Shutdown(shutdownCtx)
 		return a.closeRuntime(true, "shutdown", resolvedURL)
+	case reason := <-a.runtimeStopCh:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = a.srv.Shutdown(shutdownCtx)
+		return a.closeRuntime(true, cleanReason(reason), resolvedURL)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return a.closeRuntime(true, "server_closed", resolvedURL)
@@ -7312,6 +7354,21 @@ func listenWithPortFallback(addr string, maxFallbackAttempts int) (net.Listener,
 		}
 	}
 	return nil, err
+}
+
+func requestIsLoopback(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
 }
 
 func splitHostPort(addr string) (string, int) {

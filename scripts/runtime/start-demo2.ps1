@@ -1,7 +1,9 @@
 param(
   [switch]$Rebuild,
   [switch]$FreshData,
-  [switch]$Background
+  [switch]$Background,
+  [switch]$Restart,
+  [switch]$AllowParallel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,16 +31,23 @@ if ($FreshData -and (Test-Path $dataDir)) {
   Remove-Item -Recurse -Force $dataDir
 }
 
-New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-
-$existing = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-if ($existing) {
-  $pids = @($existing | Select-Object -ExpandProperty OwningProcess -Unique)
-  throw "Port $port is already in use by PID(s): $($pids -join ', '). Stop the existing listener first."
+if ($Restart -and $AllowParallel) {
+  throw 'Restart cannot be combined with AllowParallel.'
 }
 
+$mode = 'reuse-or-attach'
+$parallelNote = 'singleton endpoint guard enabled'
+if ($Restart) {
+  $mode = 'restart'
+}
+if ($AllowParallel) {
+  $mode = 'parallel'
+  $parallelNote = 'explicit parallel mode enabled'
+}
+
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+
 $args = @(
-  '--allow-parallel',
   '--no-open-browser',
   '--data-dir', $dataDir,
   '--profile', $profile,
@@ -46,10 +55,19 @@ $args = @(
   '--port', $port
 )
 
+if ($Restart) {
+  $args += '--restart'
+}
+if ($AllowParallel) {
+  $args += '--allow-parallel'
+}
+
 Write-Host "[start-demo2] Executable: $exePath"
 Write-Host "[start-demo2] Data dir:   $dataDir"
 Write-Host "[start-demo2] Port:       $port"
 Write-Host "[start-demo2] URL:        $url"
+Write-Host "[start-demo2] Mode:       $mode"
+Write-Host "[start-demo2] Guard:      $parallelNote"
 
 if ($Background) {
   $proc = Start-Process -FilePath $exePath -ArgumentList $args -WorkingDirectory $repoRoot -PassThru
