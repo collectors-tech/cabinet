@@ -809,4 +809,48 @@ describe('settings/operations', () => {
       'CSV import applied successfully.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-013 exports diagnostic logs without leaving the Operations route', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-logs-export',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/logs/export', {
+      statusCode: 200,
+      body: '{"entries":[{"level":"info","message":"[REDACTED]"}]}',
+      headers: {
+        'content-type': 'application/json',
+      },
+    }).as('exportLogs')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-export-logs"]').click()
+    cy.wait('@exportLogs')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-logs-status"]').should(
+      'contain',
+      'Exported runtime logs successfully.'
+    )
+    cy.get('[data-testid="settings-operations-logs-preview"]').should(
+      'contain',
+      '[REDACTED]'
+    )
+  })
 })
