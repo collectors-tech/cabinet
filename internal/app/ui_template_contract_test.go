@@ -432,6 +432,33 @@ func TestSettingsOperationsQueueControlsContract(t *testing.T) {
 	}
 }
 
+func TestSettingsOperationsRecoveryWorkflowContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/settings/operations/index.tsx")
+	if err != nil {
+		t.Fatalf("read settings operations: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"settings-operations-auth-recovery-card",
+		"settings-operations-recovery-passphrase-input",
+		"settings-operations-recovery-passphrase-submit",
+		"settings-operations-recovery-reset-submit",
+		"settings-operations-auth-recovery-status",
+		"settings-operations-auth-recovery-summary",
+		"/api/auth/recovery/passphrase",
+		"/api/auth/recovery/reset/begin",
+		"Recovery reset session started.",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("settings operations missing recovery workflow token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 
