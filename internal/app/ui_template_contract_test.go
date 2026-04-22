@@ -348,6 +348,32 @@ func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
 	}
 }
 
+func TestInventorySavedViewsAndFilterContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/tasks/components/tasks-table.tsx")
+	if err != nil {
+		t.Fatalf("read tasks table: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"inventory.saved-views.v1",
+		"inventory-saved-view-select",
+		"inventory-saved-view-save",
+		"inventory-saved-view-name",
+		"inventory-saved-view-submit",
+		"Filter by title or part number...",
+		"Condition",
+		"Category",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("tasks table missing inventory saved view/filter token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 

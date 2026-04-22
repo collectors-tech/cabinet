@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   type MouseEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -40,6 +41,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { useProfileSettings } from '@/features/settings/use-profile-settings'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
@@ -64,6 +67,110 @@ type DataTableProps = {
 }
 
 type ViewMode = 'rows' | 'cards'
+
+type InventorySavedView = {
+  id: string
+  name: string
+  globalFilter: string
+  statusFilters: string[]
+  categoryFilters: string[]
+  sorting: Array<{ id: string; desc: boolean }>
+  viewMode: ViewMode
+}
+
+const inventorySavedViewsSettingsKey = 'inventory.saved-views.v1'
+
+function titleCaseWords(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter((part) => part.trim() !== '')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function parseInventorySavedViews(value: string | undefined): InventorySavedView[] {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+      const candidate = entry as Record<string, unknown>
+      const id = typeof candidate.id === 'string' ? candidate.id.trim() : ''
+      const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+      if (!id || !name) {
+        return []
+      }
+
+      const normalizeStringArray = (raw: unknown) =>
+        Array.isArray(raw)
+          ? raw
+              .filter((item): item is string => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter((item) => item !== '')
+          : []
+
+      const sorting = Array.isArray(candidate.sorting)
+        ? candidate.sorting.flatMap((sortEntry) => {
+            if (!sortEntry || typeof sortEntry !== 'object') {
+              return []
+            }
+            const sortCandidate = sortEntry as Record<string, unknown>
+            const columnID =
+              typeof sortCandidate.id === 'string' ? sortCandidate.id.trim() : ''
+            if (!columnID) {
+              return []
+            }
+            return [
+              {
+                id: columnID,
+                desc: Boolean(sortCandidate.desc),
+              },
+            ]
+          })
+        : []
+
+      return [
+        {
+          id,
+          name,
+          globalFilter:
+            typeof candidate.globalFilter === 'string'
+              ? candidate.globalFilter
+              : '',
+          statusFilters: normalizeStringArray(candidate.statusFilters),
+          categoryFilters: normalizeStringArray(candidate.categoryFilters),
+          sorting,
+          viewMode: candidate.viewMode === 'cards' ? 'cards' : 'rows',
+        },
+      ]
+    })
+  } catch {
+    return []
+  }
+}
+
+function serializeInventorySavedViews(views: InventorySavedView[]) {
+  return JSON.stringify(
+    views.map((view) => ({
+      id: view.id,
+      name: view.name,
+      globalFilter: view.globalFilter,
+      statusFilters: view.statusFilters,
+      categoryFilters: view.categoryFilters,
+      sorting: view.sorting,
+      viewMode: view.viewMode,
+    }))
+  )
+}
 
 function formatWishlistStatus(status: string) {
   if (status === 'wishlist') {
@@ -90,6 +197,7 @@ export function TasksTable({
   wishlistActionItemID,
   isWishlistMutating,
 }: DataTableProps) {
+  const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const columns = useMemo(
     () =>
       getTasksColumns({
@@ -111,6 +219,13 @@ export function TasksTable({
     routePath === '/_authenticated/wishlist/'
       ? 'cabinet.viewMode.wishlist'
       : 'cabinet.viewMode.inventory'
+  const {
+    activeProfileId: activeInventoryProfileId,
+    settings: inventoryProfileSettings,
+    saveSettings: saveInventoryProfileSettings,
+    loading: inventoryProfileSettingsLoading,
+    saving: inventoryProfileSettingsSaving,
+  } = useProfileSettings()
 
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
@@ -125,6 +240,11 @@ export function TasksTable({
   const [selectedRecordID, setSelectedRecordID] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [saveViewDialogOpen, setSaveViewDialogOpen] = useState(false)
+  const [saveViewName, setSaveViewName] = useState('')
+  const [savedViewFeedback, setSavedViewFeedback] = useState<string | null>(null)
+  const [savedViewError, setSavedViewError] = useState<string | null>(null)
+  const [activeSavedViewID, setActiveSavedViewID] = useState('')
   const clickTimerRef = useRef<number | null>(null)
 
   const {
@@ -201,6 +321,16 @@ export function TasksTable({
   const selectedRecord = useMemo(
     () => data.find((item) => item.id === selectedRecordID) ?? null,
     [data, selectedRecordID]
+  )
+
+  const inventorySavedViews = useMemo(
+    () =>
+      isInventoryRoute
+        ? parseInventorySavedViews(
+            inventoryProfileSettings[inventorySavedViewsSettingsKey]
+          )
+        : [],
+    [inventoryProfileSettings, isInventoryRoute]
   )
 
   const visibleRecordIDs = useMemo(
@@ -297,12 +427,174 @@ export function TasksTable({
     setSelectedRecordContext(visibleRecordIDs[nextIndex] ?? selectedRecordID ?? '')
   }
 
+  const currentInventoryViewSnapshot = useMemo(() => {
+    const findArrayFilter = (id: string) => {
+      const found = columnFilters.find((filter) => filter.id === id)
+      return Array.isArray(found?.value)
+        ? found.value
+            .filter((value): value is string => typeof value === 'string')
+            .map((value) => value.trim())
+            .filter((value) => value !== '')
+        : []
+    }
+
+    return {
+      globalFilter: (globalFilter ?? '').trim(),
+      statusFilters: findArrayFilter('status'),
+      categoryFilters: findArrayFilter('priority'),
+      sorting: sorting.map((entry) => ({
+        id: entry.id,
+        desc: Boolean(entry.desc),
+      })),
+      viewMode,
+    }
+  }, [columnFilters, globalFilter, sorting, viewMode])
+
+  const persistInventorySavedViews = useCallback(
+    async (nextViews: InventorySavedView[]) => {
+      await saveInventoryProfileSettings({
+        ...inventoryProfileSettings,
+        [inventorySavedViewsSettingsKey]: serializeInventorySavedViews(nextViews),
+      })
+    },
+    [inventoryProfileSettings, saveInventoryProfileSettings]
+  )
+
+  const applyInventorySavedView = useCallback(
+    (view: InventorySavedView) => {
+      onGlobalFilterChange?.(view.globalFilter)
+      onColumnFiltersChange([
+        ...(view.statusFilters.length > 0
+          ? [{ id: 'status', value: view.statusFilters }]
+          : []),
+        ...(view.categoryFilters.length > 0
+          ? [{ id: 'priority', value: view.categoryFilters }]
+          : []),
+      ])
+      setSorting(view.sorting)
+      setViewMode(view.viewMode)
+      setActiveSavedViewID(view.id)
+      setSavedViewError(null)
+      setSavedViewFeedback(`Applied saved view: ${view.name}`)
+    },
+    [onColumnFiltersChange, onGlobalFilterChange]
+  )
+
+  const handleSaveInventoryView = useCallback(async () => {
+    const name = saveViewName.trim()
+    if (!isInventoryRoute || !activeInventoryProfileId || name === '') {
+      return
+    }
+
+    const matchingView = inventorySavedViews.find(
+      (view) => view.name.toLowerCase() === name.toLowerCase()
+    )
+    const nextView: InventorySavedView = {
+      id:
+        matchingView?.id ??
+        `inventory-view-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+      name,
+      ...currentInventoryViewSnapshot,
+    }
+
+    setSavedViewError(null)
+
+    try {
+      await persistInventorySavedViews([
+        ...inventorySavedViews.filter((view) => view.id !== matchingView?.id),
+        nextView,
+      ])
+      setActiveSavedViewID(nextView.id)
+      setSaveViewDialogOpen(false)
+      setSaveViewName('')
+      setSavedViewFeedback(`Saved view: ${name}`)
+    } catch {
+      setSavedViewError('Saved view failed to persist. Retry once profile settings are available.')
+    }
+  }, [
+    activeInventoryProfileId,
+    currentInventoryViewSnapshot,
+    inventorySavedViews,
+    isInventoryRoute,
+    persistInventorySavedViews,
+    saveViewName,
+  ])
+
+  const handleDeleteInventoryView = useCallback(async () => {
+    if (!activeSavedViewID) {
+      return
+    }
+    const currentView = inventorySavedViews.find((view) => view.id === activeSavedViewID)
+    if (!currentView) {
+      return
+    }
+    setSavedViewError(null)
+    try {
+      await persistInventorySavedViews(
+        inventorySavedViews.filter((view) => view.id !== activeSavedViewID)
+      )
+      setActiveSavedViewID('')
+      setSavedViewFeedback(`Deleted saved view: ${currentView.name}`)
+    } catch {
+      setSavedViewError('Saved view failed to delete. Retry once profile settings are available.')
+    }
+  }, [
+    activeSavedViewID,
+    inventorySavedViews,
+    persistInventorySavedViews,
+  ])
+
+  useEffect(() => {
+    if (
+      activeSavedViewID !== '' &&
+      !inventorySavedViews.some((view) => view.id === activeSavedViewID)
+    ) {
+      setActiveSavedViewID('')
+    }
+  }, [activeSavedViewID, inventorySavedViews])
+
   const statusFilterOptions = routePath === '/_authenticated/wishlist/'
     ? [
         { label: 'Watching', value: 'wishlist' },
         { label: 'Below target', value: 'discovered' },
       ]
     : statuses
+
+  const inventoryConditionFilterOptions = useMemo(() => {
+    if (!isInventoryRoute) {
+      return []
+    }
+    return Array.from(
+      new Set(
+        data
+          .map((task) => task.status.trim())
+          .filter((status) => status !== '')
+      )
+    )
+      .sort((left, right) => left.localeCompare(right))
+      .map((value) => ({
+        label: titleCaseWords(value),
+        value,
+      }))
+  }, [data, isInventoryRoute])
+
+  const inventoryCategoryFilterOptions = useMemo(() => {
+    if (!isInventoryRoute) {
+      return []
+    }
+    return Array.from(
+      new Set(
+        data
+          .map((task) => task.label.trim())
+          .filter((label) => label !== '')
+      )
+    )
+      .sort((left, right) => left.localeCompare(right))
+      .map((value) => ({
+        label: value,
+        value,
+      }))
+  }, [data, isInventoryRoute])
 
   return (
     <div
@@ -313,42 +605,131 @@ export function TasksTable({
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder='Filter by title or ID...'
+        searchPlaceholder={
+          isInventoryRoute
+            ? 'Filter by title or part number...'
+            : 'Filter by title or ID...'
+        }
         filters={[
           {
             columnId: 'status',
-            title: 'Status',
-            options: statusFilterOptions,
+            title: isInventoryRoute ? 'Condition' : 'Status',
+            options: isInventoryRoute
+              ? inventoryConditionFilterOptions
+              : statusFilterOptions,
           },
           {
             columnId: 'priority',
-            title: 'Priority',
-            options: priorities,
+            title: isInventoryRoute ? 'Category' : 'Priority',
+            options: isInventoryRoute
+              ? inventoryCategoryFilterOptions
+              : priorities,
           },
         ]}
       />
 
-      <div className='flex items-center justify-end gap-2'>
-        <Button
-          size='sm'
-          variant={viewMode === 'rows' ? 'default' : 'outline'}
-          onClick={() => setViewMode('rows')}
-          onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
-          aria-pressed={viewMode === 'rows'}
-          aria-label='Switch to rows view'
-        >
-          Rows
-        </Button>
-        <Button
-          size='sm'
-          variant={viewMode === 'cards' ? 'default' : 'outline'}
-          onClick={() => setViewMode('cards')}
-          onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
-          aria-pressed={viewMode === 'cards'}
-          aria-label='Switch to cards view'
-        >
-          Cards
-        </Button>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
+          {isInventoryRoute ? (
+            <>
+              <select
+                className='h-9 min-w-[12rem] rounded-md border bg-background px-2 text-sm'
+                data-testid='inventory-saved-view-select'
+                value={activeSavedViewID}
+                disabled={inventoryProfileSettingsLoading}
+                onChange={(event) => {
+                  const nextID = event.target.value
+                  if (nextID === '') {
+                    setActiveSavedViewID('')
+                    setSavedViewFeedback(null)
+                    setSavedViewError(null)
+                    return
+                  }
+                  const nextView = inventorySavedViews.find((view) => view.id === nextID)
+                  if (!nextView) {
+                    return
+                  }
+                  applyInventorySavedView(nextView)
+                }}
+              >
+                <option value=''>Saved views</option>
+                {inventorySavedViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid='inventory-saved-view-save'
+                disabled={inventoryProfileSettingsLoading || inventoryProfileSettingsSaving}
+                onClick={() => {
+                  setSaveViewDialogOpen(true)
+                  setSavedViewFeedback(null)
+                  setSavedViewError(null)
+                  setSaveViewName((previous) =>
+                    previous !== ''
+                      ? previous
+                      : activeSavedViewID !== ''
+                        ? inventorySavedViews.find((view) => view.id === activeSavedViewID)?.name ??
+                          ''
+                        : ''
+                  )
+                }}
+              >
+                Save View
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid='inventory-saved-view-delete'
+                disabled={
+                  activeSavedViewID === '' ||
+                  inventoryProfileSettingsLoading ||
+                  inventoryProfileSettingsSaving
+                }
+                onClick={() => void handleDeleteInventoryView()}
+              >
+                Delete View
+              </Button>
+            </>
+          ) : null}
+          {savedViewFeedback ? (
+            <p className='text-xs text-muted-foreground' data-testid='inventory-saved-view-feedback'>
+              {savedViewFeedback}
+            </p>
+          ) : null}
+          {savedViewError ? (
+            <p className='text-xs text-destructive' data-testid='inventory-saved-view-error'>
+              {savedViewError}
+            </p>
+          ) : null}
+        </div>
+        <div className='flex items-center gap-2'>
+          <Button
+            size='sm'
+            variant={viewMode === 'rows' ? 'default' : 'outline'}
+            onClick={() => setViewMode('rows')}
+            onKeyDown={(event) => handleViewModeKeyDown('rows', event)}
+            aria-pressed={viewMode === 'rows'}
+            aria-label='Switch to rows view'
+          >
+            Rows
+          </Button>
+          <Button
+            size='sm'
+            variant={viewMode === 'cards' ? 'default' : 'outline'}
+            onClick={() => setViewMode('cards')}
+            onKeyDown={(event) => handleViewModeKeyDown('cards', event)}
+            aria-pressed={viewMode === 'cards'}
+            aria-label='Switch to cards view'
+          >
+            Cards
+          </Button>
+        </div>
       </div>
 
       {viewMode === 'rows' ? (
@@ -550,6 +931,52 @@ export function TasksTable({
               onClick={() => openAdjacentRecord(1)}
             >
               Next
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={saveViewDialogOpen} onOpenChange={setSaveViewDialogOpen}>
+        <DialogContent data-testid='inventory-saved-view-dialog'>
+          <DialogHeader>
+            <DialogTitle>Save Inventory View</DialogTitle>
+            <DialogDescription>
+              Save the current inventory search, filters, sorting, and layout for this profile.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-2'>
+            <label className='text-sm font-medium' htmlFor='inventory-saved-view-name'>
+              View name
+            </label>
+            <Input
+              id='inventory-saved-view-name'
+              data-testid='inventory-saved-view-name'
+              value={saveViewName}
+              onChange={(event) => setSaveViewName(event.target.value)}
+              placeholder='Used Road Cars'
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => {
+                setSaveViewDialogOpen(false)
+                setSaveViewName('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              data-testid='inventory-saved-view-submit'
+              disabled={
+                saveViewName.trim() === '' ||
+                inventoryProfileSettingsLoading ||
+                inventoryProfileSettingsSaving
+              }
+              onClick={() => void handleSaveInventoryView()}
+            >
+              Save View
             </Button>
           </DialogFooter>
         </DialogContent>
