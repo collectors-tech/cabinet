@@ -63,6 +63,10 @@ describe("ui-screen-wishlist", () => {
     signInToWishlist();
 
     cy.contains("Wishlist").should("be.visible");
+    cy.contains(
+      "Track wanted items, target prices, and planning decisions before they become owned inventory."
+    ).should("be.visible");
+    cy.contains("wishlist.description").should("not.exist");
     cy.get("table").should("be.visible");
     cy.contains("button", "Cards").click();
     cy.window().its("localStorage").invoke("getItem", "cabinet.viewMode.wishlist").should("eq", "cards");

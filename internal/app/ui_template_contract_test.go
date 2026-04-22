@@ -230,6 +230,27 @@ func TestI18nBootstrapContract(t *testing.T) {
 	checkContains("../../ui.web/src/locales/en/nav.json", []string{"Dashboard", "Inventory", "Wishlist"})
 }
 
+func TestWishlistLocalizationContract(t *testing.T) {
+	t.Parallel()
+
+	checkContains := func(path string, required []string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		for _, token := range required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required wishlist localization token: %s", path, token)
+			}
+		}
+	}
+
+	checkContains("../../ui.web/src/features/wishlist/index.tsx", []string{"t('wishlist.title')", "t('wishlist.description')"})
+	checkContains("../../ui.web/src/locales/en/pages.json", []string{`"wishlist"`, `"title": "Wishlist"`, `"description": "Track wanted items, target prices, and planning decisions before they become owned inventory."`})
+}
+
 func TestLegacyTasksAppsRoutesRemovedContract(t *testing.T) {
 	t.Parallel()
 
