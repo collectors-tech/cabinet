@@ -26,6 +26,16 @@ type RuntimeRecoveryResponse = {
   recovery_required?: boolean
 }
 
+type RuntimeSetupImportResponse = {
+  ok?: boolean
+  setup_required?: boolean
+  instance_name?: string
+  profile_key?: string
+  config_path?: string
+  runtime_url?: string
+  runtime_port?: number
+}
+
 type ExportSnapshotResponse = {
   schema_version?: number
   exported_at?: string
@@ -89,6 +99,16 @@ export function SettingsOperations() {
   const [error, setError] = useState<string | null>(null)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeResponse | null>(null)
   const [recoveryInfo, setRecoveryInfo] = useState<RuntimeRecoveryResponse | null>(null)
+  const [setupImportSourcePath, setSetupImportSourcePath] = useState('')
+  const [setupImportPending, setSetupImportPending] = useState(false)
+  const [setupImportStatus, setSetupImportStatus] = useState(
+    'No runtime setup import has been run yet.'
+  )
+  const [setupImportTone, setSetupImportTone] = useState<'default' | 'destructive'>(
+    'default'
+  )
+  const [setupImportSummary, setSetupImportSummary] =
+    useState<RuntimeSetupImportResponse | null>(null)
   const [dataStatus, setDataStatus] = useState<string>('No import or export action has run yet.')
   const [dataTone, setDataTone] = useState<'default' | 'destructive'>('default')
   const [exportPending, setExportPending] = useState(false)
@@ -295,6 +315,33 @@ export function SettingsOperations() {
     }
   }, [])
 
+  const runSetupImport = useCallback(async () => {
+    setSetupImportPending(true)
+    setSetupImportTone('default')
+    try {
+      const response = await fetch('/api/runtime/setup-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_path: setupImportSourcePath.trim(),
+        }),
+      })
+      if (!response.ok) {
+        throw new Error('failed_to_import_runtime_setup')
+      }
+      const payload = (await response.json()) as RuntimeSetupImportResponse
+      setSetupImportSummary(payload)
+      setSetupImportStatus('Runtime setup imported successfully.')
+      await loadOperations()
+    } catch {
+      setSetupImportSummary(null)
+      setSetupImportTone('destructive')
+      setSetupImportStatus('Runtime setup import failed.')
+    } finally {
+      setSetupImportPending(false)
+    }
+  }, [loadOperations, setupImportSourcePath])
+
   const runImportCsvDryRun = useCallback(async () => {
     setImportCsvDryRunPending(true)
     setCsvSummary(null)
@@ -376,6 +423,8 @@ export function SettingsOperations() {
     importCsvDryRunPending ||
     importCsvApplyPending
   const logsActionsDisabled = loading || Boolean(error) || logsExportPending
+  const setupImportActionsDisabled =
+    loading || Boolean(error) || setupImportPending || setupImportSourcePath.trim() === ''
 
   return (
     <ContentSection
@@ -441,6 +490,62 @@ export function SettingsOperations() {
                 ? 'Recovery required'
               : 'No recovery required'}
           </p>
+
+          <div className='space-y-2 border-t pt-3'>
+            <label
+              htmlFor='settings-operations-setup-import-source'
+              className='text-sm font-medium'
+            >
+              Runtime setup import
+            </label>
+            <p className='text-muted-foreground'>
+              Import a runtime setup config from disk to recover a missing or damaged local setup.
+            </p>
+            <Input
+              id='settings-operations-setup-import-source'
+              data-testid='settings-operations-setup-import-source'
+              value={setupImportSourcePath}
+              onChange={(event) => {
+                setSetupImportSourcePath(event.target.value)
+                setSetupImportSummary(null)
+              }}
+              placeholder='C:\\cabinet\\recovery\\setup-import-source.json'
+            />
+            <div className='flex justify-end'>
+              <Button
+                variant='outline'
+                size='sm'
+                data-testid='settings-operations-setup-import-submit'
+                disabled={setupImportActionsDisabled}
+                onClick={() => {
+                  void runSetupImport()
+                }}
+              >
+                {setupImportPending ? 'Importing Setup…' : 'Import Setup Config'}
+              </Button>
+            </div>
+            <p
+              data-testid='settings-operations-setup-import-status'
+              className={setupImportTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+            >
+              {setupImportStatus}
+            </p>
+            <div
+              className='rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground'
+              data-testid='settings-operations-setup-import-summary'
+            >
+              {setupImportSummary ? (
+                <div className='space-y-1'>
+                  <p>Instance: {setupImportSummary.instance_name || 'Unknown instance'}</p>
+                  <p>Profile: {setupImportSummary.profile_key || 'Unknown profile'}</p>
+                  <p>Config: {setupImportSummary.config_path || 'Unknown config path'}</p>
+                  <p>Runtime URL: {setupImportSummary.runtime_url || 'Unknown runtime URL'}</p>
+                </div>
+              ) : (
+                <p>No imported setup summary yet.</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div

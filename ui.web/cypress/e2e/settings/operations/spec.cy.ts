@@ -853,4 +853,107 @@ describe('settings/operations', () => {
       '[REDACTED]'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-014 imports runtime setup config without leaving the Operations route', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-setup-import',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: true,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/runtime/setup-import', (req) => {
+      expect(req.body).to.deep.equal({
+        source_path: 'C:\\cabinet\\recovery\\setup-import-source.json',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+          setup_required: false,
+          instance_name: 'Imported Recovery Instance',
+          profile_key: 'imported-recovery',
+          config_path: 'C:\\cabinet\\data\\cabinet.json',
+          runtime_url: 'http://127.0.0.1:17880',
+          runtime_port: 17880,
+        },
+      })
+    }).as('setupImport')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-setup-import-source"]')
+      .clear()
+      .type('C:\\cabinet\\recovery\\setup-import-source.json')
+    cy.get('[data-testid="settings-operations-setup-import-submit"]').click()
+    cy.wait('@setupImport')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-setup-import-status"]').should(
+      'contain',
+      'Runtime setup imported successfully.'
+    )
+    cy.get('[data-testid="settings-operations-setup-import-summary"]').should(
+      'contain',
+      'Imported Recovery Instance'
+    )
+    cy.get('[data-testid="settings-operations-setup-import-summary"]').should(
+      'contain',
+      'imported-recovery'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-OPERATIONS-015 reports runtime setup import failure without leaving the Operations route', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-setup-import-error',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: true,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('POST', '/api/runtime/setup-import', {
+      statusCode: 400,
+      body: {
+        error: 'failed_to_import_setup_config',
+      },
+    }).as('setupImport')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+
+    cy.get('[data-testid="settings-operations-setup-import-source"]')
+      .clear()
+      .type('C:\\cabinet\\recovery\\missing.json')
+    cy.get('[data-testid="settings-operations-setup-import-submit"]').click()
+    cy.wait('@setupImport')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-setup-import-status"]').should(
+      'contain',
+      'Runtime setup import failed.'
+    )
+  })
 })
