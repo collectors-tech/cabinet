@@ -85,3 +85,23 @@ func TestRuntimeAttachLogLineIncludesURLPIDAndResolvedPort(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeAttachUserMessageForRequestedEndpointReuse(t *testing.T) {
+	t.Parallel()
+
+	line := runtimeAttachUserMessage(runtimeAttachDecision{
+		Attach: true,
+		URL:    "http://127.0.0.1:19090/",
+		Reason: "requested_endpoint_healthy",
+	})
+	for _, token := range []string{
+		"Cabinet is already running",
+		"http://127.0.0.1:19090/",
+		"--restart",
+		"--allow-parallel",
+	} {
+		if !strings.Contains(line, token) {
+			t.Fatalf("expected token %q in line %q", token, line)
+		}
+	}
+}

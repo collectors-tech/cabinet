@@ -66,6 +66,7 @@ func main() {
 		log.Printf("runtime attach check skipped: %v", attachErr)
 	} else if attachDecision.Attach {
 		log.Printf("%s", runtimeAttachLogLine(attachDecision, cfg.DataDir))
+		log.Printf("%s", runtimeAttachUserMessage(attachDecision))
 		if !browserLaunch.Enabled {
 			if strings.TrimSpace(browserLaunch.DisableNote) != "" {
 				log.Printf("%s", browserLaunch.DisableNote)
@@ -83,6 +84,7 @@ func main() {
 	}
 	if requestedAttachDecision.Attach {
 		log.Printf("%s", runtimeAttachLogLine(requestedAttachDecision, cfg.DataDir))
+		log.Printf("%s", runtimeAttachUserMessage(requestedAttachDecision))
 		if !browserLaunch.Enabled {
 			if strings.TrimSpace(browserLaunch.DisableNote) != "" {
 				log.Printf("%s", browserLaunch.DisableNote)
