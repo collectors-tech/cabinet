@@ -395,6 +395,43 @@ func TestInventorySavedViewsAndFilterContract(t *testing.T) {
 	}
 }
 
+func TestSettingsOperationsQueueControlsContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/settings/operations/index.tsx")
+	if err != nil {
+		t.Fatalf("read settings operations: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"useProfileSettings",
+		"scanner_schedule",
+		"operations_queue_resume_schedule",
+		"settings-operations-queue-card",
+		"settings-operations-queue-status",
+		"settings-operations-queue-pause",
+		"settings-operations-queue-resume",
+		"Workers paused.",
+		"Workers scheduled:",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("settings operations missing queue control token: %s", token)
+		}
+	}
+
+	forbidden := []string{
+		"Pause Workers (Coming soon)",
+		"Resume Workers (Coming soon)",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("settings operations still contains placeholder queue control token: %s", token)
+		}
+	}
+}
+
 func TestI18nShellSharedLabelsContract(t *testing.T) {
 	t.Parallel()
 
