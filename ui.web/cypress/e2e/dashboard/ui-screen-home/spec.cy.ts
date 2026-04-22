@@ -39,7 +39,7 @@ describe("UI-SCREEN-HOME", () => {
 
     cy.contains("Home").should("be.visible")
     cy.contains("What needs action now in your collection.").should("be.visible")
-    cy.contains("What needs attention now").should("be.visible")
+    cy.contains("Needs attention now").should("be.visible")
     cy.contains("Review discoveries").should("be.visible")
     cy.contains("Open pricing drops").should("be.visible")
     cy.contains("Recently added").should("be.visible")
@@ -48,6 +48,41 @@ describe("UI-SCREEN-HOME", () => {
       .should("have.attr", "href", "/wishlist")
     cy.get('[data-testid="dashboard-recent-item-afx-camaro"]')
       .should("have.attr", "href", "/inventory")
+  })
+
+  it("UI-SCREEN-HOME-001A does not leak raw dashboard translation keys into the live page", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 4,
+        wishlist_hits: 2,
+        price_drops: 1,
+        low_stock_discoveries: 1,
+        restocks: 3,
+        recently_added: ["AFX Camaro", "Mega G+ Set"],
+        total_items: 200,
+        total_instances: 240,
+        estimated_value: 12345.67,
+        cards: [
+          { title: "Review discoveries", value: 4, link: "/discoveries" },
+          { title: "Open pricing drops", value: 1, link: "/pricing" },
+        ],
+      },
+    }).as("dashboardLocalized")
+
+    signInToHome()
+    cy.wait("@dashboardLocalized")
+
+    cy.contains("dashboard.metrics.inventoryItems").should("not.exist")
+    cy.contains("dashboard.metrics.inventoryUnits").should("not.exist")
+    cy.contains("dashboard.metrics.wishlistHits").should("not.exist")
+    cy.contains("dashboard.metrics.estimatedValue").should("not.exist")
+    cy.contains("dashboard.attentionTitle").should("not.exist")
+    cy.contains("dashboard.attentionDescription").should("not.exist")
+    cy.contains("dashboard.recentlyAdded").should("not.exist")
+    cy.contains("dashboard.recentlyAddedDescription").should("not.exist")
+    cy.contains("dashboard.openInventory").should("not.exist")
+    cy.contains("dashboard.refresh").should("not.exist")
   })
 
   it("UI-SCREEN-HOME-002 renders deterministic loading and empty states", () => {
@@ -73,7 +108,7 @@ describe("UI-SCREEN-HOME", () => {
     signInToHome()
     cy.contains("Loading...").should("be.visible")
     cy.wait("@dashboardEmpty")
-    cy.contains("No action items right now.").should("be.visible")
+    cy.contains("There are no action items right now.").should("be.visible")
     cy.contains("No recently added items yet.").should("be.visible")
   })
 
