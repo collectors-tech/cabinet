@@ -121,6 +121,99 @@ describe('settings/operations', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-OPERATIONS-002A pauses and resumes worker scheduling without route reload', () => {
+    cy.intercept('GET', '/api/runtime', {
+      statusCode: 200,
+      body: {
+        app_version: 'rev-queue-controls',
+        build_date: '2026-04-23',
+        bind_mode: 'loopback',
+        runtime_host: '127.0.0.1',
+        runtime_port: 17880,
+        update_channel: 'stable',
+        update_public_key_configured: true,
+      },
+    }).as('runtimeInfo')
+    cy.intercept('GET', '/api/runtime/recovery', {
+      statusCode: 200,
+      body: {
+        recovery_required: false,
+      },
+    }).as('runtimeRecovery')
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: {
+        id: 'profile-ops-queue',
+      },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/profile-ops-queue/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          scanner_schedule: '0 */6 * * *',
+        },
+      },
+    }).as('profileSettings')
+    cy.intercept('PUT', '/api/profiles/profile-ops-queue/settings', (req) => {
+      const settings = req.body?.settings ?? {}
+      if (settings.scanner_schedule === 'manual') {
+        expect(settings.operations_queue_resume_schedule).to.equal('0 */6 * * *')
+        req.reply({
+          statusCode: 200,
+          body: {
+            settings: {
+              scanner_schedule: 'manual',
+              operations_queue_resume_schedule: '0 */6 * * *',
+            },
+          },
+        })
+        return
+      }
+
+      expect(settings.scanner_schedule).to.equal('0 */6 * * *')
+      expect(settings.operations_queue_resume_schedule).to.equal('0 */6 * * *')
+      req.reply({
+        statusCode: 200,
+        body: {
+          settings: {
+            scanner_schedule: '0 */6 * * *',
+            operations_queue_resume_schedule: '0 */6 * * *',
+          },
+        },
+      })
+    }).as('saveProfileSettings')
+
+    signInToOperations()
+    cy.wait('@runtimeInfo')
+    cy.wait('@runtimeRecovery')
+    cy.wait('@activeProfile')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="settings-operations-queue-card"]').should(
+      'contain',
+      'Workers scheduled: 0 */6 * * *'
+    )
+    cy.get('[data-testid="settings-operations-queue-resume"]').should('be.disabled')
+
+    cy.get('[data-testid="settings-operations-queue-pause"]').click()
+    cy.wait('@saveProfileSettings')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-queue-status"]').should(
+      'contain',
+      'Workers paused.'
+    )
+    cy.get('[data-testid="settings-operations-queue-resume"]').should('not.be.disabled')
+
+    cy.get('[data-testid="settings-operations-queue-resume"]').click()
+    cy.wait('@saveProfileSettings')
+    cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
+    cy.get('[data-testid="settings-operations-queue-status"]').should(
+      'contain',
+      'Workers scheduled: 0 */6 * * *'
+    )
+    cy.get('[data-testid="settings-operations-queue-pause"]').should('not.be.disabled')
+  })
+
   it('UI-SCREEN-SETTINGS-OPERATIONS-003 exports snapshot data and shows dry-run conflicts', () => {
     cy.intercept('GET', '/api/runtime', {
       statusCode: 200,

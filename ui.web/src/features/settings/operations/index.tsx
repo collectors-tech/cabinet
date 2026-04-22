@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useProfileSettings } from '../use-profile-settings'
 
 type RuntimeResponse = {
   app_version?: string
@@ -78,6 +79,34 @@ type CSVImportMappingState = {
   title: string
 }
 
+const queueWorkerScheduleSettingKey = 'scanner_schedule'
+const queueResumeScheduleSettingKey = 'operations_queue_resume_schedule'
+const pausedQueueWorkerSchedule = 'manual'
+const defaultQueueWorkerResumeSchedule = '0 */6 * * *'
+
+function normalizeQueueWorkerSchedule(value?: string): string {
+  const trimmed = value?.trim() ?? ''
+  return trimmed === '' ? pausedQueueWorkerSchedule : trimmed
+}
+
+function buildQueueStatusMessage(
+  schedule: string,
+  resumeSchedule: string,
+  profileSettingsLoading: boolean,
+  profileSettingsError: string | null
+): string {
+  if (profileSettingsLoading) {
+    return 'Loading worker scheduling…'
+  }
+  if (profileSettingsError) {
+    return 'Queue controls are unavailable right now.'
+  }
+  if (schedule === pausedQueueWorkerSchedule) {
+    return `Workers paused. Resume will restore schedule ${resumeSchedule}.`
+  }
+  return `Workers scheduled: ${schedule}`
+}
+
 function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
   const parsed = JSON.parse(rawInput) as {
     snapshot?: {
@@ -95,6 +124,14 @@ function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
 
 export function SettingsOperations() {
   const { t } = useTranslation('pages')
+  const {
+    activeProfileId,
+    settings: profileSettings,
+    loading: profileSettingsLoading,
+    error: profileSettingsError,
+    saving: profileSettingsSaving,
+    saveSettings,
+  } = useProfileSettings()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeResponse | null>(null)
@@ -144,6 +181,9 @@ export function SettingsOperations() {
     useState<ImportApplyAction>('merge')
   const [lastDryRunRequest, setLastDryRunRequest] = useState<ImportSnapshotRequest | null>(null)
   const [lastCsvDryRunRequest, setLastCsvDryRunRequest] = useState<CSVImportRequest | null>(null)
+  const [queuePendingAction, setQueuePendingAction] = useState<'pause' | 'resume' | null>(null)
+  const [queueStatusOverride, setQueueStatusOverride] = useState<string | null>(null)
+  const [queueTone, setQueueTone] = useState<'default' | 'destructive'>('default')
 
   const loadOperations = useCallback(async () => {
     setLoading(true)
@@ -404,6 +444,85 @@ export function SettingsOperations() {
     }
   }, [importCsvDefaultAction, lastCsvDryRunRequest])
 
+  const queueWorkerSchedule = normalizeQueueWorkerSchedule(
+    profileSettings[queueWorkerScheduleSettingKey]
+  )
+  const queuePaused = queueWorkerSchedule === pausedQueueWorkerSchedule
+  const queueResumeSchedule =
+    profileSettings[queueResumeScheduleSettingKey]?.trim() ||
+    (queuePaused ? defaultQueueWorkerResumeSchedule : queueWorkerSchedule)
+  const queueStatus =
+    queueStatusOverride ??
+    buildQueueStatusMessage(
+      queueWorkerSchedule,
+      queueResumeSchedule,
+      profileSettingsLoading,
+      profileSettingsError
+    )
+
+  const runPauseWorkers = useCallback(async () => {
+    if (!activeProfileId) {
+      setQueueTone('destructive')
+      setQueueStatusOverride('Queue controls are unavailable without an active profile.')
+      return
+    }
+
+    const resumeSchedule =
+      queueWorkerSchedule === pausedQueueWorkerSchedule
+        ? queueResumeSchedule
+        : queueWorkerSchedule
+
+    setQueuePendingAction('pause')
+    setQueueTone('default')
+    try {
+      await saveSettings({
+        ...profileSettings,
+        [queueWorkerScheduleSettingKey]: pausedQueueWorkerSchedule,
+        [queueResumeScheduleSettingKey]: resumeSchedule,
+      })
+      setQueueStatusOverride(`Workers paused. Resume will restore schedule ${resumeSchedule}.`)
+    } catch {
+      setQueueTone('destructive')
+      setQueueStatusOverride(
+        'Failed to pause workers. Retry when profile settings are available.'
+      )
+    } finally {
+      setQueuePendingAction(null)
+    }
+  }, [
+    activeProfileId,
+    profileSettings,
+    queueResumeSchedule,
+    queueWorkerSchedule,
+    saveSettings,
+  ])
+
+  const runResumeWorkers = useCallback(async () => {
+    if (!activeProfileId) {
+      setQueueTone('destructive')
+      setQueueStatusOverride('Queue controls are unavailable without an active profile.')
+      return
+    }
+
+    setQueuePendingAction('resume')
+    setQueueTone('default')
+    try {
+      await saveSettings({
+        ...profileSettings,
+        [queueWorkerScheduleSettingKey]: queueResumeSchedule,
+        [queueResumeScheduleSettingKey]: queueResumeSchedule,
+      })
+      setQueueStatusOverride(`Workers scheduled: ${queueResumeSchedule}`)
+    } catch {
+      setQueueTone('destructive')
+      setQueueStatusOverride(
+        'Failed to resume workers. Retry when profile settings are available.'
+      )
+    } finally {
+      setQueuePendingAction(null)
+    }
+  }, [activeProfileId, profileSettings, queueResumeSchedule, saveSettings])
+
   const runtimeAddress = runtimeInfo
     ? `${runtimeInfo.runtime_host?.trim() || '127.0.0.1'}:${runtimeInfo.runtime_port ?? 17880}`
     : 'Unavailable'
@@ -425,6 +544,13 @@ export function SettingsOperations() {
   const logsActionsDisabled = loading || Boolean(error) || logsExportPending
   const setupImportActionsDisabled =
     loading || Boolean(error) || setupImportPending || setupImportSourcePath.trim() === ''
+  const queueActionsDisabled =
+    loading ||
+    Boolean(error) ||
+    profileSettingsLoading ||
+    Boolean(profileSettingsError) ||
+    profileSettingsSaving ||
+    queuePendingAction !== null
 
   return (
     <ContentSection
@@ -958,17 +1084,42 @@ export function SettingsOperations() {
           </div>
         </div>
 
-        <div className='rounded-md border p-3'>
+        <div
+          className='rounded-md border p-3 space-y-3'
+          data-testid='settings-operations-queue-card'
+        >
           <p className='font-medium'>Queue Controls</p>
           <p className='text-muted-foreground'>
             Pause and resume Market Watch and enrichment workers for active profile context.
           </p>
-          <div className='mt-3 flex gap-2'>
-            <Button variant='outline' size='sm' disabled>
-              Pause Workers (Coming soon)
+          <p
+            data-testid='settings-operations-queue-status'
+            className={queueTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          >
+            {queueStatus}
+          </p>
+          <div className='flex gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-queue-pause'
+              disabled={queueActionsDisabled || queuePaused}
+              onClick={() => {
+                void runPauseWorkers()
+              }}
+            >
+              {queuePendingAction === 'pause' ? 'Pausing Workers…' : 'Pause Workers'}
             </Button>
-            <Button variant='outline' size='sm' disabled>
-              Resume Workers (Coming soon)
+            <Button
+              variant='outline'
+              size='sm'
+              data-testid='settings-operations-queue-resume'
+              disabled={queueActionsDisabled || !queuePaused}
+              onClick={() => {
+                void runResumeWorkers()
+              }}
+            >
+              {queuePendingAction === 'resume' ? 'Resuming Workers…' : 'Resume Workers'}
             </Button>
           </div>
         </div>
