@@ -14,12 +14,16 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/launcher"
 )
 
 type runtimeAttachDecision struct {
 	Attach bool
 	URL    string
 	PID    int
+	Reason string
 }
 
 type runtimeSetupAttachMetadata struct {
@@ -157,10 +161,44 @@ func runtimeAttachLogLine(decision runtimeAttachDecision, dataDir string) string
 		}
 	}
 	return fmt.Sprintf(
-		"CABINET_RUNTIME_ATTACH url=%s pid=%d data_dir=%s resolved_port=%d",
+		"CABINET_RUNTIME_ATTACH url=%s pid=%d data_dir=%s resolved_port=%d reason=%s",
 		strings.TrimSpace(decision.URL),
 		decision.PID,
 		strings.TrimSpace(dataDir),
 		resolvedPort,
+		attachReasonOrDefault(decision.Reason),
 	)
+}
+
+func resolveRequestedRuntimeAttach(
+	cfg config.Config,
+	allowParallel bool,
+	urlHealthy func(runtimeURL string) bool,
+) runtimeAttachDecision {
+	if allowParallel {
+		return runtimeAttachDecision{}
+	}
+
+	requestedURL := launcher.StartupURLFromAddr(cfg.Addr)
+	if strings.TrimSpace(requestedURL) == "" {
+		return runtimeAttachDecision{}
+	}
+	if !urlHealthy(requestedURL) {
+		return runtimeAttachDecision{}
+	}
+
+	return runtimeAttachDecision{
+		Attach: true,
+		URL:    requestedURL,
+		PID:    0,
+		Reason: "requested_endpoint_healthy",
+	}
+}
+
+func attachReasonOrDefault(reason string) string {
+	trimmed := strings.TrimSpace(reason)
+	if trimmed == "" {
+		return "same_data_dir"
+	}
+	return trimmed
 }
