@@ -125,10 +125,10 @@ describe("ui-screen-wishlist", () => {
   it("UI-SCREEN-WISHLIST-005 supports inline collection create and auto-select", () => {
     signInToWishlist();
 
-    cy.get('[data-testid="wishlist-inline-add-new"]').click();
-    cy.get('[data-testid="wishlist-inline-new-name"]').type("Wishlist Inline Alpha");
-    cy.get('[data-testid="wishlist-inline-save"]').click();
-    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+    cy.get('[data-testid="wishlist-table-add-collection"]').click();
+    cy.get('[data-testid="wishlist-table-new-collection-name"]').type("Wishlist Inline Alpha");
+    cy.get('[data-testid="wishlist-table-new-collection-save"]').click();
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       "contain",
       "Wishlist Inline Alpha"
     );
@@ -137,17 +137,17 @@ describe("ui-screen-wishlist", () => {
   it("UI-SCREEN-WISHLIST-005 keeps inline create open and shows validation on blank save", () => {
     signInToWishlist();
 
-    cy.get('[data-testid="wishlist-inline-add-new"]').click();
-    cy.get('[data-testid="wishlist-inline-save"]').click();
-    cy.get('[data-testid="wishlist-inline-new-name"]').should(
+    cy.get('[data-testid="wishlist-table-add-collection"]').click();
+    cy.get('[data-testid="wishlist-table-new-collection-save"]').click();
+    cy.get('[data-testid="wishlist-table-new-collection-name"]').should(
       "have.attr",
       "aria-invalid",
       "true"
     );
-    cy.get('[data-testid="wishlist-inline-validation"]')
+    cy.get('[data-testid="wishlist-table-new-collection-validation"]')
       .should("be.visible")
       .and("contain", "Collection name is required.");
-    cy.get('[data-testid="wishlist-inline-new-name"]').should("be.visible");
+    cy.get('[data-testid="wishlist-table-new-collection-name"]').should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-011 filters table rows by selected wishlist collection", () => {
@@ -156,8 +156,8 @@ describe("ui-screen-wishlist", () => {
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
 
-    cy.get('[data-testid="wishlist-inline-picker"] select').select("Overflow");
-    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+    cy.get('[data-testid="wishlist-table-collection-select"]').select("Overflow");
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       "contain",
       "Overflow"
     );
@@ -166,9 +166,32 @@ describe("ui-screen-wishlist", () => {
     cy.contains("F1 Silverline").should("not.exist");
     cy.contains("No results.").should("be.visible");
 
-    cy.get('[data-testid="wishlist-inline-picker"] select').select("All Items");
+    cy.get('[data-testid="wishlist-table-collection-select"]').select("All Items");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-012 uses compact table collection filter instead of separate picker section", () => {
+    signInToWishlist();
+
+    cy.get('[data-testid="wishlist-inline-picker"]').should("not.exist");
+    cy.get('[data-testid="wishlist-table-collection-filter"]').should(
+      "be.visible"
+    );
+    cy.get('[data-testid="wishlist-table-add-collection"]').should(
+      "be.visible"
+    );
+
+    cy.get('[data-testid="wishlist-table-collection-select"]').select(
+      "Overflow"
+    );
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+      "contain",
+      "Overflow"
+    );
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+    cy.contains("F1 Silverline").should("not.exist");
+    cy.contains("No results.").should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-007 renders wishlist collection semantics instead of task seed rows", () => {

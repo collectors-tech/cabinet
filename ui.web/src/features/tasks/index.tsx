@@ -653,6 +653,98 @@ export function Tasks({
     wishlistPlanningFocus,
   ])
 
+  const wishlistCollectionFilter = isWishlistRoute ? (
+    <div
+      className='flex flex-wrap items-center gap-2'
+      data-testid='wishlist-table-collection-filter'
+    >
+      <select
+        className='h-8 min-w-[10rem] rounded-md border bg-background px-2 text-sm'
+        data-testid='wishlist-table-collection-select'
+        value={activeWorkspaceCollection}
+        onChange={(event) => {
+          void setActiveWorkspaceCollection(event.target.value)
+        }}
+      >
+        {workspaceCollections.map((collection) => (
+          <option
+            key={collection}
+            value={collection}
+            data-testid={`wishlist-table-collection-option-${collectionKey(collection)}`}
+          >
+            {collection}
+          </option>
+        ))}
+      </select>
+      <span
+        className='text-xs text-muted-foreground'
+        data-testid='wishlist-table-collection-selected'
+      >
+        {activeWorkspaceCollection}
+      </span>
+      <Button
+        type='button'
+        variant='outline'
+        className='h-8 px-2 text-xs'
+        data-testid='wishlist-table-add-collection'
+        onClick={() => {
+          setInlineCollectionValidationMessage('')
+          setInlineCollectionInputOpen((open) => !open)
+        }}
+      >
+        + New Collection
+      </Button>
+      {inlineCollectionInputOpen ? (
+        <div
+          className='flex flex-wrap items-center gap-2'
+          data-testid='wishlist-table-new-collection-form'
+        >
+          <Input
+            className='h-8 w-[12rem]'
+            data-testid='wishlist-table-new-collection-name'
+            placeholder='Collection name'
+            aria-invalid={inlineCollectionValidationMessage ? 'true' : 'false'}
+            value={inlineCollectionName}
+            onChange={(event) => {
+              setInlineCollectionName(event.target.value)
+              if (inlineCollectionValidationMessage) {
+                setInlineCollectionValidationMessage('')
+              }
+            }}
+          />
+          <Button
+            type='button'
+            className='h-8 px-3'
+            data-testid='wishlist-table-new-collection-save'
+            onClick={async () => {
+              const created = await addCollection(inlineCollectionName)
+              if (!created) {
+                setInlineCollectionValidationMessage(
+                  'Collection name is required.'
+                )
+                return
+              }
+              setInlineCollectionValidationMessage('')
+              setInlineCollectionName('')
+              setInlineCollectionInputOpen(false)
+            }}
+          >
+            Save
+          </Button>
+          {inlineCollectionValidationMessage ? (
+            <span
+              className='text-sm text-destructive'
+              data-testid='wishlist-table-new-collection-validation'
+              role='alert'
+            >
+              {inlineCollectionValidationMessage}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : undefined
+
   return (
     <>
       <Header fixed>
@@ -718,99 +810,10 @@ export function Tasks({
             ))}
           </div>
         ) : null}
-        {isWishlistRoute ? (
-          <div
-            className='rounded-md border p-3'
-            data-testid='wishlist-inline-picker'
-          >
-            <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center'>
-              <select
-                className='h-9 rounded-md border bg-background px-2 text-sm'
-                value={activeWorkspaceCollection}
-                onChange={(event) => {
-                  void setActiveWorkspaceCollection(event.target.value)
-                }}
-              >
-                {workspaceCollections.map((collection) => (
-                  <option
-                    key={collection}
-                    value={collection}
-                    data-testid={`wishlist-inline-picker-option-${collectionKey(collection)}`}
-                  >
-                    {collection}
-                  </option>
-                ))}
-              </select>
-              <span
-                className='text-sm text-muted-foreground'
-                data-testid='wishlist-inline-picker-selected'
-              >
-                {activeWorkspaceCollection}
-              </span>
-              <Button
-                type='button'
-                variant='outline'
-                data-testid='wishlist-inline-add-new'
-                onClick={() => {
-                  setInlineCollectionValidationMessage('')
-                  setInlineCollectionInputOpen((open) => !open)
-                }}
-              >
-                + New Collection
-              </Button>
-            </div>
-            {inlineCollectionInputOpen ? (
-              <div className='mt-2'>
-                <div className='flex gap-2'>
-                  <Input
-                    data-testid='wishlist-inline-new-name'
-                    placeholder='Collection name'
-                    aria-invalid={
-                      inlineCollectionValidationMessage ? 'true' : 'false'
-                    }
-                    value={inlineCollectionName}
-                    onChange={(event) => {
-                      setInlineCollectionName(event.target.value)
-                      if (inlineCollectionValidationMessage) {
-                        setInlineCollectionValidationMessage('')
-                      }
-                    }}
-                  />
-                  <Button
-                    type='button'
-                    data-testid='wishlist-inline-save'
-                    onClick={async () => {
-                      const created = await addCollection(inlineCollectionName)
-                      if (!created) {
-                        setInlineCollectionValidationMessage(
-                          'Collection name is required.'
-                        )
-                        return
-                      }
-                      setInlineCollectionValidationMessage('')
-                      setInlineCollectionName('')
-                      setInlineCollectionInputOpen(false)
-                    }}
-                  >
-                    Save
-                  </Button>
-                </div>
-                {inlineCollectionValidationMessage ? (
-                  <p
-                    className='mt-2 text-sm text-destructive'
-                    data-testid='wishlist-inline-validation'
-                    role='alert'
-                  >
-                    {inlineCollectionValidationMessage}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <TasksTable
           data={displayedData}
           routePath={routePath}
+          wishlistCollectionFilter={wishlistCollectionFilter}
           onEditRow={(task) => {
             setCurrentDialogRow(task)
             setDialogOpen('update')
