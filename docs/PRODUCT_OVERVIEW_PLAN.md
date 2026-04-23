@@ -42,6 +42,34 @@ The recommended order is:
 
 This order keeps the owned-item model stable first, then adds planning, grouping, evidence, and recovery around it.
 
+## Execution task list
+
+Use this list as the working queue for turning the waves below into implementation issues. Each item should become one focused GitHub issue unless it is already covered by an existing issue.
+
+1. Confirm each main screen has one reliable runtime smoke test.
+2. Close the highest-risk persistence/reload gap in Inventory.
+3. Close the highest-risk planning/conversion gap in Wishlist.
+4. Close the highest-risk assignment/move gap in Collections.
+5. Close the highest-risk attachment/primary-photo gap for item media.
+6. Close the highest-risk settings/storage/maintenance trust gap.
+7. Add or update active-profile isolation coverage for the changed workflow.
+8. Add restart-safe validation for workflows that write durable state.
+9. Update OpenSpec specs when behavior becomes canonical.
+10. Keep documentation and help-center copy aligned with the shipped behavior.
+
+## Immediate issue queue
+
+These are the next practical slices implied by the product overview and the current repository state:
+
+| Order | Area | Next slice | Completion signal |
+| --- | --- | --- | --- |
+| 1 | Settings | Restore `/settings/profile` to a useful profile-settings body and remove raw translation-key leaks. | Profile settings route has visible copy, fields/actions, and route-level coverage. |
+| 2 | Wishlist | Finish wishlist planning metadata and owned-item conversion rules. | Wanted items can be created, prioritized, moved through status, and converted to Inventory with tests. |
+| 3 | Collections | Finish shared collection assignment/move management. | Collection CRUD and item movement are visible, persistent, and covered from the management surface. |
+| 4 | Inventory | Finish item create/edit persistence, identifiers, and saved-view stability. | Owned-item changes survive reload/restart and remain scoped to the active profile. |
+| 5 | Photos/media | Finish photo attachment, primary-photo selection, and media-path confidence. | Media attaches to the right item/profile, persists, and exposes recovery guidance. |
+| 6 | Maintenance | Finish backup/restore/import/export and diagnostics guardrails. | Maintenance actions explain risk, validate inputs, and report durable outcomes. |
+
 ## Delivery waves
 
 ### Wave 1: Inventory as source of truth
