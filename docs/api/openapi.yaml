@@ -686,6 +686,29 @@ paths:
       responses:
         "204":
           description: Deleted
+  /api/wishlist/convert-owned:
+    post:
+      tags: [Wishlist]
+      summary: Convert wishlist entry to owned inventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: Wishlist entry converted to owned inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Invalid or cross-profile wishlist entry
   /api/pricing/track:
     post:
       tags: [Pricing]

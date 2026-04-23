@@ -99,6 +99,18 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.DeleteForProfile(ctx, "", id)
 }
 
+func (s *Service) ConvertToOwnedForProfile(ctx context.Context, profileID, id string) error {
+	trimmedProfileID := strings.TrimSpace(profileID)
+	itemID, err := s.itemIDForEntry(ctx, trimmedProfileID, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID); err != nil {
+		return err
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "active", "")
+}
+
 func (s *Service) DeleteForProfile(ctx context.Context, profileID, id string) error {
 	trimmedProfileID := strings.TrimSpace(profileID)
 	itemID, _ := s.itemIDForEntry(ctx, trimmedProfileID, id)

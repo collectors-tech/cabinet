@@ -70,6 +70,25 @@ Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` 
 - **AND** rows header semantics MUST render `Item ID`, `Title`, `Watch Status`, and `Target Priority`
 - **AND** UI MUST NOT render generic task-template headers such as `Task` or task workflow labels such as `Backlog`
 
+### Requirement UI-SCREEN-WISHLIST-008: Wishlist screen SHALL support planning focus controls
+Wishlist screen SHALL show planning metadata and persist the selected planning focus for the wishlist route.
+
+#### Scenario: Persist wishlist planning focus
+- **GIVEN** wishlist route is loaded with wishlist metadata overlays
+- **WHEN** user selects a planning focus
+- **THEN** the selected focus MUST be visually active
+- **AND** the selected focus MUST persist across refresh and route return
+
+### Requirement UI-SCREEN-WISHLIST-009: Wishlist screen SHALL explicitly move acquired items to Inventory
+Wishlist row actions SHALL expose a deliberate `Mark owned` action that calls the explicit wishlist conversion API.
+
+#### Scenario: Mark wishlist row owned
+- **GIVEN** wishlist route shows a wanted item with wishlist entry metadata
+- **WHEN** user selects `Mark owned` from the row action menu
+- **THEN** UI MUST submit `POST /api/wishlist/convert-owned` with the wishlist entry `id`
+- **AND** the item MUST disappear from Wishlist after refresh
+- **AND** the item MUST be visible in Inventory
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |

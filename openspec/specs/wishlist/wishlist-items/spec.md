@@ -15,3 +15,20 @@ Cabinet SHALL treat the canonical item record as the source-of-truth for wishlis
   - `target_price` (number)
   - `priority` (`low|medium|high`)
   - `notes` (string, optional)
+
+### Requirement WISHLIST-ITEMS-002: Wishlist entries SHALL convert explicitly to owned inventory
+Cabinet SHALL provide an explicit active-profile scoped conversion action that moves a wanted item into owned Inventory without relying on generic deletion semantics.
+
+#### Scenario: Convert wishlist entry to owned
+- **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
+- **WHEN** the user submits `POST /api/wishlist/convert-owned` with the wishlist entry `id`
+- **THEN** API MUST return `200`
+- **AND** the wishlist entry MUST be removed from `/api/wishlist`
+- **AND** the canonical item MUST no longer appear in `/api/items?status=wishlist`
+- **AND** the canonical item MUST appear in `/api/items` with lifecycle status `active`
+
+#### Scenario: Reject cross-profile wishlist conversion
+- **GIVEN** a wishlist entry belongs to a different profile than the active profile
+- **WHEN** the user submits `POST /api/wishlist/convert-owned` with that wishlist entry `id`
+- **THEN** API MUST reject the conversion
+- **AND** the original wishlist entry and canonical item status MUST remain unchanged
