@@ -220,6 +220,7 @@ export function Tasks({
   const {
     workspaceCollections,
     activeWorkspaceCollection,
+    collectionItems,
     setActiveWorkspaceCollection,
     addCollection,
   } = useWorkspaceCollections()
@@ -627,10 +628,30 @@ export function Tasks({
     if (!isWishlistRoute) {
       return tableData
     }
-    return tableData.filter((task) =>
+
+    const focusedData = tableData.filter((task) =>
       matchesWishlistPlanningFocus(task, wishlistPlanningFocus)
     )
-  }, [isWishlistRoute, tableData, wishlistPlanningFocus])
+    if (activeWorkspaceCollection === 'All Items') {
+      return focusedData
+    }
+
+    const selectedCollectionItemIDs = new Set(
+      collectionItems
+        .filter((item) => item.collectionName === activeWorkspaceCollection)
+        .map((item) => item.id)
+    )
+
+    return focusedData.filter((task) =>
+      selectedCollectionItemIDs.has(task.itemID ?? task.id)
+    )
+  }, [
+    activeWorkspaceCollection,
+    collectionItems,
+    isWishlistRoute,
+    tableData,
+    wishlistPlanningFocus,
+  ])
 
   return (
     <>
