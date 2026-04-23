@@ -48,6 +48,7 @@ describe("ui-screen-wishlist", () => {
     if (!options?.skipStub) {
       stubWishlistData();
     }
+    cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
     cy.e2eReset();
     cy.e2eSetSetupState("present");
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
@@ -57,6 +58,16 @@ describe("ui-screen-wishlist", () => {
     });
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
+    cy.wait("@profileSettings");
+    cy.wait("@profileSettings");
+  }
+
+  function openWishlistRowActions(rowText: string) {
+    cy.contains("tr", rowText)
+      .find('[data-testid="task-row-actions-trigger"]')
+      .should("be.visible")
+      .trigger("pointerdown", { button: 0, force: true });
+    cy.get('[role="menu"]').should("be.visible");
   }
 
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
@@ -139,6 +150,27 @@ describe("ui-screen-wishlist", () => {
     cy.get('[data-testid="wishlist-inline-new-name"]').should("be.visible");
   });
 
+  it("UI-SCREEN-WISHLIST-011 filters table rows by selected wishlist collection", () => {
+    signInToWishlist();
+
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+    cy.contains("F1 Silverline").should("be.visible");
+
+    cy.get('[data-testid="wishlist-inline-picker"] select').select("Overflow");
+    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+      "contain",
+      "Overflow"
+    );
+
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+    cy.contains("F1 Silverline").should("not.exist");
+    cy.contains("No results.").should("be.visible");
+
+    cy.get('[data-testid="wishlist-inline-picker"] select').select("All Items");
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+    cy.contains("F1 Silverline").should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-007 renders wishlist collection semantics instead of task seed rows", () => {
     signInToWishlist();
 
@@ -205,10 +237,8 @@ describe("ui-screen-wishlist", () => {
 
     signInToWishlist({ skipStub: true });
 
-    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
-      cy.get('[data-testid="task-row-actions-trigger"]').click();
-    });
-    cy.get('[data-testid="wishlist-mark-owned-action"]').click();
+    openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
+    cy.get('[data-testid="wishlist-mark-owned-action"]').click({ force: true });
 
     cy.wait("@moveWishlistItemToOwned");
     cy.wait("@wishlistItems");
@@ -433,10 +463,8 @@ describe("ui-screen-wishlist", () => {
 
     signInToWishlist({ skipStub: true });
 
-    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
-      cy.get('[data-testid="task-row-actions-trigger"]').click();
-    });
-    cy.contains('[role="menuitem"]', "Edit").click();
+    openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
+    cy.contains('[role="menuitem"]', "Edit").click({ force: true });
 
     cy.contains("Edit Wishlist Entry").should("be.visible");
     cy.get('input[name="title"]').clear().type("AFX Mega-G+ Camaro Updated");
@@ -450,9 +478,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("AFX Mega-G+ Camaro Updated").should("be.visible");
     cy.contains("Updated watch note").should("be.visible");
 
-    cy.contains("tr", "AFX Mega-G+ Camaro Updated").within(() => {
-      cy.get('[data-testid="task-row-actions-trigger"]').click();
-    });
+    openWishlistRowActions("AFX Mega-G+ Camaro Updated");
     cy.get('[role="menu"]')
       .should("be.visible")
       .within(() => {
