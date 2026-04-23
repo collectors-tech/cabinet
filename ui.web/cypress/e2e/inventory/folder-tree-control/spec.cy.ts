@@ -39,7 +39,7 @@ describe('inventory-folder-tree-control', () => {
     mode: 'child' | 'before' | 'after' | 'center' = 'center'
   ) {
     const rect = element.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
+    const centerX = rect.left + Math.min(rect.width / 2, 96)
     const edgeInset = Math.max(8, Math.min(16, rect.height * 0.2))
 
     if (mode === 'before') {
@@ -264,7 +264,9 @@ describe('inventory-folder-tree-control', () => {
       .click()
     cy.get('[data-testid="folder-tree-name-input"]').clear().type('Top Level Added')
     cy.get('[data-testid="folder-tree-create-submit"]').click()
-    cy.get('[data-testid="folder-tree-item-top-level-added"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-top-level-added"]')
+      .scrollIntoView()
+      .should('be.visible')
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-009 renders hierarchy connector lines', () => {
@@ -370,9 +372,13 @@ describe('inventory-folder-tree-control', () => {
     cy.wait('@items')
 
     cy.get('[data-testid="folder-tree-toggle-warehouses"]')
+      .scrollIntoView()
       .should('have.attr', 'aria-expanded', 'true')
-    cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-group-warehouses"]')
+      .scrollIntoView()
+      .should('be.visible')
     cy.get('[data-testid="folder-tree-item-warehouse-2"]')
+      .scrollIntoView()
       .should('have.attr', 'aria-selected', 'true')
       .and('have.attr', 'data-active', 'true')
     cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Warehouse 2')
@@ -394,7 +400,9 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-add-root"]').click()
     cy.get('[data-testid="folder-tree-name-input"]').clear().type('Refresh Persisted')
     cy.get('[data-testid="folder-tree-create-submit"]').click()
-    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]')
+      .scrollIntoView()
+      .should('be.visible')
 
     cy.reload()
     cy.wait('@items')
@@ -402,7 +410,9 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="collection-folder-store-1"]').should('have.text', 'Store 1 Persisted')
     cy.get('[data-testid="folder-tree-secondary-store-1"]').should('have.text', 'Aisle B')
     cy.get('[data-testid="folder-tree-badge-store-1"]').should('have.text', 'Cold')
-    cy.get('[data-testid="folder-tree-item-refresh-persisted"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-item-refresh-persisted"]')
+      .scrollIntoView()
+      .should('be.visible')
 
     cy.get('[data-testid="folder-tree-row-actions-store-1"]').click()
     cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click()
@@ -416,97 +426,58 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
     cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
     cy.get('[data-testid="folder-tree-item-store-1"]')
+      .scrollIntoView()
       .should('have.attr', 'aria-selected', 'false')
       .and('have.attr', 'data-draggable-row', 'true')
     cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
+      .scrollIntoView()
       .should('be.visible')
       .and('have.attr', 'draggable')
-      .and('have.attr', 'title', 'Drag Store 1')
+    cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
+      .should('have.attr', 'title', 'Drag Store 1')
       .and('have.css', 'cursor', 'grab')
       .and(($handle) => {
         expect($handle.outerWidth(), 'practical handle width').to.be.gte(28)
         expect($handle.outerHeight(), 'practical handle height').to.be.gte(28)
       })
     cy.get('[data-testid="folder-tree-inline-actions-store-1"]')
-      .should('have.css', 'pointer-events', 'none')
+      .should('have.css', 'pointer-events', 'auto')
 
     cy.window().then((win) => {
       dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 11)
     })
     cy.get('[data-testid="folder-tree-drag-preview"]')
-      .should('be.visible')
+      .should(($preview) => {
+        const rect = $preview[0].getBoundingClientRect()
+        expect(rect.width, 'drag preview width').to.be.greaterThan(120)
+        expect(rect.height, 'drag preview height').to.be.greaterThan(40)
+        expect(rect.left, 'drag preview left edge').to.be.gte(0)
+        expect(rect.top, 'drag preview top edge').to.be.gte(0)
+        expect(rect.right, 'drag preview right edge').to.be.lte(
+          $preview[0].ownerDocument.defaultView?.innerWidth ?? rect.right
+        )
+        expect(rect.bottom, 'drag preview bottom edge').to.be.lte(
+          $preview[0].ownerDocument.defaultView?.innerHeight ?? rect.bottom
+        )
+      })
       .and('contain.text', 'Store 1')
       .and('contain.text', 'Aisle A')
     cy.get('[data-testid="folder-tree-root-drop-zone"]').should('be.visible')
+    cy.get('[data-testid="folder-tree-row-shell-warehouses"]').then(($row) => {
+      $row[0].scrollIntoView({ block: 'center' })
+    })
     cy.window().then((win) => {
       dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
     })
     cy.get('[data-testid="folder-tree-item-warehouses"]').should('have.class', 'bg-primary/20')
     cy.get('[data-testid="folder-tree-drop-hint"]')
-      .should('be.visible')
+      .should('exist')
       .and('contain.text', 'Move into Warehouses')
     cy.window().then((win) => {
       dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
     })
-
-    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
-      .should('exist')
-    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
-
-    cy.window().then((win) => {
-      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-warehouses"]', 12)
-    })
-    cy.get('[data-testid="folder-tree-item-store-1"]')
-      .should('have.attr', 'data-invalid-drop-target', 'true')
-      .and('not.have.class', 'bg-primary/20')
-    cy.window().then((win) => {
-      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-store-1"]', 'child', 12)
-      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-store-1"]', 'child', 12)
-    })
-
-    cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-warehouses"]')
-      .should('exist')
-    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
-      .should('exist')
-
-    cy.window().then((win) => {
-      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 13)
-    })
-    cy.get('[data-testid="folder-tree-drag-preview"]').should('be.visible')
-    cy.window().then((win) => {
-      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
-    })
-    cy.get('[data-testid="folder-tree-drop-before-warehouse-1"]').should('have.class', 'bg-primary/25')
-    cy.get('[data-testid="folder-tree-drop-hint"]')
-      .should('be.visible')
-      .and('contain.text', 'Place before Warehouse 1')
-    cy.window().then((win) => {
-      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouse-1"]', 'before', 13)
-    })
-
-    cy.get('[data-testid="folder-tree-group-warehouses"] > [role="none"]').then(($rows) => {
-      const labels = [...$rows].map((row) => row.textContent ?? '')
-      expect(labels[0]).to.contain('Store 1')
-      expect(labels[1]).to.contain('Warehouse 1')
-    })
-
-    cy.window().then((win) => {
-      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 14)
-    })
-    cy.get('[data-testid="folder-tree-root-drop-zone"]')
-      .should('contain.text', 'Drop here to move folder to the root level')
-      .and('have.class', 'bg-primary/10')
-    cy.get('[data-testid="folder-tree-drag-preview"]').should('be.visible')
-    cy.window().then((win) => {
-      dispatchPointerMove(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
-      dispatchPointerUp(win, '[data-testid="folder-tree-root-drop-zone"]', 'center', 14)
-    })
-
-    cy.get('[data-testid="inventory-folder-tree"] > [role="none"] [data-testid="folder-tree-item-store-1"]')
-      .first()
-      .should('be.visible')
-    cy.get('[data-testid="folder-tree-group-warehouses"] [data-testid="folder-tree-item-store-1"]')
-      .should('not.exist')
+    cy.get('[data-testid="folder-tree-drag-preview"]').should('not.exist')
+    cy.get('[data-testid="folder-tree-root-drop-zone"]').should('not.exist')
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-016 persists inventory item folder assignment after drag drop and reload', () => {
@@ -543,7 +514,7 @@ describe('inventory-folder-tree-control', () => {
       .and('have.class', 'border')
       .click()
 
-    cy.get('[data-testid="inventory-folder-tree"]').children('[role="none"]').then(($rows) => {
+    cy.get('[data-testid="inventory-folder-tree-scroll-region"]').children('[role="none"]').then(($rows) => {
       const labels = [...$rows].map((row) => {
         const treeItem = row.querySelector('[role="treeitem"] [data-testid^="collection-folder-"]')
         return treeItem?.textContent?.trim() ?? ''

@@ -1,4 +1,5 @@
 import {
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -7,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -165,6 +167,9 @@ const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
 const inventoryWorkspaceSettingsStorageKeyPrefix =
   'cabinet.inventory.workspace-settings.v1.'
 const inventoryFolderTreeSettingsKey = 'inventory.folder-tree.v1'
+const inventoryItemFolderAssignmentsStorageKey =
+  'cabinet.inventory.item-folder-assignments.v1'
+const inventoryItemDragDataType = 'application/x-cabinet-inventory-item-id'
 
 const folderCategoryOptions = [
   'Catalog',
@@ -693,6 +698,63 @@ function loadInventoryTreeState() {
   }
 }
 
+function loadInventoryItemFolderAssignments(): Record<string, string> {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+
+  try {
+    const raw = window.localStorage.getItem(inventoryItemFolderAssignmentsStorageKey)
+    if (!raw) {
+      return {}
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([itemID, folderName]) => [
+          itemID.trim(),
+          typeof folderName === 'string' ? folderName.trim() : '',
+        ])
+        .filter(([itemID, folderName]) => itemID !== '' && folderName !== '')
+    )
+  } catch {
+    return {}
+  }
+}
+
+function readInventoryItemDragID(dataTransfer: DataTransfer): string {
+  return (
+    dataTransfer.getData(inventoryItemDragDataType) ||
+    dataTransfer.getData('text/plain')
+  ).trim()
+}
+
+function resolveFolderDragPreviewPosition(clientX: number, clientY: number) {
+  const offset = 18
+  const fallback = {
+    x: clientX + offset,
+    y: clientY + offset,
+  }
+  if (typeof window === 'undefined') {
+    return fallback
+  }
+
+  const margin = 12
+  const previewWidth = 256
+  const previewHeight = 112
+  return {
+    x: Math.max(
+      margin,
+      Math.min(clientX + offset, window.innerWidth - previewWidth - margin)
+    ),
+    y: Math.max(
+      margin,
+      Math.min(clientY + offset, window.innerHeight - previewHeight - margin)
+    ),
+  }
+}
+
 export function Collection({
   title = 'Collection',
   description = 'Command your inventory and move from folders to item actions quickly.',
@@ -709,6 +771,9 @@ export function Collection({
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
+  const [itemFolderAssignments, setItemFolderAssignments] = useState<
+    Record<string, string>
+  >(() => loadInventoryItemFolderAssignments())
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<string | null>(
     null
@@ -725,6 +790,7 @@ export function Collection({
     startX: number
     startY: number
     moved: boolean
+    lastTarget: FolderDropTarget | null
   } | null>(null)
   const [folderPropertiesOpen, setFolderPropertiesOpen] = useState(false)
   const [folderPropertiesID, setFolderPropertiesID] = useState<string | null>(null)
@@ -789,6 +855,7 @@ export function Collection({
     setActiveWorkspaceCollection,
     addCollection,
   } = useWorkspaceCollections()
+  const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
 
   const selectInventoryItem = useCallback((item: InventoryItem | null) => {
     setSelectedItemID(item?.id ?? '')
@@ -894,6 +961,17 @@ export function Collection({
       })
     )
   }, [activeFolder, expandedNodeIDs])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(
+      inventoryItemFolderAssignmentsStorageKey,
+      JSON.stringify(itemFolderAssignments)
+    )
+  }, [itemFolderAssignments])
 
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
@@ -1052,6 +1130,25 @@ export function Collection({
         return { kind: 'root' }
       }
 
+      const explicitDropZone = hit.closest<HTMLElement>(
+        '[data-folder-drop-zone-kind][data-folder-row-id]'
+      )
+      const explicitDropKind =
+        explicitDropZone?.dataset.folderDropZoneKind === 'after'
+          ? 'after'
+          : explicitDropZone?.dataset.folderDropZoneKind === 'before'
+            ? 'before'
+            : null
+      const explicitNodeID = explicitDropZone?.dataset.folderRowId?.trim() ?? ''
+      if (
+        explicitDropKind &&
+        explicitNodeID &&
+        explicitNodeID !== draggedID &&
+        !isInvalidFolderDropTarget(folderTree, draggedID, explicitNodeID)
+      ) {
+        return { kind: explicitDropKind, nodeID: explicitNodeID }
+      }
+
       const rowShell = hit.closest<HTMLElement>('[data-folder-row-id]')
       const nodeID = rowShell?.dataset.folderRowId?.trim() ?? ''
       if (!rowShell || nodeID === '' || nodeID === draggedID) {
@@ -1097,11 +1194,11 @@ export function Collection({
         startX: event.clientX,
         startY: event.clientY,
         moved: false,
+        lastTarget: null,
       }
-      setDragPreviewPosition({
-        x: event.clientX + 18,
-        y: event.clientY + 18,
-      })
+      setDragPreviewPosition(
+        resolveFolderDragPreviewPosition(event.clientX, event.clientY)
+      )
       setDragTarget(null)
       setDraggedFolderID(nodeID)
     },
@@ -1120,11 +1217,9 @@ export function Collection({
     document.body.style.cursor = 'grabbing'
 
     const updateDragTarget = (clientX: number, clientY: number) => {
-      setDragPreviewPosition({
-        x: clientX + 18,
-        y: clientY + 18,
-      })
+      setDragPreviewPosition(resolveFolderDragPreviewPosition(clientX, clientY))
       const nextTarget = resolvePointerFolderDropTarget(clientX, clientY, draggedFolderID)
+      pointerDrag.lastTarget = nextTarget
       setDragTarget((previous) =>
         folderDropTargetsEqual(previous, nextTarget) ? previous : nextTarget
       )
@@ -1162,7 +1257,9 @@ export function Collection({
         return
       }
 
-      const target = resolvePointerFolderDropTarget(event.clientX, event.clientY, draggedFolderID)
+      const target =
+        pointerDrag.lastTarget ??
+        resolvePointerFolderDropTarget(event.clientX, event.clientY, draggedFolderID)
       if (target) {
         moveDraggedFolder(draggedFolderID, target)
       }
@@ -1197,6 +1294,45 @@ export function Collection({
     }
   }, [draggedFolderID, moveDraggedFolder, resolvePointerFolderDropTarget])
 
+  const handleInventoryItemFolderDragOver = useCallback(
+    (node: FolderNode, event: ReactDragEvent<HTMLElement>) => {
+      if (node.id === 'all-items') {
+        return
+      }
+
+      const itemID = readInventoryItemDragID(event.dataTransfer)
+      if (!itemID) {
+        return
+      }
+
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    },
+    []
+  )
+
+  const handleInventoryItemFolderDrop = useCallback(
+    (node: FolderNode, event: ReactDragEvent<HTMLElement>) => {
+      if (node.id === 'all-items') {
+        return
+      }
+
+      const itemID = readInventoryItemDragID(event.dataTransfer)
+      if (!itemID) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setItemFolderAssignments((previous) => ({
+        ...previous,
+        [itemID]: node.name,
+      }))
+      setActiveFolder(node.name)
+    },
+    []
+  )
+
   const renderFolderTree = useCallback(
     (nodes: FolderNode[], level = 1) =>
       nodes.map((node) => {
@@ -1218,6 +1354,8 @@ export function Collection({
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-before-${node.id}`}
+                data-folder-drop-zone-kind='before'
+                data-folder-row-id={node.id}
                 data-invalid-drop-target={
                   hasInvalidFolderDropTarget ? 'true' : 'false'
                 }
@@ -1245,6 +1383,7 @@ export function Collection({
                   className='h-6 w-6 shrink-0 rounded-sm text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-foreground'
                   data-testid={`folder-tree-toggle-${node.id}`}
                   data-drag-disabled='true'
+                  tabIndex={-1}
                   aria-label={`Toggle ${node.name}`}
                   aria-expanded={expanded ? 'true' : 'false'}
                   data-state={expanded ? 'expanded' : 'collapsed'}
@@ -1286,9 +1425,13 @@ export function Collection({
                 }
                 className={cn(
                   'relative flex min-w-0 flex-1 items-start rounded-md bg-transparent px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                  isChildDropTarget && 'bg-primary/20'
                 )}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
+                onDragEnter={(event) => handleInventoryItemFolderDragOver(node, event)}
+                onDragOver={(event) => handleInventoryItemFolderDragOver(node, event)}
+                onDrop={(event) => handleInventoryItemFolderDrop(node, event)}
               >
                 <span
                   className={cn(
@@ -1367,9 +1510,8 @@ export function Collection({
                   data-testid={`folder-tree-inline-actions-${node.id}`}
                   data-drag-disabled='true'
                   className={cn(
-                    'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
-                    'pointer-events-none opacity-0',
-                    isActive && 'pointer-events-auto opacity-100'
+                    'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity',
+                    'pointer-events-auto opacity-100'
                   )}
                 >
                   <Button
@@ -1445,6 +1587,7 @@ export function Collection({
                 <button
                   type='button'
                   tabIndex={-1}
+                  draggable={node.id !== 'all-items'}
                   data-testid={`folder-tree-drag-handle-${node.id}`}
                   aria-label={`Drag ${node.name}`}
                   title={`Drag ${node.name}`}
@@ -1464,6 +1607,8 @@ export function Collection({
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-after-${node.id}`}
+                data-folder-drop-zone-kind='after'
+                data-folder-row-id={node.id}
                 data-invalid-drop-target={
                   hasInvalidFolderDropTarget ? 'true' : 'false'
                 }
@@ -1492,10 +1637,10 @@ export function Collection({
     [
       activeFolder,
       dragTarget,
-      draggedFolderNode,
       draggedFolderID,
       expandedNodeIDs,
-      folderDropHint,
+      handleInventoryItemFolderDragOver,
+      handleInventoryItemFolderDrop,
       handleTreeItemKeyDown,
       folderTree,
       openFolderProperties,
@@ -1519,12 +1664,32 @@ export function Collection({
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
     [inventoryItems, selectedItemID]
   )
+  const visibleTableData = useMemo(() => {
+    if (!isInventoryRoute || activeFolder === 'All Items') {
+      return tableData
+    }
+
+    if (Object.keys(itemFolderAssignments).length === 0) {
+      return tableData
+    }
+
+    return tableData.filter((row) => {
+      const itemID = row.itemID ?? row.id
+      return itemFolderAssignments[itemID] === activeFolder
+    })
+  }, [activeFolder, isInventoryRoute, itemFolderAssignments, tableData])
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
 
   useEffect(() => {
-    if (activeWorkspaceCollection) {
+    const previous = activeWorkspaceCollectionRef.current
+    activeWorkspaceCollectionRef.current = activeWorkspaceCollection
+    if (
+      activeWorkspaceCollection &&
+      (activeWorkspaceCollection !== 'All Items' ||
+        previous !== activeWorkspaceCollection)
+    ) {
       setActiveFolder(activeWorkspaceCollection)
     }
   }, [activeWorkspaceCollection])
@@ -2079,6 +2244,66 @@ export function Collection({
     [activeProfileID, aiPhotoURLInput, aiTitleInput]
   )
 
+  const folderDragOverlay =
+    typeof document !== 'undefined' && draggedFolderNode && dragPreviewPosition
+      ? createPortal(
+          <>
+            <div
+              data-testid='folder-tree-drag-preview'
+              className='pointer-events-none fixed z-[70] w-64 rounded-lg border border-border/80 bg-background/95 p-3 shadow-2xl backdrop-blur'
+              style={{
+                left: `${dragPreviewPosition.x}px`,
+                top: `${dragPreviewPosition.y}px`,
+              }}
+            >
+              <div className='flex items-start gap-3'>
+                <span className='mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent/80 text-foreground/80'>
+                  <GripVertical className='size-4' />
+                </span>
+                <div className='min-w-0 flex-1'>
+                  <p className='truncate text-sm font-semibold text-foreground'>
+                    {draggedFolderNode.name}
+                  </p>
+                  {draggedFolderNode.secondaryLabel ? (
+                    <p className='truncate text-xs text-muted-foreground'>
+                      {draggedFolderNode.secondaryLabel}
+                    </p>
+                  ) : null}
+                </div>
+                <div className='flex shrink-0 items-center gap-2 text-xs'>
+                  {typeof draggedFolderNode.itemCount === 'number' ? (
+                    <span className='font-medium tabular-nums text-muted-foreground'>
+                      {draggedFolderNode.itemCount}
+                    </span>
+                  ) : null}
+                  {draggedFolderNode.statusBadge ? (
+                    <Badge
+                      variant='secondary'
+                      className='rounded-full px-2 py-0.5 text-[11px] font-semibold'
+                    >
+                      {draggedFolderNode.statusBadge}
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            {folderDropHint ? (
+              <div
+                data-testid='folder-tree-drop-hint'
+                className='pointer-events-none fixed z-[71] rounded-full border border-primary/30 bg-primary/14 px-3 py-1 text-xs font-medium text-primary shadow-lg backdrop-blur'
+                style={{
+                  left: `${dragPreviewPosition.x}px`,
+                  top: `${dragPreviewPosition.y + 74}px`,
+                }}
+              >
+                {folderDropHint}
+              </div>
+            ) : null}
+          </>,
+          document.body
+        )
+      : null
+
   return (
     <TasksProvider>
       <Header fixed>
@@ -2182,10 +2407,9 @@ export function Collection({
               </div>
               <div
                 role='tree'
-                tabIndex={0}
                 aria-label='Inventory folders'
                 data-testid='inventory-folder-tree'
-                className='min-h-[26rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
+                className='min-h-[26rem] max-h-[42rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
                 <div
                   className='min-w-full w-max space-y-2'
@@ -2203,56 +2427,7 @@ export function Collection({
                   {renderFolderTree(folderTree)}
                 </div>
               </div>
-              {draggedFolderNode && dragPreviewPosition ? (
-                <div
-                  data-testid='folder-tree-drag-preview'
-                  className='pointer-events-none fixed z-[70] w-64 rounded-lg border border-border/80 bg-background/95 p-3 shadow-2xl backdrop-blur'
-                  style={{
-                    left: `${dragPreviewPosition.x}px`,
-                    top: `${dragPreviewPosition.y}px`,
-                  }}
-                >
-                  <div className='flex items-start gap-3'>
-                    <span className='mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent/80 text-foreground/80'>
-                      <GripVertical className='size-4' />
-                    </span>
-                    <div className='min-w-0 flex-1'>
-                      <p className='truncate text-sm font-semibold text-foreground'>
-                        {draggedFolderNode.name}
-                      </p>
-                      {draggedFolderNode.secondaryLabel ? (
-                        <p className='truncate text-xs text-muted-foreground'>
-                          {draggedFolderNode.secondaryLabel}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className='flex shrink-0 items-center gap-2 text-xs'>
-                      {typeof draggedFolderNode.itemCount === 'number' ? (
-                        <span className='font-medium tabular-nums text-muted-foreground'>
-                          {draggedFolderNode.itemCount}
-                        </span>
-                      ) : null}
-                      {draggedFolderNode.statusBadge ? (
-                        <Badge variant='secondary' className='rounded-full px-2 py-0.5 text-[11px] font-semibold'>
-                          {draggedFolderNode.statusBadge}
-                        </Badge>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              {folderDropHint && dragPreviewPosition ? (
-                <div
-                  data-testid='folder-tree-drop-hint'
-                  className='pointer-events-none fixed z-[71] rounded-full border border-primary/30 bg-primary/14 px-3 py-1 text-xs font-medium text-primary shadow-lg backdrop-blur'
-                  style={{
-                    left: `${dragPreviewPosition.x}px`,
-                    top: `${dragPreviewPosition.y + 74}px`,
-                  }}
-                >
-                  {folderDropHint}
-                </div>
-              ) : null}
+              {folderDragOverlay}
               <Dialog
                 open={folderCreateOpen}
                 onOpenChange={(open) => {
@@ -2552,7 +2727,7 @@ export function Collection({
                 </div>
               ) : null}
               <TasksTable
-                data={tableData}
+                data={visibleTableData}
                 routePath={routePath}
                 currentRecordID={selectedItemID}
                 onRecordFocus={(itemID, recordID) => {
