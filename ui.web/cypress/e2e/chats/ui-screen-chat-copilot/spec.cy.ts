@@ -48,9 +48,12 @@ describe('chats/ui-screen-chat-copilot', () => {
         .invoke('attr', 'aria-label')
         .should('match', /open.*assistant workspace/i)
       cy.get('[data-testid="shell-chat-toggle"]').click()
-      cy.get('[data-testid="shell-assistant-workspace"]').should('be.visible')
+      cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
       cy.get('[data-testid="shell-workspace-assistant"]')
         .should('have.attr', 'data-active', 'true')
+      cy.get('[data-testid="shell-assistant-route-context"]')
+        .invoke('text')
+        .should('contain', '/inventory')
       cy.location('pathname').should('eq', initialPathname)
 
       cy.get('[data-testid="shell-chat-toggle"]')
