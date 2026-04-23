@@ -327,10 +327,11 @@ export function Tasks({
       }
       setWishlistActionItemID(task.id)
       try {
-        const response = await fetch(
-          `/api/wishlist?id=${encodeURIComponent(wishlistEntryID)}`,
-          { method: 'DELETE' }
-        )
+        const response = await fetch('/api/wishlist/convert-owned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: wishlistEntryID }),
+        })
         if (!response.ok) {
           throw new Error('failed_to_move_wishlist_item_to_owned')
         }

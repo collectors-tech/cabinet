@@ -192,10 +192,11 @@ describe("ui-screen-wishlist", () => {
     cy.intercept("GET", "/api/items?status=wishlist", (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistItems } });
     }).as("catalogItems");
-    cy.intercept("DELETE", "/api/wishlist?id=wish-1", (req) => {
+    cy.intercept("POST", "/api/wishlist/convert-owned", (req) => {
+      expect(req.body).to.deep.equal({ id: "wish-1" });
       wishlistEntries = [];
       wishlistItems = [];
-      req.reply({ statusCode: 204, body: "" });
+      req.reply({ statusCode: 200, body: { ok: true } });
     }).as("moveWishlistItemToOwned");
     cy.intercept("GET", "/api/items", {
       statusCode: 200,

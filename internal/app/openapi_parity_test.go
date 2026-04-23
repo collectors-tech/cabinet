@@ -29,6 +29,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/scanner/failures/retry",
 		"/api/provider/health",
 		"/api/settings/reset-ignore-rules",
+		"/api/wishlist/convert-owned",
 		"/api/wishlist/hits",
 		"/api/pricing/snapshot/run",
 		"/api/pricing/graph",
