@@ -68,6 +68,8 @@ type DataTableProps = {
 
 type ViewMode = 'rows' | 'cards'
 
+const inventoryItemDragDataType = 'application/x-cabinet-inventory-item-id'
+
 type InventorySavedView = {
   id: string
   name: string
@@ -76,6 +78,10 @@ type InventorySavedView = {
   categoryFilters: string[]
   sorting: Array<{ id: string; desc: boolean }>
   viewMode: ViewMode
+}
+
+function inventoryItemRowTestID(task: Task): string | undefined {
+  return task.itemID ? `inventory-item-row-${task.itemID}` : undefined
 }
 
 const inventorySavedViewsSettingsKey = 'inventory.saved-views.v1'
@@ -763,12 +769,29 @@ export function TasksTable({
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
+                    data-testid={inventoryItemRowTestID(row.original)}
                     data-state={row.getIsSelected() && 'selected'}
+                    draggable={
+                      routePath === '/_authenticated/inventory/' &&
+                      Boolean(row.original.itemID)
+                    }
                     className={cn(
                       currentRecordID === (row.original.itemID ?? row.original.id)
                         ? 'bg-primary/5'
                         : undefined
                     )}
+                    onDragStart={(event) => {
+                      const itemID = row.original.itemID
+                      if (
+                        routePath !== '/_authenticated/inventory/' ||
+                        !itemID
+                      ) {
+                        return
+                      }
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData(inventoryItemDragDataType, itemID)
+                      event.dataTransfer.setData('text/plain', itemID)
+                    }}
                     onClick={(event) => handleRowClick(row.original.id, event)}
                     onDoubleClick={(event) =>
                       handleRowDoubleClick(row.original.id, event)
@@ -809,6 +832,11 @@ export function TasksTable({
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
+                data-testid={inventoryItemRowTestID(row.original)}
+                draggable={
+                  routePath === '/_authenticated/inventory/' &&
+                  Boolean(row.original.itemID)
+                }
                 className={cn(
                   'space-y-2 rounded-md border p-4',
                   currentRecordID === (row.original.itemID ?? row.original.id)
@@ -816,6 +844,18 @@ export function TasksTable({
                     : 'cursor-pointer'
                 )}
                 data-state={row.getIsSelected() && 'selected'}
+                onDragStart={(event) => {
+                  const itemID = row.original.itemID
+                  if (
+                    routePath !== '/_authenticated/inventory/' ||
+                    !itemID
+                  ) {
+                    return
+                  }
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData(inventoryItemDragDataType, itemID)
+                  event.dataTransfer.setData('text/plain', itemID)
+                }}
                 onClick={(event) => handleRowClick(row.original.id, event)}
                 onDoubleClick={(event) =>
                   handleRowDoubleClick(row.original.id, event)

@@ -77,7 +77,7 @@ function Test-IsEphemeralRuntimePath([string]$path) {
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uiRoot = Join-Path $repoRoot "ui.web"
 $defaultRuntimeExecutable = Join-Path $repoRoot "bin/cabinet.exe"
-$configPath = Join-Path $uiRoot "cypress.config.ts"
+$configPath = Join-Path $uiRoot "cypress.config.runtime.cjs"
 $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $uiRoot $Spec }
 
 $resolvedRuntimeExecutablePath = ""
