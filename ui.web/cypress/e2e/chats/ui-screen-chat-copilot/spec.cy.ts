@@ -38,26 +38,33 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-thread-title"]').should('contain', title)
   }
 
-  it('CHAT-COPILOT-001 toggles chat rail from header without route context loss', () => {
+  it('CHAT-COPILOT-001 toggles assistant workspace from the header without route context loss', () => {
     openInventory()
+    cy.get('[data-testid="active-profile-name"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-navigation"]')
+      .should('have.attr', 'data-active', 'true')
     cy.location('pathname').then((initialPathname) => {
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
-        .should('match', /open.*chat/i)
+        .should('match', /open.*assistant workspace/i)
       cy.get('[data-testid="shell-chat-toggle"]').click()
-      cy.get('[data-testid="shell-chat-rail"]').should('be.visible')
+      cy.get('[data-testid="shell-assistant-workspace"]').should('be.visible')
+      cy.get('[data-testid="shell-workspace-assistant"]')
+        .should('have.attr', 'data-active', 'true')
       cy.location('pathname').should('eq', initialPathname)
 
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
-        .should('match', /close.*chat/i)
+        .should('match', /return to navigation workspace/i)
       cy.get('[data-testid="shell-chat-toggle"]').click()
-      cy.get('[data-testid="shell-chat-rail"]').should('not.exist')
+      cy.get('[data-testid="shell-assistant-workspace"]').should('not.exist')
+      cy.get('[data-testid="shell-workspace-navigation"]')
+        .should('have.attr', 'data-active', 'true')
       cy.location('pathname').should('eq', initialPathname)
     })
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-009 disables thread creation while chat service is unavailable', () => {
+  it('UI-SCREEN-CHAT-COPILOT-002 disables thread creation while chat service is unavailable', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 404,
       body: { error: 'active_profile_404' },
@@ -121,7 +128,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow', () => {
+  it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()
     createThread('E2E Mobile Copilot Thread')
@@ -136,6 +143,12 @@ describe('chats/ui-screen-chat-copilot', () => {
     )
     cy.get('[data-testid="chat-upload-attachment-button"]').click()
     cy.get('[data-testid="chat-attachment-list"]').should('contain', 'mobile-chat-photo.jpg')
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Use the attached photo to create an item')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Use the attached photo to create an item'
+    )
 
     cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
     cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-008-MOBILE')
@@ -149,7 +162,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'CP-008-MOBILE')
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-009 keeps top-level /inbox reachable as a communications surface', () => {
+  it('UI-SCREEN-CHAT-COPILOT-010 keeps top-level /inbox reachable as a communications surface', () => {
     openInbox()
     cy.contains('h1', 'Chats').should('be.visible')
     cy.get('[data-testid="chat-thread-list"]').should('be.visible')
