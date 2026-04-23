@@ -1,4 +1,6 @@
 describe('inventory-folder-tree-control', () => {
+  const folderDragDataType = 'application/x-cabinet-folder-id'
+
   function getFocusableElements(doc: Document) {
     return Array.from(
       doc.querySelectorAll<HTMLElement>(
@@ -34,88 +36,34 @@ describe('inventory-folder-tree-control', () => {
     return focusableElements[currentIndex + 1] ?? null
   }
 
-  function resolvePointerCoordinates(
-    element: Element,
-    mode: 'child' | 'before' | 'after' | 'center' = 'center'
-  ) {
-    const rect = element.getBoundingClientRect()
-    const centerX = rect.left + Math.min(rect.width / 2, 96)
-    const edgeInset = Math.max(8, Math.min(16, rect.height * 0.2))
-
-    if (mode === 'before') {
-      return { x: centerX, y: rect.top + edgeInset }
-    }
-    if (mode === 'after') {
-      return { x: centerX, y: rect.bottom - edgeInset }
-    }
-    return { x: centerX, y: rect.top + rect.height / 2 }
-  }
-
-  function dispatchPointerDown(win: Window, selector: string, pointerId: number) {
-    const element = win.document.querySelector<HTMLElement>(selector)
-    expect(element, `${selector} exists`).to.not.equal(null)
-    const { x, y } = resolvePointerCoordinates(element as HTMLElement)
-    element?.dispatchEvent(
-      new win.PointerEvent('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        pointerId,
-        pointerType: 'mouse',
-        isPrimary: true,
-        clientX: x,
-        clientY: y,
+  function getFolderLabels(selector: string) {
+    return cy.get(selector).children('[role="none"]').then(($rows) =>
+      [...$rows].map((row) => {
+        const label = row.querySelector('[role="treeitem"] [data-testid^="collection-folder-"]')
+        return label?.textContent?.trim() ?? ''
       })
     )
   }
 
-  function dispatchPointerMove(
-    win: Window,
-    selector: string,
-    mode: 'child' | 'before' | 'after' | 'center',
-    pointerId: number
+  function dragFolderInto(
+    folderID: string,
+    targetSelector: string,
+    targetDropEvent: 'dragenter' | 'dragover' | 'drop' = 'drop'
   ) {
-    const element = win.document.querySelector<HTMLElement>(selector)
-    expect(element, `${selector} exists`).to.not.equal(null)
-    const { x, y } = resolvePointerCoordinates(element as HTMLElement, mode)
-    win.dispatchEvent(
-      new win.PointerEvent('pointermove', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        pointerId,
-        pointerType: 'mouse',
-        isPrimary: true,
-        clientX: x,
-        clientY: y,
-      })
-    )
-  }
-
-  function dispatchPointerUp(
-    win: Window,
-    selector: string,
-    mode: 'child' | 'before' | 'after' | 'center',
-    pointerId: number
-  ) {
-    const element = win.document.querySelector<HTMLElement>(selector)
-    expect(element, `${selector} exists`).to.not.equal(null)
-    const { x, y } = resolvePointerCoordinates(element as HTMLElement, mode)
-    win.dispatchEvent(
-      new win.PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 0,
-        pointerId,
-        pointerType: 'mouse',
-        isPrimary: true,
-        clientX: x,
-        clientY: y,
-      })
-    )
+    cy.window().then((win) => {
+      const transfer = new win.DataTransfer()
+      cy.get(`[data-testid="folder-tree-drag-handle-${folderID}"]`)
+        .trigger('dragstart', { dataTransfer: transfer })
+        .then(() => {
+          expect(transfer.getData(folderDragDataType), `${folderID} drag data`).to.equal(folderID)
+        })
+      cy.get(targetSelector)
+        .trigger('dragenter', { dataTransfer: transfer })
+        .trigger('dragover', { dataTransfer: transfer })
+        .trigger(targetDropEvent, { dataTransfer: transfer })
+      cy.get(`[data-testid="folder-tree-drag-handle-${folderID}"]`)
+        .trigger('dragend', { dataTransfer: transfer })
+    })
   }
 
   beforeEach(() => {
@@ -444,7 +392,13 @@ describe('inventory-folder-tree-control', () => {
       .should('have.css', 'pointer-events', 'auto')
 
     cy.window().then((win) => {
-      dispatchPointerDown(win, '[data-testid="folder-tree-drag-handle-store-1"]', 11)
+      const transfer = new win.DataTransfer()
+      cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
+        .trigger('dragstart', { dataTransfer: transfer })
+        .then(() => {
+          expect(transfer.getData(folderDragDataType), 'store-1 drag data').to.equal('store-1')
+        })
+      cy.wrap(transfer, { log: false }).as('folderDragTransfer')
     })
     cy.get('[data-testid="folder-tree-drag-preview"]')
       .should(($preview) => {
@@ -466,16 +420,24 @@ describe('inventory-folder-tree-control', () => {
     cy.get('[data-testid="folder-tree-row-shell-warehouses"]').then(($row) => {
       $row[0].scrollIntoView({ block: 'center' })
     })
-    cy.window().then((win) => {
-      dispatchPointerMove(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
+    cy.get<DataTransfer>('@folderDragTransfer').then((transfer) => {
+      cy.get('[data-testid="folder-tree-item-warehouses"]')
+        .trigger('dragenter', { dataTransfer: transfer })
+        .trigger('dragover', { dataTransfer: transfer })
     })
     cy.get('[data-testid="folder-tree-item-warehouses"]').should('have.class', 'bg-primary/20')
     cy.get('[data-testid="folder-tree-drop-hint"]')
       .should('exist')
       .and('contain.text', 'Move into Warehouses')
-    cy.window().then((win) => {
-      dispatchPointerUp(win, '[data-testid="folder-tree-row-shell-warehouses"]', 'child', 11)
+    cy.get<DataTransfer>('@folderDragTransfer').then((transfer) => {
+      cy.get('[data-testid="folder-tree-item-warehouses"]')
+        .trigger('drop', { dataTransfer: transfer })
+      cy.get('[data-testid="folder-tree-drag-handle-store-1"]')
+        .trigger('dragend', { dataTransfer: transfer })
     })
+    cy.get('[data-testid="folder-tree-group-warehouses"]')
+      .find('[data-testid="folder-tree-item-store-1"]')
+      .should('be.visible')
     cy.get('[data-testid="folder-tree-drag-preview"]').should('not.exist')
     cy.get('[data-testid="folder-tree-root-drop-zone"]').should('not.exist')
   })
@@ -614,6 +576,61 @@ describe('inventory-folder-tree-control', () => {
           ).to.be.gte(availableHeight - 6)
         })
       })
+    })
+  })
+
+  it('UI-SCREEN-INVENTORY-FOLDER-TREE-020 performs deterministic chained folder structural reordering', () => {
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-group-warehouses"]').should('be.visible')
+
+    dragFolderInto('store-1', '[data-testid="folder-tree-item-warehouses"]')
+    cy.get('[data-testid="folder-tree-group-warehouses"]')
+      .find('[data-testid="folder-tree-item-store-1"]')
+      .should('be.visible')
+    cy.get('[data-testid="collection-active-context"]').should('contain.text', 'Store 1')
+
+    cy.window().then((win) => {
+      const transfer = new win.DataTransfer()
+      cy.get('[data-testid="folder-tree-drag-handle-warehouses"]')
+        .trigger('dragstart', { dataTransfer: transfer })
+      cy.get('[data-testid="folder-tree-item-store-1"]')
+        .should('have.attr', 'data-invalid-drop-target', 'true')
+        .trigger('dragenter', { dataTransfer: transfer })
+        .trigger('dragover', { dataTransfer: transfer })
+        .trigger('drop', { dataTransfer: transfer })
+      cy.get('[data-testid="folder-tree-drag-handle-warehouses"]')
+        .trigger('dragend', { dataTransfer: transfer })
+    })
+    cy.get('[data-testid="folder-tree-group-warehouses"]')
+      .find('[data-testid="folder-tree-item-store-1"]')
+      .should('be.visible')
+
+    dragFolderInto('store-1', '[data-testid="folder-tree-drop-before-warehouse-1"]')
+    getFolderLabels('[data-testid="folder-tree-group-warehouses"]').should((labels) => {
+      expect(labels.slice(0, 4)).to.deep.equal([
+        'Store 1',
+        'Warehouse 1',
+        'Warehouse 2',
+        'Warehouse 3',
+      ])
+    })
+
+    dragFolderInto('warehouse-3', '[data-testid="folder-tree-drop-after-store-1"]')
+    getFolderLabels('[data-testid="folder-tree-group-warehouses"]').should((labels) => {
+      expect(labels.slice(0, 4)).to.deep.equal([
+        'Store 1',
+        'Warehouse 3',
+        'Warehouse 1',
+        'Warehouse 2',
+      ])
+    })
+
+    dragFolderInto('store-1', '[data-testid="folder-tree-root-drop-zone"]')
+    cy.get('[data-testid="folder-tree-group-warehouses"]')
+      .find('[data-testid="folder-tree-item-store-1"]')
+      .should('not.exist')
+    getFolderLabels('[data-testid="inventory-folder-tree-scroll-region"]').should((labels) => {
+      expect(labels).to.include('Store 1')
     })
   })
 })

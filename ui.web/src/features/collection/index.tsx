@@ -170,6 +170,7 @@ const inventoryFolderTreeSettingsKey = 'inventory.folder-tree.v1'
 const inventoryItemFolderAssignmentsStorageKey =
   'cabinet.inventory.item-folder-assignments.v1'
 const inventoryItemDragDataType = 'application/x-cabinet-inventory-item-id'
+const folderDragDataType = 'application/x-cabinet-folder-id'
 
 const folderCategoryOptions = [
   'Catalog',
@@ -728,6 +729,27 @@ function readInventoryItemDragID(dataTransfer: DataTransfer): string {
     dataTransfer.getData(inventoryItemDragDataType) ||
     dataTransfer.getData('text/plain')
   ).trim()
+}
+
+function readFolderDragID(dataTransfer: DataTransfer): string {
+  return dataTransfer.getData(folderDragDataType).trim()
+}
+
+function canMoveFolderToTarget(
+  nodes: FolderNode[],
+  draggedID: string,
+  target: FolderDropTarget | null
+): boolean {
+  if (draggedID === '' || draggedID === 'all-items' || !target) {
+    return false
+  }
+  if (target.kind === 'root') {
+    return true
+  }
+  if (draggedID === target.nodeID) {
+    return false
+  }
+  return !isInvalidFolderDropTarget(nodes, draggedID, target.nodeID)
 }
 
 function resolveFolderDragPreviewPosition(clientX: number, clientY: number) {
@@ -1296,6 +1318,9 @@ export function Collection({
 
   const handleInventoryItemFolderDragOver = useCallback(
     (node: FolderNode, event: ReactDragEvent<HTMLElement>) => {
+      if (readFolderDragID(event.dataTransfer)) {
+        return
+      }
       if (node.id === 'all-items') {
         return
       }
@@ -1313,6 +1338,9 @@ export function Collection({
 
   const handleInventoryItemFolderDrop = useCallback(
     (node: FolderNode, event: ReactDragEvent<HTMLElement>) => {
+      if (readFolderDragID(event.dataTransfer)) {
+        return
+      }
       if (node.id === 'all-items') {
         return
       }
@@ -1331,6 +1359,78 @@ export function Collection({
       setActiveFolder(node.name)
     },
     []
+  )
+
+  const clearFolderHTMLDrag = useCallback(() => {
+    setDragPreviewPosition(null)
+    setDraggedFolderID(null)
+    setDragTarget(null)
+  }, [])
+
+  const startFolderHTMLDrag = useCallback(
+    (node: FolderNode, event: ReactDragEvent<HTMLButtonElement>) => {
+      if (node.id === 'all-items') {
+        event.preventDefault()
+        return
+      }
+
+      event.stopPropagation()
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData(folderDragDataType, node.id)
+      setDraggedFolderID(node.id)
+      setDragTarget(null)
+      setDragPreviewPosition(
+        resolveFolderDragPreviewPosition(event.clientX, event.clientY)
+      )
+    },
+    []
+  )
+
+  const handleFolderHTMLDragOver = useCallback(
+    (target: FolderDropTarget, event: ReactDragEvent<HTMLElement>) => {
+      const folderID = readFolderDragID(event.dataTransfer)
+      if (!folderID) {
+        return false
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setDraggedFolderID(folderID)
+      setDragPreviewPosition(
+        resolveFolderDragPreviewPosition(event.clientX, event.clientY)
+      )
+
+      if (!canMoveFolderToTarget(folderTree, folderID, target)) {
+        event.dataTransfer.dropEffect = 'none'
+        setDragTarget(null)
+        return true
+      }
+
+      event.dataTransfer.dropEffect = 'move'
+      setDragTarget((previous) =>
+        folderDropTargetsEqual(previous, target) ? previous : target
+      )
+      return true
+    },
+    [folderTree]
+  )
+
+  const handleFolderHTMLDrop = useCallback(
+    (target: FolderDropTarget, event: ReactDragEvent<HTMLElement>) => {
+      const folderID = readFolderDragID(event.dataTransfer)
+      if (!folderID) {
+        return false
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (canMoveFolderToTarget(folderTree, folderID, target)) {
+        moveDraggedFolder(folderID, target)
+      }
+      clearFolderHTMLDrag()
+      return true
+    },
+    [clearFolderHTMLDrag, folderTree, moveDraggedFolder]
   )
 
   const renderFolderTree = useCallback(
@@ -1358,6 +1458,21 @@ export function Collection({
                 data-folder-row-id={node.id}
                 data-invalid-drop-target={
                   hasInvalidFolderDropTarget ? 'true' : 'false'
+                }
+                onDragEnter={(event) =>
+                  handleFolderHTMLDragOver(
+                    { kind: 'before', nodeID: node.id },
+                    event
+                  )
+                }
+                onDragOver={(event) =>
+                  handleFolderHTMLDragOver(
+                    { kind: 'before', nodeID: node.id },
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  handleFolderHTMLDrop({ kind: 'before', nodeID: node.id }, event)
                 }
                 className={cn(
                   'mx-2 mb-1 h-2 rounded-full border border-dashed transition-colors',
@@ -1429,9 +1544,24 @@ export function Collection({
                 )}
                 onClick={() => setActiveFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
-                onDragEnter={(event) => handleInventoryItemFolderDragOver(node, event)}
-                onDragOver={(event) => handleInventoryItemFolderDragOver(node, event)}
-                onDrop={(event) => handleInventoryItemFolderDrop(node, event)}
+                onDragEnter={(event) => {
+                  if (handleFolderHTMLDragOver({ kind: 'child', nodeID: node.id }, event)) {
+                    return
+                  }
+                  handleInventoryItemFolderDragOver(node, event)
+                }}
+                onDragOver={(event) => {
+                  if (handleFolderHTMLDragOver({ kind: 'child', nodeID: node.id }, event)) {
+                    return
+                  }
+                  handleInventoryItemFolderDragOver(node, event)
+                }}
+                onDrop={(event) => {
+                  if (handleFolderHTMLDrop({ kind: 'child', nodeID: node.id }, event)) {
+                    return
+                  }
+                  handleInventoryItemFolderDrop(node, event)
+                }}
               >
                 <span
                   className={cn(
@@ -1596,6 +1726,8 @@ export function Collection({
                     draggedFolderID === node.id && 'text-foreground'
                   )}
                   onPointerDown={(event) => startFolderPointerDrag(node.id, event)}
+                  onDragStart={(event) => startFolderHTMLDrag(node, event)}
+                  onDragEnd={clearFolderHTMLDrag}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.preventDefault()}
                 >
@@ -1611,6 +1743,15 @@ export function Collection({
                 data-folder-row-id={node.id}
                 data-invalid-drop-target={
                   hasInvalidFolderDropTarget ? 'true' : 'false'
+                }
+                onDragEnter={(event) =>
+                  handleFolderHTMLDragOver({ kind: 'after', nodeID: node.id }, event)
+                }
+                onDragOver={(event) =>
+                  handleFolderHTMLDragOver({ kind: 'after', nodeID: node.id }, event)
+                }
+                onDrop={(event) =>
+                  handleFolderHTMLDrop({ kind: 'after', nodeID: node.id }, event)
                 }
                 className={cn(
                   'mx-2 mt-1 h-2 rounded-full border border-dashed transition-colors',
@@ -1636,14 +1777,18 @@ export function Collection({
       }),
     [
       activeFolder,
+      clearFolderHTMLDrag,
       dragTarget,
       draggedFolderID,
       expandedNodeIDs,
+      handleFolderHTMLDragOver,
+      handleFolderHTMLDrop,
       handleInventoryItemFolderDragOver,
       handleInventoryItemFolderDrop,
       handleTreeItemKeyDown,
       folderTree,
       openFolderProperties,
+      startFolderHTMLDrag,
       startFolderPointerDrag,
       toggleNodeExpanded,
     ]
@@ -2419,6 +2564,15 @@ export function Collection({
                     <div
                       role='presentation'
                       data-testid='folder-tree-root-drop-zone'
+                      onDragEnter={(event) =>
+                        handleFolderHTMLDragOver({ kind: 'root' }, event)
+                      }
+                      onDragOver={(event) =>
+                        handleFolderHTMLDragOver({ kind: 'root' }, event)
+                      }
+                      onDrop={(event) =>
+                        handleFolderHTMLDrop({ kind: 'root' }, event)
+                      }
                       className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
                     >
                       Drop here to move folder to the root level
