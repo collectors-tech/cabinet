@@ -34,5 +34,39 @@
   "integrations": {
     "title": "Integrations",
     "description": "Configure providers, credentials, and connector actions."
+  },
+  "settings": {
+    "profile": {
+      "title": "Profile settings",
+      "description": "Manage your account profile and public display details."
+    },
+    "account": {
+      "title": "Account",
+      "description": "Update your account settings and manage sign-in preferences."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Customize how Cabinet looks and switches between light and dark themes."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Choose which updates alert you and how those alerts are delivered."
+    },
+    "display": {
+      "title": "Display",
+      "description": "Control which interface details are shown across the app."
+    },
+    "storage": {
+      "title": "Storage",
+      "description": "Review and manage storage locations for this workspace."
+    },
+    "billing": {
+      "title": "Billing",
+      "description": "Review subscription, billing, and plan preferences."
+    },
+    "operations": {
+      "title": "Operations",
+      "description": "Manage background work, import/export, and runtime operations."
+    }
   }
 }
