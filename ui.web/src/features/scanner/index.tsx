@@ -218,6 +218,28 @@ export function Scanner() {
     void loadScanner()
   }, [loadScanner])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const barcode = new URLSearchParams(window.location.search)
+      .get('barcode')
+      ?.trim()
+    if (!barcode) {
+      return
+    }
+    setNewName(`Barcode ${barcode}`)
+    setNewKeywords(barcode)
+    setActionStatus(`barcode_lookup_ready_${barcode}`)
+    setActionFeedback({
+      summary: 'Barcode lookup is ready for Market Watch.',
+      actions: [
+        'Review provider scope before creating the query set.',
+        'Create the query set or edit the barcode keyword first.',
+      ],
+    })
+  }, [])
+
   const resolveProviderScope = () => {
     if (providerMode === 'single') {
       const normalized = singleProvider.trim().toLowerCase()
