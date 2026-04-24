@@ -813,7 +813,7 @@ export function Tasks({
         <TasksTable
           data={displayedData}
           routePath={routePath}
-          wishlistCollectionFilter={wishlistCollectionFilter}
+          customFilters={wishlistCollectionFilter}
           onEditRow={(task) => {
             setCurrentDialogRow(task)
             setDialogOpen('update')

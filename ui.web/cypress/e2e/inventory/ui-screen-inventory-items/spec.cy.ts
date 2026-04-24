@@ -224,7 +224,7 @@ describe("inventory-management", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection inline and auto-selects it", () => {
+  it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection from the compact filter and auto-selects it", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
       body: {
@@ -243,10 +243,10 @@ describe("inventory-management", () => {
     signIn();
     cy.wait("@itemsInline");
 
-    cy.get('[data-testid="collection-inline-add-new"]').click();
-    cy.get('[data-testid="collection-inline-new-name"]').type("Inline Alpha");
-    cy.get('[data-testid="collection-inline-save"]').click();
-    cy.get('[data-testid="collection-inline-picker-selected"]').should(
+    cy.get('[data-testid="inventory-collection-add-root"]').click();
+    cy.get('[data-testid="folder-tree-name-input"]').type("Inline Alpha");
+    cy.get('[data-testid="folder-tree-create-submit"]').click();
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
       "contain",
       "Inline Alpha"
     );
@@ -483,4 +483,5 @@ describe("inventory-management", () => {
     cy.contains("Plane Delta").should("not.exist");
     cy.get("table tbody tr").eq(0).should("contain", "PN-VIEW-002");
   });
+
 });

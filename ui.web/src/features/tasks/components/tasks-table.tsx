@@ -65,7 +65,7 @@ type DataTableProps = {
   onWishlistExport?: (tasks: Task[]) => void
   wishlistActionItemID?: string | null
   isWishlistMutating?: boolean
-  wishlistCollectionFilter?: ReactNode
+  customFilters?: ReactNode
 }
 
 type ViewMode = 'rows' | 'cards'
@@ -204,7 +204,7 @@ export function TasksTable({
   onWishlistExport,
   wishlistActionItemID,
   isWishlistMutating,
-  wishlistCollectionFilter,
+  customFilters,
 }: DataTableProps) {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const columns = useMemo(
@@ -635,7 +635,7 @@ export function TasksTable({
               : priorities,
           },
         ]}
-        customFilters={wishlistCollectionFilter}
+        customFilters={customFilters}
       />
 
       <div className='flex flex-wrap items-center justify-between gap-2'>
