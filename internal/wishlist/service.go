@@ -53,10 +53,14 @@ func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Ent
 	if in.HighlightHit {
 		highlight = 1
 	}
+	belowTargetNow := 0
+	if in.BelowTargetNow {
+		belowTargetNow = 1
+	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, below_target_now)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow)
 	if err != nil {
 		return Entry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
@@ -84,11 +88,15 @@ func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Ent
 	if in.HighlightHit {
 		highlight = 1
 	}
+	belowTargetNow := 0
+	if in.BelowTargetNow {
+		belowTargetNow = 1
+	}
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE wishlist_entries
-		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, updated_at = CURRENT_TIMESTAMP
+		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, below_target_now = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID, trimmedProfileID, trimmedProfileID)
+	`, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, in.ID, trimmedProfileID, trimmedProfileID)
 	if err != nil {
 		return err
 	}
@@ -131,10 +139,11 @@ func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
 func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (Entry, error) {
 	var e Entry
 	var highlight int
+	var belowTargetNow int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, item_id, target_price, priority, notes, highlight_hit, created_at, updated_at
+		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, created_at, updated_at
 		FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &e.CreatedAt, &e.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Entry{}, fmt.Errorf("wishlist entry not found")
@@ -142,7 +151,7 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 		return Entry{}, err
 	}
 	e.HighlightHit = highlight == 1
-	e.BelowTargetNow = s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
+	e.BelowTargetNow = belowTargetNow == 1 || s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
 	return e, nil
 }
 
