@@ -840,6 +840,7 @@ export function Collection({
   const [selectedItemID, setSelectedItemID] = useState('')
   const [selectedItemLabel, setSelectedItemLabel] = useState('')
   const [itemEditorMode, setItemEditorMode] = useState<'create' | 'edit'>('edit')
+  const [itemEditorOpen, setItemEditorOpen] = useState(false)
   const [itemDraft, setItemDraft] = useState<InventoryItemDraft>(
     emptyInventoryItemDraft
   )
@@ -897,7 +898,23 @@ export function Collection({
     setItemSaveError(null)
     setItemSaveSuccess(null)
     selectInventoryItem(null)
+    setItemEditorOpen(true)
   }, [selectInventoryItem])
+
+  const openInventoryItemEditor = useCallback(
+    (item: InventoryItem | null) => {
+      if (!item) {
+        return
+      }
+      setItemEditorMode('edit')
+      setItemDraft(inventoryItemToDraft(item))
+      setItemSaveError(null)
+      setItemSaveSuccess(null)
+      selectInventoryItem(item)
+      setItemEditorOpen(true)
+    },
+    [selectInventoryItem]
+  )
 
   const openFolderProperties = useCallback((node: FolderNode) => {
     setFolderPropertiesID(node.id)
@@ -1831,6 +1848,38 @@ export function Collection({
     })
   }, [activeFolder, isInventoryRoute, itemFolderAssignments, tableData])
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
+  const selectedVisibleInventoryIndex = selectedItemID
+    ? visibleTableData.findIndex(
+        (row) => (row.itemID ?? row.id) === selectedItemID
+      )
+    : -1
+  const canNavigateToPreviousInventoryItem = selectedVisibleInventoryIndex > 0
+  const canNavigateToNextInventoryItem =
+    selectedVisibleInventoryIndex >= 0 &&
+    selectedVisibleInventoryIndex < visibleTableData.length - 1
+  const openAdjacentInventoryItem = useCallback(
+    (offset: number) => {
+      if (selectedVisibleInventoryIndex < 0) {
+        return
+      }
+      const nextRow = visibleTableData[selectedVisibleInventoryIndex + offset]
+      if (!nextRow) {
+        return
+      }
+      const nextID = nextRow.itemID ?? nextRow.id
+      const nextItem =
+        inventoryItems.find((item) => item.id === nextID) ??
+        inventoryItems.find((item) => item.part_number === nextRow.id) ??
+        null
+      openInventoryItemEditor(nextItem)
+    },
+    [
+      inventoryItems,
+      openInventoryItemEditor,
+      selectedVisibleInventoryIndex,
+      visibleTableData,
+    ]
+  )
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
   const handleInventoryCollectionFilterChange = useCallback(
@@ -2033,6 +2082,7 @@ export function Collection({
   }, [itemEditorMode, selectedInventoryItem])
 
   const handleSaveItem = useCallback(async () => {
+    const wasCreateMode = itemEditorMode === 'create'
     const payload = {
       part_number: itemDraft.part_number.trim(),
       title: itemDraft.title.trim(),
@@ -2071,11 +2121,12 @@ export function Collection({
       const savedID = saved.id?.trim() ?? selectedItemID
       setItemEditorMode('edit')
       setItemSaveSuccess(
-        itemEditorMode === 'create'
+        wasCreateMode
           ? 'Item created and selected for follow-up media attach.'
           : 'Item changes saved and reloaded from the API.'
       )
       await loadInventoryItems(savedID)
+      setItemEditorOpen(false)
     } catch {
       setItemSaveError('Inventory save failed. Review the fields and retry.')
     } finally {
@@ -2937,172 +2988,223 @@ export function Collection({
                   setItemSaveSuccess(null)
                   selectInventoryItem(matchedItem)
                 }}
+                onEditRow={(task) => {
+                  const matchedItem =
+                    inventoryItems.find((item) => item.id === task.itemID) ??
+                    inventoryItems.find((item) => item.part_number === task.id) ??
+                    null
+                  openInventoryItemEditor(matchedItem)
+                }}
               />
               {isInventoryRoute ? (
                 <>
-                  <section
-                    className='space-y-3 rounded-md border p-4'
-                    data-testid='inventory-item-editor'
+                  <Dialog
+                    open={itemEditorOpen}
+                    onOpenChange={(open) => {
+                      setItemEditorOpen(open)
+                      if (!open) {
+                        setItemSaveError(null)
+                      }
+                    }}
                   >
-                    <div className='flex flex-wrap items-start justify-between gap-3'>
-                      <div>
-                        <h3 className='text-base font-semibold'>Item Save</h3>
-                        <p className='text-sm text-muted-foreground'>
-                          Create a new inventory item or edit the selected persisted item.
-                        </p>
-                      </div>
-                      <div className='flex gap-2'>
-                        <Button
-                          type='button'
-                          variant={itemEditorMode === 'create' ? 'default' : 'outline'}
-                          data-testid='inventory-item-create-mode'
-                          onClick={startCreateItem}
-                        >
-                          Create New
-                        </Button>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          data-testid='inventory-item-edit-selected'
-                          disabled={!selectedInventoryItem}
-                          onClick={() => {
-                            if (!selectedInventoryItem) {
-                              return
-                            }
-                            setItemEditorMode('edit')
-                            setItemDraft(inventoryItemToDraft(selectedInventoryItem))
-                            setItemSaveError(null)
-                            setItemSaveSuccess(null)
-                          }}
-                        >
-                          Edit Selected
-                        </Button>
-                      </div>
-                    </div>
-                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
-                      <div className='space-y-2'>
-                        <label className='text-sm font-medium' htmlFor='inventory-item-part-number'>
-                          Part Number
-                        </label>
-                        <Input
-                          id='inventory-item-part-number'
-                          data-testid='inventory-item-part-number'
-                          value={itemDraft.part_number}
-                          onChange={(event) =>
-                            setItemDraft((current) => ({
-                              ...current,
-                              part_number: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <label className='text-sm font-medium' htmlFor='inventory-item-title'>
-                          Title
-                        </label>
-                        <Input
-                          id='inventory-item-title'
-                          data-testid='inventory-item-title'
-                          value={itemDraft.title}
-                          onChange={(event) =>
-                            setItemDraft((current) => ({
-                              ...current,
-                              title: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <label className='text-sm font-medium' htmlFor='inventory-item-brand'>
-                          Brand
-                        </label>
-                        <Input
-                          id='inventory-item-brand'
-                          data-testid='inventory-item-brand'
-                          value={itemDraft.brand}
-                          onChange={(event) =>
-                            setItemDraft((current) => ({
-                              ...current,
-                              brand: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <label className='text-sm font-medium' htmlFor='inventory-item-category'>
-                          Category
-                        </label>
-                        <Input
-                          id='inventory-item-category'
-                          data-testid='inventory-item-category'
-                          value={itemDraft.category}
-                          onChange={(event) =>
-                            setItemDraft((current) => ({
-                              ...current,
-                              category: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className='space-y-2'>
-                      <label className='text-sm font-medium' htmlFor='inventory-item-description'>
-                        Description
-                      </label>
-                      <Input
-                        id='inventory-item-description'
-                        data-testid='inventory-item-description'
-                        value={itemDraft.description}
-                        onChange={(event) =>
-                          setItemDraft((current) => ({
-                            ...current,
-                            description: event.target.value,
-                          }))
+                    <DialogContent data-testid='inventory-item-editor-dialog'>
+                      <div
+                        className='space-y-4'
+                        data-testid={
+                          itemEditorMode === 'create'
+                            ? 'inventory-item-create-dialog'
+                            : 'inventory-item-edit-dialog'
                         }
-                      />
-                    </div>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Button
-                        type='button'
-                        data-testid='inventory-item-save'
-                        disabled={itemSaveBusy}
-                        onClick={() => void handleSaveItem()}
                       >
-                        {itemEditorMode === 'create' ? 'Create Item' : 'Save Changes'}
-                      </Button>
-                      {itemEditorMode === 'create' ? (
-                        <span
+                        <DialogHeader>
+                          <DialogTitle>
+                            {itemEditorMode === 'create' ? 'Create Item' : 'Edit Item'}
+                          </DialogTitle>
+                        </DialogHeader>
+                        <p
                           className='text-sm text-muted-foreground'
                           data-testid='inventory-item-editor-mode'
                         >
-                          Creating new item draft.
-                        </span>
-                      ) : (
-                        <span
-                          className='text-sm text-muted-foreground'
-                          data-testid='inventory-item-editor-mode'
-                        >
-                          Editing selected item: {selectedItemContext}
-                        </span>
-                      )}
-                    </div>
-                    {itemSaveError ? (
-                      <div
-                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                        data-testid='inventory-item-save-error'
-                      >
-                        {itemSaveError}
+                          {itemEditorMode === 'create'
+                            ? 'Creating new item draft.'
+                            : `Editing selected item: ${selectedItemContext}`}
+                        </p>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-part-number'
+                            >
+                              Part Number
+                            </label>
+                            <Input
+                              id='inventory-item-part-number'
+                              data-testid='inventory-item-part-number'
+                              value={itemDraft.part_number}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  part_number: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-title'
+                            >
+                              Title
+                            </label>
+                            <Input
+                              id='inventory-item-title'
+                              data-testid='inventory-item-title'
+                              value={itemDraft.title}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  title: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-brand'
+                            >
+                              Brand
+                            </label>
+                            <Input
+                              id='inventory-item-brand'
+                              data-testid='inventory-item-brand'
+                              value={itemDraft.brand}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  brand: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-category'
+                            >
+                              Category
+                            </label>
+                            <Input
+                              id='inventory-item-category'
+                              data-testid='inventory-item-category'
+                              value={itemDraft.category}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  category: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-item-description'
+                          >
+                            Description
+                          </label>
+                          <Input
+                            id='inventory-item-description'
+                            data-testid='inventory-item-description'
+                            value={itemDraft.description}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        {itemSaveError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                            data-testid='inventory-item-save-error'
+                          >
+                            {itemSaveError}
+                          </div>
+                        ) : null}
+                        {itemSaveSuccess ? (
+                          <div
+                            className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm'
+                            data-testid='inventory-item-save-success'
+                          >
+                            {itemSaveSuccess}
+                          </div>
+                        ) : null}
+                        <DialogFooter className='flex flex-wrap gap-2 sm:justify-between'>
+                          {itemEditorMode === 'edit' ? (
+                            <div className='flex flex-1 gap-2'>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                data-testid='inventory-item-editor-previous'
+                                disabled={!canNavigateToPreviousInventoryItem}
+                                onClick={() => openAdjacentInventoryItem(-1)}
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                data-testid='inventory-item-editor-next'
+                                disabled={!canNavigateToNextInventoryItem}
+                                onClick={() => openAdjacentInventoryItem(1)}
+                              >
+                                Next
+                              </Button>
+                            </div>
+                          ) : null}
+                          <div className='flex gap-2'>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              data-testid='inventory-item-editor-cancel'
+                              onClick={() => setItemEditorOpen(false)}
+                            >
+                              <span
+                                data-testid={
+                                  itemEditorMode === 'create'
+                                    ? 'inventory-item-create-cancel'
+                                    : undefined
+                                }
+                              >
+                                Cancel
+                              </span>
+                            </Button>
+                            <Button
+                              type='button'
+                              data-testid='inventory-item-save'
+                              disabled={itemSaveBusy}
+                              onClick={() => void handleSaveItem()}
+                            >
+                              <span
+                                data-testid={
+                                  itemEditorMode === 'create'
+                                    ? 'inventory-item-create-submit'
+                                    : undefined
+                                }
+                              >
+                                {itemEditorMode === 'create'
+                                  ? 'Create Item'
+                                  : 'Save Changes'}
+                              </span>
+                            </Button>
+                          </div>
+                        </DialogFooter>
                       </div>
-                    ) : null}
-                    {itemSaveSuccess ? (
-                      <div
-                        className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm'
-                        data-testid='inventory-item-save-success'
-                      >
-                        {itemSaveSuccess}
-                      </div>
-                    ) : null}
-                  </section>
+                    </DialogContent>
+                  </Dialog>
                   <section
                     className='space-y-3 rounded-md border p-4'
                     data-testid='inventory-photos-section'
