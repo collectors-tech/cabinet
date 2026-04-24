@@ -424,21 +424,23 @@ describe("inventory-management", () => {
       },
     ];
     let profileSettings: Record<string, string> = {};
+    let savedViewID = "";
 
     cy.intercept("GET", "/api/profiles/active", {
       statusCode: 200,
       body: { id: "inventory-profile-1" },
     }).as("activeProfile");
 
-    cy.intercept("GET", "/api/profiles/inventory-profile-1/settings", () => {
-      return {
+    cy.intercept("GET", "/api/profiles/inventory-profile-1/settings", (req) => {
+      req.reply({
         statusCode: 200,
         body: { settings: profileSettings },
-      };
+      });
     }).as("inventoryProfileSettings");
 
     cy.intercept("PUT", "/api/profiles/inventory-profile-1/settings", (req) => {
-      profileSettings = req.body.settings ?? {};
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+      profileSettings = body.settings ?? body ?? {};
       req.reply({
         statusCode: 200,
         body: { settings: profileSettings },
@@ -450,12 +452,15 @@ describe("inventory-management", () => {
       body: { items },
     }).as("inventorySavedViewsItems");
 
+    cy.clearLocalStorage("cabinet.viewMode.inventory");
     signIn();
     cy.wait("@activeProfile");
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
 
-    cy.contains("button", "Rows").click();
+    cy.get('button[aria-label="Switch to rows view"]')
+      .click({ force: true })
+      .should("have.attr", "aria-pressed", "true");
     cy.contains("button", "Condition").click();
     cy.contains('[cmdk-item]', "Used").click();
     cy.contains("button", "Category").click();
@@ -469,9 +474,15 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-saved-view-name"]').type("Used Road Cars");
     cy.get('[data-testid="inventory-saved-view-submit"]').click();
     cy.wait("@saveInventorySettings")
-      .its("request.body.settings")
-      .then((settings) => {
-        expect(settings["inventory.saved-views.v1"]).to.contain("Used Road Cars");
+      .then(() => {
+        expect(profileSettings["inventory.saved-views.v1"]).to.contain("Used Road Cars");
+        const views = JSON.parse(profileSettings["inventory.saved-views.v1"]);
+        const savedView = views.find(
+          (view: { name?: string }) => view.name === "Used Road Cars"
+        );
+        expect(savedView?.viewMode).to.equal("rows");
+        savedViewID = savedView?.id ?? "";
+        expect(savedViewID).to.not.equal("");
       });
 
     cy.contains("button", "Reset").click();
@@ -484,7 +495,9 @@ describe("inventory-management", () => {
     cy.wait("@inventoryProfileSettings");
     cy.wait("@inventorySavedViewsItems");
 
-    cy.get('[data-testid="inventory-saved-view-select"]').select("Used Road Cars");
+    cy.then(() => {
+      cy.get('[data-testid="inventory-saved-view-select"]').select(savedViewID);
+    });
 
     cy.contains("button", "Rows").should("have.attr", "aria-pressed", "true");
     cy.get('input[placeholder="Filter by title or part number..."]').should(
