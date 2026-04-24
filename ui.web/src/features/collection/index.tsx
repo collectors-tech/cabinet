@@ -57,7 +57,6 @@ import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { tasks } from '@/features/tasks/data/tasks'
 import { type Task } from '@/features/tasks/data/schema'
 import {
-  collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import { cn } from '@/lib/utils'
@@ -280,6 +279,13 @@ function countFolderNodes(nodes: FolderNode[]): number {
     const childCount = node.children ? countFolderNodes(node.children) : 0
     return count + 1 + childCount
   }, 0)
+}
+
+function flattenFolderOptions(nodes: FolderNode[], level = 0): Array<FolderNode & { level: number }> {
+  return nodes.flatMap((node) => [
+    { ...node, level },
+    ...flattenFolderOptions(node.children ?? [], level + 1),
+  ])
 }
 
 function slugifyFolderName(value: string): string {
@@ -788,8 +794,6 @@ export function Collection({
   const [activeFolder, setActiveFolder] = useState(
     () => loadInventoryTreeState().activeFolder
   )
-  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
-  const [inlineCollectionName, setInlineCollectionName] = useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
@@ -875,7 +879,6 @@ export function Collection({
     workspaceCollections,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
-    addCollection,
   } = useWorkspaceCollections()
   const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
 
@@ -1804,6 +1807,14 @@ export function Collection({
     }),
     [activeFolder, folderTree, tableData.length]
   )
+  const folderFilterOptions = useMemo(
+    () => flattenFolderOptions(folderTree),
+    [folderTree]
+  )
+  const activeFolderIsAvailable = folderFilterOptions.some(
+    (folder) => folder.name === activeFolder
+  )
+  const activeFolderFilterValue = activeFolderIsAvailable ? activeFolder : 'All Items'
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const selectedInventoryItem = useMemo(
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
@@ -1811,10 +1822,6 @@ export function Collection({
   )
   const visibleTableData = useMemo(() => {
     if (!isInventoryRoute || activeFolder === 'All Items') {
-      return tableData
-    }
-
-    if (Object.keys(itemFolderAssignments).length === 0) {
       return tableData
     }
 
@@ -1826,6 +1833,18 @@ export function Collection({
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
+  const handleInventoryCollectionFilterChange = useCallback(
+    (nextFolder: string) => {
+      const safeFolder = folderTreeContainsName(folderTree, nextFolder)
+        ? nextFolder
+        : 'All Items'
+      setActiveFolder(safeFolder)
+      if (workspaceCollections.includes(safeFolder)) {
+        void setActiveWorkspaceCollection(safeFolder)
+      }
+    },
+    [folderTree, setActiveWorkspaceCollection, workspaceCollections]
+  )
 
   useEffect(() => {
     const previous = activeWorkspaceCollectionRef.current
@@ -2448,6 +2467,86 @@ export function Collection({
           document.body
         )
       : null
+  const inventoryCollectionFilter = isInventoryRoute ? (
+    <div
+      className='flex flex-wrap items-center gap-2'
+      data-testid='inventory-collection-filter'
+    >
+      <select
+        className='h-8 min-w-[11rem] rounded-md border bg-background px-2 text-sm'
+        data-testid='inventory-collection-filter-select'
+        value={activeFolderFilterValue}
+        onChange={(event) => handleInventoryCollectionFilterChange(event.target.value)}
+      >
+        {folderFilterOptions.map((folder) => (
+          <option key={folder.id} value={folder.name}>
+            {'\u00a0\u00a0'.repeat(folder.level)}
+            {folder.name}
+          </option>
+        ))}
+      </select>
+      <span
+        className='text-xs text-muted-foreground'
+        data-testid='inventory-collection-filter-selected'
+      >
+        {activeFolderFilterValue}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type='button'
+            variant='outline'
+            className='h-8 px-2 text-xs'
+            data-testid='inventory-collection-browser-trigger'
+          >
+            Browse
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='start' className='w-[min(32rem,92vw)] p-2'>
+          <div
+            role='tree'
+            aria-label='Inventory folder filter'
+            className='max-h-[22rem] overflow-auto rounded-md border p-2'
+            data-testid='inventory-folder-browser-menu'
+          >
+            <div className='min-w-full w-max space-y-2'>
+              {draggedFolderID ? (
+                <div
+                  role='presentation'
+                  data-testid='folder-tree-root-drop-zone'
+                  onDragEnter={(event) =>
+                    handleFolderHTMLDragOver({ kind: 'root' }, event)
+                  }
+                  onDragOver={(event) =>
+                    handleFolderHTMLDragOver({ kind: 'root' }, event)
+                  }
+                  onDrop={(event) => handleFolderHTMLDrop({ kind: 'root' }, event)}
+                  className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
+                >
+                  Drop here to move folder to the root level
+                </div>
+              ) : null}
+              {renderFolderTree(folderTree)}
+            </div>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button
+        type='button'
+        variant='outline'
+        className='h-8 px-2 text-xs'
+        data-testid='inventory-collection-add-root'
+        onClick={() => {
+          setFolderCreateParentID(null)
+          setFolderCreateName('')
+          setFolderCreateOpen(true)
+        }}
+      >
+        + New Collection
+      </Button>
+      {folderDragOverlay}
+    </div>
+  ) : undefined
 
   return (
     <TasksProvider>
@@ -2500,7 +2599,11 @@ export function Collection({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   data-testid='inventory-create-menu-folder'
-                  onClick={() => setInlineCollectionInputOpen(true)}
+                  onClick={() => {
+                    setFolderCreateParentID(null)
+                    setFolderCreateName('')
+                    setFolderCreateOpen(true)
+                  }}
                 >
                   New Collection
                 </DropdownMenuItem>
@@ -2509,8 +2612,8 @@ export function Collection({
           </div>
         </div>
 
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-12'>
-          <Card className='lg:col-span-4 flex h-full min-h-0 flex-col'>
+        <div className='grid grid-cols-1 gap-4'>
+          <Card className='hidden'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -2553,7 +2656,7 @@ export function Collection({
               <div
                 role='tree'
                 aria-label='Inventory folders'
-                data-testid='inventory-folder-tree'
+                data-testid='inventory-folder-tree-legacy'
                 className='min-h-[26rem] max-h-[42rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
                 <div
@@ -2769,7 +2872,7 @@ export function Collection({
             </CardContent>
           </Card>
 
-          <Card className='lg:col-span-8'>
+          <Card>
             <CardHeader>
               <CardTitle>Collection Browser</CardTitle>
             </CardHeader>
@@ -2794,67 +2897,6 @@ export function Collection({
                   </strong>
                 </span>
               </p>
-              <div className='rounded-md border p-3' data-testid='collection-inline-picker'>
-                <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center'>
-                  <select
-                    className='h-9 rounded-md border bg-background px-2 text-sm'
-                    value={activeWorkspaceCollection}
-                    onChange={(event) => {
-                      const selected = event.target.value
-                      void setActiveWorkspaceCollection(selected)
-                      setActiveFolder(selected)
-                    }}
-                  >
-                    {workspaceCollections.map((collection) => (
-                      <option
-                        key={collection}
-                        value={collection}
-                        data-testid={`collection-inline-picker-option-${collectionKey(collection)}`}
-                      >
-                        {collection}
-                      </option>
-                    ))}
-                  </select>
-                  <span
-                    className='text-sm text-muted-foreground'
-                    data-testid='collection-inline-picker-selected'
-                  >
-                    {activeWorkspaceCollection}
-                  </span>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    data-testid='collection-inline-add-new'
-                    onClick={() => setInlineCollectionInputOpen((open) => !open)}
-                  >
-                    + New Collection
-                  </Button>
-                </div>
-                {inlineCollectionInputOpen ? (
-                  <div className='mt-2 flex gap-2'>
-                    <Input
-                      data-testid='collection-inline-new-name'
-                      placeholder='Collection name'
-                      value={inlineCollectionName}
-                      onChange={(event) => setInlineCollectionName(event.target.value)}
-                    />
-                    <Button
-                      type='button'
-                      data-testid='collection-inline-save'
-                      onClick={async () => {
-                        const created = await addCollection(inlineCollectionName)
-                        if (created) {
-                          setActiveFolder(created)
-                        }
-                        setInlineCollectionName('')
-                        setInlineCollectionInputOpen(false)
-                      }}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
               {loading ? (
                 <div
                   className='rounded-md border p-6 text-sm text-muted-foreground'
@@ -2884,6 +2926,7 @@ export function Collection({
                 data={visibleTableData}
                 routePath={routePath}
                 currentRecordID={selectedItemID}
+                customFilters={inventoryCollectionFilter}
                 onRecordFocus={(itemID, recordID) => {
                   const matchedItem =
                     inventoryItems.find((item) => item.id === itemID) ??
