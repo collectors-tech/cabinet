@@ -33,6 +33,18 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     )
   }
 
+  function openPhotosModal() {
+    cy.get('[data-testid="inventory-photos-action"]').click()
+    cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
+    cy.get('[data-testid="inventory-photos-panel"]').should('be.visible')
+  }
+
+  function openFirstRowPhotosModal() {
+    cy.get('[data-testid="inventory-row-photos-action"]').first().click()
+    cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
+    cy.get('[data-testid="inventory-photos-panel"]').should('be.visible')
+  }
+
   it('UI-SCREEN-INVENTORY-PHOTOS-001 supports upload + primary + delete lifecycle', () => {
     let listCall = 0
     cy.intercept('GET', '/api/items', {
@@ -90,7 +102,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
     cy.wait('@listPhotos')
-    cy.get('[data-testid="inventory-photos-section"]').should('be.visible')
+    openFirstRowPhotosModal()
     cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
       contents: Cypress.Buffer.from('fake image bytes'),
       fileName: 'new-photo.jpg',
@@ -119,12 +131,14 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       },
     }).as('items')
     cy.intercept('GET', '/api/items/item-photo-2/photos', {
+      delay: 1500,
       statusCode: 500,
       body: { error: 'failed_to_list_photos' },
     }).as('photosError')
 
     signIn()
     cy.wait('@items')
+    openFirstRowPhotosModal()
     cy.get('[data-testid="inventory-photos-loading"]').should('be.visible')
     cy.wait('@photosError')
     cy.get('[data-testid="inventory-photos-error"]').should('be.visible')
@@ -150,7 +164,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
     cy.wait('@photos')
-    cy.get('[data-testid="inventory-photos-section"]').should('be.visible')
+    openPhotosModal()
     cy.get('[data-testid="inventory-photo-thumb"]').first().click()
     cy.get('[data-testid="inventory-photo-fullscreen"]').should('be.visible')
     cy.get('[data-testid="inventory-photo-next"]').click()
@@ -198,9 +212,12 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
 
-    cy.contains('td', 'PN-PHOTO-B').closest('tr').click()
+    cy.get(
+      '[data-testid="inventory-item-row-item-photo-b"] [data-testid="inventory-row-photos-action"]'
+    ).click()
     cy.wait('@itemBPhotos')
     cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-B')
+    cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
     photoRowNames().should('deep.equal', ['item-b.jpg'])
 
     cy.wait('@itemAPhotos')
@@ -246,6 +263,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
     cy.wait('@reloadPhotos')
+    openPhotosModal()
 
     cy.contains('[data-testid="inventory-photo-row"]', 'reload-two.jpg')
       .find('[data-testid="inventory-photo-set-primary"]')
@@ -260,6 +278,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.wait('@items')
     cy.wait('@reloadPhotos')
     cy.get('[data-testid="collection-selected-item"]').should('contain', 'PN-PHOTO-RELOAD')
+    openPhotosModal()
     cy.contains('[data-testid="inventory-photo-row"]', 'reload-two.jpg')
       .find('[data-testid="inventory-photo-primary-badge"]')
       .should('exist')
@@ -315,6 +334,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
     cy.wait('@orderedPhotos')
+    openPhotosModal()
 
     photoRowNames().should('deep.equal', [
       'order-one.jpg',
@@ -337,6 +357,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.reload()
     cy.wait('@items')
     cy.wait('@orderedPhotos')
+    openPhotosModal()
     photoRowNames().should('deep.equal', [
       'order-two.jpg',
       'order-one.jpg',
@@ -385,6 +406,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     signIn()
     cy.wait('@items')
     cy.wait('@rebuildPhotos')
+    openPhotosModal()
 
     cy.get('[data-testid="inventory-photo-rebuild"]').click()
     cy.wait('@rebuildRequest')
@@ -399,7 +421,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
   it('PHOTOS-MEDIA-009 persists uploaded photos through reload and keeps them profile-scoped', () => {
     bootstrapInventoryPhotos()
 
-    cy.get('[data-testid="inventory-photos-section"]').should('be.visible')
+    openFirstRowPhotosModal()
     cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
       contents: Cypress.Buffer.from(validPhotoJPEGBase64, 'base64'),
       fileName: 'profile-scoped-photo.jpg',
@@ -415,6 +437,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
 
     cy.reload()
     cy.wait('@inventoryItems')
+    openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
     cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
       'be.visible'
@@ -448,6 +471,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       },
     })
     cy.wait('@inventoryItems')
+    openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
     cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
       'not.exist'
@@ -463,6 +487,7 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
       },
     })
     cy.wait('@inventoryItems')
+    openFirstRowPhotosModal()
     cy.wait('@inventoryPhotos')
     cy.contains('[data-testid="inventory-photo-row"]', 'profile-scoped-photo.jpg').should(
       'be.visible'

@@ -57,6 +57,7 @@ type DataTableProps = {
   currentRecordID?: string
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
   onEditRow?: (task: Task) => void
+  onPhotoRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
@@ -196,6 +197,7 @@ export function TasksTable({
   currentRecordID,
   onRecordFocus,
   onEditRow,
+  onPhotoRow,
   onDeleteRow,
   onWishlistMarkOwned,
   onWishlistBulkStatusChange,
@@ -212,11 +214,12 @@ export function TasksTable({
       getTasksColumns({
         routePath,
         onEditRow,
+        onPhotoRow,
         onDeleteRow,
         onWishlistMarkOwned,
         wishlistActionItemID,
       }),
-    [routePath, onEditRow, onDeleteRow, onWishlistMarkOwned, wishlistActionItemID]
+    [routePath, onEditRow, onPhotoRow, onDeleteRow, onWishlistMarkOwned, wishlistActionItemID]
   )
 
   const route =

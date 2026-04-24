@@ -828,6 +828,7 @@ export function Collection({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
+  const [photosDialogOpen, setPhotosDialogOpen] = useState(false)
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState<string | null>(null)
   const [photosBusy, setPhotosBusy] = useState(false)
@@ -914,6 +915,35 @@ export function Collection({
       setItemEditorOpen(true)
     },
     [selectInventoryItem]
+  )
+
+  const openInventoryPhotosForItem = useCallback(
+    (item: InventoryItem | null) => {
+      setCameraError(null)
+      setCameraSuccess(null)
+      setPhotoRebuildError(null)
+      setPhotoRebuildSuccess(null)
+      setPhotosError(null)
+      if (!item) {
+        selectInventoryItem(null)
+        setPhotosError('Select an inventory item before managing photos.')
+        setPhotosDialogOpen(true)
+        return
+      }
+      selectInventoryItem(item)
+      setPhotosDialogOpen(true)
+    },
+    [selectInventoryItem]
+  )
+
+  const resolveInventoryItemFromTask = useCallback(
+    (task: Task) =>
+      inventoryItems.find((item) => item.id === task.itemID) ??
+      inventoryItems.find((item) => item.part_number === task.id) ??
+      inventoryItems.find((item) => item.part_number === task.partNumber) ??
+      inventoryItems.find((item) => item.title === task.title) ??
+      null,
+    [inventoryItems]
   )
 
   const openFolderProperties = useCallback((node: FolderNode) => {
@@ -2624,6 +2654,20 @@ export function Collection({
             </p>
           </div>
           <div className='flex gap-2'>
+            {isInventoryRoute ? (
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='inventory-photos-action'
+                onClick={() =>
+                  openInventoryPhotosForItem(
+                    selectedInventoryItem ?? inventoryItems[0] ?? null
+                  )
+                }
+              >
+                Photos
+              </Button>
+            ) : null}
             <Button
               type='button'
               data-testid='inventory-new-action'
@@ -2989,11 +3033,12 @@ export function Collection({
                   selectInventoryItem(matchedItem)
                 }}
                 onEditRow={(task) => {
-                  const matchedItem =
-                    inventoryItems.find((item) => item.id === task.itemID) ??
-                    inventoryItems.find((item) => item.part_number === task.id) ??
-                    null
+                  const matchedItem = resolveInventoryItemFromTask(task)
                   openInventoryItemEditor(matchedItem)
+                }}
+                onPhotoRow={(task) => {
+                  const matchedItem = resolveInventoryItemFromTask(task)
+                  openInventoryPhotosForItem(matchedItem)
                 }}
               />
               {isInventoryRoute ? (
@@ -3205,207 +3250,237 @@ export function Collection({
                       </div>
                     </DialogContent>
                   </Dialog>
-                  <section
-                    className='space-y-3 rounded-md border p-4'
-                    data-testid='inventory-photos-section'
-                  >
-                    <div>
-                      <h3 className='text-base font-semibold'>Photos</h3>
-                      <p className='text-sm text-muted-foreground'>
-                        Review item media and inspect photos in fullscreen mode.
-                      </p>
-                    </div>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Button
-                        type='button'
-                        variant='outline'
-                        data-testid='inventory-camera-take-photo'
-                        onClick={() => void handleTakePhoto()}
+                  <Dialog open={photosDialogOpen} onOpenChange={setPhotosDialogOpen}>
+                    <DialogContent
+                      className='max-h-[86vh] overflow-y-auto sm:max-w-4xl'
+                      data-testid='inventory-photos-dialog'
+                    >
+                      <section
+                        className='space-y-3'
+                        data-testid='inventory-photos-panel'
                       >
-                        Take Photo
-                      </Button>
-                      <input
-                        type='file'
-                        accept='image/*'
-                        data-testid='inventory-photo-upload-input'
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] ?? null
-                          void handlePhotoUpload(file)
-                          event.currentTarget.value = ''
-                        }}
-                      />
-                      <Button
-                        type='button'
-                        variant='outline'
-                        data-testid='inventory-photo-rebuild'
-                        onClick={() => void handleRebuildPhotos()}
-                        disabled={photosBusy || selectedItemID === ''}
-                      >
-                        Rebuild Photos
-                      </Button>
-                      {photosBusy ? (
-                        <span className='text-xs text-muted-foreground'>Working...</span>
-                      ) : null}
-                    </div>
-                    {cameraError ? (
-                      <div
-                        className='rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm'
-                        data-testid='inventory-camera-error'
-                      >
-                        {cameraError}
-                      </div>
-                    ) : null}
-                    {cameraSuccess ? (
-                      <div
-                        className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
-                        data-testid='inventory-camera-success'
-                      >
-                        {cameraSuccess}
-                      </div>
-                    ) : null}
-                    {photoRebuildError ? (
-                      <div
-                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                        data-testid='inventory-photo-rebuild-error'
-                      >
-                        <p className='font-medium'>Photo rebuild failed.</p>
-                        <p className='mt-1 text-muted-foreground'>{photoRebuildError}</p>
-                        <Button
-                          className='mt-3'
-                          size='sm'
-                          variant='outline'
-                          data-testid='inventory-photo-rebuild-retry'
-                          onClick={() => void handleRebuildPhotos()}
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    ) : null}
-                    {photoRebuildSuccess ? (
-                      <div
-                        className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
-                        data-testid='inventory-photo-rebuild-success'
-                      >
-                        {photoRebuildSuccess}
-                      </div>
-                    ) : null}
-                    {photosLoading ? (
-                      <div
-                        className='rounded-md border p-3 text-sm text-muted-foreground'
-                        data-testid='inventory-photos-loading'
-                      >
-                        Loading photos...
-                      </div>
-                    ) : null}
-                    {photosError ? (
-                      <div
-                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                        data-testid='inventory-photos-error'
-                      >
-                        <p className='font-medium'>Photos are unavailable.</p>
-                        <p className='mt-1 text-muted-foreground'>{photosError}</p>
-                        <Button
-                          className='mt-3'
-                          size='sm'
-                          variant='outline'
-                          onClick={() => void loadInventoryPhotos()}
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    ) : null}
-                    {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
-                      <div
-                        className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
-                        data-testid='inventory-photos-empty'
-                      >
-                        No photos yet for the selected item. Upload an image to begin.
-                      </div>
-                    ) : null}
-                    {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
-                      <>
-                        <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
-                          {inventoryPhotos.map((photo, index) => (
-                            <button
-                              key={photo.id}
-                              type='button'
-                              className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
-                              data-testid='inventory-photo-thumb'
-                              onClick={() => setSelectedPhotoIndex(index)}
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <DialogHeader>
+                              <DialogTitle>Photos</DialogTitle>
+                            </DialogHeader>
+                            <p
+                              className='text-sm text-muted-foreground'
+                              data-testid='inventory-photos-item-context'
                             >
-                              <img
-                                src={`/api/items/${encodeURIComponent(
-                                  selectedItemID
-                                )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
-                                alt={photo.filename}
-                                className='h-32 w-full object-cover'
-                              />
-                              <div className='p-2 text-sm'>{photo.filename}</div>
-                            </button>
-                          ))}
+                              {selectedInventoryItem
+                                ? `Managing photos for ${selectedInventoryItem.title}`
+                                : 'Select an inventory item before managing photos.'}
+                            </p>
+                          </div>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            data-testid='inventory-photos-dialog-close'
+                            onClick={() => setPhotosDialogOpen(false)}
+                          >
+                            Close
+                          </Button>
                         </div>
-                        <div className='space-y-2'>
-                          {inventoryPhotos.map((photo, index) => (
-                            <div
-                              key={`row-${photo.id}`}
-                              className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
-                              data-testid='inventory-photo-row'
+                        <div className='sr-only'>
+                          Review item media and inspect photos in fullscreen mode.
+                        </div>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            data-testid='inventory-camera-take-photo'
+                            onClick={() => void handleTakePhoto()}
+                            disabled={!selectedItemID}
+                          >
+                            Take Photo
+                          </Button>
+                          <input
+                            type='file'
+                            accept='image/*'
+                            data-testid='inventory-photo-upload-input'
+                            disabled={!selectedItemID}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] ?? null
+                              void handlePhotoUpload(file)
+                              event.currentTarget.value = ''
+                            }}
+                          />
+                          <Button
+                            type='button'
+                            variant='outline'
+                            data-testid='inventory-photo-rebuild'
+                            onClick={() => void handleRebuildPhotos()}
+                            disabled={photosBusy || selectedItemID === ''}
+                          >
+                            Rebuild Photos
+                          </Button>
+                          {photosBusy ? (
+                            <span className='text-xs text-muted-foreground'>Working...</span>
+                          ) : null}
+                        </div>
+                        {cameraError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm'
+                            data-testid='inventory-camera-error'
+                          >
+                            {cameraError}
+                          </div>
+                        ) : null}
+                        {cameraSuccess ? (
+                          <div
+                            className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
+                            data-testid='inventory-camera-success'
+                          >
+                            {cameraSuccess}
+                          </div>
+                        ) : null}
+                        {photoRebuildError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                            data-testid='inventory-photo-rebuild-error'
+                          >
+                            <p className='font-medium'>Photo rebuild failed.</p>
+                            <p className='mt-1 text-muted-foreground'>{photoRebuildError}</p>
+                            <Button
+                              className='mt-3'
+                              size='sm'
+                              variant='outline'
+                              data-testid='inventory-photo-rebuild-retry'
+                              onClick={() => void handleRebuildPhotos()}
                             >
-                              <div className='flex items-center gap-2 text-sm'>
-                                <span>{photo.filename}</span>
-                                {photo.is_primary ? (
-                                  <span
-                                    className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
-                                    data-testid='inventory-photo-primary-badge'
-                                  >
-                                    Primary
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className='flex gap-2'>
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  data-testid='inventory-photo-move-up'
-                                  onClick={() => void handleReorderPhotos(photo.id, 'up')}
-                                  disabled={photosBusy || index === 0}
+                              Retry
+                            </Button>
+                          </div>
+                        ) : null}
+                        {photoRebuildSuccess ? (
+                          <div
+                            className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm'
+                            data-testid='inventory-photo-rebuild-success'
+                          >
+                            {photoRebuildSuccess}
+                          </div>
+                        ) : null}
+                        {photosLoading ? (
+                          <div
+                            className='rounded-md border p-3 text-sm text-muted-foreground'
+                            data-testid='inventory-photos-loading'
+                          >
+                            Loading photos...
+                          </div>
+                        ) : null}
+                        {photosError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                            data-testid='inventory-photos-error'
+                          >
+                            <p className='font-medium'>Photos are unavailable.</p>
+                            <p className='mt-1 text-muted-foreground'>{photosError}</p>
+                            <Button
+                              className='mt-3'
+                              size='sm'
+                              variant='outline'
+                              onClick={() => void loadInventoryPhotos()}
+                              disabled={!selectedItemID}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ) : null}
+                        {!photosLoading && !photosError && inventoryPhotos.length === 0 ? (
+                          <div
+                            className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                            data-testid='inventory-photos-empty'
+                          >
+                            No photos yet for the selected item. Upload an image to begin.
+                          </div>
+                        ) : null}
+                        {!photosLoading && !photosError && inventoryPhotos.length > 0 ? (
+                          <>
+                            <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
+                              {inventoryPhotos.map((photo, index) => (
+                                <button
+                                  key={photo.id}
+                                  type='button'
+                                  className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
+                                  data-testid='inventory-photo-thumb'
+                                  onClick={() => setSelectedPhotoIndex(index)}
                                 >
-                                  Move Up
-                                </Button>
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  data-testid='inventory-photo-move-down'
-                                  onClick={() => void handleReorderPhotos(photo.id, 'down')}
-                                  disabled={
-                                    photosBusy || index === inventoryPhotos.length - 1
-                                  }
-                                >
-                                  Move Down
-                                </Button>
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  data-testid='inventory-photo-set-primary'
-                                  onClick={() => void handleSetPrimaryPhoto(photo.id)}
-                                >
-                                  Set Primary
-                                </Button>
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  data-testid='inventory-photo-delete'
-                                  onClick={() => void handleDeletePhoto(photo.id)}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
+                                  <img
+                                    src={`/api/items/${encodeURIComponent(
+                                      selectedItemID
+                                    )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
+                                    alt={photo.filename}
+                                    className='h-32 w-full object-cover'
+                                  />
+                                  <div className='p-2 text-sm'>{photo.filename}</div>
+                                </button>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                  </section>
+                            <div className='space-y-2'>
+                              {inventoryPhotos.map((photo, index) => (
+                                <div
+                                  key={`row-${photo.id}`}
+                                  className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
+                                  data-testid='inventory-photo-row'
+                                >
+                                  <div className='flex items-center gap-2 text-sm'>
+                                    <span>{photo.filename}</span>
+                                    {photo.is_primary ? (
+                                      <span
+                                        className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
+                                        data-testid='inventory-photo-primary-badge'
+                                      >
+                                        Primary
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className='flex gap-2'>
+                                    <Button
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-photo-move-up'
+                                      onClick={() => void handleReorderPhotos(photo.id, 'up')}
+                                      disabled={photosBusy || index === 0}
+                                    >
+                                      Move Up
+                                    </Button>
+                                    <Button
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-photo-move-down'
+                                      onClick={() => void handleReorderPhotos(photo.id, 'down')}
+                                      disabled={
+                                        photosBusy || index === inventoryPhotos.length - 1
+                                      }
+                                    >
+                                      Move Down
+                                    </Button>
+                                    <Button
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-photo-set-primary'
+                                      onClick={() => void handleSetPrimaryPhoto(photo.id)}
+                                    >
+                                      Set Primary
+                                    </Button>
+                                    <Button
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-photo-delete'
+                                      onClick={() => void handleDeletePhoto(photo.id)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : null}
+                      </section>
+                    </DialogContent>
+                  </Dialog>
                   <section
                     className='space-y-3 rounded-md border p-4'
                     data-testid='inventory-barcodes-section'

@@ -35,6 +35,11 @@ describe('MOBILE-CAMERA-CAPTURE', () => {
     }).as('photos')
   })
 
+  function openPhotosModal() {
+    cy.get('[data-testid="inventory-photos-action"]').click()
+    cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
+  }
+
   it('MOBILE-CAMERA-001 supports direct camera capture upload path', () => {
     cy.intercept('POST', '/api/items/item-camera-1/photos', {
       statusCode: 201,
@@ -54,6 +59,7 @@ describe('MOBILE-CAMERA-CAPTURE', () => {
     cy.wait('@items')
     cy.wait('@photos')
     cy.wait('@activeProfile')
+    openPhotosModal()
     cy.get('[data-testid="inventory-camera-take-photo"]').click()
     cy.wait('@uploadPhoto')
     cy.get('[data-testid="inventory-camera-success"]').should('be.visible')
@@ -67,6 +73,7 @@ describe('MOBILE-CAMERA-CAPTURE', () => {
     cy.wait('@items')
     cy.wait('@photos')
     cy.wait('@activeProfile')
+    openPhotosModal()
     cy.get('[data-testid="inventory-camera-take-photo"]').click()
     cy.get('[data-testid="inventory-camera-error"]').should('be.visible')
     cy.get('[data-testid="inventory-photo-upload-input"]').should('be.visible')
