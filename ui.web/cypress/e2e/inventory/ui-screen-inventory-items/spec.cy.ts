@@ -364,6 +364,8 @@ describe("inventory-management", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
     cy.contains("Created Inventory Item").should("be.visible");
 
+    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get('[data-testid="inventory-photos-dialog"]').should("be.visible");
     cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
       contents: Cypress.Buffer.from("created-photo-binary"),
       fileName: "created-photo.jpg",
@@ -374,6 +376,8 @@ describe("inventory-management", () => {
     cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
       "be.visible"
     );
+    cy.get('[data-testid="inventory-photos-dialog-close"]').click();
+    cy.get('[data-testid="inventory-photos-dialog"]').should("not.exist");
 
     cy.get('[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
@@ -387,6 +391,8 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get('[data-testid="inventory-photos-dialog"]').should("be.visible");
     cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
       "be.visible"
     );

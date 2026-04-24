@@ -1,5 +1,7 @@
 import { type ColumnDef } from '@tanstack/react-table'
+import { ImageIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { labels, priorities, statuses } from '../data/data'
@@ -11,6 +13,7 @@ export type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wis
 type TasksColumnsOptions = {
   routePath: TasksRoutePath
   onEditRow?: (task: Task) => void
+  onPhotoRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   wishlistActionItemID?: string | null
@@ -28,6 +31,7 @@ function formatWishlistStatus(status: string) {
 export function getTasksColumns({
   routePath,
   onEditRow,
+  onPhotoRow,
   onDeleteRow,
   onWishlistMarkOwned,
   wishlistActionItemID,
@@ -187,14 +191,32 @@ export function getTasksColumns({
     {
       id: 'actions',
       cell: ({ row }) => (
-        <DataTableRowActions
-          row={row}
-          routePath={routePath}
-          onEditRow={onEditRow}
-          onDeleteRow={onDeleteRow}
-          onWishlistMarkOwned={onWishlistMarkOwned}
-          wishlistActionItemID={wishlistActionItemID}
-        />
+        <div className='flex items-center justify-end gap-1'>
+          {isInventoryRoute ? (
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              className='h-8 w-8'
+              data-testid='inventory-row-photos-action'
+              aria-label={`Open photos for ${row.original.title}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onPhotoRow?.(row.original)
+              }}
+            >
+              <ImageIcon className='h-4 w-4' />
+            </Button>
+          ) : null}
+          <DataTableRowActions
+            row={row}
+            routePath={routePath}
+            onEditRow={onEditRow}
+            onDeleteRow={onDeleteRow}
+            onWishlistMarkOwned={onWishlistMarkOwned}
+            wishlistActionItemID={wishlistActionItemID}
+          />
+        </div>
       ),
     },
   ]
