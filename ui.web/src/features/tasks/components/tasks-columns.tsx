@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/react-table'
-import { ImageIcon } from 'lucide-react'
+import { BarcodeIcon, ImageIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -8,12 +8,15 @@ import { labels, priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableRowActions } from './data-table-row-actions'
 
-export type TasksRoutePath = '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+export type TasksRoutePath =
+  | '/_authenticated/inventory/'
+  | '/_authenticated/wishlist/'
 
 type TasksColumnsOptions = {
   routePath: TasksRoutePath
   onEditRow?: (task: Task) => void
   onPhotoRow?: (task: Task) => void
+  onBarcodeRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   wishlistActionItemID?: string | null
@@ -32,6 +35,7 @@ export function getTasksColumns({
   routePath,
   onEditRow,
   onPhotoRow,
+  onBarcodeRow,
   onDeleteRow,
   onWishlistMarkOwned,
   wishlistActionItemID,
@@ -69,7 +73,9 @@ export function getTasksColumns({
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Part #' : isWishlistRoute ? 'Item ID' : 'Task'}
+          title={
+            isInventoryRoute ? 'Part #' : isWishlistRoute ? 'Item ID' : 'Task'
+          }
         />
       ),
       cell: ({ row }) => <div className='w-[120px]'>{row.getValue('id')}</div>,
@@ -90,9 +96,13 @@ export function getTasksColumns({
 
         return (
           <div className='flex min-w-0 flex-col gap-1'>
-            {!isInventoryRoute && !isWishlistRoute && label ? <Badge variant='outline'>{label.label}</Badge> : null}
+            {!isInventoryRoute && !isWishlistRoute && label ? (
+              <Badge variant='outline'>{label.label}</Badge>
+            ) : null}
             <div className='flex space-x-2'>
-              <span className='truncate font-medium'>{row.getValue('title')}</span>
+              <span className='truncate font-medium'>
+                {row.getValue('title')}
+              </span>
             </div>
             {isWishlistRoute && row.original.notes ? (
               <span className='truncate text-xs text-muted-foreground'>
@@ -108,7 +118,13 @@ export function getTasksColumns({
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Condition' : isWishlistRoute ? 'Watch Status' : 'Status'}
+          title={
+            isInventoryRoute
+              ? 'Condition'
+              : isWishlistRoute
+                ? 'Watch Status'
+                : 'Status'
+          }
         />
       ),
       meta: { className: 'ps-1', tdClassName: 'ps-4' },
@@ -116,7 +132,9 @@ export function getTasksColumns({
         if (isInventoryRoute) {
           return (
             <div className='flex min-w-[100px] items-center gap-2'>
-              <span className='capitalize'>{String(row.getValue('status'))}</span>
+              <span className='capitalize'>
+                {String(row.getValue('status'))}
+              </span>
             </div>
           )
         }
@@ -155,7 +173,13 @@ export function getTasksColumns({
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={isInventoryRoute ? 'Category' : isWishlistRoute ? 'Target Priority' : 'Priority'}
+          title={
+            isInventoryRoute
+              ? 'Category'
+              : isWishlistRoute
+                ? 'Target Priority'
+                : 'Priority'
+          }
         />
       ),
       meta: { className: 'ps-1', tdClassName: 'ps-3' },
@@ -193,20 +217,36 @@ export function getTasksColumns({
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-1'>
           {isInventoryRoute ? (
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon'
-              className='h-8 w-8'
-              data-testid='inventory-row-photos-action'
-              aria-label={`Open photos for ${row.original.title}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                onPhotoRow?.(row.original)
-              }}
-            >
-              <ImageIcon className='h-4 w-4' />
-            </Button>
+            <>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                data-testid='inventory-row-barcodes-action'
+                aria-label={`Open barcodes for ${row.original.title}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onBarcodeRow?.(row.original)
+                }}
+              >
+                <BarcodeIcon className='h-4 w-4' />
+              </Button>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                data-testid='inventory-row-photos-action'
+                aria-label={`Open photos for ${row.original.title}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onPhotoRow?.(row.original)
+                }}
+              >
+                <ImageIcon className='h-4 w-4' />
+              </Button>
+            </>
           ) : null}
           <DataTableRowActions
             row={row}

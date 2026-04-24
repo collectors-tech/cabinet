@@ -26,15 +26,6 @@ import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -43,6 +34,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
 import { useProfileSettings } from '@/features/settings/use-profile-settings'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
@@ -58,10 +58,14 @@ type DataTableProps = {
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
   onEditRow?: (task: Task) => void
   onPhotoRow?: (task: Task) => void
+  onBarcodeRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
-  onWishlistBulkPriorityChange?: (tasks: Task[], priority: string) => Promise<void>
+  onWishlistBulkPriorityChange?: (
+    tasks: Task[],
+    priority: string
+  ) => Promise<void>
   onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
   onWishlistExport?: (tasks: Task[]) => void
   wishlistActionItemID?: string | null
@@ -97,7 +101,9 @@ function titleCaseWords(value: string) {
     .join(' ')
 }
 
-function parseInventorySavedViews(value: string | undefined): InventorySavedView[] {
+function parseInventorySavedViews(
+  value: string | undefined
+): InventorySavedView[] {
   if (!value) {
     return []
   }
@@ -114,7 +120,8 @@ function parseInventorySavedViews(value: string | undefined): InventorySavedView
       }
       const candidate = entry as Record<string, unknown>
       const id = typeof candidate.id === 'string' ? candidate.id.trim() : ''
-      const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+      const name =
+        typeof candidate.name === 'string' ? candidate.name.trim() : ''
       if (!id || !name) {
         return []
       }
@@ -134,7 +141,9 @@ function parseInventorySavedViews(value: string | undefined): InventorySavedView
             }
             const sortCandidate = sortEntry as Record<string, unknown>
             const columnID =
-              typeof sortCandidate.id === 'string' ? sortCandidate.id.trim() : ''
+              typeof sortCandidate.id === 'string'
+                ? sortCandidate.id.trim()
+                : ''
             if (!columnID) {
               return []
             }
@@ -198,6 +207,7 @@ export function TasksTable({
   onRecordFocus,
   onEditRow,
   onPhotoRow,
+  onBarcodeRow,
   onDeleteRow,
   onWishlistMarkOwned,
   onWishlistBulkStatusChange,
@@ -215,11 +225,20 @@ export function TasksTable({
         routePath,
         onEditRow,
         onPhotoRow,
+        onBarcodeRow,
         onDeleteRow,
         onWishlistMarkOwned,
         wishlistActionItemID,
       }),
-    [routePath, onEditRow, onPhotoRow, onDeleteRow, onWishlistMarkOwned, wishlistActionItemID]
+    [
+      routePath,
+      onEditRow,
+      onPhotoRow,
+      onBarcodeRow,
+      onDeleteRow,
+      onWishlistMarkOwned,
+      wishlistActionItemID,
+    ]
   )
 
   const route =
@@ -254,7 +273,9 @@ export function TasksTable({
   const [editOpen, setEditOpen] = useState(false)
   const [saveViewDialogOpen, setSaveViewDialogOpen] = useState(false)
   const [saveViewName, setSaveViewName] = useState('')
-  const [savedViewFeedback, setSavedViewFeedback] = useState<string | null>(null)
+  const [savedViewFeedback, setSavedViewFeedback] = useState<string | null>(
+    null
+  )
   const [savedViewError, setSavedViewError] = useState<string | null>(null)
   const [activeSavedViewID, setActiveSavedViewID] = useState('')
   const clickTimerRef = useRef<number | null>(null)
@@ -368,7 +389,9 @@ export function TasksTable({
       return false
     }
     return Boolean(
-      target.closest('button, a, input, select, textarea, [role="checkbox"], [data-sidebar="menu-action"]')
+      target.closest(
+        'button, a, input, select, textarea, [role="checkbox"], [data-sidebar="menu-action"]'
+      )
     )
   }
 
@@ -399,10 +422,7 @@ export function TasksTable({
     }, 180)
   }
 
-  const handleRowDoubleClick = (
-    id: string,
-    event: MouseEvent<HTMLElement>
-  ) => {
+  const handleRowDoubleClick = (id: string, event: MouseEvent<HTMLElement>) => {
     if (isInteractiveTarget(event.target)) {
       return
     }
@@ -436,7 +456,9 @@ export function TasksTable({
     if (nextIndex < 0 || nextIndex >= visibleRecordIDs.length) {
       return
     }
-    setSelectedRecordContext(visibleRecordIDs[nextIndex] ?? selectedRecordID ?? '')
+    setSelectedRecordContext(
+      visibleRecordIDs[nextIndex] ?? selectedRecordID ?? ''
+    )
   }
 
   const currentInventoryViewSnapshot = useMemo(() => {
@@ -466,7 +488,8 @@ export function TasksTable({
     async (nextViews: InventorySavedView[]) => {
       await saveInventoryProfileSettings({
         ...inventoryProfileSettings,
-        [inventorySavedViewsSettingsKey]: serializeInventorySavedViews(nextViews),
+        [inventorySavedViewsSettingsKey]:
+          serializeInventorySavedViews(nextViews),
       })
     },
     [inventoryProfileSettings, saveInventoryProfileSettings]
@@ -521,7 +544,9 @@ export function TasksTable({
       setSaveViewName('')
       setSavedViewFeedback(`Saved view: ${name}`)
     } catch {
-      setSavedViewError('Saved view failed to persist. Retry once profile settings are available.')
+      setSavedViewError(
+        'Saved view failed to persist. Retry once profile settings are available.'
+      )
     }
   }, [
     activeInventoryProfileId,
@@ -536,7 +561,9 @@ export function TasksTable({
     if (!activeSavedViewID) {
       return
     }
-    const currentView = inventorySavedViews.find((view) => view.id === activeSavedViewID)
+    const currentView = inventorySavedViews.find(
+      (view) => view.id === activeSavedViewID
+    )
     if (!currentView) {
       return
     }
@@ -548,13 +575,11 @@ export function TasksTable({
       setActiveSavedViewID('')
       setSavedViewFeedback(`Deleted saved view: ${currentView.name}`)
     } catch {
-      setSavedViewError('Saved view failed to delete. Retry once profile settings are available.')
+      setSavedViewError(
+        'Saved view failed to delete. Retry once profile settings are available.'
+      )
     }
-  }, [
-    activeSavedViewID,
-    inventorySavedViews,
-    persistInventorySavedViews,
-  ])
+  }, [activeSavedViewID, inventorySavedViews, persistInventorySavedViews])
 
   useEffect(() => {
     if (
@@ -565,12 +590,13 @@ export function TasksTable({
     }
   }, [activeSavedViewID, inventorySavedViews])
 
-  const statusFilterOptions = routePath === '/_authenticated/wishlist/'
-    ? [
-        { label: 'Watching', value: 'wishlist' },
-        { label: 'Below target', value: 'discovered' },
-      ]
-    : statuses
+  const statusFilterOptions =
+    routePath === '/_authenticated/wishlist/'
+      ? [
+          { label: 'Watching', value: 'wishlist' },
+          { label: 'Below target', value: 'discovered' },
+        ]
+      : statuses
 
   const inventoryConditionFilterOptions = useMemo(() => {
     if (!isInventoryRoute) {
@@ -578,9 +604,7 @@ export function TasksTable({
     }
     return Array.from(
       new Set(
-        data
-          .map((task) => task.status.trim())
-          .filter((status) => status !== '')
+        data.map((task) => task.status.trim()).filter((status) => status !== '')
       )
     )
       .sort((left, right) => left.localeCompare(right))
@@ -596,9 +620,7 @@ export function TasksTable({
     }
     return Array.from(
       new Set(
-        data
-          .map((task) => task.label.trim())
-          .filter((label) => label !== '')
+        data.map((task) => task.label.trim()).filter((label) => label !== '')
       )
     )
       .sort((left, right) => left.localeCompare(right))
@@ -658,7 +680,9 @@ export function TasksTable({
                     setSavedViewError(null)
                     return
                   }
-                  const nextView = inventorySavedViews.find((view) => view.id === nextID)
+                  const nextView = inventorySavedViews.find(
+                    (view) => view.id === nextID
+                  )
                   if (!nextView) {
                     return
                   }
@@ -677,7 +701,10 @@ export function TasksTable({
                 size='sm'
                 variant='outline'
                 data-testid='inventory-saved-view-save'
-                disabled={inventoryProfileSettingsLoading || inventoryProfileSettingsSaving}
+                disabled={
+                  inventoryProfileSettingsLoading ||
+                  inventoryProfileSettingsSaving
+                }
                 onClick={() => {
                   setSaveViewDialogOpen(true)
                   setSavedViewFeedback(null)
@@ -686,8 +713,9 @@ export function TasksTable({
                     previous !== ''
                       ? previous
                       : activeSavedViewID !== ''
-                        ? inventorySavedViews.find((view) => view.id === activeSavedViewID)?.name ??
-                          ''
+                        ? (inventorySavedViews.find(
+                            (view) => view.id === activeSavedViewID
+                          )?.name ?? '')
                         : ''
                   )
                 }}
@@ -711,12 +739,18 @@ export function TasksTable({
             </>
           ) : null}
           {savedViewFeedback ? (
-            <p className='text-xs text-muted-foreground' data-testid='inventory-saved-view-feedback'>
+            <p
+              className='text-xs text-muted-foreground'
+              data-testid='inventory-saved-view-feedback'
+            >
               {savedViewFeedback}
             </p>
           ) : null}
           {savedViewError ? (
-            <p className='text-xs text-destructive' data-testid='inventory-saved-view-error'>
+            <p
+              className='text-xs text-destructive'
+              data-testid='inventory-saved-view-error'
+            >
               {savedViewError}
             </p>
           ) : null}
@@ -783,7 +817,8 @@ export function TasksTable({
                       Boolean(row.original.itemID)
                     }
                     className={cn(
-                      currentRecordID === (row.original.itemID ?? row.original.id)
+                      currentRecordID ===
+                        (row.original.itemID ?? row.original.id)
                         ? 'bg-primary/5'
                         : undefined
                     )}
@@ -796,7 +831,10 @@ export function TasksTable({
                         return
                       }
                       event.dataTransfer.effectAllowed = 'move'
-                      event.dataTransfer.setData(inventoryItemDragDataType, itemID)
+                      event.dataTransfer.setData(
+                        inventoryItemDragDataType,
+                        itemID
+                      )
                       event.dataTransfer.setData('text/plain', itemID)
                     }}
                     onClick={(event) => handleRowClick(row.original.id, event)}
@@ -853,10 +891,7 @@ export function TasksTable({
                 data-state={row.getIsSelected() && 'selected'}
                 onDragStart={(event) => {
                   const itemID = row.original.itemID
-                  if (
-                    routePath !== '/_authenticated/inventory/' ||
-                    !itemID
-                  ) {
+                  if (routePath !== '/_authenticated/inventory/' || !itemID) {
                     return
                   }
                   event.dataTransfer.effectAllowed = 'move'
@@ -893,7 +928,8 @@ export function TasksTable({
                   <span>Priority: {row.original.priority}</span>
                   <span>Type: {row.original.label}</span>
                 </div>
-                {routePath === '/_authenticated/wishlist/' && row.original.notes ? (
+                {routePath === '/_authenticated/wishlist/' &&
+                row.original.notes ? (
                   <p className='text-xs text-muted-foreground'>
                     Notes: {row.original.notes}
                   </p>
@@ -987,11 +1023,15 @@ export function TasksTable({
           <DialogHeader>
             <DialogTitle>Save Inventory View</DialogTitle>
             <DialogDescription>
-              Save the current inventory search, filters, sorting, and layout for this profile.
+              Save the current inventory search, filters, sorting, and layout
+              for this profile.
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-2'>
-            <label className='text-sm font-medium' htmlFor='inventory-saved-view-name'>
+            <label
+              className='text-sm font-medium'
+              htmlFor='inventory-saved-view-name'
+            >
               View name
             </label>
             <Input
