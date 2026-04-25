@@ -346,16 +346,56 @@ describe('ui-screen-collections', () => {
     )
   })
 
-  it('UI-SCREEN-COLLECTIONS-015 falls wishlist table collection context back after delete', () => {
+  it('UI-SCREEN-COLLECTIONS-015 removes deleted collections from compact filters', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
 
     cy.get('[data-testid="collections-row-store-1"]').click()
-    cy.wait('@saveCollectionSettings')
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        activeCollection?: string
+      }
+      expect(persisted.activeCollection).to.equal('Store 1')
+    })
     cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-delete-submit"]').click()
     cy.contains('Store 1 removed from workspace collections.').should('be.visible')
-    cy.wait('@saveCollectionSettings')
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.activeCollection).to.equal('All Items')
+      expect(
+        persisted.collections ?? [],
+        `delete request collections: ${JSON.stringify(persisted.collections ?? [])}`
+      ).not.to.include('Store 1')
+    })
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.activeCollection).to.equal('All Items')
+      expect(
+        persisted.collections ?? [],
+        `persisted collections: ${JSON.stringify(persisted.collections ?? [])}`
+      ).not.to.include('Store 1')
+    })
+
+    cy.visit('/inventory/')
+    cy.wait('@loadCollectionSettings')
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+      'contain.text',
+      'All Items'
+    )
+    cy.get('[data-testid="inventory-collection-filter-select"] option').then(($options) => {
+      const optionLabels = [...$options].map((option) => option.textContent?.trim())
+      expect(optionLabels).not.to.include('Store 1')
+    })
 
     cy.visit('/wishlist/')
     cy.wait('@loadCollectionSettings')
@@ -363,5 +403,9 @@ describe('ui-screen-collections', () => {
       'contain.text',
       'All Items'
     )
+    cy.get('[data-testid="wishlist-table-collection-select"] option').then(($options) => {
+      const optionLabels = [...$options].map((option) => option.textContent?.trim())
+      expect(optionLabels).not.to.include('Store 1')
+    })
   })
 })

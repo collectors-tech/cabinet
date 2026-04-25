@@ -1,6 +1,6 @@
 # TASK_LIST
 
-Last synced from GitHub issues: 2026-04-24 21:02 +10:00
+Last synced from GitHub issues: 2026-04-25 22:55 +10:00
 
 ## Status Legend
 - `OPEN`: issue is open and not yet complete.
@@ -8,17 +8,18 @@ Last synced from GitHub issues: 2026-04-24 21:02 +10:00
 - Work is executed one focused issue branch at a time, validated, merged into `develop`, then the demo is rebuilt and restarted.
 
 ## Current Execution Queue
-- [ ] #640 [OPEN] Move Inventory photos into item-scoped modal with row quick action
-- [ ] #641 [OPEN] Move Inventory barcodes into item-scoped modal with row quick action
-- [ ] #642 [OPEN] Add responsive Cypress coverage for Inventory table-first redesign
-- [ ] #646 [OPEN] Inventory: add assign-to-collection action on each item row
+- [ ] #665 [OPEN] Workspace collection deletes should remove stale options from compact filters
 - [ ] #643 [OPEN] Collections: implement two-table selected collection layout
 - [ ] #644 [OPEN] Collections: remove duplicate Selected collection section
 - [ ] #645 [OPEN] Collections: convert Collection members section into items table
-- [ ] #636 [OPEN] Make inventory collection-browser context menu actions visibly effective
-- [ ] #635 [OPEN] Implement real mobile camera photo capture for inventory items
-- [ ] #634 [OPEN] Unify page header actions and reclaim workspace height
 - [ ] #637 [OPEN] Epic: Redesign Inventory as a table-first collection browser
+- [x] #640 [DONE] Move Inventory photos into item-scoped modal with row quick action
+- [x] #641 [DONE] Move Inventory barcodes into item-scoped modal with row quick action
+- [x] #642 [DONE] Add responsive Cypress coverage for Inventory table-first redesign
+- [x] #646 [DONE] Inventory: add assign-to-collection action on each item row
+- [x] #636 [DONE] Make inventory collection-browser context menu actions visibly effective
+- [x] #635 [DONE] Implement real mobile camera photo capture for inventory items
+- [x] #634 [DONE] Unify page header actions and reclaim workspace height
 
 ## CI, Runtime, And Repository Hygiene
 - [ ] #553 [OPEN] Consolidate duplicated main gate GitHub Actions workflows
