@@ -65,8 +65,19 @@ describe("ui-screen-wishlist", () => {
   function openWishlistRowActions(rowText: string) {
     cy.contains("tr", rowText)
       .find('[data-testid="task-row-actions-trigger"]')
+      .scrollIntoView()
       .should("be.visible")
-      .trigger("pointerdown", { button: 0, force: true });
+      .then(($trigger) => {
+        const button = $trigger[0];
+        const view = button.ownerDocument.defaultView;
+        button.dispatchEvent(
+          new view!.PointerEvent("pointerdown", {
+            bubbles: true,
+            button: 0,
+            pointerType: "mouse",
+          })
+        );
+      });
     cy.get('[role="menu"]').should("be.visible");
   }
 
@@ -74,9 +85,13 @@ describe("ui-screen-wishlist", () => {
     signInToWishlist();
 
     cy.contains("Wishlist").should("be.visible");
+    cy.get('[data-testid="wishlist-page-header"]').within(() => {
+      cy.get('[data-testid="wishlist-new-action"]').should("be.visible");
+      cy.get('[data-testid="wishlist-create-menu-trigger"]').should("be.visible");
+    });
     cy.contains(
       "Track wanted items, target prices, and planning decisions before they become owned inventory."
-    ).should("be.visible");
+    ).should("not.exist");
     cy.contains("wishlist.description").should("not.exist");
     cy.get("table").should("be.visible");
     cy.contains("button", "Cards").click();

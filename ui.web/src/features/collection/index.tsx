@@ -1084,7 +1084,6 @@ function resolveFolderDragPreviewPosition(clientX: number, clientY: number) {
 
 export function Collection({
   title = 'Collection',
-  description = 'Command your inventory and move from folders to item actions quickly.',
   routePath,
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
@@ -3144,19 +3143,24 @@ export function Collection({
         </div>
       </Header>
 
-      <Main className='space-y-4'>
-        <div className='flex flex-wrap items-end justify-between gap-3'>
-          <div className='space-y-2'>
-            <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
-            <p className='text-muted-foreground'>{description}</p>
-            <p
-              className='text-xs text-muted-foreground'
-              data-testid='collection-context-label'
+      <Main className='space-y-3'>
+        <div
+          className='flex flex-wrap items-center justify-between gap-2'
+          data-testid='inventory-page-header'
+        >
+          <div className='flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
+            <h1 className='text-xl font-bold tracking-tight'>{title}</h1>
+            <span
+              className='text-xs font-medium text-muted-foreground'
+              data-testid='inventory-header-context'
             >
-              Collection context: {activeFolder}
-            </p>
+              Collection: {activeFolder}
+            </span>
           </div>
-          <div className='flex gap-2'>
+          <div
+            className='flex flex-wrap items-center justify-end gap-2'
+            data-testid='inventory-header-actions'
+          >
             {isInventoryRoute ? (
               <>
                 <Button
@@ -3224,7 +3228,7 @@ export function Collection({
           </div>
         </div>
 
-        <div className='grid grid-cols-1 gap-4'>
+        <div className='grid grid-cols-1 gap-4' data-testid='inventory-workspace'>
           <Card className='hidden'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>

@@ -167,7 +167,10 @@ function TasksHeaderActions({
   onImport: () => void
 }) {
   return (
-    <div className='flex items-center gap-2'>
+    <div
+      className='flex flex-wrap items-center justify-end gap-2'
+      data-testid='wishlist-header-actions'
+    >
       <Button
         type='button'
         data-testid='wishlist-new-action'
@@ -214,7 +217,6 @@ function TasksHeaderActions({
 
 export function Tasks({
   title = 'Tasks',
-  description = "Here's a list of your tasks for this month!",
   routePath = '/_authenticated/inventory/',
 }: TasksProps) {
   const {
@@ -757,11 +759,18 @@ export function Tasks({
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='flex flex-wrap items-end justify-between gap-2'>
-          <div>
-            <h2 className='text-2xl font-bold tracking-tight'>{title}</h2>
-            <p className='text-muted-foreground'>{description}</p>
+      <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
+        <div
+          className='flex flex-wrap items-center justify-between gap-2'
+          data-testid={isWishlistRoute ? 'wishlist-page-header' : undefined}
+        >
+          <div className='flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
+            <h2 className='text-xl font-bold tracking-tight'>{title}</h2>
+            {isWishlistRoute ? (
+              <span className='text-xs font-medium text-muted-foreground'>
+                Planning list
+              </span>
+            ) : null}
           </div>
           <TasksHeaderActions
             isWishlistRoute={isWishlistRoute}
@@ -779,65 +788,72 @@ export function Tasks({
             }}
           />
         </div>
-        {isWishlistRoute ? (
-          <div
-            className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'
-            data-testid='wishlist-planning-summary'
-          >
-            {wishlistPlanningSummary.map((focus) => (
-              <button
-                key={focus.id}
-                type='button'
-                data-testid={`wishlist-planning-focus-${focus.id}`}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  wishlistPlanningFocus === focus.id
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:bg-accent/40'
-                }`}
-                aria-pressed={wishlistPlanningFocus === focus.id}
-                onClick={() => setWishlistPlanningFocus(focus.id)}
-              >
-                <div className='flex items-start justify-between gap-3'>
-                  <div>
-                    <p className='text-sm font-medium'>{focus.label}</p>
-                    <p className='mt-1 text-xs text-muted-foreground'>
-                      {focus.description}
-                    </p>
+        <div
+          className='flex flex-1 flex-col gap-4 sm:gap-6'
+          data-testid={isWishlistRoute ? 'wishlist-workspace' : undefined}
+        >
+          {isWishlistRoute ? (
+            <div
+              className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'
+              data-testid='wishlist-planning-summary'
+            >
+              {wishlistPlanningSummary.map((focus) => (
+                <button
+                  key={focus.id}
+                  type='button'
+                  data-testid={`wishlist-planning-focus-${focus.id}`}
+                  className={`rounded-lg border p-4 text-left transition-colors ${
+                    wishlistPlanningFocus === focus.id
+                      ? 'border-primary bg-primary/5'
+                      : 'hover:bg-accent/40'
+                  }`}
+                  aria-pressed={wishlistPlanningFocus === focus.id}
+                  onClick={() => setWishlistPlanningFocus(focus.id)}
+                >
+                  <div className='flex items-start justify-between gap-3'>
+                    <div>
+                      <p className='text-sm font-medium'>{focus.label}</p>
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        {focus.description}
+                      </p>
+                    </div>
+                    <span className='text-2xl font-semibold'>
+                      {focus.count}
+                    </span>
                   </div>
-                  <span className='text-2xl font-semibold'>{focus.count}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <TasksTable
-          data={displayedData}
-          routePath={routePath}
-          customFilters={wishlistCollectionFilter}
-          onEditRow={(task) => {
-            setCurrentDialogRow(task)
-            setDialogOpen('update')
-          }}
-          onDeleteRow={(task) => {
-            setCurrentDialogRow(task)
-            setDialogOpen('delete')
-          }}
-          onWishlistMarkOwned={
-            isWishlistRoute ? handleWishlistMarkOwned : undefined
-          }
-          onWishlistBulkStatusChange={
-            isWishlistRoute ? handleWishlistBulkStatusChange : undefined
-          }
-          onWishlistBulkPriorityChange={
-            isWishlistRoute ? handleWishlistBulkPriorityChange : undefined
-          }
-          onWishlistBulkDelete={
-            isWishlistRoute ? handleWishlistBulkDelete : undefined
-          }
-          onWishlistExport={isWishlistRoute ? handleWishlistExport : undefined}
-          wishlistActionItemID={wishlistActionItemID}
-          isWishlistMutating={isWishlistMutating}
-        />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <TasksTable
+            data={displayedData}
+            routePath={routePath}
+            customFilters={wishlistCollectionFilter}
+            onEditRow={(task) => {
+              setCurrentDialogRow(task)
+              setDialogOpen('update')
+            }}
+            onDeleteRow={(task) => {
+              setCurrentDialogRow(task)
+              setDialogOpen('delete')
+            }}
+            onWishlistMarkOwned={
+              isWishlistRoute ? handleWishlistMarkOwned : undefined
+            }
+            onWishlistBulkStatusChange={
+              isWishlistRoute ? handleWishlistBulkStatusChange : undefined
+            }
+            onWishlistBulkPriorityChange={
+              isWishlistRoute ? handleWishlistBulkPriorityChange : undefined
+            }
+            onWishlistBulkDelete={
+              isWishlistRoute ? handleWishlistBulkDelete : undefined
+            }
+            onWishlistExport={isWishlistRoute ? handleWishlistExport : undefined}
+            wishlistActionItemID={wishlistActionItemID}
+            isWishlistMutating={isWishlistMutating}
+          />
+        </div>
       </Main>
 
       <TasksDialogs
