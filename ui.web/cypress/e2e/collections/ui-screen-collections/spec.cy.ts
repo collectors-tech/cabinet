@@ -36,6 +36,16 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-workspace"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
     cy.get('[data-testid="collections-members-table"]').should('be.visible')
+    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
+      'contain.text',
+      '1996 Topps Kobe Bryant rookie'
+    )
+    cy.get('[data-testid="collections-member-row-inventory-item-charizard-base"]').should(
+      'contain.text',
+      'Base Set Charizard'
+    )
+
     cy.get('[data-testid="collections-row-store-1"]').click()
     cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Store 1')
     cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(

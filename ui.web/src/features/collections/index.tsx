@@ -173,7 +173,9 @@ export function Collections() {
 
   const selectedCollectionItems = useMemo(
     () =>
-      collectionItems.filter((item) => item.collectionName === selectedCollectionName),
+      selectedCollectionName === 'All Items'
+        ? collectionItems
+        : collectionItems.filter((item) => item.collectionName === selectedCollectionName),
     [collectionItems, selectedCollectionName]
   )
 
