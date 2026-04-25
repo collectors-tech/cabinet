@@ -993,6 +993,7 @@ export function Collection({
     string | null
   >(null)
   const [folderCreateName, setFolderCreateName] = useState('')
+  const [collectionBrowserOpen, setCollectionBrowserOpen] = useState(false)
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
   const [dragPreviewPosition, setDragPreviewPosition] = useState<{
@@ -1239,6 +1240,20 @@ export function Collection({
     assignWorkspaceItemToCollection,
     selectInventoryItem,
   ])
+
+  const selectInventoryFolder = useCallback(
+    (nextFolder: string) => {
+      const safeFolder = folderTreeContainsName(folderTree, nextFolder)
+        ? nextFolder
+        : 'All Items'
+      setActiveFolder(safeFolder)
+      setCollectionBrowserOpen(false)
+      if (workspaceCollections.includes(safeFolder)) {
+        void setActiveWorkspaceCollection(safeFolder)
+      }
+    },
+    [folderTree, setActiveWorkspaceCollection, workspaceCollections]
+  )
 
   const resolveInventoryItemFromTask = useCallback(
     (task: Task) =>
@@ -1929,7 +1944,7 @@ export function Collection({
                   'relative flex min-w-0 flex-1 items-start rounded-md bg-transparent px-3 py-2 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 focus-visible:outline-none',
                   isChildDropTarget && 'bg-primary/20'
                 )}
-                onClick={() => setActiveFolder(node.name)}
+                onClick={() => selectInventoryFolder(node.name)}
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
                 onDragEnter={(event) => {
                   if (
@@ -2058,12 +2073,13 @@ export function Collection({
                       event.stopPropagation()
                       setFolderCreateParentID(node.id)
                       setFolderCreateName('')
+                      setCollectionBrowserOpen(false)
                       setFolderCreateOpen(true)
                     }}
                   >
                     <Plus className='size-4' />
                   </Button>
-                  <DropdownMenu>
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button
                         type='button'
@@ -2087,7 +2103,7 @@ export function Collection({
                         data-testid={`folder-tree-row-action-select-${node.id}`}
                         onClick={(event) => {
                           event.stopPropagation()
-                          setActiveFolder(node.name)
+                          selectInventoryFolder(node.name)
                         }}
                       >
                         Select folder
@@ -2096,6 +2112,7 @@ export function Collection({
                         data-testid={`folder-tree-row-action-properties-${node.id}`}
                         onClick={(event) => {
                           event.stopPropagation()
+                          setCollectionBrowserOpen(false)
                           openFolderProperties(node)
                         }}
                       >
@@ -2107,6 +2124,7 @@ export function Collection({
                           event.stopPropagation()
                           setFolderCreateParentID(node.id)
                           setFolderCreateName('')
+                          setCollectionBrowserOpen(false)
                           setFolderCreateOpen(true)
                         }}
                       >
@@ -2200,6 +2218,7 @@ export function Collection({
       handleTreeItemKeyDown,
       folderTree,
       openFolderProperties,
+      selectInventoryFolder,
       startFolderHTMLDrag,
       startFolderPointerDrag,
       toggleNodeExpanded,
@@ -2241,6 +2260,10 @@ export function Collection({
       return itemFolderAssignments[itemID] === activeFolder
     })
   }, [activeFolder, isInventoryRoute, itemFolderAssignments, tableData])
+  const selectedFolderHasNoItems =
+    isInventoryRoute &&
+    activeFolderFilterValue !== 'All Items' &&
+    visibleTableData.length === 0
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedVisibleInventoryIndex = selectedItemID
     ? visibleTableData.findIndex(
@@ -2276,19 +2299,6 @@ export function Collection({
   )
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
-  const handleInventoryCollectionFilterChange = useCallback(
-    (nextFolder: string) => {
-      const safeFolder = folderTreeContainsName(folderTree, nextFolder)
-        ? nextFolder
-        : 'All Items'
-      setActiveFolder(safeFolder)
-      if (workspaceCollections.includes(safeFolder)) {
-        void setActiveWorkspaceCollection(safeFolder)
-      }
-    },
-    [folderTree, setActiveWorkspaceCollection, workspaceCollections]
-  )
-
   useEffect(() => {
     const previous = activeWorkspaceCollectionRef.current
     activeWorkspaceCollectionRef.current = activeWorkspaceCollection
@@ -2932,9 +2942,7 @@ export function Collection({
         className='h-8 min-w-[11rem] rounded-md border bg-background px-2 text-sm'
         data-testid='inventory-collection-filter-select'
         value={activeFolderFilterValue}
-        onChange={(event) =>
-          handleInventoryCollectionFilterChange(event.target.value)
-        }
+        onChange={(event) => selectInventoryFolder(event.target.value)}
       >
         {folderFilterOptions.map((folder) => (
           <option key={folder.id} value={folder.name}>
@@ -2949,7 +2957,11 @@ export function Collection({
       >
         {activeFolderFilterValue}
       </span>
-      <DropdownMenu>
+      <DropdownMenu
+        modal={false}
+        open={collectionBrowserOpen}
+        onOpenChange={setCollectionBrowserOpen}
+      >
         <DropdownMenuTrigger asChild>
           <Button
             type='button'
@@ -3449,6 +3461,15 @@ export function Collection({
                   >
                     Retry
                   </Button>
+                </div>
+              ) : null}
+              {selectedFolderHasNoItems ? (
+                <div
+                  className='rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground'
+                  data-testid='inventory-selected-folder-empty'
+                >
+                  No items are assigned to {activeFolderFilterValue} yet. Use
+                  the row collection action to place inventory here.
                 </div>
               ) : null}
               <TasksTable
