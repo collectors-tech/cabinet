@@ -367,6 +367,26 @@ func bootstrapE2EFixtures(ctx context.Context, conn *sql.DB, cfg config.Config, 
 	}
 
 	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, priority, make, model, year, scale, series, description, tags_json, created_at, updated_at)
+		VALUES
+		 ('e2e-wishlist-item-grail', ?, 'E2E Wishlist', 'Trading Cards', 'WISH-GRAIL-001', 'Wishlist Sample Grail Chase', 'wishlist', 'high', 'Pokemon', 'Charizard', '1999', 'Card', 'Wishlist Samples', 'Representative high-priority wishlist sample.', '["seed","wishlist","grail"]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-item-price-drop', ?, 'E2E Wishlist', 'Diecast', 'WISH-DROP-002', 'Wishlist Sample Price Drop Watch', 'wishlist', 'medium', 'Hot Wheels', 'Skyline', '2024', '1:64', 'Wishlist Samples', 'Representative below-target wishlist sample.', '["seed","wishlist","price-drop"]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-item-steady', ?, 'E2E Wishlist', 'Comics', 'WISH-WATCH-003', 'Wishlist Sample Steady Watch', 'wishlist', 'low', 'Marvel', 'Spider-Man', '1984', 'Issue', 'Wishlist Samples', 'Representative low-priority wishlist sample.', '["seed","wishlist","watch"]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, profileID, profileID, profileID); err != nil {
+		return e2eBootstrapResponse{}, fmt.Errorf("insert wishlist sample items: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, below_target_now, created_at, updated_at)
+		VALUES
+		 ('e2e-wishlist-grail', ?, 'e2e-wishlist-item-grail', 150.00, 'high', 'Sample grail chase row for Wishlist review.', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-price-drop', ?, 'e2e-wishlist-item-price-drop', 35.00, 'medium', 'Sample below-target row for Wishlist review.', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-steady', ?, 'e2e-wishlist-item-steady', 12.00, 'low', 'Sample steady watch row for Wishlist review.', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, profileID, profileID, profileID); err != nil {
+		return e2eBootstrapResponse{}, fmt.Errorf("insert wishlist sample entries: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes, created_at, updated_at)
 		VALUES
 		 ('e2e-instance-001', ?, 'mint', 'sealed', 1, 'Shelf A', 29.99, '2025-01-10', 'seed instance 1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),

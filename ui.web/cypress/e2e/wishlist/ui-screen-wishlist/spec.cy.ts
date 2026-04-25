@@ -47,6 +47,9 @@ describe("ui-screen-wishlist", () => {
   function signInToWishlist(options?: { skipStub?: boolean }) {
     if (!options?.skipStub) {
       stubWishlistData();
+    } else {
+      cy.intercept("GET", "/api/wishlist").as("wishlistItems");
+      cy.intercept("GET", "/api/items?status=wishlist").as("catalogItems");
     }
     cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
     cy.e2eReset();
@@ -116,6 +119,18 @@ describe("ui-screen-wishlist", () => {
     cy.contains("button", "Rows").click();
     cy.get('input[placeholder="Filter by title or ID..."]').type("no-match-wishlist");
     cy.contains("No results.").should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-013 renders representative seeded wishlist rows without stubs", () => {
+    signInToWishlist({ skipStub: true });
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("Wishlist Sample Grail Chase").should("be.visible");
+    cy.contains("Wishlist Sample Price Drop Watch").should("be.visible");
+    cy.contains("Wishlist Sample Steady Watch").should("be.visible");
+    cy.contains("Below target").should("be.visible");
+    cy.contains("High").should("be.visible");
+    cy.contains("Low").should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
