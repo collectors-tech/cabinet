@@ -81,6 +81,117 @@ type BarcodeMatch = {
   created_at?: string
 }
 
+type CameraImageCapture = {
+  takePhoto: () => Promise<Blob>
+}
+
+type CameraImageCaptureConstructor = new (
+  track: MediaStreamTrack
+) => CameraImageCapture
+
+type CameraWindow = Window & {
+  ImageCapture?: CameraImageCaptureConstructor
+}
+
+function getCameraVideoTrack(stream: MediaStream) {
+  return stream.getVideoTracks()[0] ?? null
+}
+
+function createCameraPhotoFile(blob: Blob) {
+  return new File([blob], `camera-capture-${Date.now()}.jpg`, {
+    type: blob.type || 'image/jpeg',
+  })
+}
+
+function waitForVideoMetadata(video: HTMLVideoElement) {
+  if (video.videoWidth > 0 && video.videoHeight > 0) {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    function cleanup() {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.removeEventListener('error', onError)
+      window.clearTimeout(timeoutID)
+    }
+
+    function onLoaded() {
+      cleanup()
+      resolve()
+    }
+
+    function onError() {
+      cleanup()
+      reject(new Error('camera_video_unavailable'))
+    }
+
+    const timeoutID = window.setTimeout(() => {
+      cleanup()
+      resolve()
+    }, 1500)
+
+    video.addEventListener('loadedmetadata', onLoaded, { once: true })
+    video.addEventListener('error', onError, { once: true })
+  })
+}
+
+function canvasToJpegBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('camera_frame_encode_failed'))
+          return
+        }
+        resolve(blob)
+      },
+      'image/jpeg',
+      0.92
+    )
+  })
+}
+
+async function captureCameraPhotoBlob(stream: MediaStream) {
+  const videoTrack = getCameraVideoTrack(stream)
+  const imageCaptureConstructor =
+    typeof window !== 'undefined'
+      ? (window as CameraWindow).ImageCapture
+      : undefined
+
+  if (imageCaptureConstructor && videoTrack) {
+    return new imageCaptureConstructor(videoTrack).takePhoto()
+  }
+
+  const video = document.createElement('video')
+  video.muted = true
+  video.playsInline = true
+  video.srcObject = stream
+
+  try {
+    await video.play()
+  } catch {
+    // Some browsers block play() on detached media; loadedmetadata is enough.
+  }
+
+  try {
+    await waitForVideoMetadata(video)
+    const width = video.videoWidth || 1280
+    const height = video.videoHeight || 720
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('camera_canvas_unavailable')
+    }
+    context.drawImage(video, 0, 0, width, height)
+    return await canvasToJpegBlob(canvas)
+  } finally {
+    video.pause()
+    video.srcObject = null
+  }
+}
+
 type InventoryItem = {
   id: string
   part_number: string
@@ -2723,15 +2834,16 @@ export function Collection({
     }
     let stream: MediaStream | null = null
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      const file = new File(['camera-capture'], 'camera-capture.jpg', {
-        type: 'image/jpeg',
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
       })
+      const photoBlob = await captureCameraPhotoBlob(stream)
+      const file = createCameraPhotoFile(photoBlob)
       await handlePhotoUpload(file)
       setCameraSuccess('Camera capture uploaded successfully.')
     } catch {
       setCameraError(
-        'Camera permission was denied or unavailable. Use Upload File instead.'
+        'Camera permission was denied or unavailable. Use Upload File or your browser camera picker instead.'
       )
     } finally {
       if (stream) {
@@ -3845,6 +3957,7 @@ export function Collection({
                           <input
                             type='file'
                             accept='image/*'
+                            capture='environment'
                             data-testid='inventory-photo-upload-input'
                             disabled={!selectedItemID}
                             onChange={(event) => {
