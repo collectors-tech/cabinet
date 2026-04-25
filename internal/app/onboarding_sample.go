@@ -20,10 +20,14 @@ type onboardingSampleSeedResult struct {
 }
 
 type onboardingSampleSpec struct {
-	Item        collection.Item
-	Instance    collection.Instance
-	Wishlist    bool
-	TargetPrice float64
+	Item                   collection.Item
+	Instance               collection.Instance
+	Wishlist               bool
+	TargetPrice            float64
+	WishlistPriority       string
+	WishlistNotes          string
+	WishlistHighlightHit   bool
+	WishlistBelowTargetNow bool
 }
 
 func seedOnboardingSampleData(
@@ -68,8 +72,11 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-15",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    true,
-			TargetPrice: 10,
+			Wishlist:             true,
+			TargetPrice:          10,
+			WishlistPriority:     "high",
+			WishlistNotes:        "Sample grail chase: buy when a clean card lands near target.",
+			WishlistHighlightHit: true,
 		},
 		{
 			Item: collection.Item{
@@ -94,8 +101,11 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-20",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    false,
-			TargetPrice: 0,
+			Wishlist:             true,
+			TargetPrice:          9,
+			WishlistPriority:     "low",
+			WishlistNotes:        "Sample steady watch: useful comparison item, not urgent.",
+			WishlistHighlightHit: false,
 		},
 		{
 			Item: collection.Item{
@@ -120,8 +130,12 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-22",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    true,
-			TargetPrice: 18,
+			Wishlist:               true,
+			TargetPrice:            18,
+			WishlistPriority:       "high",
+			WishlistNotes:          "Sample price-drop candidate: below target should bubble up.",
+			WishlistHighlightHit:   true,
+			WishlistBelowTargetNow: true,
 		},
 		{
 			Item: collection.Item{
@@ -146,8 +160,11 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-24",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    false,
-			TargetPrice: 0,
+			Wishlist:             true,
+			TargetPrice:          22,
+			WishlistPriority:     "medium",
+			WishlistNotes:        "Sample display target: watch for boxed examples.",
+			WishlistHighlightHit: true,
 		},
 		{
 			Item: collection.Item{
@@ -172,8 +189,11 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-26",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    true,
-			TargetPrice: 20,
+			Wishlist:             true,
+			TargetPrice:          20,
+			WishlistPriority:     "medium",
+			WishlistNotes:        "Sample silver-age target: review condition before buying.",
+			WishlistHighlightHit: true,
 		},
 		{
 			Item: collection.Item{
@@ -252,12 +272,21 @@ func seedOnboardingSampleData(
 
 		if spec.Wishlist {
 			if _, exists := wishlistByItemID[item.ID]; !exists {
+				priority := spec.WishlistPriority
+				if priority == "" {
+					priority = "medium"
+				}
+				notes := spec.WishlistNotes
+				if notes == "" {
+					notes = "Sample wishlist entry created during onboarding."
+				}
 				createdEntry, createErr := wishlistSvc.CreateForProfile(ctx, active.ID, wishlist.Entry{
-					ItemID:       item.ID,
-					TargetPrice:  spec.TargetPrice,
-					Priority:     "normal",
-					Notes:        "Sample wishlist entry created during onboarding.",
-					HighlightHit: true,
+					ItemID:         item.ID,
+					TargetPrice:    spec.TargetPrice,
+					Priority:       priority,
+					Notes:          notes,
+					HighlightHit:   spec.WishlistHighlightHit,
+					BelowTargetNow: spec.WishlistBelowTargetNow,
 				})
 				if createErr != nil {
 					return onboardingSampleSeedResult{}, fmt.Errorf("create wishlist for %s: %w", item.ID, createErr)
