@@ -546,22 +546,22 @@ function countFolderNodes(nodes: FolderNode[]): number {
   }, 0)
 }
 
-function flattenFolderOptions(
-  nodes: FolderNode[],
-  level = 0
-): Array<FolderNode & { level: number }> {
-  return nodes.flatMap((node) => [
-    { ...node, level },
-    ...flattenFolderOptions(node.children ?? [], level + 1),
-  ])
-}
-
 function slugifyFolderName(value: string): string {
   return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function buildWorkspaceCollectionFilterOptions(
+  collections: string[]
+): Array<FolderNode & { level: number }> {
+  return collections.map((name) => ({
+    id: slugifyFolderName(name) || 'collection',
+    name,
+    level: 0,
+  }))
 }
 
 function buildUniqueFolderID(name: string, nodes: FolderNode[]): string {
@@ -1203,6 +1203,7 @@ export function Collection({
     workspaceCollections,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
+    addCollection,
     assignWorkspaceItemToCollection,
   } = useWorkspaceCollections()
   const assignableWorkspaceCollections = useMemo(
@@ -1353,16 +1354,14 @@ export function Collection({
 
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
-      const safeFolder = folderTreeContainsName(folderTree, nextFolder)
+      const safeFolder = workspaceCollections.includes(nextFolder)
         ? nextFolder
         : 'All Items'
       setActiveFolder(safeFolder)
       setCollectionBrowserOpen(false)
-      if (workspaceCollections.includes(safeFolder)) {
-        void setActiveWorkspaceCollection(safeFolder)
-      }
+      void setActiveWorkspaceCollection(safeFolder)
     },
-    [folderTree, setActiveWorkspaceCollection, workspaceCollections]
+    [setActiveWorkspaceCollection, workspaceCollections]
   )
 
   const resolveInventoryItemFromTask = useCallback(
@@ -2346,8 +2345,8 @@ export function Collection({
     [activeFolder, folderTree, tableData.length]
   )
   const folderFilterOptions = useMemo(
-    () => flattenFolderOptions(folderTree),
-    [folderTree]
+    () => buildWorkspaceCollectionFilterOptions(workspaceCollections),
+    [workspaceCollections]
   )
   const activeFolderIsAvailable = folderFilterOptions.some(
     (folder) => folder.name === activeFolder
@@ -2361,15 +2360,15 @@ export function Collection({
     [inventoryItems, selectedItemID]
   )
   const visibleTableData = useMemo(() => {
-    if (!isInventoryRoute || activeFolder === 'All Items') {
+    if (!isInventoryRoute || activeFolderFilterValue === 'All Items') {
       return tableData
     }
 
     return tableData.filter((row) => {
       const itemID = row.itemID ?? row.id
-      return itemFolderAssignments[itemID] === activeFolder
+      return itemFolderAssignments[itemID] === activeFolderFilterValue
     })
-  }, [activeFolder, isInventoryRoute, itemFolderAssignments, tableData])
+  }, [activeFolderFilterValue, isInventoryRoute, itemFolderAssignments, tableData])
   const selectedFolderHasNoItems =
     isInventoryRoute &&
     activeFolderFilterValue !== 'All Items' &&
@@ -3348,7 +3347,7 @@ export function Collection({
                     <Button
                       type='button'
                       data-testid='folder-tree-create-submit'
-                      onClick={() => {
+                      onClick={async () => {
                         const name = folderCreateName.trim()
                         if (name === '') {
                           return
@@ -3373,6 +3372,10 @@ export function Collection({
                             next.add(folderCreateParentID)
                             return next
                           })
+                        }
+                        const created = await addCollection(name)
+                        if (!created && workspaceCollections.includes(name)) {
+                          await setActiveWorkspaceCollection(name)
                         }
                         setActiveFolder(name)
                         setFolderCreateOpen(false)

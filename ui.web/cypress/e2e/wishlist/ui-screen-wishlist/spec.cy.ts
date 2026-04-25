@@ -77,6 +77,19 @@ describe("ui-screen-wishlist", () => {
             pointerType: "mouse",
           })
         );
+        button.dispatchEvent(
+          new view!.PointerEvent("pointerup", {
+            bubbles: true,
+            button: 0,
+            pointerType: "mouse",
+          })
+        );
+        button.dispatchEvent(
+          new view!.MouseEvent("click", {
+            bubbles: true,
+            button: 0,
+          })
+        );
       });
     cy.get('[role="menu"]').should("be.visible");
   }

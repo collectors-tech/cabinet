@@ -173,6 +173,14 @@ function defaultWorkspaceCollectionsState(): Required<PersistedWorkspaceCollecti
   }
 }
 
+function loadingWorkspaceCollectionsState(): Required<PersistedWorkspaceCollectionsState> {
+  return {
+    collections: ['All Items'],
+    activeCollection: 'All Items',
+    items: [],
+  }
+}
+
 function parseWorkspaceCollectionsState(
   rawValue: string | undefined
 ): Required<PersistedWorkspaceCollectionsState> {
@@ -229,12 +237,16 @@ function serializeWorkspaceCollectionsState(
 export function useWorkspaceCollections() {
   const {
     activeProfileId,
+    loading,
     settings,
     saveSettings,
   } = useProfileSettings()
   const persistedState = useMemo(
-    () => parseWorkspaceCollectionsState(settings[collectionsSettingsKey]),
-    [settings]
+    () =>
+      loading
+        ? loadingWorkspaceCollectionsState()
+        : parseWorkspaceCollectionsState(settings[collectionsSettingsKey]),
+    [loading, settings]
   )
 
   const workspaceCollections = persistedState.collections
@@ -303,13 +315,15 @@ export function useWorkspaceCollections() {
   ): Promise<string | null> => {
     const normalizedCurrent = normalizeCollectionName(currentName)
     const normalizedNext = normalizeCollectionName(nextName)
+    const currentKey = collectionKey(normalizedCurrent)
+    const nextKey = collectionKey(normalizedNext)
     if (!normalizedCurrent || !normalizedNext || normalizedCurrent === 'All Items') {
       return null
     }
     const exists = workspaceCollections.some(
       (collection) =>
-        collection.toLowerCase() === normalizedNext.toLowerCase() &&
-        collection.toLowerCase() !== normalizedCurrent.toLowerCase()
+        collectionKey(collection) === nextKey &&
+        collectionKey(collection) !== currentKey
     )
     if (exists) {
       return null
@@ -317,16 +331,16 @@ export function useWorkspaceCollections() {
 
     await persistWorkspaceCollectionsState({
       collections: workspaceCollections.map((collection) =>
-        collection.toLowerCase() === normalizedCurrent.toLowerCase()
+        collectionKey(collection) === currentKey
           ? normalizedNext
           : collection
       ),
       activeCollection:
-        activeWorkspaceCollection.toLowerCase() === normalizedCurrent.toLowerCase()
+        collectionKey(activeWorkspaceCollection) === currentKey
           ? normalizedNext
           : activeWorkspaceCollection,
       items: workspaceItems.map((item) =>
-        item.collectionName?.toLowerCase() === normalizedCurrent.toLowerCase()
+        item.collectionName && collectionKey(item.collectionName) === currentKey
           ? { ...item, collectionName: normalizedNext }
           : item
       ),
@@ -337,11 +351,12 @@ export function useWorkspaceCollections() {
 
   const removeCollection = async (name: string): Promise<boolean> => {
     const normalized = normalizeCollectionName(name)
+    const normalizedKey = collectionKey(normalized)
     if (!normalized || normalized === 'All Items') {
       return false
     }
     const exists = workspaceCollections.some(
-      (collection) => collection.toLowerCase() === normalized.toLowerCase()
+      (collection) => collectionKey(collection) === normalizedKey
     )
     if (!exists) {
       return false
@@ -349,14 +364,14 @@ export function useWorkspaceCollections() {
 
     await persistWorkspaceCollectionsState({
       collections: workspaceCollections.filter(
-        (collection) => collection.toLowerCase() !== normalized.toLowerCase()
+        (collection) => collectionKey(collection) !== normalizedKey
       ),
       activeCollection:
-        activeWorkspaceCollection.toLowerCase() === normalized.toLowerCase()
+        collectionKey(activeWorkspaceCollection) === normalizedKey
           ? 'All Items'
           : activeWorkspaceCollection,
       items: workspaceItems.map((item) =>
-        item.collectionName?.toLowerCase() === normalized.toLowerCase()
+        item.collectionName && collectionKey(item.collectionName) === normalizedKey
           ? { ...item, collectionName: null }
           : item
       ),
