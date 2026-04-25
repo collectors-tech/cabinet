@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/react-table'
-import { BarcodeIcon, ImageIcon } from 'lucide-react'
+import { BarcodeIcon, ImageIcon, TagsIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -17,6 +17,7 @@ type TasksColumnsOptions = {
   onEditRow?: (task: Task) => void
   onPhotoRow?: (task: Task) => void
   onBarcodeRow?: (task: Task) => void
+  onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   wishlistActionItemID?: string | null
@@ -36,6 +37,7 @@ export function getTasksColumns({
   onEditRow,
   onPhotoRow,
   onBarcodeRow,
+  onAssignCollectionRow,
   onDeleteRow,
   onWishlistMarkOwned,
   wishlistActionItemID,
@@ -218,6 +220,20 @@ export function getTasksColumns({
         <div className='flex items-center justify-end gap-1'>
           {isInventoryRoute ? (
             <>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                data-testid='inventory-row-assign-collection-action'
+                aria-label={`Assign ${row.original.title} to a collection`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onAssignCollectionRow?.(row.original)
+                }}
+              >
+                <TagsIcon className='h-4 w-4' />
+              </Button>
               <Button
                 type='button'
                 variant='ghost'

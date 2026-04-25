@@ -59,6 +59,7 @@ type DataTableProps = {
   onEditRow?: (task: Task) => void
   onPhotoRow?: (task: Task) => void
   onBarcodeRow?: (task: Task) => void
+  onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
@@ -208,6 +209,7 @@ export function TasksTable({
   onEditRow,
   onPhotoRow,
   onBarcodeRow,
+  onAssignCollectionRow,
   onDeleteRow,
   onWishlistMarkOwned,
   onWishlistBulkStatusChange,
@@ -226,6 +228,7 @@ export function TasksTable({
         onEditRow,
         onPhotoRow,
         onBarcodeRow,
+        onAssignCollectionRow,
         onDeleteRow,
         onWishlistMarkOwned,
         wishlistActionItemID,
@@ -235,6 +238,7 @@ export function TasksTable({
       onEditRow,
       onPhotoRow,
       onBarcodeRow,
+      onAssignCollectionRow,
       onDeleteRow,
       onWishlistMarkOwned,
       wishlistActionItemID,
@@ -780,8 +784,8 @@ export function TasksTable({
       </div>
 
       {viewMode === 'rows' ? (
-        <div className='overflow-hidden rounded-md border'>
-          <Table className='min-w-xl'>
+        <div className='overflow-x-auto rounded-md border'>
+          <Table className='min-w-[42rem]'>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>

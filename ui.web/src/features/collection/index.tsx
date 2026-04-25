@@ -49,7 +49,10 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
+import {
+  type WorkspaceCollectionItem,
+  useWorkspaceCollections,
+} from '@/features/collections/use-workspace-collections'
 import {
   TasksDialogs,
   type TasksDialogType,
@@ -1045,6 +1048,13 @@ export function Collection({
   const [itemSaveBusy, setItemSaveBusy] = useState(false)
   const [itemSaveError, setItemSaveError] = useState<string | null>(null)
   const [itemSaveSuccess, setItemSaveSuccess] = useState<string | null>(null)
+  const [assignCollectionOpen, setAssignCollectionOpen] = useState(false)
+  const [assignCollectionItem, setAssignCollectionItem] =
+    useState<InventoryItem | null>(null)
+  const [assignCollectionName, setAssignCollectionName] = useState('')
+  const [assignCollectionError, setAssignCollectionError] = useState<
+    string | null
+  >(null)
   const [tasksDialogOpen, setTasksDialogOpen] =
     useState<TasksDialogType | null>(null)
   const [tasksDialogRow, setTasksDialogRow] = useState<Task | null>(null)
@@ -1082,7 +1092,12 @@ export function Collection({
     workspaceCollections,
     activeWorkspaceCollection,
     setActiveWorkspaceCollection,
+    assignWorkspaceItemToCollection,
   } = useWorkspaceCollections()
+  const assignableWorkspaceCollections = useMemo(
+    () => workspaceCollections.filter((collection) => collection !== 'All Items'),
+    [workspaceCollections]
+  )
   const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
 
   const selectInventoryItem = useCallback((item: InventoryItem | null) => {
@@ -1155,6 +1170,75 @@ export function Collection({
     },
     [selectInventoryItem]
   )
+
+  const openInventoryAssignCollectionForItem = useCallback(
+    (item: InventoryItem | null) => {
+      setAssignCollectionError(null)
+      if (!item) {
+        selectInventoryItem(null)
+        setAssignCollectionItem(null)
+        setAssignCollectionName(assignableWorkspaceCollections[0] ?? '')
+        setAssignCollectionError(
+          'Select an inventory item before assigning a collection.'
+        )
+        setAssignCollectionOpen(true)
+        return
+      }
+
+      const currentAssignment = itemFolderAssignments[item.id]
+      const defaultCollection =
+        currentAssignment && currentAssignment !== 'All Items'
+          ? currentAssignment
+          : assignableWorkspaceCollections[0] ?? ''
+      selectInventoryItem(item)
+      setAssignCollectionItem(item)
+      setAssignCollectionName(defaultCollection)
+      setAssignCollectionOpen(true)
+    },
+    [
+      assignableWorkspaceCollections,
+      itemFolderAssignments,
+      selectInventoryItem,
+    ]
+  )
+
+  const handleAssignInventoryItemToCollection = useCallback(async () => {
+    if (!assignCollectionItem || !assignCollectionName) {
+      setAssignCollectionError('Choose an item and collection before saving.')
+      return
+    }
+
+    const workspaceItem: WorkspaceCollectionItem = {
+      id: assignCollectionItem.id,
+      name: assignCollectionItem.title || assignCollectionItem.part_number,
+      detail:
+        [assignCollectionItem.brand, assignCollectionItem.category]
+          .filter(Boolean)
+          .join(' - ') || 'Inventory item',
+      collectionName: assignCollectionName,
+    }
+    const updated = await assignWorkspaceItemToCollection(
+      workspaceItem,
+      assignCollectionName
+    )
+    if (!updated) {
+      setAssignCollectionError('Collection assignment could not be saved.')
+      return
+    }
+
+    setItemFolderAssignments((current) => ({
+      ...current,
+      [assignCollectionItem.id]: assignCollectionName,
+    }))
+    selectInventoryItem(assignCollectionItem)
+    setAssignCollectionOpen(false)
+    setAssignCollectionError(null)
+  }, [
+    assignCollectionItem,
+    assignCollectionName,
+    assignWorkspaceItemToCollection,
+    selectInventoryItem,
+  ])
 
   const resolveInventoryItemFromTask = useCallback(
     (task: Task) =>
@@ -3396,9 +3480,89 @@ export function Collection({
                   const matchedItem = resolveInventoryItemFromTask(task)
                   openInventoryBarcodesForItem(matchedItem)
                 }}
+                onAssignCollectionRow={(task) => {
+                  const matchedItem = resolveInventoryItemFromTask(task)
+                  openInventoryAssignCollectionForItem(matchedItem)
+                }}
               />
               {isInventoryRoute ? (
                 <>
+                  <Dialog
+                    open={assignCollectionOpen}
+                    onOpenChange={(open) => {
+                      setAssignCollectionOpen(open)
+                      if (!open) {
+                        setAssignCollectionError(null)
+                      }
+                    }}
+                  >
+                    <DialogContent data-testid='inventory-assign-collection-dialog'>
+                      <div className='space-y-4'>
+                        <DialogHeader>
+                          <DialogTitle>Assign to Collection</DialogTitle>
+                        </DialogHeader>
+                        <p className='text-sm text-muted-foreground'>
+                          {assignCollectionItem
+                            ? `Choose a collection for ${assignCollectionItem.title}.`
+                            : 'Choose an inventory item before assigning.'}
+                        </p>
+                        <div className='grid gap-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-assign-collection-select'
+                          >
+                            Collection
+                          </label>
+                          <select
+                            id='inventory-assign-collection-select'
+                            data-testid='inventory-assign-collection-select'
+                            className='h-9 rounded-md border bg-background px-2 text-sm'
+                            value={assignCollectionName}
+                            onChange={(event) =>
+                              setAssignCollectionName(event.target.value)
+                            }
+                          >
+                            {assignableWorkspaceCollections.map(
+                              (collection) => (
+                                <option key={collection} value={collection}>
+                                  {collection}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        </div>
+                        {assignCollectionError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                            data-testid='inventory-assign-collection-error'
+                          >
+                            {assignCollectionError}
+                          </div>
+                        ) : null}
+                        <DialogFooter>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            onClick={() => setAssignCollectionOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type='button'
+                            data-testid='inventory-assign-collection-submit'
+                            disabled={
+                              !assignCollectionItem || !assignCollectionName
+                            }
+                            onClick={() =>
+                              void handleAssignInventoryItemToCollection()
+                            }
+                          >
+                            Assign
+                          </Button>
+                        </DialogFooter>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                   <Dialog
                     open={itemEditorOpen}
                     onOpenChange={(open) => {

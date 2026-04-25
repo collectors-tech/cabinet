@@ -396,6 +396,48 @@ export function useWorkspaceCollections() {
     }).then(() => updatedItem)
   }
 
+  const assignWorkspaceItemToCollection = (
+    item: WorkspaceCollectionItem,
+    collectionName: string
+  ): Promise<WorkspaceCollectionItem | null> => {
+    const normalizedCollection = normalizeCollectionName(collectionName)
+    if (
+      !item.id ||
+      !normalizedCollection ||
+      normalizedCollection === 'All Items'
+    ) {
+      return Promise.resolve(null)
+    }
+    if (
+      !workspaceCollections.some(
+        (collection) => collection === normalizedCollection
+      )
+    ) {
+      return Promise.resolve(null)
+    }
+
+    const normalizedItem = normalizeWorkspaceCollectionItem({
+      ...item,
+      collectionName: normalizedCollection,
+    })
+    const existingItem = workspaceItems.some(
+      (workspaceItem) => workspaceItem.id === normalizedItem.id
+    )
+    const updatedItems = existingItem
+      ? workspaceItems.map((workspaceItem) =>
+          workspaceItem.id === normalizedItem.id
+            ? normalizedItem
+            : workspaceItem
+        )
+      : [...workspaceItems, normalizedItem]
+
+    return persistWorkspaceCollectionsState({
+      collections: workspaceCollections,
+      activeCollection: activeWorkspaceCollection,
+      items: updatedItems,
+    }).then(() => normalizedItem)
+  }
+
   const unassignItemFromCollection = (
     itemID: string
   ): Promise<WorkspaceCollectionItem | null> => {
@@ -444,6 +486,7 @@ export function useWorkspaceCollections() {
     collectionSummaries,
     collectionItems,
     assignItemToCollection,
+    assignWorkspaceItemToCollection,
     unassignItemFromCollection,
   }
 }
