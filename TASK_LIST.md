@@ -8,11 +8,11 @@ Last synced from GitHub issues: 2026-04-25 22:55 +10:00
 - Work is executed one focused issue branch at a time, validated, merged into `develop`, then the demo is rebuilt and restarted.
 
 ## Current Execution Queue
-- [ ] #665 [OPEN] Workspace collection deletes should remove stale options from compact filters
 - [ ] #643 [OPEN] Collections: implement two-table selected collection layout
 - [ ] #644 [OPEN] Collections: remove duplicate Selected collection section
 - [ ] #645 [OPEN] Collections: convert Collection members section into items table
 - [ ] #637 [OPEN] Epic: Redesign Inventory as a table-first collection browser
+- [x] #665 [DONE] Workspace collection deletes should remove stale options from compact filters
 - [x] #640 [DONE] Move Inventory photos into item-scoped modal with row quick action
 - [x] #641 [DONE] Move Inventory barcodes into item-scoped modal with row quick action
 - [x] #642 [DONE] Add responsive Cypress coverage for Inventory table-first redesign
