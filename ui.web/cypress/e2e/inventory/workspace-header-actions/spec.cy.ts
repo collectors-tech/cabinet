@@ -33,7 +33,7 @@ describe('workspace header action lanes', () => {
     })
   }
 
-  it('keeps Inventory actions in a compact page header without duplicate workspace chrome', () => {
+  it('keeps Inventory actions in the global shell header without duplicate workspace chrome', () => {
     cy.viewport(1280, 800)
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
@@ -43,7 +43,9 @@ describe('workspace header action lanes', () => {
     bootstrap('/inventory/')
     cy.wait('@items')
 
-    cy.get('[data-testid="inventory-page-header"]')
+    cy.get('[data-testid="inventory-shell-header"]').should('be.visible')
+    cy.get('[data-testid="inventory-page-header"]').should('not.exist')
+    cy.get('[data-testid="inventory-global-header-actions"]')
       .should('be.visible')
       .within(() => {
         cy.contains('Inventory').should('be.visible')
@@ -56,14 +58,15 @@ describe('workspace header action lanes', () => {
           'be.visible'
         )
       })
+    cy.get('[data-testid="inventory-header-action-separator"]').should('be.visible')
     cy.contains('Browse, organize, and update the items you already own.').should(
       'not.exist'
     )
     cy.get('[data-testid="collection-context-label"]').should('not.exist')
-    assertWorkspaceStartsBelowHeader('inventory-page-header', 'inventory-workspace')
+    assertWorkspaceStartsBelowHeader('inventory-shell-header', 'inventory-workspace')
   })
 
-  it('keeps Wishlist actions in the same compact header pattern', () => {
+  it('keeps Wishlist actions in the same global shell header pattern', () => {
     cy.viewport(1280, 800)
     cy.intercept('GET', '/api/wishlist', {
       statusCode: 200,
@@ -100,7 +103,9 @@ describe('workspace header action lanes', () => {
     cy.wait('@wishlistCatalog')
     cy.wait('@profileSettings')
 
-    cy.get('[data-testid="wishlist-page-header"]')
+    cy.get('[data-testid="wishlist-shell-header"]').should('be.visible')
+    cy.get('[data-testid="wishlist-page-header"]').should('not.exist')
+    cy.get('[data-testid="wishlist-global-header-actions"]')
       .should('be.visible')
       .within(() => {
         cy.contains('Wishlist').should('be.visible')
@@ -109,31 +114,35 @@ describe('workspace header action lanes', () => {
           'be.visible'
         )
       })
+    cy.get('[data-testid="wishlist-header-action-separator"]').should('be.visible')
     cy.contains(
       'Track wanted items, target prices, and planning decisions before they become owned inventory.'
     ).should('not.exist')
     assertWorkspaceStartsBelowHeader(
-      'wishlist-page-header',
+      'wishlist-shell-header',
       'wishlist-workspace'
     )
   })
 
-  it('keeps Collections actions in the same compact header pattern', () => {
+  it('keeps Collections actions in the same global shell header pattern', () => {
     cy.viewport(1280, 800)
     bootstrap('/collections/')
 
-    cy.get('[data-testid="collections-page-header"]')
+    cy.get('[data-testid="collections-shell-header"]').should('be.visible')
+    cy.get('[data-testid="collections-page-header"]').should('not.exist')
+    cy.get('[data-testid="collections-global-header-actions"]')
       .should('be.visible')
       .within(() => {
         cy.contains('Collections').should('be.visible')
         cy.get('[data-testid="collections-page-icon"]').should('be.visible')
         cy.get('[data-testid="collections-new-action"]').should('be.visible')
       })
+    cy.get('[data-testid="collections-header-action-separator"]').should('be.visible')
     cy.contains(
       'Manage collection rows and item placement from the shared Cabinet table surface.'
     ).should('not.exist')
     assertWorkspaceStartsBelowHeader(
-      'collections-page-header',
+      'collections-shell-header',
       'collections-workspace'
     )
   })

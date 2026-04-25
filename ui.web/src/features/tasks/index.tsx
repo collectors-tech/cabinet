@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import {
   collectionKey,
   useWorkspaceCollections,
@@ -749,45 +750,54 @@ export function Tasks({
 
   return (
     <>
-      <Header fixed>
+      <Header fixed data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
+        <div className='ms-auto flex min-w-0 items-center gap-3'>
+          {isWishlistRoute ? (
+            <>
+              <div
+                className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+                data-testid='wishlist-global-header-actions'
+              >
+                <div className='mr-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
+                  <h2 className='text-lg font-bold tracking-tight'>{title}</h2>
+                  <span className='text-xs font-medium text-muted-foreground'>
+                    Planning list
+                  </span>
+                </div>
+                <TasksHeaderActions
+                  isWishlistRoute={isWishlistRoute}
+                  onOpenCollectionCreate={() => {
+                    setInlineCollectionValidationMessage('')
+                    setInlineCollectionInputOpen(true)
+                  }}
+                  onCreate={() => {
+                    setCurrentDialogRow(null)
+                    setDialogOpen('create')
+                  }}
+                  onImport={() => {
+                    setCurrentDialogRow(null)
+                    setDialogOpen('import')
+                  }}
+                />
+              </div>
+              <Separator
+                orientation='vertical'
+                className='h-6'
+                data-testid='wishlist-header-action-separator'
+              />
+            </>
+          ) : null}
+          <div className='flex items-center space-x-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ConfigDrawer />
+            <ProfileDropdown />
+          </div>
         </div>
       </Header>
 
       <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
-        <div
-          className='flex flex-wrap items-center justify-between gap-2'
-          data-testid={isWishlistRoute ? 'wishlist-page-header' : undefined}
-        >
-          <div className='flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
-            <h2 className='text-xl font-bold tracking-tight'>{title}</h2>
-            {isWishlistRoute ? (
-              <span className='text-xs font-medium text-muted-foreground'>
-                Planning list
-              </span>
-            ) : null}
-          </div>
-          <TasksHeaderActions
-            isWishlistRoute={isWishlistRoute}
-            onOpenCollectionCreate={() => {
-              setInlineCollectionValidationMessage('')
-              setInlineCollectionInputOpen(true)
-            }}
-            onCreate={() => {
-              setCurrentDialogRow(null)
-              setDialogOpen('create')
-            }}
-            onImport={() => {
-              setCurrentDialogRow(null)
-              setDialogOpen('import')
-            }}
-          />
-        </div>
         <div
           className='flex flex-1 flex-col gap-4 sm:gap-6'
           data-testid={isWishlistRoute ? 'wishlist-workspace' : undefined}

@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
   SheetContent,
@@ -3132,34 +3133,22 @@ export function Collection({
 
   return (
     <TasksProvider>
-      <Header fixed>
+      <Header fixed data-testid='inventory-shell-header'>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      <Main className='space-y-3'>
-        <div
-          className='flex flex-wrap items-center justify-between gap-2'
-          data-testid='inventory-page-header'
-        >
-          <div className='flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
-            <h1 className='text-xl font-bold tracking-tight'>{title}</h1>
-            <span
-              className='text-xs font-medium text-muted-foreground'
-              data-testid='inventory-header-context'
-            >
-              Collection: {activeFolder}
-            </span>
-          </div>
+        <div className='ms-auto flex min-w-0 items-center gap-3'>
           <div
-            className='flex flex-wrap items-center justify-end gap-2'
-            data-testid='inventory-header-actions'
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='inventory-global-header-actions'
           >
+            <div className='mr-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
+              <h1 className='text-lg font-bold tracking-tight'>{title}</h1>
+              <span
+                className='text-xs font-medium text-muted-foreground'
+                data-testid='inventory-header-context'
+              >
+                Collection: {activeFolder}
+              </span>
+            </div>
             {isInventoryRoute ? (
               <>
                 <Button
@@ -3225,8 +3214,21 @@ export function Collection({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='inventory-header-action-separator'
+          />
+          <div className='flex items-center space-x-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ConfigDrawer />
+            <ProfileDropdown />
+          </div>
         </div>
+      </Header>
 
+      <Main className='space-y-3'>
         <div className='grid grid-cols-1 gap-4' data-testid='inventory-workspace'>
           <Card className='hidden'>
             <CardHeader>
