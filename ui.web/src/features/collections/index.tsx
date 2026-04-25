@@ -331,16 +331,20 @@ export function Collections() {
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='mb-6 flex flex-wrap items-end justify-between gap-3'>
-          <div>
-            <div className='flex items-center gap-2'>
-              <Tag className='h-5 w-5 text-muted-foreground' data-testid='collections-page-icon' />
-              <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
-            </div>
-            <p className='text-muted-foreground'>
-              Manage collection rows and item placement from the shared Cabinet table surface.
-            </p>
+      <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
+        <div
+          className='flex flex-wrap items-center justify-between gap-2'
+          data-testid='collections-page-header'
+        >
+          <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
+            <Tag
+              className='h-5 w-5 text-muted-foreground'
+              data-testid='collections-page-icon'
+            />
+            <h1 className='text-xl font-bold tracking-tight'>Collections</h1>
+            <span className='text-xs font-medium text-muted-foreground'>
+              {selectedCollectionName}
+            </span>
           </div>
           <Button data-testid='collections-new-action' onClick={() => setCreateOpen(true)}>
             <Plus className='mr-2 h-4 w-4' />
@@ -348,7 +352,10 @@ export function Collections() {
           </Button>
         </div>
 
-        <div className='grid gap-6 lg:grid-cols-[1.5fr,1fr]'>
+        <div
+          className='grid gap-6 lg:grid-cols-[1.5fr,1fr]'
+          data-testid='collections-workspace'
+        >
           <Card data-testid='collections-section'>
             <CardHeader>
               <CardTitle>Collections table</CardTitle>

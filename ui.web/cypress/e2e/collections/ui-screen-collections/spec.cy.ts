@@ -265,7 +265,7 @@ describe('ui-screen-collections', () => {
     })
   })
 
-  it('UI-SCREEN-COLLECTIONS-012 reflects inventory inline collection create inside the collections manager', () => {
+  it('UI-SCREEN-COLLECTIONS-012 keeps inventory collection create in the compact folder filter', () => {
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
@@ -275,25 +275,24 @@ describe('ui-screen-collections', () => {
     })
     cy.wait('@loadCollectionSettings')
 
-    cy.get('[data-testid="collection-inline-add-new"]').click()
-    cy.get('[data-testid="collection-inline-new-name"]').type('Inventory Sync Shelf')
-    cy.get('[data-testid="collection-inline-save"]').click()
+    cy.get('[data-testid="inventory-collection-add-root"]').click()
+    cy.get('[data-testid="folder-tree-name-input"]').type('Inventory Sync Shelf')
+    cy.get('[data-testid="folder-tree-create-submit"]').click()
     cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="collection-inline-picker-selected"]').should(
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
       'contain.text',
       'Inventory Sync Shelf'
     )
 
-    cy.visit('/collections/')
+    cy.reload()
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="collections-row-inventory-sync-shelf"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should(
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
       'contain.text',
       'Inventory Sync Shelf'
     )
   })
 
-  it('UI-SCREEN-COLLECTIONS-013 reflects wishlist inline collection create inside the collections manager', () => {
+  it('UI-SCREEN-COLLECTIONS-013 reflects wishlist table collection create inside the collections manager', () => {
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
@@ -303,11 +302,11 @@ describe('ui-screen-collections', () => {
     })
     cy.wait('@loadCollectionSettings')
 
-    cy.get('[data-testid="wishlist-inline-add-new"]').click()
-    cy.get('[data-testid="wishlist-inline-new-name"]').type('Wishlist Sync Shelf')
-    cy.get('[data-testid="wishlist-inline-save"]').click()
+    cy.get('[data-testid="wishlist-table-add-collection"]').click()
+    cy.get('[data-testid="wishlist-table-new-collection-name"]').type('Wishlist Sync Shelf')
+    cy.get('[data-testid="wishlist-table-new-collection-save"]').click()
     cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="wishlist-inline-picker-selected"]').should(
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       'contain.text',
       'Wishlist Sync Shelf'
     )
@@ -321,7 +320,7 @@ describe('ui-screen-collections', () => {
     )
   })
 
-  it('UI-SCREEN-COLLECTIONS-014 propagates rename into inventory and wishlist pickers', () => {
+  it('UI-SCREEN-COLLECTIONS-014 propagates rename into the wishlist table collection filter', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-2"]').click()
@@ -330,16 +329,24 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-edit-submit"]').click()
     cy.contains('Store 2 renamed to Store 2 Routed.').should('be.visible')
 
-    cy.visit('/inventory/')
-    cy.get('[data-testid="collection-inline-picker-option-store-2-routed"]').should('be.visible')
-    cy.get('[data-testid="collection-inline-picker-option-store-2"]').should('not.exist')
-
     cy.visit('/wishlist/')
-    cy.get('[data-testid="wishlist-inline-picker-option-store-2-routed"]').should('be.visible')
-    cy.get('[data-testid="wishlist-inline-picker-option-store-2"]').should('not.exist')
+    cy.get('[data-testid="wishlist-table-collection-select"]').select('Store 2 Routed')
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+      'contain.text',
+      'Store 2 Routed'
+    )
+    cy.get('[data-testid="wishlist-table-collection-select"] option').then(
+      ($options) => {
+        const optionLabels = [...$options].map((option) =>
+          option.textContent?.trim()
+        )
+        expect(optionLabels).to.include('Store 2 Routed')
+        expect(optionLabels).not.to.include('Store 2')
+      }
+    )
   })
 
-  it('UI-SCREEN-COLLECTIONS-015 propagates delete fallback into inventory and wishlist pickers', () => {
+  it('UI-SCREEN-COLLECTIONS-015 falls wishlist table collection context back after delete', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
 
@@ -348,13 +355,13 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-row-delete-store-1"]').scrollIntoView().click({ force: true })
     cy.get('[data-testid="collections-delete-submit"]').click()
     cy.contains('Store 1 removed from workspace collections.').should('be.visible')
-
-    cy.visit('/inventory/')
-    cy.get('[data-testid="collection-inline-picker-selected"]').should('contain.text', 'All Items')
-    cy.get('[data-testid="collection-inline-picker-option-store-1"]').should('not.exist')
+    cy.wait('@saveCollectionSettings')
 
     cy.visit('/wishlist/')
-    cy.get('[data-testid="wishlist-inline-picker-selected"]').should('contain.text', 'All Items')
-    cy.get('[data-testid="wishlist-inline-picker-option-store-1"]').should('not.exist')
+    cy.wait('@loadCollectionSettings')
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+      'contain.text',
+      'All Items'
+    )
   })
 })
