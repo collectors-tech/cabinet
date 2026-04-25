@@ -32,6 +32,7 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { Separator } from '@/components/ui/separator'
 import {
   Select,
   SelectContent,
@@ -324,36 +325,42 @@ export function Collections() {
 
   return (
     <>
-      <Header>
+      <Header fixed data-testid='collections-shell-header'>
         <Search />
-        <div className='ml-auto flex items-center gap-4'>
-          <ThemeSwitch />
-          <LanguageSwitch />
-          <ProfileDropdown />
+        <div className='ml-auto flex min-w-0 items-center gap-3'>
+          <div
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='collections-global-header-actions'
+          >
+            <div className='mr-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
+              <Tag
+                className='h-5 w-5 text-muted-foreground'
+                data-testid='collections-page-icon'
+              />
+              <h1 className='text-lg font-bold tracking-tight'>Collections</h1>
+              <span className='text-xs font-medium text-muted-foreground'>
+                {selectedCollectionName}
+              </span>
+            </div>
+            <Button data-testid='collections-new-action' onClick={() => setCreateOpen(true)}>
+              <Plus className='mr-2 h-4 w-4' />
+              New collection
+            </Button>
+          </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='collections-header-action-separator'
+          />
+          <div className='flex items-center gap-4'>
+            <ThemeSwitch />
+            <LanguageSwitch />
+            <ProfileDropdown />
+          </div>
         </div>
       </Header>
 
       <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
-        <div
-          className='flex flex-wrap items-center justify-between gap-2'
-          data-testid='collections-page-header'
-        >
-          <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
-            <Tag
-              className='h-5 w-5 text-muted-foreground'
-              data-testid='collections-page-icon'
-            />
-            <h1 className='text-xl font-bold tracking-tight'>Collections</h1>
-            <span className='text-xs font-medium text-muted-foreground'>
-              {selectedCollectionName}
-            </span>
-          </div>
-          <Button data-testid='collections-new-action' onClick={() => setCreateOpen(true)}>
-            <Plus className='mr-2 h-4 w-4' />
-            New collection
-          </Button>
-        </div>
-
         <div
           className='grid gap-4'
           data-testid='collections-workspace'
