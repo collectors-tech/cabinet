@@ -353,7 +353,7 @@ export function Collections() {
         </div>
 
         <div
-          className='grid gap-6 lg:grid-cols-[1.5fr,1fr]'
+          className='grid gap-4'
           data-testid='collections-workspace'
         >
           <Card data-testid='collections-section'>
@@ -426,44 +426,38 @@ export function Collections() {
             </CardContent>
           </Card>
 
-          <div className='space-y-6'>
-            <Card data-testid='collections-selected-panel'>
-              <CardHeader>
-                <CardTitle>Selected collection</CardTitle>
-                <CardDescription>
-                  Keep the active collection context visible while you manage rows and item placement.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-3'>
+          <Card data-testid='collections-members-panel'>
+            <CardHeader>
+              <div className='flex flex-wrap items-start justify-between gap-3'>
+                <div className='space-y-1'>
+                  <CardTitle>Collection members</CardTitle>
+                  <CardDescription>
+                    Review the inventory items assigned to the selected collection.
+                  </CardDescription>
+                </div>
                 {selectedRow ? (
-                  <>
+                  <div className='min-w-[14rem] rounded-md border bg-muted/30 px-3 py-2 text-sm'>
                     <div className='font-medium' data-testid='collections-selected-name'>
                       {selectedRow.name}
                     </div>
-                    <div className='text-sm text-muted-foreground'>
+                    <div className='text-xs text-muted-foreground'>
                       {selectedRow.description}
                     </div>
-                    <div className='text-sm text-muted-foreground' data-testid='collections-active-context-message'>
-                      Active collection is {selectedRow.name}. This choice persists for the current signed-in profile.
+                    <div className='text-xs text-muted-foreground' data-testid='collections-active-context-message'>
+                      Active collection is {selectedRow.name}.
                     </div>
                     <div className='text-xs text-muted-foreground' data-testid='collections-active-context-persistence'>
                       Persists for this signed-in profile across refresh.
                     </div>
-                  </>
-                ) : (
-                  <div className='text-sm text-muted-foreground'>Select a collection row to manage it here.</div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card data-testid='collections-assignment-panel'>
-              <CardHeader>
-                <CardTitle>Assign items</CardTitle>
-                <CardDescription>
-                  Add an item into the selected collection or move an item into this collection from another lane.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-4'>
+                  </div>
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div
+                className='rounded-md border bg-muted/20 p-3'
+                data-testid='collections-assignment-panel'
+              >
                 {isProtectedCollection ? (
                   <div className='text-sm text-muted-foreground' data-testid='collections-assignment-disabled'>
                     Select a specific collection to assign items. “All Items” stays as the global overview.
@@ -493,87 +487,101 @@ export function Collections() {
                     </Button>
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card data-testid='collections-members-panel'>
-              <CardHeader>
-                <CardTitle>Collection members</CardTitle>
-                <CardDescription>
-                  Review assigned items and move them deterministically between collections.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-3'>
-                {selectedCollectionItems.length ? (
-                  selectedCollectionItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className='rounded-md border p-3'
-                      data-testid={`collections-member-${collectionKey(item.name)}`}
-                    >
-                      <div className='font-medium' data-testid={`collections-member-name-${collectionKey(item.name)}`}>
-                        {item.name}
-                      </div>
-                      <div className='text-sm text-muted-foreground'>{item.detail}</div>
-                      <div
-                        className='mt-2 text-xs text-muted-foreground'
-                        data-testid={`collections-member-current-${collectionKey(item.name)}`}
-                      >
-                        Currently in {item.collectionName ?? 'Unassigned'}.
-                      </div>
-                      <div className='mt-3 flex items-center gap-3'>
-                        <Select
-                          value={moveTargets[item.id] ?? ''}
-                          onValueChange={(value) =>
-                            setMoveTargets((current) => ({ ...current, [item.id]: value }))
-                          }
+              <div className='rounded-md border' data-testid='collections-members-table'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Details</TableHead>
+                      <TableHead>Current collection</TableHead>
+                      <TableHead className='min-w-[22rem]'>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedCollectionItems.length ? (
+                      selectedCollectionItems.map((item) => (
+                        <TableRow
+                          key={item.id}
+                          data-testid={`collections-member-row-${item.id}`}
                         >
-                          <SelectTrigger data-testid={`collections-move-target-${collectionKey(item.name)}`}>
-                            <SelectValue placeholder='Move to...' />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {rows
-                              .filter((row) => row.name !== 'All Items' && row.name !== item.collectionName)
-                              .map((row) => (
-                                <SelectItem key={row.key} value={row.name}>
-                                  {row.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          data-testid={`collections-move-submit-${collectionKey(item.name)}`}
-                          onClick={() => {
-                            void handleMoveItem(item)
-                          }}
-                        >
-                          <ArrowRightLeft className='mr-2 h-4 w-4' />
-                          Move item
-                        </Button>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          data-testid={`collections-unassign-submit-${collectionKey(item.name)}`}
-                          onClick={() => {
-                            void handleUnassignItem(item)
-                          }}
-                        >
-                          <Trash2 className='mr-2 h-4 w-4' />
-                          Unassign
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className='text-sm text-muted-foreground' data-testid='collections-members-empty'>
-                    No items are currently assigned to {selectedCollectionName}.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                          <TableCell
+                            className='font-medium'
+                            data-testid={`collections-member-${collectionKey(item.name)}`}
+                          >
+                            <span data-testid={`collections-member-name-${collectionKey(item.name)}`}>
+                              {item.name}
+                            </span>
+                          </TableCell>
+                          <TableCell className='text-muted-foreground'>
+                            {item.detail}
+                          </TableCell>
+                          <TableCell
+                            className='text-muted-foreground'
+                            data-testid={`collections-member-current-${collectionKey(item.name)}`}
+                          >
+                            Currently in {item.collectionName ?? 'Unassigned'}.
+                          </TableCell>
+                          <TableCell>
+                            <div className='flex flex-wrap items-center gap-2'>
+                              <Select
+                                value={moveTargets[item.id] ?? ''}
+                                onValueChange={(value) =>
+                                  setMoveTargets((current) => ({ ...current, [item.id]: value }))
+                                }
+                              >
+                                <SelectTrigger data-testid={`collections-move-target-${collectionKey(item.name)}`}>
+                                  <SelectValue placeholder='Move to...' />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {rows
+                                    .filter((row) => row.name !== 'All Items' && row.name !== item.collectionName)
+                                    .map((row) => (
+                                      <SelectItem key={row.key} value={row.name}>
+                                        {row.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                data-testid={`collections-move-submit-${collectionKey(item.name)}`}
+                                onClick={() => {
+                                  void handleMoveItem(item)
+                                }}
+                              >
+                                <ArrowRightLeft className='mr-2 h-4 w-4' />
+                                Move item
+                              </Button>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                data-testid={`collections-unassign-submit-${collectionKey(item.name)}`}
+                                onClick={() => {
+                                  void handleUnassignItem(item)
+                                }}
+                              >
+                                <Trash2 className='mr-2 h-4 w-4' />
+                                Unassign
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow data-testid='collections-members-empty-row'>
+                        <TableCell colSpan={4} className='h-24 text-center text-muted-foreground'>
+                          No items are currently assigned to {selectedCollectionName}.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </Main>
 

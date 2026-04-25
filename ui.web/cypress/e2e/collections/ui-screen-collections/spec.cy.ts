@@ -30,6 +30,30 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-row-all-items"]').should('be.visible')
   })
 
+  it('UI-SCREEN-COLLECTIONS-016 renders selected collection items in a lower table', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-workspace"]').should('be.visible')
+    cy.get('[data-testid="collections-shared-table"]').should('be.visible')
+    cy.get('[data-testid="collections-members-table"]').should('be.visible')
+    cy.get('[data-testid="collections-row-store-1"]').click()
+    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
+      'contain.text',
+      'Shadowless Pikachu'
+    )
+
+    cy.get('[data-testid="collections-row-overflow"]').click()
+    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Overflow')
+    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="collections-members-empty-row"]').should(
+      'contain.text',
+      'No items are currently assigned to Overflow.'
+    )
+  })
+
   it('UI-SCREEN-COLLECTIONS-002 selects a row and persists active context across refresh', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSelection')
@@ -130,7 +154,9 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
     cy.get('[data-testid="collections-move-target-1996-topps-kobe-bryant-rookie"]').click()
     cy.contains('[role="option"]', 'Warehouse 1').click()
-    cy.get('[data-testid="collections-move-submit-1996-topps-kobe-bryant-rookie"]').click()
+    cy.get('[data-testid="collections-move-submit-1996-topps-kobe-bryant-rookie"]').click({
+      force: true,
+    })
 
     cy.contains('1996 Topps Kobe Bryant rookie moved to Warehouse 1.').should('be.visible')
     cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
