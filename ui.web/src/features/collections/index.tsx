@@ -48,6 +48,9 @@ import {
   useWorkspaceCollections,
 } from './use-workspace-collections'
 
+const collectionsHeaderDescription =
+  'Manage collection rows and item placement from the shared Cabinet table surface.'
+
 type CollectionRow = WorkspaceCollectionSummary
 
 function buildCollectionColumns({
@@ -262,17 +265,25 @@ export function Collections() {
     <>
       <Header fixed data-testid='collections-shell-header'>
         <Search />
+        <h1
+          className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap text-lg font-bold tracking-tight lg:flex'
+          data-testid='collections-header-title'
+          title={collectionsHeaderDescription}
+          aria-label={`Collections - ${collectionsHeaderDescription}`}
+        >
+          <Tag
+            aria-hidden='true'
+            className='h-5 w-5 text-muted-foreground'
+            data-testid='collections-page-icon'
+          />
+          Collections
+        </h1>
         <div className='ml-auto flex min-w-0 items-center gap-3'>
           <div
             className='flex min-w-0 flex-wrap items-center justify-end gap-2'
             data-testid='collections-global-header-actions'
           >
             <div className='mr-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
-              <Tag
-                className='h-5 w-5 text-muted-foreground'
-                data-testid='collections-page-icon'
-              />
-              <h1 className='text-lg font-bold tracking-tight'>Collections</h1>
               <span className='text-xs font-medium text-muted-foreground'>
                 Active:
               </span>

@@ -33,6 +33,23 @@ describe('workspace header action lanes', () => {
     })
   }
 
+  function assertHeaderTitleCentered(
+    headerTestID: string,
+    titleTestID: string
+  ) {
+    cy.get(`[data-testid="${headerTestID}"]`).then(($header) => {
+      const headerRect = $header[0].getBoundingClientRect()
+      const headerCenter = headerRect.left + headerRect.width / 2
+
+      cy.get(`[data-testid="${titleTestID}"]`).then(($title) => {
+        const titleRect = $title[0].getBoundingClientRect()
+        const titleCenter = titleRect.left + titleRect.width / 2
+
+        expect(Math.abs(titleCenter - headerCenter)).to.be.lessThan(8)
+      })
+    })
+  }
+
   it('keeps Inventory actions in the global shell header without duplicate workspace chrome', () => {
     cy.viewport(1280, 800)
     cy.intercept('GET', '/api/items', {
@@ -44,11 +61,23 @@ describe('workspace header action lanes', () => {
     cy.wait('@items')
 
     cy.get('[data-testid="inventory-shell-header"]').should('be.visible')
+    cy.get('[data-testid="inventory-header-title"]')
+      .should('be.visible')
+      .should(
+        'have.attr',
+        'title',
+        'Browse, organize, and update the items you already own.'
+      )
+      .should(
+        'have.attr',
+        'aria-label',
+        'Inventory - Browse, organize, and update the items you already own.'
+      )
+    assertHeaderTitleCentered('inventory-shell-header', 'inventory-header-title')
     cy.get('[data-testid="inventory-page-header"]').should('not.exist')
     cy.get('[data-testid="inventory-global-header-actions"]')
       .should('be.visible')
       .within(() => {
-        cy.contains('Inventory').should('be.visible')
         cy.get('[data-testid="inventory-header-context"]').should(
           'contain.text',
           'All Items'
@@ -104,11 +133,24 @@ describe('workspace header action lanes', () => {
     cy.wait('@profileSettings')
 
     cy.get('[data-testid="wishlist-shell-header"]').should('be.visible')
+    cy.get('[data-testid="wishlist-header-title"]')
+      .should('be.visible')
+      .should(
+        'have.attr',
+        'title',
+        'Track wanted items, target prices, and planning decisions before they become owned inventory.'
+      )
+      .should(
+        'have.attr',
+        'aria-label',
+        'Wishlist - Track wanted items, target prices, and planning decisions before they become owned inventory.'
+      )
+    assertHeaderTitleCentered('wishlist-shell-header', 'wishlist-header-title')
     cy.get('[data-testid="wishlist-page-header"]').should('not.exist')
     cy.get('[data-testid="wishlist-global-header-actions"]')
       .should('be.visible')
       .within(() => {
-        cy.contains('Wishlist').should('be.visible')
+        cy.contains('Planning list').should('not.exist')
         cy.get('[data-testid="wishlist-new-action"]').should('be.visible')
         cy.get('[data-testid="wishlist-create-menu-trigger"]').should(
           'be.visible'
@@ -129,12 +171,24 @@ describe('workspace header action lanes', () => {
     bootstrap('/collections/')
 
     cy.get('[data-testid="collections-shell-header"]').should('be.visible')
+    cy.get('[data-testid="collections-header-title"]')
+      .should('be.visible')
+      .should(
+        'have.attr',
+        'title',
+        'Manage collection rows and item placement from the shared Cabinet table surface.'
+      )
+      .should(
+        'have.attr',
+        'aria-label',
+        'Collections - Manage collection rows and item placement from the shared Cabinet table surface.'
+      )
+    assertHeaderTitleCentered('collections-shell-header', 'collections-header-title')
     cy.get('[data-testid="collections-page-header"]').should('not.exist')
     cy.get('[data-testid="collections-global-header-actions"]')
       .should('be.visible')
       .within(() => {
-        cy.contains('Collections').should('be.visible')
-        cy.get('[data-testid="collections-page-icon"]').should('be.visible')
+        cy.get('[data-testid="collections-page-icon"]').should('not.exist')
         cy.get('[data-testid="collections-new-action"]').should('be.visible')
       })
     cy.get('[data-testid="collections-header-action-separator"]').should('be.visible')
