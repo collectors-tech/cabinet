@@ -40,7 +40,11 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
   }
 
   function openFirstRowPhotosModal() {
-    cy.get('[data-testid="inventory-row-photos-action"]').first().click()
+    cy.get('[data-testid^="inventory-item-row-"]')
+      .first()
+      .should('be.visible')
+      .find('[data-testid="inventory-row-photos-action"]')
+      .click()
     cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
     cy.get('[data-testid="inventory-photos-panel"]').should('be.visible')
   }
@@ -171,6 +175,57 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
     cy.get('[data-testid="inventory-photo-prev"]').click()
     cy.get('[data-testid="inventory-photo-fullscreen-close"]').click()
     cy.get('[data-testid="inventory-photo-fullscreen"]').should('not.exist')
+  })
+
+  it('PHOTOS-MEDIA-004A renders photo actions inside each image card as compact controls', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-card-actions',
+            title: 'Photo Card Actions Item',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-card-actions/photos', {
+      statusCode: 200,
+      body: {
+        photos: [
+          { id: 'card-p1', filename: 'card-one.jpg', is_primary: true },
+          { id: 'card-p2', filename: 'card-two.jpg', is_primary: false },
+        ],
+      },
+    }).as('photos')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@photos')
+    openPhotosModal()
+
+    cy.contains('[data-testid="inventory-photo-row"]', 'card-one.jpg').within(
+      () => {
+        cy.get('[data-testid="inventory-photo-thumb"]').should('be.visible')
+        cy.get('[data-testid="inventory-photo-card-actions"]').should(
+          'be.visible'
+        )
+        cy.get('[data-testid="inventory-photo-move-up"]')
+          .should('have.attr', 'aria-label', 'Move card-one.jpg up')
+          .and('not.contain.text', 'Move Up')
+        cy.get('[data-testid="inventory-photo-move-down"]')
+          .should('have.attr', 'aria-label', 'Move card-one.jpg down')
+          .and('not.contain.text', 'Move Down')
+        cy.get('[data-testid="inventory-photo-set-primary"]')
+          .should('have.attr', 'aria-label', 'Set card-one.jpg as primary')
+          .and('not.contain.text', 'Set Primary')
+        cy.get('[data-testid="inventory-photo-delete"]')
+          .should('have.attr', 'aria-label', 'Delete card-one.jpg')
+          .and('not.contain.text', 'Delete')
+      }
+    )
   })
 
   it('PHOTOS-MEDIA-005 keeps photos scoped to the currently selected item when switching rows', () => {
