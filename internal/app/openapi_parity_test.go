@@ -77,6 +77,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/items/{itemID}/photos/reorder",
 		"/api/items/{itemID}/photos/{photoID}",
 		"/api/items/{itemID}/photos/{photoID}/primary",
+		"/api/items/{itemID}/photos/{photoID}/rotate",
 		"/api/items/{itemID}/photos/{photoID}/file",
 		"/api/items/{itemID}/photos-rebuild",
 		"/api/barcodes/{barcode}",

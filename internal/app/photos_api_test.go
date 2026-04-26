@@ -1,7 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -123,6 +127,53 @@ func TestPhotosReorderEndpoint(t *testing.T) {
 	}
 }
 
+func TestPhotosRotateEndpoint_UpdatesStoredOrientation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('item-1','AFX','Slot Car','P-1','Car')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+
+	body, contentType := buildMultipartPhoto(t, "wide.jpg", rectangularJPEG(t, 80, 32))
+	resp := doRequest(t, a, http.MethodPost, "/api/items/item-1/photos", body, map[string]string{"Content-Type": contentType})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("upload status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+
+	rotateRight := doRequest(t, a, http.MethodPut, "/api/items/item-1/photos/"+created.ID+"/rotate", strings.NewReader(`{"direction":"right"}`), map[string]string{"Content-Type": "application/json"})
+	if rotateRight.Code != http.StatusOK {
+		t.Fatalf("rotate right status = %d body=%s", rotateRight.Code, rotateRight.Body.String())
+	}
+	originalRight := doRequest(t, a, http.MethodGet, "/api/items/item-1/photos/"+created.ID+"/file?variant=original", nil, nil)
+	if originalRight.Code != http.StatusOK {
+		t.Fatalf("rotated original status = %d body=%s", originalRight.Code, originalRight.Body.String())
+	}
+	width, height := jpegDimensions(t, originalRight.Body.Bytes())
+	if width != 32 || height != 80 {
+		t.Fatalf("expected right-rotated dimensions 32x80, got %dx%d", width, height)
+	}
+
+	rotateLeft := doRequest(t, a, http.MethodPut, "/api/items/item-1/photos/"+created.ID+"/rotate", strings.NewReader(`{"direction":"left"}`), map[string]string{"Content-Type": "application/json"})
+	if rotateLeft.Code != http.StatusOK {
+		t.Fatalf("rotate left status = %d body=%s", rotateLeft.Code, rotateLeft.Body.String())
+	}
+	originalLeft := doRequest(t, a, http.MethodGet, "/api/items/item-1/photos/"+created.ID+"/file?variant=original", nil, nil)
+	if originalLeft.Code != http.StatusOK {
+		t.Fatalf("restored original status = %d body=%s", originalLeft.Code, originalLeft.Body.String())
+	}
+	width, height = jpegDimensions(t, originalLeft.Body.Bytes())
+	if width != 80 || height != 32 {
+		t.Fatalf("expected left-rotated dimensions 80x32, got %dx%d", width, height)
+	}
+}
+
 func TestPhotosUpload_UsesActiveProfileMediaDirectory(t *testing.T) {
 	t.Parallel()
 
@@ -241,4 +292,28 @@ func TestPhotosUpload_UsesActiveProfileMediaDirectory(t *testing.T) {
 	if !strings.HasPrefix(photoTwo.ThumbnailPath, profileTwoMediaDir) {
 		t.Fatalf("expected profile two thumbnail path in %s, got %s", profileTwoMediaDir, photoTwo.ThumbnailPath)
 	}
+}
+
+func rectangularJPEG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8((x * 255) / width), G: uint8((y * 255) / height), B: 120, A: 255})
+		}
+	}
+	var b bytes.Buffer
+	if err := jpeg.Encode(&b, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatalf("encode rectangular jpeg: %v", err)
+	}
+	return b.Bytes()
+}
+
+func jpegDimensions(t *testing.T, data []byte) (int, int) {
+	t.Helper()
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode jpeg config: %v", err)
+	}
+	return cfg.Width, cfg.Height
 }
