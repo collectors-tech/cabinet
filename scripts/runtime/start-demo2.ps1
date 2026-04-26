@@ -52,6 +52,7 @@ $args = @(
   '--data-dir', $dataDir,
   '--profile', $profile,
   '--instance-name', $instanceName,
+  '--seed-sample-data',
   '--port', $port
 )
 
