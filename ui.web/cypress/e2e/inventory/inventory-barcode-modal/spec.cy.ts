@@ -55,6 +55,15 @@ describe('inventory barcode modal', () => {
     cy.get('[data-testid="inventory-barcodes-dialog"]')
       .should('be.visible')
       .and('contain', 'Barcode Alpha')
+    cy.get('[data-testid="inventory-barcodes-dialog"] [data-slot="dialog-close"]').should(
+      'have.length',
+      1
+    )
+    cy.get('[data-testid="inventory-barcodes-dialog-close"]').should(
+      'have.attr',
+      'data-slot',
+      'dialog-close'
+    )
     cy.get('[data-testid="inventory-barcodes-lookup-input"]').type('1234567890123')
     cy.get('[data-testid="inventory-barcodes-lookup-button"]').click()
     cy.wait('@lookupAlpha')

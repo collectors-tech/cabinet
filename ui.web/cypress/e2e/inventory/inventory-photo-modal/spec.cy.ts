@@ -56,6 +56,15 @@ describe('inventory photo modal', () => {
     cy.get('[data-testid="inventory-photos-dialog"]')
       .should('be.visible')
       .and('contain', 'Photo Alpha')
+    cy.get('[data-testid="inventory-photos-dialog"] [data-slot="dialog-close"]').should(
+      'have.length',
+      1
+    )
+    cy.get('[data-testid="inventory-photos-dialog-close"]').should(
+      'have.attr',
+      'data-slot',
+      'dialog-close'
+    )
     cy.contains('[data-testid="inventory-photo-row"]', 'alpha-one.jpg').should('be.visible')
     cy.get('[data-testid="inventory-photos-dialog-close"]').click()
     cy.get('[data-testid="inventory-photos-dialog"]').should('not.exist')
