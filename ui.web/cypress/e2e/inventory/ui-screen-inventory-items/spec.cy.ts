@@ -381,14 +381,14 @@ describe("inventory-management", () => {
 
     cy.get('[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
-    cy.get('[data-testid="inventory-item-editor-dialog"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("be.visible");
     cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item Updated");
     cy.get('[data-testid="inventory-item-brand"]').clear().type("Aurora");
     cy.get('[data-testid="inventory-item-save"]').click();
 
     cy.wait("@updateItem");
     cy.wait("@itemsList");
-    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
     cy.get('[data-testid="inventory-photos-action"]').click();

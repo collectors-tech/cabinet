@@ -163,7 +163,7 @@ describe("inventory responsive table-first redesign", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-RESP-B");
   });
 
-  it("keeps tablet editor modal navigation available from table rows", () => {
+  it("keeps tablet editor panel navigation available from table rows", () => {
     cy.viewport(768, 1024);
     signIn();
 
@@ -171,7 +171,7 @@ describe("inventory responsive table-first redesign", () => {
       '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="task-row-actions-trigger"]'
     ).trigger("pointerdown", { button: 0, pointerType: "mouse" });
     cy.contains('[role="menuitem"]', "Edit").click({ force: true });
-    cy.get('[data-testid="inventory-item-editor-dialog"]')
+    cy.get('[data-testid="inventory-item-editor-panel"]')
       .should("be.visible")
       .and("contain", "Edit Item");
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Responsive Alpha");
@@ -181,7 +181,7 @@ describe("inventory responsive table-first redesign", () => {
     cy.get('[data-testid="inventory-item-editor-previous"]').click();
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Responsive Alpha");
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
-    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
 
     assertNoDocumentHorizontalOverflow();
   });
