@@ -19,6 +19,7 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 		"--base-url", "http://127.0.0.1:19090",
 		"--restart",
 		"--allow-parallel",
+		"--seed-sample-data",
 		"--log-level", "debug",
 	})
 	if err != nil {
@@ -45,6 +46,9 @@ func TestParseStartupArgsBuildsEnvOverrides(t *testing.T) {
 	}
 	if overrides.Env["CABINET_ALLOW_PARALLEL"] != "true" {
 		t.Fatalf("expected CABINET_ALLOW_PARALLEL=true")
+	}
+	if overrides.Env["CABINET_SEED_SAMPLE_DATA"] != "true" {
+		t.Fatalf("expected CABINET_SEED_SAMPLE_DATA=true")
 	}
 	if overrides.Env["CABINET_LOG_LEVEL"] != "debug" {
 		t.Fatalf("expected CABINET_LOG_LEVEL=debug")
@@ -138,9 +142,9 @@ func TestValidateStartupOverridesRejectsRestartWithAllowParallel(t *testing.T) {
 
 	err := validateStartupOverrides(startupOverrides{
 		Env: map[string]string{
-			"CABINET_RESTART":       "true",
+			"CABINET_RESTART":        "true",
 			"CABINET_ALLOW_PARALLEL": "true",
-			"CABINET_PROFILE":       "demo",
+			"CABINET_PROFILE":        "demo",
 		},
 	})
 	if err == nil {

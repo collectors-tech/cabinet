@@ -30,6 +30,7 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	var baseURL string
 	var restart bool
 	var allowParallel bool
+	var seedSampleData bool
 	var logLevel string
 	var noOpenBrowser bool
 
@@ -42,6 +43,7 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 	fs.StringVar(&baseURL, "base-url", "", "Base URL override for runtime callbacks/origin.")
 	fs.BoolVar(&restart, "restart", false, "Restart an already-running Cabinet instance on the requested endpoint.")
 	fs.BoolVar(&allowParallel, "allow-parallel", false, "Allow parallel runtime instances.")
+	fs.BoolVar(&seedSampleData, "seed-sample-data", false, "Seed idempotent sample data for the active profile on startup.")
 	fs.StringVar(&logLevel, "log-level", "", "Log level override (debug|info|warn|error).")
 	fs.BoolVar(&noOpenBrowser, "no-open-browser", false, "Disable browser auto-open on startup.")
 
@@ -115,6 +117,10 @@ func parseStartupArgs(args []string) (startupOverrides, error) {
 		env["CABINET_ALLOW_PARALLEL"] = "true"
 	}
 
+	if seedSampleData {
+		env["CABINET_SEED_SAMPLE_DATA"] = "true"
+	}
+
 	logLevel = strings.ToLower(strings.TrimSpace(logLevel))
 	if logLevel != "" {
 		switch logLevel {
@@ -141,7 +147,7 @@ func applyStartupOverrides(overrides startupOverrides) {
 
 func buildEffectiveStartupConfigLine(cfg config.Config) string {
 	return fmt.Sprintf(
-		"CABINET_EFFECTIVE_CONFIG addr=%s host=%s port=%d data_dir=%s profile=%s auth_mode=%s base_url=%s allow_parallel=%s log_level=%s",
+		"CABINET_EFFECTIVE_CONFIG addr=%s host=%s port=%d data_dir=%s profile=%s auth_mode=%s base_url=%s allow_parallel=%s seed_sample_data=%s log_level=%s",
 		cfg.Addr,
 		cfg.Host,
 		cfg.Port,
@@ -150,6 +156,7 @@ func buildEffectiveStartupConfigLine(cfg config.Config) string {
 		envOrDefault("CABINET_AUTH_MODE", "local"),
 		envOrDefault("CABINET_BASE_URL", fmt.Sprintf("http://%s", cfg.Addr)),
 		envOrDefault("CABINET_ALLOW_PARALLEL", "false"),
+		envOrDefault("CABINET_SEED_SAMPLE_DATA", "false"),
 		envOrDefault("CABINET_LOG_LEVEL", "info"),
 	)
 }

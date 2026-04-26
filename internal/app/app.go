@@ -67,6 +67,15 @@ func startupMigrationTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func startupSampleDataSeedEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_SEED_SAMPLE_DATA"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 type App struct {
 	cfg           config.Config
 	db            *sql.DB
@@ -128,6 +137,19 @@ func New(cfg config.Config) (*App, error) {
 	if err != nil {
 		conn.Close()
 		return nil, err
+	}
+	if startupSampleDataSeedEnabled() {
+		result, seedErr := seedOnboardingSampleData(ctx, profiles, collectionRepo, wishlistSvc, conn)
+		if seedErr != nil {
+			log.Printf("sample data startup seed skipped: %v", seedErr)
+		} else {
+			log.Printf(
+				"sample data startup seed complete: created_items=%d created_wishlist_entries=%d total_wishlist_entries=%d",
+				result.CreatedItems,
+				result.CreatedWishlistEntries,
+				result.TotalWishlistEntries,
+			)
+		}
 	}
 	cloudLeases := newCloudLeaseStore()
 	cloudEntitlements := newCloudEntitlementStore()
