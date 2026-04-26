@@ -418,6 +418,9 @@ export function TasksTable({
     if (record) {
       onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
+    if (isInventoryRoute) {
+      return
+    }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
     }

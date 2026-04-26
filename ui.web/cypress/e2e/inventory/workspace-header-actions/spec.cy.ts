@@ -34,18 +34,25 @@ describe('workspace header action lanes', () => {
   }
 
   function assertHeaderTitleCentered(
-    headerTestID: string,
-    titleTestID: string
+    titleTestID: string,
+    actionsTestID: string
   ) {
-    cy.get(`[data-testid="${headerTestID}"]`).then(($header) => {
-      const headerRect = $header[0].getBoundingClientRect()
-      const headerCenter = headerRect.left + headerRect.width / 2
+    cy.get(`[data-testid="${titleTestID}"]`).then(($title) => {
+      const titleRect = $title[0].getBoundingClientRect()
+      const titleCenter = titleRect.left + titleRect.width / 2
+      const searchElement = $title[0].parentElement?.previousElementSibling
 
-      cy.get(`[data-testid="${titleTestID}"]`).then(($title) => {
-        const titleRect = $title[0].getBoundingClientRect()
-        const titleCenter = titleRect.left + titleRect.width / 2
+      expect(searchElement, 'search element before title lane').to.not.equal(null)
+      const searchRect = searchElement.getBoundingClientRect()
 
-        expect(Math.abs(titleCenter - headerCenter)).to.be.lessThan(8)
+      cy.get(`[data-testid="${actionsTestID}"]`).then(($actions) => {
+        const actionsRect = $actions[0].getBoundingClientRect()
+        const availableCenter = searchRect.right + (actionsRect.left - searchRect.right) / 2
+
+        expect(Math.abs(titleCenter - availableCenter)).to.be.lessThan(8)
+        expect(titleRect.right, 'title does not overlap actions').to.be.lessThan(
+          actionsRect.left
+        )
       })
     })
   }
@@ -73,7 +80,7 @@ describe('workspace header action lanes', () => {
         'aria-label',
         'Inventory - Browse, organize, and update the items you already own.'
       )
-    assertHeaderTitleCentered('inventory-shell-header', 'inventory-header-title')
+    assertHeaderTitleCentered('inventory-header-title', 'inventory-global-header-actions')
     cy.get('[data-testid="inventory-page-header"]').should('not.exist')
     cy.get('[data-testid="inventory-global-header-actions"]')
       .should('be.visible')
@@ -145,7 +152,7 @@ describe('workspace header action lanes', () => {
         'aria-label',
         'Wishlist - Track wanted items, target prices, and planning decisions before they become owned inventory.'
       )
-    assertHeaderTitleCentered('wishlist-shell-header', 'wishlist-header-title')
+    assertHeaderTitleCentered('wishlist-header-title', 'wishlist-global-header-actions')
     cy.get('[data-testid="wishlist-page-header"]').should('not.exist')
     cy.get('[data-testid="wishlist-global-header-actions"]')
       .should('be.visible')
@@ -183,7 +190,7 @@ describe('workspace header action lanes', () => {
         'aria-label',
         'Collections - Manage collection rows and item placement from the shared Cabinet table surface.'
       )
-    assertHeaderTitleCentered('collections-shell-header', 'collections-header-title')
+    assertHeaderTitleCentered('collections-header-title', 'collections-global-header-actions')
     cy.get('[data-testid="collections-page-header"]').should('not.exist')
     cy.get('[data-testid="collections-global-header-actions"]')
       .should('be.visible')
