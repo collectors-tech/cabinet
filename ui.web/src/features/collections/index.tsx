@@ -320,12 +320,6 @@ export function Collections() {
           data-testid='collections-workspace'
         >
           <Card data-testid='collections-section'>
-            <CardHeader>
-              <CardTitle>Collections table</CardTitle>
-              <CardDescription>
-                Browse, create, rename, and remove collection rows from the same management surface.
-              </CardDescription>
-            </CardHeader>
             <CardContent className='space-y-4'>
               <div className='flex items-center gap-3' data-testid='collections-management-tools'>
                 <Input

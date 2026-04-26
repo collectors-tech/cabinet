@@ -26,6 +26,10 @@ describe('ui-screen-collections', () => {
 
     cy.get('[data-testid="collections-section"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
+    cy.contains('Collections table').should('not.exist')
+    cy.contains(
+      'Browse, create, rename, and remove collection rows from the same management surface.'
+    ).should('not.exist')
     cy.get('[data-testid="collections-new-action"]').should('be.visible')
     cy.get('[data-testid="collections-row-all-items"]').should('be.visible')
   })
