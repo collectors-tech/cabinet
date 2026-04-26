@@ -218,6 +218,7 @@ function TasksHeaderActions({
 
 export function Tasks({
   title = 'Tasks',
+  description = '',
   routePath = '/_authenticated/inventory/',
 }: TasksProps) {
   const {
@@ -752,6 +753,16 @@ export function Tasks({
     <>
       <Header fixed data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}>
         <Search />
+        {isWishlistRoute ? (
+          <h1
+            className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-lg font-bold tracking-tight lg:block'
+            data-testid='wishlist-header-title'
+            title={description}
+            aria-label={description ? `${title} - ${description}` : title}
+          >
+            {title}
+          </h1>
+        ) : null}
         <div className='ms-auto flex min-w-0 items-center gap-3'>
           {isWishlistRoute ? (
             <>
@@ -759,12 +770,6 @@ export function Tasks({
                 className='flex min-w-0 flex-wrap items-center justify-end gap-2'
                 data-testid='wishlist-global-header-actions'
               >
-                <div className='mr-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
-                  <h2 className='text-lg font-bold tracking-tight'>{title}</h2>
-                  <span className='text-xs font-medium text-muted-foreground'>
-                    Planning list
-                  </span>
-                </div>
                 <TasksHeaderActions
                   isWishlistRoute={isWishlistRoute}
                   onOpenCollectionCreate={() => {

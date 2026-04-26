@@ -1086,6 +1086,7 @@ function resolveFolderDragPreviewPosition(clientX: number, clientY: number) {
 
 export function Collection({
   title = 'Collection',
+  description = '',
   routePath,
 }: CollectionWorkspaceProps) {
   const [tableData, setTableData] = useState<Task[]>(tasks)
@@ -3145,13 +3146,20 @@ export function Collection({
         data-testid='inventory-shell-header'
       >
         <Search className='hidden min-w-32 sm:flex' />
+        <h1
+          className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-lg font-bold tracking-tight lg:block'
+          data-testid='inventory-header-title'
+          title={description}
+          aria-label={description ? `${title} - ${description}` : title}
+        >
+          {title}
+        </h1>
         <div className='ms-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none sm:gap-3'>
           <div
             className='flex min-w-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
             data-testid='inventory-global-header-actions'
           >
             <div className='mr-1 hidden min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex'>
-              <h1 className='text-lg font-bold tracking-tight'>{title}</h1>
               <span
                 className='text-xs font-medium text-muted-foreground'
                 data-testid='inventory-header-context'
