@@ -106,8 +106,12 @@ describe("inventory responsive table-first redesign", () => {
     cy.get('[data-testid="inventory-collection-filter-select"]').select("Store 1");
     cy.get('[data-testid="inventory-collection-filter-selected"]').should("contain", "Store 1");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
+    cy.get('[data-testid="inventory-collection-filter-select"]').select("All Items");
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should("contain", "All Items");
 
-    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get(
+      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="inventory-row-photos-action"]'
+    ).click();
     cy.get('[data-testid="inventory-photos-dialog"]')
       .should("be.visible")
       .and("contain", "Responsive Alpha");
@@ -117,7 +121,9 @@ describe("inventory responsive table-first redesign", () => {
     cy.get('[data-testid="inventory-photos-dialog-close"]').click();
     cy.get('[data-testid="inventory-photos-dialog"]').should("not.exist");
 
-    cy.get('[data-testid="inventory-barcodes-action"]').click();
+    cy.get(
+      '[data-testid="inventory-item-row-item-responsive-alpha"] [data-testid="inventory-row-barcodes-action"]'
+    ).click();
     cy.get('[data-testid="inventory-barcodes-dialog"]')
       .should("be.visible")
       .and("contain", "Responsive Alpha");

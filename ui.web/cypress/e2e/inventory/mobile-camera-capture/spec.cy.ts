@@ -41,7 +41,9 @@ describe('MOBILE-CAMERA-CAPTURE', () => {
     cy.wait('@items')
     cy.wait('@photos')
     cy.wait('@activeProfile')
-    cy.get('[data-testid="inventory-photos-action"]').click()
+    cy.get(
+      '[data-testid="inventory-item-row-item-camera-1"] [data-testid="inventory-row-photos-action"]'
+    ).click()
     cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
   }
 

@@ -7,7 +7,7 @@ describe('inventory photo modal', () => {
     })
   }
 
-  it('opens item-scoped photos from page and row actions without inline photos section', () => {
+  it('opens item-scoped photos from row actions without inline photos section', () => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
       body: {
@@ -52,7 +52,9 @@ describe('inventory photo modal', () => {
 
     cy.get('[data-testid="inventory-photos-section"]').should('not.exist')
 
-    cy.get('[data-testid="inventory-photos-action"]').click()
+    cy.get(
+      '[data-testid="inventory-item-row-item-photo-alpha"] [data-testid="inventory-row-photos-action"]'
+    ).click()
     cy.get('[data-testid="inventory-photos-dialog"]')
       .should('be.visible')
       .and('contain', 'Photo Alpha')
