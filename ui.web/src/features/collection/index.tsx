@@ -3055,7 +3055,10 @@ export function Collection({
           testId='inventory-header-title'
           iconTestId='inventory-page-icon'
         />
-        <div className='ms-auto flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'>
+        <div
+          className='ms-auto flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'
+          data-header-title-avoid='true'
+        >
           <div
             className='flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
             data-testid='inventory-global-header-actions'

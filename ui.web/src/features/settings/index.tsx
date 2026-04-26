@@ -76,7 +76,10 @@ export function Settings() {
           testId='settings-header-title'
           iconTestId='settings-page-icon'
         />
-        <div className='ms-auto flex items-center space-x-4'>
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />

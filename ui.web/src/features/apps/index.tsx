@@ -647,7 +647,10 @@ export function Apps({
           testId='integrations-header-title'
           iconTestId='integrations-page-icon'
         />
-        <div className='ms-auto flex items-center gap-4'>
+        <div
+          className='ms-auto flex items-center gap-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />

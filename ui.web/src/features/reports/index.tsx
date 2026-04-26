@@ -184,7 +184,10 @@ export function Reports() {
           testId='reports-header-title'
           iconTestId='reports-page-icon'
         />
-        <div className='ms-auto flex items-center space-x-4'>
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />

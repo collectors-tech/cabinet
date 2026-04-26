@@ -348,7 +348,10 @@ export function Chats() {
           testId='chats-header-title'
           iconTestId='chats-page-icon'
         />
-        <div className='ms-auto flex items-center space-x-4'>
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
