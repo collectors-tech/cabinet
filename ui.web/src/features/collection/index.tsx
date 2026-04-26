@@ -10,6 +10,8 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowDown,
+  ArrowUp,
   Barcode,
   ChevronRight,
   Ellipsis,
@@ -17,6 +19,8 @@ import {
   Images,
   ListChecks,
   Plus,
+  Star,
+  Trash2,
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
@@ -4197,13 +4201,16 @@ export function Collection({
                         {!photosLoading &&
                         !photosError &&
                         inventoryPhotos.length > 0 ? (
-                          <>
-                            <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
-                              {inventoryPhotos.map((photo, index) => (
+                          <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
+                            {inventoryPhotos.map((photo, index) => (
+                              <div
+                                key={photo.id}
+                                className='overflow-hidden rounded-md border bg-card text-card-foreground shadow-xs'
+                                data-testid='inventory-photo-row'
+                              >
                                 <button
-                                  key={photo.id}
                                   type='button'
-                                  className='overflow-hidden rounded-md border text-left transition hover:border-primary/60'
+                                  className='block w-full text-left transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
                                   data-testid='inventory-photo-thumb'
                                   onClick={() => setSelectedPhotoIndex(index)}
                                 >
@@ -4212,48 +4219,52 @@ export function Collection({
                                       selectedItemID
                                     )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
                                     alt={photo.filename}
-                                    className='h-32 w-full object-cover'
+                                    className='h-36 w-full object-cover'
                                   />
-                                  <div className='p-2 text-sm'>
-                                    {photo.filename}
-                                  </div>
                                 </button>
-                              ))}
-                            </div>
-                            <div className='space-y-2'>
-                              {inventoryPhotos.map((photo, index) => (
-                                <div
-                                  key={`row-${photo.id}`}
-                                  className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2'
-                                  data-testid='inventory-photo-row'
-                                >
-                                  <div className='flex items-center gap-2 text-sm'>
-                                    <span>{photo.filename}</span>
+                                <div className='space-y-3 p-3'>
+                                  <div className='flex min-w-0 items-center justify-between gap-2'>
+                                    <span className='truncate text-sm font-medium'>
+                                      {photo.filename}
+                                    </span>
                                     {photo.is_primary ? (
                                       <span
-                                        className='rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
+                                        className='inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary'
                                         data-testid='inventory-photo-primary-badge'
                                       >
+                                        <Star
+                                          className='size-3 fill-current'
+                                          aria-hidden
+                                        />
                                         Primary
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className='flex gap-2'>
+                                  <div
+                                    className='flex items-center justify-end gap-1.5'
+                                    data-testid='inventory-photo-card-actions'
+                                  >
                                     <Button
-                                      size='sm'
+                                      size='icon'
                                       variant='outline'
+                                      className='size-8'
                                       data-testid='inventory-photo-move-up'
+                                      aria-label={`Move ${photo.filename} up`}
+                                      title={`Move ${photo.filename} up`}
                                       onClick={() =>
                                         void handleReorderPhotos(photo.id, 'up')
                                       }
                                       disabled={photosBusy || index === 0}
                                     >
-                                      Move Up
+                                      <ArrowUp className='size-4' aria-hidden />
                                     </Button>
                                     <Button
-                                      size='sm'
+                                      size='icon'
                                       variant='outline'
+                                      className='size-8'
                                       data-testid='inventory-photo-move-down'
+                                      aria-label={`Move ${photo.filename} down`}
+                                      title={`Move ${photo.filename} down`}
                                       onClick={() =>
                                         void handleReorderPhotos(
                                           photo.id,
@@ -4265,33 +4276,42 @@ export function Collection({
                                         index === inventoryPhotos.length - 1
                                       }
                                     >
-                                      Move Down
+                                      <ArrowDown
+                                        className='size-4'
+                                        aria-hidden
+                                      />
                                     </Button>
                                     <Button
-                                      size='sm'
+                                      size='icon'
                                       variant='outline'
+                                      className='size-8'
                                       data-testid='inventory-photo-set-primary'
+                                      aria-label={`Set ${photo.filename} as primary`}
+                                      title={`Set ${photo.filename} as primary`}
                                       onClick={() =>
                                         void handleSetPrimaryPhoto(photo.id)
                                       }
                                     >
-                                      Set Primary
+                                      <Star className='size-4' aria-hidden />
                                     </Button>
                                     <Button
-                                      size='sm'
+                                      size='icon'
                                       variant='outline'
+                                      className='size-8'
                                       data-testid='inventory-photo-delete'
+                                      aria-label={`Delete ${photo.filename}`}
+                                      title={`Delete ${photo.filename}`}
                                       onClick={() =>
                                         void handleDeletePhoto(photo.id)
                                       }
                                     >
-                                      Delete
+                                      <Trash2 className='size-4' aria-hidden />
                                     </Button>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </>
+                              </div>
+                            ))}
+                          </div>
                         ) : null}
                       </section>
                     </DialogContent>
