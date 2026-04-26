@@ -4118,13 +4118,14 @@ export function Collection({
                   >
                     <DialogContent
                       className='max-h-[86vh] overflow-y-auto sm:max-w-4xl'
+                      closeButtonTestId='inventory-photos-dialog-close'
                       data-testid='inventory-photos-dialog'
                     >
                       <section
                         className='space-y-3'
                         data-testid='inventory-photos-panel'
                       >
-                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div className='flex flex-wrap items-start justify-between gap-3 pr-8'>
                           <div>
                             <DialogHeader>
                               <DialogTitle>Photos</DialogTitle>
@@ -4138,14 +4139,6 @@ export function Collection({
                                 : 'Select an inventory item before managing photos.'}
                             </p>
                           </div>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            data-testid='inventory-photos-dialog-close'
-                            onClick={() => setPhotosDialogOpen(false)}
-                          >
-                            Close
-                          </Button>
                         </div>
                         <div className='sr-only'>
                           Review item media and inspect photos in fullscreen
@@ -4381,13 +4374,14 @@ export function Collection({
                   >
                     <DialogContent
                       className='max-h-[86vh] overflow-y-auto sm:max-w-4xl'
+                      closeButtonTestId='inventory-barcodes-dialog-close'
                       data-testid='inventory-barcodes-dialog'
                     >
                       <section
                         className='space-y-3'
                         data-testid='inventory-barcodes-panel'
                       >
-                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div className='flex flex-wrap items-start justify-between gap-3 pr-8'>
                           <div>
                             <DialogHeader>
                               <DialogTitle>Barcodes</DialogTitle>
@@ -4401,14 +4395,6 @@ export function Collection({
                                 : 'Select an inventory item before managing barcodes.'}
                             </p>
                           </div>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            data-testid='inventory-barcodes-dialog-close'
-                            onClick={() => setBarcodesDialogOpen(false)}
-                          >
-                            Close
-                          </Button>
                         </div>
                         <div className='sr-only'>
                           Add barcodes to the selected item, run local lookup,
