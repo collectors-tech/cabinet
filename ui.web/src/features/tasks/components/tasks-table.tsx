@@ -438,6 +438,10 @@ export function TasksTable({
       window.clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
     }
+    if (isInventoryRoute && record && onEditRow) {
+      onEditRow(record)
+      return
+    }
     openEdit(id)
   }
 

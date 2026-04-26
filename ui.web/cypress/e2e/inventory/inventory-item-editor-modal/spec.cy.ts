@@ -95,9 +95,17 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATED");
     cy.contains("Created Modal Item").should("be.visible");
 
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+    cy.get('[data-testid="inventory-item-editor-panel"]')
+      .should("be.visible")
+      .and("contain", "Edit Item");
+    cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
+    cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
+
     cy.get('[data-testid="inventory-item-row-item-alpha"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
-    cy.get('[data-testid="inventory-item-editor-dialog"]')
+    cy.get('[data-testid="inventory-item-editor-panel"]')
       .should("be.visible")
       .and("contain", "Edit Item");
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
@@ -114,7 +122,7 @@ describe("inventory item editor modal", () => {
 
     cy.wait("@updateBravo");
     cy.wait("@itemsList");
-    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
     cy.contains("Bravo Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });

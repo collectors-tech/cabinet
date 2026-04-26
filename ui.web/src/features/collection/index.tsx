@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -1153,6 +1154,9 @@ export function Collection({
   const [itemEditorMode, setItemEditorMode] = useState<'create' | 'edit'>(
     'edit'
   )
+  const [itemEditorSurface, setItemEditorSurface] = useState<
+    'dialog' | 'panel'
+  >('dialog')
   const [itemEditorOpen, setItemEditorOpen] = useState(false)
   const [itemDraft, setItemDraft] = useState<InventoryItemDraft>(
     emptyInventoryItemDraft
@@ -1224,6 +1228,7 @@ export function Collection({
 
   const startCreateItem = useCallback(() => {
     setItemEditorMode('create')
+    setItemEditorSurface('dialog')
     setItemDraft(emptyInventoryItemDraft())
     setItemSaveError(null)
     setItemSaveSuccess(null)
@@ -1237,6 +1242,7 @@ export function Collection({
         return
       }
       setItemEditorMode('edit')
+      setItemEditorSurface('panel')
       setItemDraft(inventoryItemToDraft(item))
       setItemSaveError(null)
       setItemSaveSuccess(null)
@@ -3133,14 +3139,18 @@ export function Collection({
 
   return (
     <TasksProvider>
-      <Header fixed data-testid='inventory-shell-header'>
-        <Search />
-        <div className='ms-auto flex min-w-0 items-center gap-3'>
+      <Header
+        fixed
+        className='h-auto min-h-16'
+        data-testid='inventory-shell-header'
+      >
+        <Search className='hidden min-w-32 sm:flex' />
+        <div className='ms-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none sm:gap-3'>
           <div
-            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            className='flex min-w-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
             data-testid='inventory-global-header-actions'
           >
-            <div className='mr-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'>
+            <div className='mr-1 hidden min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex'>
               <h1 className='text-lg font-bold tracking-tight'>{title}</h1>
               <span
                 className='text-xs font-medium text-muted-foreground'
@@ -3154,6 +3164,7 @@ export function Collection({
                 <Button
                   type='button'
                   variant='outline'
+                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
                   data-testid='inventory-barcodes-action'
                   onClick={() =>
                     openInventoryBarcodesForItem(
@@ -3161,11 +3172,13 @@ export function Collection({
                     )
                   }
                 >
-                  Barcodes
+                  <span className='hidden sm:inline'>Barcodes</span>
+                  <span className='sm:hidden'>Codes</span>
                 </Button>
                 <Button
                   type='button'
                   variant='outline'
+                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
                   data-testid='inventory-photos-action'
                   onClick={() =>
                     openInventoryPhotosForItem(
@@ -3173,25 +3186,29 @@ export function Collection({
                     )
                   }
                 >
-                  Photos
+                  <span className='hidden sm:inline'>Photos</span>
+                  <span className='sm:hidden'>Pics</span>
                 </Button>
               </>
             ) : null}
             <Button
               type='button'
+              className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
               data-testid='inventory-new-action'
               onClick={startCreateItem}
             >
-              New
+              <span>New</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   type='button'
                   variant='outline'
+                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
                   data-testid='inventory-create-menu-trigger'
                 >
-                  Create
+                  <span className='hidden sm:inline'>Create</span>
+                  <span className='sm:hidden'>More</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
@@ -3216,10 +3233,10 @@ export function Collection({
           </div>
           <Separator
             orientation='vertical'
-            className='h-6'
+            className='hidden h-6 md:block'
             data-testid='inventory-header-action-separator'
           />
-          <div className='flex items-center space-x-4'>
+          <div className='hidden items-center space-x-4 md:flex'>
             <LanguageSwitch />
             <ThemeSwitch />
             <ConfigDrawer />
@@ -3706,7 +3723,7 @@ export function Collection({
                     </DialogContent>
                   </Dialog>
                   <Dialog
-                    open={itemEditorOpen}
+                    open={itemEditorOpen && itemEditorSurface === 'dialog'}
                     onOpenChange={(open) => {
                       setItemEditorOpen(open)
                       if (!open) {
@@ -3914,6 +3931,187 @@ export function Collection({
                       </div>
                     </DialogContent>
                   </Dialog>
+                  <Sheet
+                    open={itemEditorOpen && itemEditorSurface === 'panel'}
+                    onOpenChange={(open) => {
+                      setItemEditorOpen(open)
+                      if (!open) {
+                        setItemSaveError(null)
+                      }
+                    }}
+                  >
+                    <SheetContent
+                      side='left'
+                      className='w-[min(28rem,92vw)] overflow-y-auto sm:max-w-md'
+                      data-testid='inventory-item-editor-panel'
+                    >
+                      <SheetHeader className='text-start'>
+                        <SheetTitle>Edit Item</SheetTitle>
+                        <SheetDescription data-testid='inventory-item-editor-mode'>
+                          Editing selected item: {selectedItemContext}
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div
+                        className='space-y-4 px-4'
+                        data-testid='inventory-item-edit-panel'
+                      >
+                        <div className='grid grid-cols-1 gap-3'>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-part-number'
+                            >
+                              Part Number
+                            </label>
+                            <Input
+                              id='inventory-panel-item-part-number'
+                              data-testid='inventory-item-part-number'
+                              value={itemDraft.part_number}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  part_number: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-title'
+                            >
+                              Title
+                            </label>
+                            <Input
+                              id='inventory-panel-item-title'
+                              data-testid='inventory-item-title'
+                              value={itemDraft.title}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  title: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-brand'
+                            >
+                              Brand
+                            </label>
+                            <Input
+                              id='inventory-panel-item-brand'
+                              data-testid='inventory-item-brand'
+                              value={itemDraft.brand}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  brand: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-category'
+                            >
+                              Category
+                            </label>
+                            <Input
+                              id='inventory-panel-item-category'
+                              data-testid='inventory-item-category'
+                              value={itemDraft.category}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  category: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-panel-item-description'
+                          >
+                            Description
+                          </label>
+                          <Input
+                            id='inventory-panel-item-description'
+                            data-testid='inventory-item-description'
+                            value={itemDraft.description}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        {itemSaveError ? (
+                          <div
+                            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                            data-testid='inventory-item-save-error'
+                          >
+                            {itemSaveError}
+                          </div>
+                        ) : null}
+                        {itemSaveSuccess ? (
+                          <div
+                            className='rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm'
+                            data-testid='inventory-item-save-success'
+                          >
+                            {itemSaveSuccess}
+                          </div>
+                        ) : null}
+                      </div>
+                      <SheetFooter className='gap-2 sm:flex-row sm:justify-between'>
+                        <div className='flex gap-2'>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            data-testid='inventory-item-editor-previous'
+                            disabled={!canNavigateToPreviousInventoryItem}
+                            onClick={() => openAdjacentInventoryItem(-1)}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            data-testid='inventory-item-editor-next'
+                            disabled={!canNavigateToNextInventoryItem}
+                            onClick={() => openAdjacentInventoryItem(1)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                        <div className='flex gap-2'>
+                          <SheetClose asChild>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              data-testid='inventory-item-editor-cancel'
+                            >
+                              Cancel
+                            </Button>
+                          </SheetClose>
+                          <Button
+                            type='button'
+                            data-testid='inventory-item-save'
+                            disabled={itemSaveBusy}
+                            onClick={() => void handleSaveItem()}
+                          >
+                            Save Changes
+                          </Button>
+                        </div>
+                      </SheetFooter>
+                    </SheetContent>
+                  </Sheet>
                   <Dialog
                     open={photosDialogOpen}
                     onOpenChange={setPhotosDialogOpen}
