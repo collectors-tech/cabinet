@@ -8,7 +8,7 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ArrowRightLeft, Pencil, Plus, Tag, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,13 +34,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { Separator } from '@/components/ui/separator'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -50,7 +43,6 @@ import {
 } from '@/components/ui/table'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
-  type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
   collectionKey,
   useWorkspaceCollections,
@@ -143,8 +135,6 @@ export function Collections() {
     removeCollection,
     collectionItems,
     collectionSummaries,
-    assignItemToCollection,
-    unassignItemFromCollection,
   } = useWorkspaceCollections()
 
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
@@ -155,8 +145,6 @@ export function Collections() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [createValue, setCreateValue] = useState('')
   const [editValue, setEditValue] = useState('')
-  const [assignmentItemID, setAssignmentItemID] = useState('')
-  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
 
   const rows = useMemo(() => collectionSummaries, [collectionSummaries])
 
@@ -170,19 +158,12 @@ export function Collections() {
   )
 
   const selectedCollectionName = selectedRow?.name ?? 'All Items'
-  const isProtectedCollection = selectedCollectionName === 'All Items'
 
   const selectedCollectionItems = useMemo(
     () =>
       selectedCollectionName === 'All Items'
         ? collectionItems
         : collectionItems.filter((item) => item.collectionName === selectedCollectionName),
-    [collectionItems, selectedCollectionName]
-  )
-
-  const assignmentCandidates = useMemo(
-    () =>
-      collectionItems.filter((item) => item.collectionName !== selectedCollectionName),
     [collectionItems, selectedCollectionName]
   )
 
@@ -277,52 +258,6 @@ export function Collections() {
     toast.success(`${removedName} removed from workspace collections.`)
   }
 
-  async function handleAssignToSelectedCollection() {
-    if (!assignmentItemID || !selectedRow || isProtectedCollection) {
-      return
-    }
-    const updated = await assignItemToCollection(assignmentItemID, selectedRow.name)
-    if (!updated) {
-      toast.error('Select an item and a valid collection before saving.')
-      return
-    }
-    setAssignmentItemID('')
-    toast.success(`${updated.name} assigned to ${selectedRow.name}.`)
-  }
-
-  async function handleMoveItem(item: WorkspaceCollectionItem) {
-    const destination = moveTargets[item.id]
-    if (!destination) {
-      toast.error('Choose a destination collection before moving the item.')
-      return
-    }
-    const updated = await assignItemToCollection(item.id, destination)
-    if (!updated) {
-      toast.error('Item move failed.')
-      return
-    }
-    setMoveTargets((current) => {
-      const next = { ...current }
-      delete next[item.id]
-      return next
-    })
-    toast.success(`${item.name} moved to ${destination}.`)
-  }
-
-  async function handleUnassignItem(item: WorkspaceCollectionItem) {
-    const updated = await unassignItemFromCollection(item.id)
-    if (!updated) {
-      toast.error('Item release failed.')
-      return
-    }
-    setMoveTargets((current) => {
-      const next = { ...current }
-      delete next[item.id]
-      return next
-    })
-    toast.success(`${item.name} removed from ${selectedCollectionName}.`)
-  }
-
   return (
     <>
       <Header fixed data-testid='collections-shell-header'>
@@ -339,6 +274,12 @@ export function Collections() {
               />
               <h1 className='text-lg font-bold tracking-tight'>Collections</h1>
               <span className='text-xs font-medium text-muted-foreground'>
+                Active:
+              </span>
+              <span
+                className='text-xs font-medium text-muted-foreground'
+                data-testid='collections-active-context'
+              >
                 {selectedCollectionName}
               </span>
             </div>
@@ -437,67 +378,13 @@ export function Collections() {
 
           <Card data-testid='collections-members-panel'>
             <CardHeader>
-              <div className='flex flex-wrap items-start justify-between gap-3'>
-                <div className='space-y-1'>
-                  <CardTitle>Collection members</CardTitle>
-                  <CardDescription>
-                    Review the inventory items assigned to the selected collection.
-                  </CardDescription>
-                </div>
-                {selectedRow ? (
-                  <div className='min-w-[14rem] rounded-md border bg-muted/30 px-3 py-2 text-sm'>
-                    <div className='font-medium' data-testid='collections-selected-name'>
-                      {selectedRow.name}
-                    </div>
-                    <div className='text-xs text-muted-foreground'>
-                      {selectedRow.description}
-                    </div>
-                    <div className='text-xs text-muted-foreground' data-testid='collections-active-context-message'>
-                      Active collection is {selectedRow.name}.
-                    </div>
-                    <div className='text-xs text-muted-foreground' data-testid='collections-active-context-persistence'>
-                      Persists for this signed-in profile across refresh.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <CardTitle>Collection members</CardTitle>
+              <CardDescription>
+                Review inventory items assigned to the selected collection. Assign or
+                move items from Inventory row actions.
+              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <div
-                className='rounded-md border bg-muted/20 p-3'
-                data-testid='collections-assignment-panel'
-              >
-                {isProtectedCollection ? (
-                  <div className='text-sm text-muted-foreground' data-testid='collections-assignment-disabled'>
-                    Select a specific collection to assign items. “All Items” stays as the global overview.
-                  </div>
-                ) : (
-                  <>
-                    <Select value={assignmentItemID} onValueChange={setAssignmentItemID}>
-                      <SelectTrigger data-testid='collections-assignment-select'>
-                        <SelectValue placeholder='Choose an item to assign' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {assignmentCandidates.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name} ({item.collectionName ?? 'Unassigned'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type='button'
-                      onClick={() => {
-                        void handleAssignToSelectedCollection()
-                      }}
-                      data-testid='collections-assignment-submit'
-                    >
-                      Assign to {selectedCollectionName}
-                    </Button>
-                  </>
-                )}
-              </div>
-
               <div className='rounded-md border' data-testid='collections-members-table'>
                 <Table>
                   <TableHeader>
@@ -505,7 +392,6 @@ export function Collections() {
                       <TableHead>Item</TableHead>
                       <TableHead>Details</TableHead>
                       <TableHead>Current collection</TableHead>
-                      <TableHead className='min-w-[22rem]'>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -532,56 +418,11 @@ export function Collections() {
                           >
                             Currently in {item.collectionName ?? 'Unassigned'}.
                           </TableCell>
-                          <TableCell>
-                            <div className='flex flex-wrap items-center gap-2'>
-                              <Select
-                                value={moveTargets[item.id] ?? ''}
-                                onValueChange={(value) =>
-                                  setMoveTargets((current) => ({ ...current, [item.id]: value }))
-                                }
-                              >
-                                <SelectTrigger data-testid={`collections-move-target-${collectionKey(item.name)}`}>
-                                  <SelectValue placeholder='Move to...' />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {rows
-                                    .filter((row) => row.name !== 'All Items' && row.name !== item.collectionName)
-                                    .map((row) => (
-                                      <SelectItem key={row.key} value={row.name}>
-                                        {row.name}
-                                      </SelectItem>
-                                    ))}
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                type='button'
-                                variant='outline'
-                                data-testid={`collections-move-submit-${collectionKey(item.name)}`}
-                                onClick={() => {
-                                  void handleMoveItem(item)
-                                }}
-                              >
-                                <ArrowRightLeft className='mr-2 h-4 w-4' />
-                                Move item
-                              </Button>
-                              <Button
-                                type='button'
-                                variant='outline'
-                                data-testid={`collections-unassign-submit-${collectionKey(item.name)}`}
-                                onClick={() => {
-                                  void handleUnassignItem(item)
-                                }}
-                              >
-                                <Trash2 className='mr-2 h-4 w-4' />
-                                Unassign
-                              </Button>
-                            </div>
-                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow data-testid='collections-members-empty-row'>
-                        <TableCell colSpan={4} className='h-24 text-center text-muted-foreground'>
+                        <TableCell colSpan={3} className='h-24 text-center text-muted-foreground'>
                           No items are currently assigned to {selectedCollectionName}.
                         </TableCell>
                       </TableRow>
