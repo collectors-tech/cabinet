@@ -1692,6 +1692,36 @@ paths:
       responses:
         "204":
           description: Primary set
+  /api/items/{itemID}/photos/{photoID}/rotate:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Collection]
+      summary: Rotate photo orientation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction:
+                  type: string
+                  enum: [left, right]
+      responses:
+        "200":
+          description: Rotated photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Photo"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/{photoID}/file:
     parameters:
       - $ref: "#/components/parameters/ItemID"

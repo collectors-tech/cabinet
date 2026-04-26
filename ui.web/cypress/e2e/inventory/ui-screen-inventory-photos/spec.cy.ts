@@ -218,6 +218,12 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
         cy.get('[data-testid="inventory-photo-move-down"]')
           .should('have.attr', 'aria-label', 'Move card-one.jpg down')
           .and('not.contain.text', 'Move Down')
+        cy.get('[data-testid="inventory-photo-rotate-left"]')
+          .should('have.attr', 'aria-label', 'Rotate card-one.jpg left')
+          .and('not.contain.text', 'Rotate Left')
+        cy.get('[data-testid="inventory-photo-rotate-right"]')
+          .should('have.attr', 'aria-label', 'Rotate card-one.jpg right')
+          .and('not.contain.text', 'Rotate Right')
         cy.get('[data-testid="inventory-photo-set-primary"]')
           .should('have.attr', 'aria-label', 'Set card-one.jpg as primary')
           .and('not.contain.text', 'Set Primary')
@@ -226,6 +232,59 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
           .and('not.contain.text', 'Delete')
       }
     )
+  })
+
+  it('PHOTOS-MEDIA-004B rotates photos from the card controls and refreshes the preview', () => {
+    let listCall = 0
+    const photos = [
+      { id: 'rotate-p1', filename: 'rotate-one.jpg', is_primary: true },
+    ]
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'item-photo-rotate',
+            title: 'Photo Rotate Item',
+            status: 'active',
+            category: 'Cars',
+          },
+        ],
+      },
+    }).as('items')
+    cy.intercept('GET', '/api/items/item-photo-rotate/photos', (req) => {
+      listCall += 1
+      req.reply({
+        statusCode: 200,
+        body: { photos },
+      })
+    }).as('photos')
+    cy.intercept(
+      'PUT',
+      '/api/items/item-photo-rotate/photos/rotate-p1/rotate',
+      (req) => {
+        expect(req.body).to.deep.equal({ direction: 'right' })
+        req.reply({ statusCode: 200, body: { ...photos[0] } })
+      }
+    ).as('rotatePhoto')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@photos')
+    openPhotosModal()
+
+    cy.contains('[data-testid="inventory-photo-row"]', 'rotate-one.jpg')
+      .find('[data-testid="inventory-photo-rotate-right"]')
+      .click()
+    cy.wait('@rotatePhoto')
+    cy.wait('@photos')
+    cy.wrap(null).then(() => {
+      expect(listCall).to.be.greaterThan(1)
+    })
+    cy.contains('[data-testid="inventory-photo-row"]', 'rotate-one.jpg')
+      .find('[data-testid="inventory-photo-thumb"] img')
+      .should('have.attr', 'src')
+      .and('include', 'v=')
   })
 
   it('PHOTOS-MEDIA-005 keeps photos scoped to the currently selected item when switching rows', () => {

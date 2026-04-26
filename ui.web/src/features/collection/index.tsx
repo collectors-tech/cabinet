@@ -19,6 +19,8 @@ import {
   Images,
   ListChecks,
   Plus,
+  RotateCcw,
+  RotateCw,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -1044,6 +1046,7 @@ export function Collection({
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState<string | null>(null)
   const [photosBusy, setPhotosBusy] = useState(false)
+  const [photoImageVersion, setPhotoImageVersion] = useState(0)
   const [photoRebuildError, setPhotoRebuildError] = useState<string | null>(
     null
   )
@@ -2657,6 +2660,38 @@ export function Collection({
     [loadInventoryPhotos, selectedItemID]
   )
 
+  const handleRotatePhoto = useCallback(
+    async (photoID: string, direction: 'left' | 'right') => {
+      if (!selectedItemID || !photoID) {
+        return
+      }
+      setPhotosBusy(true)
+      setPhotosError(null)
+      try {
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(
+            selectedItemID
+          )}/photos/${encodeURIComponent(photoID)}/rotate`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ direction }),
+          }
+        )
+        if (!response.ok) {
+          throw new Error(`rotate_photo_${response.status}`)
+        }
+        setPhotoImageVersion((version) => version + 1)
+        await loadInventoryPhotos()
+      } catch {
+        setPhotosError('Unable to rotate this photo. Retry this action.')
+      } finally {
+        setPhotosBusy(false)
+      }
+    },
+    [loadInventoryPhotos, selectedItemID]
+  )
+
   const handleReorderPhotos = useCallback(
     async (photoID: string, direction: 'up' | 'down') => {
       if (!selectedItemID || !photoID) {
@@ -4217,7 +4252,9 @@ export function Collection({
                                   <img
                                     src={`/api/items/${encodeURIComponent(
                                       selectedItemID
-                                    )}/photos/${encodeURIComponent(photo.id)}/file?variant=preview`}
+                                    )}/photos/${encodeURIComponent(
+                                      photo.id
+                                    )}/file?variant=preview&v=${photoImageVersion}`}
                                     alt={photo.filename}
                                     className='h-36 w-full object-cover'
                                   />
@@ -4277,6 +4314,46 @@ export function Collection({
                                       }
                                     >
                                       <ArrowDown
+                                        className='size-4'
+                                        aria-hidden
+                                      />
+                                    </Button>
+                                    <Button
+                                      size='icon'
+                                      variant='outline'
+                                      className='size-8'
+                                      data-testid='inventory-photo-rotate-left'
+                                      aria-label={`Rotate ${photo.filename} left`}
+                                      title={`Rotate ${photo.filename} left`}
+                                      onClick={() =>
+                                        void handleRotatePhoto(
+                                          photo.id,
+                                          'left'
+                                        )
+                                      }
+                                      disabled={photosBusy}
+                                    >
+                                      <RotateCcw
+                                        className='size-4'
+                                        aria-hidden
+                                      />
+                                    </Button>
+                                    <Button
+                                      size='icon'
+                                      variant='outline'
+                                      className='size-8'
+                                      data-testid='inventory-photo-rotate-right'
+                                      aria-label={`Rotate ${photo.filename} right`}
+                                      title={`Rotate ${photo.filename} right`}
+                                      onClick={() =>
+                                        void handleRotatePhoto(
+                                          photo.id,
+                                          'right'
+                                        )
+                                      }
+                                      disabled={photosBusy}
+                                    >
+                                      <RotateCw
                                         className='size-4'
                                         aria-hidden
                                       />
@@ -4625,7 +4702,9 @@ export function Collection({
               <img
                 src={`/api/items/${encodeURIComponent(
                   selectedItemID
-                )}/photos/${encodeURIComponent(selectedPhoto.id)}/file?variant=original`}
+                )}/photos/${encodeURIComponent(
+                  selectedPhoto.id
+                )}/file?variant=original&v=${photoImageVersion}`}
                 alt={selectedPhoto.filename}
                 className='max-h-[70vh] w-full rounded-md object-contain'
               />

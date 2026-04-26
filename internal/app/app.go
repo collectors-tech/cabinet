@@ -4160,6 +4160,31 @@ func New(cfg config.Config) (*App, error) {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+			if len(parts) == 4 && parts[3] == "rotate" {
+				photoID := strings.TrimSpace(parts[2])
+				if photoID == "" {
+					http.Error(w, `{"error":"invalid_photo_id"}`, http.StatusBadRequest)
+					return
+				}
+				if r.Method != http.MethodPut {
+					http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+					return
+				}
+				var req struct {
+					Direction string `json:"direction"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				rotated, err := mediaService.Rotate(r.Context(), itemID, photoID, req.Direction)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_rotate_photo"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(rotated)
+				return
+			}
 			if len(parts) == 4 && parts[3] == "file" {
 				photoID := strings.TrimSpace(parts[2])
 				if photoID == "" {
