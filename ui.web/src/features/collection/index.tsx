@@ -14,6 +14,7 @@ import {
   ArrowUp,
   Barcode,
   ChevronRight,
+  ClipboardPaste,
   Ellipsis,
   GripVertical,
   Images,
@@ -21,6 +22,7 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  Save,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -118,14 +120,6 @@ type InventoryItemDraft = {
 }
 
 type InventoryCreateIntent = 'manual' | 'photo' | 'barcode'
-
-type AISuggestion = {
-  part_number?: string
-  brand?: string
-  title?: string
-  confidence?: number
-  requires_confirmation?: boolean
-}
 
 type FolderNode = {
   id: string
@@ -433,6 +427,69 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     brand: item.brand,
     category: item.category,
     description: item.description,
+  }
+}
+
+function compactQuickCreateText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function quickCreateSlug(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function buildQuickCreatePartNumber(prefix: 'TXT' | 'URL', value: string) {
+  const slug = quickCreateSlug(value) || 'ITEM'
+  const suffix = Date.now().toString(36).toUpperCase()
+  return `${prefix}-${slug.slice(0, 42)}-${suffix}`.slice(0, 64)
+}
+
+function humanizeQuickCreatePathSegment(value: string): string {
+  return compactQuickCreateText(
+    value.replace(/\.[^.]+$/, '').replace(/_+/g, ' ')
+  )
+}
+
+function buildQuickCreateDraft(value: string): InventoryItemDraft {
+  const source = value.trim()
+  try {
+    const url = new URL(source)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      const hostname = url.hostname.replace(/^www\./i, '')
+      const pathSegments = url.pathname.split('/').filter(Boolean)
+      const lastSegment = decodeURIComponent(
+        pathSegments[pathSegments.length - 1] ?? ''
+      )
+      const pathTitle = humanizeQuickCreatePathSegment(lastSegment)
+      const title = compactQuickCreateText(
+        pathTitle ? `${hostname} ${pathTitle}` : hostname
+      )
+      return {
+        part_number: buildQuickCreatePartNumber(
+          'URL',
+          `${hostname} ${url.pathname}`
+        ),
+        title,
+        brand: 'Unknown',
+        category: 'General',
+        description: `Source URL: ${source}`,
+      }
+    }
+  } catch {
+    // Plain pasted text is the normal fallback when this is not a URL.
+  }
+
+  const title = compactQuickCreateText(source).slice(0, 120)
+  return {
+    part_number: buildQuickCreatePartNumber('TXT', title),
+    title,
+    brand: 'Unknown',
+    category: 'General',
+    description: source,
   }
 }
 
@@ -1104,20 +1161,15 @@ export function Collection({
   const [barcodeMatches, setBarcodeMatches] = useState<BarcodeMatch[]>([])
   const [barcodeLookupCompleted, setBarcodeLookupCompleted] = useState(false)
   const [lastLookupBarcode, setLastLookupBarcode] = useState('')
-  const [aiTitleInput, setAITitleInput] = useState('')
-  const [aiPhotoURLInput, setAIPhotoURLInput] = useState('')
-  const [aiSuggestion, setAISuggestion] = useState<AISuggestion | null>(null)
-  const [aiLoading, setAILoading] = useState(false)
-  const [aiError, setAIError] = useState<string | null>(null)
-  const [aiApplied, setAIApplied] = useState(false)
-  const [aiConfirmOpen, setAIConfirmOpen] = useState(false)
-  const [lastAISuggestAction, setLastAISuggestAction] = useState<
-    'title' | 'photo' | null
-  >(null)
+  const [quickCreateInput, setQuickCreateInput] = useState('')
+  const [quickCreateBusy, setQuickCreateBusy] = useState(false)
+  const [quickCreateError, setQuickCreateError] = useState<string | null>(null)
+  const [quickCreateSuccess, setQuickCreateSuccess] = useState<string | null>(
+    null
+  )
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
-  const aiApplyTriggerRef = useRef<HTMLButtonElement | null>(null)
   const inventoryPhotoRequestIDRef = useRef(0)
   const selectedItemIDRef = useRef('')
   const {
@@ -2986,42 +3038,55 @@ export function Collection({
     )}/external-search?source=ebay&region=AU`
   }, [lastLookupBarcode])
 
-  const runAISuggest = useCallback(
-    async (mode: 'title' | 'photo') => {
-      if (!activeProfileID) {
-        setAIError('Active profile is required before AI requests can run.')
-        return
+  const handlePasteQuickCreate = useCallback(async () => {
+    setQuickCreateError(null)
+    setQuickCreateSuccess(null)
+    if (!navigator.clipboard?.readText) {
+      setQuickCreateError(
+        'Clipboard paste is not available here. Paste into the field manually.'
+      )
+      return
+    }
+    try {
+      const text = await navigator.clipboard.readText()
+      setQuickCreateInput(text)
+    } catch {
+      setQuickCreateError(
+        'Clipboard paste was blocked. Paste into the field manually.'
+      )
+    }
+  }, [])
+
+  const handleSaveQuickCreate = useCallback(async () => {
+    const source = quickCreateInput.trim()
+    if (source === '') {
+      setQuickCreateError('Paste a URL or text before saving an item.')
+      setQuickCreateSuccess(null)
+      return
+    }
+    setQuickCreateBusy(true)
+    setQuickCreateError(null)
+    setQuickCreateSuccess(null)
+    try {
+      const payload = buildQuickCreateDraft(source)
+      const response = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw new Error(`quick_create_item_${response.status}`)
       }
-      setAILoading(true)
-      setAIError(null)
-      setLastAISuggestAction(mode)
-      setAIApplied(false)
-      try {
-        const endpoint =
-          mode === 'title' ? '/api/ai/suggest/title' : '/api/ai/suggest/photo'
-        const payload =
-          mode === 'title'
-            ? { profile_id: activeProfileID, title: aiTitleInput }
-            : { profile_id: activeProfileID, image_url: aiPhotoURLInput }
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        if (!response.ok) {
-          throw new Error(`ai_suggest_${mode}_${response.status}`)
-        }
-        const suggestion = (await response.json()) as AISuggestion
-        setAISuggestion(suggestion)
-      } catch {
-        setAISuggestion(null)
-        setAIError('AI suggestion failed. Retry the request.')
-      } finally {
-        setAILoading(false)
-      }
-    },
-    [activeProfileID, aiPhotoURLInput, aiTitleInput]
-  )
+      const saved = (await response.json()) as { id?: string }
+      await loadInventoryItems(saved.id?.trim())
+      setQuickCreateInput('')
+      setQuickCreateSuccess('Item created and selected.')
+    } catch {
+      setQuickCreateError('Unable to create an item from this paste. Retry.')
+    } finally {
+      setQuickCreateBusy(false)
+    }
+  }, [loadInventoryItems, quickCreateInput])
 
   const folderDragOverlay =
     typeof document !== 'undefined' && draggedFolderNode && dragPreviewPosition
@@ -3587,8 +3652,68 @@ export function Collection({
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Collection Browser</CardTitle>
+            <CardHeader className='gap-3 sm:flex-row sm:items-start sm:justify-between'>
+              <CardTitle className='shrink-0'>Collection Browser</CardTitle>
+              {routePath === '/_authenticated/inventory/' ? (
+                <form
+                  className='flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end'
+                  data-testid='inventory-quick-create'
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void handleSaveQuickCreate()
+                  }}
+                >
+                  <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='inventory-quick-create-paste'
+                      onClick={() => void handlePasteQuickCreate()}
+                    >
+                      <ClipboardPaste className='size-4' aria-hidden='true' />
+                      Paste
+                    </Button>
+                    <Input
+                      className='w-full sm:w-72 lg:w-96'
+                      placeholder='Paste URL or text'
+                      aria-label='Paste URL or text to create inventory item'
+                      data-testid='inventory-quick-create-input'
+                      value={quickCreateInput}
+                      onChange={(event) => {
+                        setQuickCreateInput(event.target.value)
+                        setQuickCreateError(null)
+                        setQuickCreateSuccess(null)
+                      }}
+                    />
+                    <Button
+                      type='submit'
+                      data-testid='inventory-quick-create-save'
+                      disabled={quickCreateBusy}
+                    >
+                      <Save className='size-4' aria-hidden='true' />
+                      {quickCreateBusy ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                  {quickCreateError ? (
+                    <p
+                      className='text-sm text-destructive'
+                      data-testid='inventory-quick-create-error'
+                      role='alert'
+                    >
+                      {quickCreateError}
+                    </p>
+                  ) : null}
+                  {quickCreateSuccess ? (
+                    <p
+                      className='text-sm text-muted-foreground'
+                      data-testid='inventory-quick-create-success'
+                      role='status'
+                    >
+                      {quickCreateSuccess}
+                    </p>
+                  ) : null}
+                </form>
+              ) : null}
             </CardHeader>
             <CardContent className='space-y-4'>
               <p className='text-sm text-muted-foreground'>
@@ -4710,121 +4835,6 @@ export function Collection({
                       </section>
                     </DialogContent>
                   </Dialog>
-                  <section
-                    className='space-y-3 rounded-md border p-4'
-                    data-testid='inventory-ai-assist-section'
-                  >
-                    <div>
-                      <h3 className='text-base font-semibold'>AI Assist</h3>
-                      <p className='text-sm text-muted-foreground'>
-                        Generate title and photo suggestions with explicit
-                        confirm-before-apply.
-                      </p>
-                    </div>
-                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
-                      <div className='space-y-2'>
-                        <Input
-                          placeholder='Paste listing title'
-                          data-testid='inventory-ai-title-input'
-                          value={aiTitleInput}
-                          onChange={(event) =>
-                            setAITitleInput(event.target.value)
-                          }
-                        />
-                        <Button
-                          data-testid='inventory-ai-suggest-title'
-                          onClick={() => void runAISuggest('title')}
-                          disabled={aiLoading || aiTitleInput.trim() === ''}
-                        >
-                          Suggest from Title
-                        </Button>
-                      </div>
-                      <div className='space-y-2'>
-                        <Input
-                          placeholder='Paste photo URL'
-                          data-testid='inventory-ai-photo-url-input'
-                          value={aiPhotoURLInput}
-                          onChange={(event) =>
-                            setAIPhotoURLInput(event.target.value)
-                          }
-                        />
-                        <Button
-                          data-testid='inventory-ai-suggest-photo'
-                          onClick={() => void runAISuggest('photo')}
-                          disabled={aiLoading || aiPhotoURLInput.trim() === ''}
-                        >
-                          Suggest from Photo
-                        </Button>
-                      </div>
-                    </div>
-                    {aiLoading ? (
-                      <div
-                        className='rounded-md border p-3 text-sm text-muted-foreground'
-                        data-testid='inventory-ai-loading'
-                      >
-                        Running AI suggestion...
-                      </div>
-                    ) : null}
-                    {aiError ? (
-                      <div
-                        className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                        data-testid='inventory-ai-error'
-                      >
-                        <p className='font-medium'>AI suggestion failed.</p>
-                        <p className='mt-1 text-muted-foreground'>{aiError}</p>
-                        <Button
-                          className='mt-3'
-                          variant='outline'
-                          size='sm'
-                          data-testid='inventory-ai-retry'
-                          onClick={() => {
-                            if (lastAISuggestAction) {
-                              void runAISuggest(lastAISuggestAction)
-                            }
-                          }}
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    ) : null}
-                    {aiSuggestion ? (
-                      <div
-                        className='rounded-md border p-3 text-sm'
-                        data-testid='inventory-ai-suggestion'
-                      >
-                        <p>
-                          <strong>Part:</strong>{' '}
-                          {aiSuggestion.part_number || 'n/a'}
-                        </p>
-                        <p>
-                          <strong>Brand:</strong> {aiSuggestion.brand || 'n/a'}
-                        </p>
-                        <p>
-                          <strong>Title:</strong> {aiSuggestion.title || 'n/a'}
-                        </p>
-                        <p>
-                          <strong>Confidence:</strong>{' '}
-                          {(aiSuggestion.confidence ?? 0).toFixed(2)}
-                        </p>
-                        <Button
-                          className='mt-3'
-                          data-testid='inventory-ai-apply'
-                          ref={aiApplyTriggerRef}
-                          onClick={() => setAIConfirmOpen(true)}
-                        >
-                          Apply Suggestion
-                        </Button>
-                      </div>
-                    ) : null}
-                    {aiApplied ? (
-                      <div
-                        className='rounded-md border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm'
-                        data-testid='inventory-ai-applied-banner'
-                      >
-                        Suggestion applied to draft item fields.
-                      </div>
-                    ) : null}
-                  </section>
                 </>
               ) : null}
             </CardContent>
@@ -4898,46 +4908,6 @@ export function Collection({
                 Close
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-        <Dialog
-          open={aiConfirmOpen}
-          onOpenChange={(open) => {
-            setAIConfirmOpen(open)
-            if (!open) {
-              requestAnimationFrame(() => {
-                aiApplyTriggerRef.current?.focus()
-              })
-            }
-          }}
-        >
-          <DialogContent data-testid='inventory-ai-confirm-dialog'>
-            <DialogHeader>
-              <DialogTitle>Confirm AI Apply</DialogTitle>
-            </DialogHeader>
-            <p className='text-sm text-muted-foreground'>
-              AI suggestions require explicit confirmation before apply.
-            </p>
-            <DialogFooter>
-              <Button variant='outline' onClick={() => setAIConfirmOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  setItemDraft((current) => ({
-                    ...current,
-                    part_number:
-                      aiSuggestion?.part_number?.trim() || current.part_number,
-                    brand: aiSuggestion?.brand?.trim() || current.brand,
-                    title: aiSuggestion?.title?.trim() || current.title,
-                  }))
-                  setAIApplied(true)
-                  setAIConfirmOpen(false)
-                }}
-              >
-                Confirm Apply
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       </Main>

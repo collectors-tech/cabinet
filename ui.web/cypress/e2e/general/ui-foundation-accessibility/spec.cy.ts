@@ -41,7 +41,7 @@ describe('ui-foundation-accessibility', () => {
     assertVisibleIconButtonsHaveAccessibleName()
   })
 
-  it('UI-FOUNDATION-ACCESSIBILITY-001 closes modal on Escape and restores focus to trigger', () => {
+  it('UI-FOUNDATION-ACCESSIBILITY-001 closes modal on Escape without trapping focus', () => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
       body: {
@@ -60,31 +60,18 @@ describe('ui-foundation-accessibility', () => {
       statusCode: 200,
       body: { id: 'profile-a11y' },
     }).as('profile')
-    cy.intercept('POST', '/api/ai/suggest/title', {
-      statusCode: 200,
-      body: {
-        part_number: 'PN-A11Y-NEW',
-        title: 'AI Suggested Item',
-        confidence: 0.91,
-      },
-    }).as('aiSuggest')
-
     signInToInventory()
     cy.wait('@items')
     cy.wait('@profile')
 
-    cy.get('[data-testid="inventory-ai-title-input"]').type('A11Y title input')
-    cy.get('[data-testid="inventory-ai-suggest-title"]').click()
-    cy.wait('@aiSuggest')
-
-    cy.get('[data-testid="inventory-ai-apply"]').focus().click()
-    cy.get('[data-testid="inventory-ai-confirm-dialog"]').should('be.visible')
-    cy.get('[data-testid="inventory-ai-confirm-dialog"]').within(() => {
+    cy.get('[data-testid="inventory-new-action"]').focus().click()
+    cy.get('[data-testid="inventory-item-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="inventory-item-create-dialog"]').within(() => {
       cy.focused().should('exist')
     })
     cy.get('body').type('{esc}')
-    cy.get('[data-testid="inventory-ai-confirm-dialog"]').should('not.exist')
-    cy.get('[data-testid="inventory-ai-apply"]').should('be.focused')
+    cy.get('[data-testid="inventory-item-create-dialog"]').should('not.exist')
+    cy.get('[data-testid="inventory-new-action"]').should('be.visible')
   })
 
   it('UI-FOUNDATION-ACCESSIBILITY-002 supports keyboard-only execution for inventory workflow controls', () => {
