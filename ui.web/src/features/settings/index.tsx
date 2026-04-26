@@ -8,11 +8,12 @@ import {
   Cog,
   CreditCard,
   HardDrive,
+  Settings as SettingsIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
-import { Header } from '@/components/layout/header'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -68,6 +69,13 @@ export function Settings() {
       {/* ===== Top Heading ===== */}
       <Header>
         <Search />
+        <HeaderTitle
+          title='Settings'
+          description='Manage account, appearance, storage, and operations preferences.'
+          icon={SettingsIcon}
+          testId='settings-header-title'
+          iconTestId='settings-page-icon'
+        />
         <div className='ms-auto flex items-center space-x-4'>
           <LanguageSwitch />
           <ThemeSwitch />
