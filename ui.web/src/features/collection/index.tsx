@@ -117,6 +117,8 @@ type InventoryItemDraft = {
   description: string
 }
 
+type InventoryCreateIntent = 'manual' | 'photo' | 'barcode'
+
 type AISuggestion = {
   part_number?: string
   brand?: string
@@ -1069,6 +1071,12 @@ export function Collection({
   const [itemDraft, setItemDraft] = useState<InventoryItemDraft>(
     emptyInventoryItemDraft
   )
+  const [itemCreateIntent, setItemCreateIntent] =
+    useState<InventoryCreateIntent>('manual')
+  const [itemCreatePhotoFile, setItemCreatePhotoFile] = useState<File | null>(
+    null
+  )
+  const [itemCreateBarcodeInput, setItemCreateBarcodeInput] = useState('')
   const [itemSaveBusy, setItemSaveBusy] = useState(false)
   const [itemSaveError, setItemSaveError] = useState<string | null>(null)
   const [itemSaveSuccess, setItemSaveSuccess] = useState<string | null>(null)
@@ -1135,15 +1143,39 @@ export function Collection({
     selectedItemIDRef.current = selectedItemID
   }, [selectedItemID])
 
-  const startCreateItem = useCallback(() => {
-    setItemEditorMode('create')
-    setItemEditorSurface('dialog')
-    setItemDraft(emptyInventoryItemDraft())
-    setItemSaveError(null)
-    setItemSaveSuccess(null)
-    selectInventoryItem(null)
-    setItemEditorOpen(true)
-  }, [selectInventoryItem])
+  const resetCreateAttachments = useCallback(() => {
+    setItemCreateIntent('manual')
+    setItemCreatePhotoFile(null)
+    setItemCreateBarcodeInput('')
+  }, [])
+
+  const startCreateItem = useCallback(
+    (intent: InventoryCreateIntent = 'manual') => {
+      setItemEditorMode('create')
+      setItemEditorSurface('dialog')
+      setItemDraft(emptyInventoryItemDraft())
+      setItemCreateIntent(intent)
+      setItemCreatePhotoFile(null)
+      setItemCreateBarcodeInput('')
+      setItemSaveError(null)
+      setItemSaveSuccess(null)
+      selectInventoryItem(null)
+      setItemEditorOpen(true)
+    },
+    [selectInventoryItem]
+  )
+
+  const startCreateItemFromPhoto = useCallback(() => {
+    startCreateItem('photo')
+  }, [startCreateItem])
+
+  const startCreateItemFromBarcode = useCallback(() => {
+    startCreateItem('barcode')
+  }, [startCreateItem])
+
+  const startManualCreateItem = useCallback(() => {
+    startCreateItem('manual')
+  }, [startCreateItem])
 
   const openInventoryItemEditor = useCallback(
     (item: InventoryItem | null) => {
@@ -2532,6 +2564,23 @@ export function Collection({
       setItemSaveSuccess(null)
       return
     }
+    if (wasCreateMode && itemCreateIntent === 'photo' && !itemCreatePhotoFile) {
+      setItemSaveError('Choose a photo before creating from the Photos action.')
+      setItemSaveSuccess(null)
+      return
+    }
+    const pendingCreateBarcode = itemCreateBarcodeInput.trim()
+    if (
+      wasCreateMode &&
+      itemCreateIntent === 'barcode' &&
+      pendingCreateBarcode === ''
+    ) {
+      setItemSaveError(
+        'Enter a barcode before creating from the Barcodes action.'
+      )
+      setItemSaveSuccess(null)
+      return
+    }
     setItemSaveBusy(true)
     setItemSaveError(null)
     setItemSaveSuccess(null)
@@ -2551,20 +2600,61 @@ export function Collection({
       }
       const saved = (await response.json()) as { id?: string }
       const savedID = saved.id?.trim() ?? selectedItemID
+      if (wasCreateMode && itemCreateIntent === 'photo' && itemCreatePhotoFile) {
+        const photoBody = new FormData()
+        photoBody.append('file', itemCreatePhotoFile)
+        const photoResponse = await fetch(
+          `/api/items/${encodeURIComponent(savedID)}/photos`,
+          {
+            method: 'POST',
+            body: photoBody,
+          }
+        )
+        if (!photoResponse.ok) {
+          throw new Error(`create_item_photo_${photoResponse.status}`)
+        }
+      }
+      if (wasCreateMode && itemCreateIntent === 'barcode') {
+        const barcodeResponse = await fetch(
+          `/api/items/${encodeURIComponent(savedID)}/barcodes`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ barcode: pendingCreateBarcode }),
+          }
+        )
+        if (!barcodeResponse.ok) {
+          throw new Error(`create_item_barcode_${barcodeResponse.status}`)
+        }
+      }
       setItemEditorMode('edit')
       setItemSaveSuccess(
-        wasCreateMode
-          ? 'Item created and selected for follow-up media attach.'
-          : 'Item changes saved and reloaded from the API.'
+        wasCreateMode && itemCreateIntent === 'photo'
+          ? 'Item created with photo and selected.'
+          : wasCreateMode && itemCreateIntent === 'barcode'
+            ? 'Item created with barcode and selected.'
+            : wasCreateMode
+              ? 'Item created and selected for follow-up media attach.'
+              : 'Item changes saved and reloaded from the API.'
       )
       await loadInventoryItems(savedID)
       setItemEditorOpen(false)
+      resetCreateAttachments()
     } catch {
       setItemSaveError('Inventory save failed. Review the fields and retry.')
     } finally {
       setItemSaveBusy(false)
     }
-  }, [itemDraft, itemEditorMode, loadInventoryItems, selectedItemID])
+  }, [
+    itemCreateBarcodeInput,
+    itemCreateIntent,
+    itemCreatePhotoFile,
+    itemDraft,
+    itemEditorMode,
+    loadInventoryItems,
+    resetCreateAttachments,
+    selectedItemID,
+  ])
 
   const handlePhotoUpload = useCallback(
     async (file: File | null) => {
@@ -3109,13 +3199,9 @@ export function Collection({
                   variant='outline'
                   className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
                   data-testid='inventory-barcodes-action'
-                  aria-label='Manage barcodes'
-                  title='Barcodes'
-                  onClick={() =>
-                    openInventoryBarcodesForItem(
-                      selectedInventoryItem ?? inventoryItems[0] ?? null
-                    )
-                  }
+                  aria-label='Create item from barcode'
+                  title='Create item from barcode'
+                  onClick={startCreateItemFromBarcode}
                 >
                   <Barcode className='size-4 2xl:mr-2' aria-hidden />
                   <span className='hidden 2xl:inline'>Barcodes</span>
@@ -3125,13 +3211,9 @@ export function Collection({
                   variant='outline'
                   className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
                   data-testid='inventory-photos-action'
-                  aria-label='Manage photos'
-                  title='Photos'
-                  onClick={() =>
-                    openInventoryPhotosForItem(
-                      selectedInventoryItem ?? inventoryItems[0] ?? null
-                    )
-                  }
+                  aria-label='Create item from photo'
+                  title='Create item from photo'
+                  onClick={startCreateItemFromPhoto}
                 >
                   <Images className='size-4 2xl:mr-2' aria-hidden />
                   <span className='hidden 2xl:inline'>Photos</span>
@@ -3144,7 +3226,7 @@ export function Collection({
               data-testid='inventory-new-action'
               aria-label='New item'
               title='New'
-              onClick={startCreateItem}
+              onClick={startManualCreateItem}
             >
               <Plus className='size-4 2xl:mr-2' aria-hidden />
               <span className='hidden 2xl:inline'>New</span>
@@ -3166,7 +3248,7 @@ export function Collection({
               <DropdownMenuContent align='end'>
                 <DropdownMenuItem
                   data-testid='inventory-create-menu-item'
-                  onClick={startCreateItem}
+                  onClick={startManualCreateItem}
                 >
                   New Item
                 </DropdownMenuItem>
@@ -3683,6 +3765,7 @@ export function Collection({
                       setItemEditorOpen(open)
                       if (!open) {
                         setItemSaveError(null)
+                        resetCreateAttachments()
                       }
                     }}
                   >
@@ -3698,7 +3781,11 @@ export function Collection({
                         <DialogHeader>
                           <DialogTitle>
                             {itemEditorMode === 'create'
-                              ? 'Create Item'
+                              ? itemCreateIntent === 'photo'
+                                ? 'Create Item From Photo'
+                                : itemCreateIntent === 'barcode'
+                                  ? 'Create Item From Barcode'
+                                  : 'Create Item'
                               : 'Edit Item'}
                           </DialogTitle>
                         </DialogHeader>
@@ -3707,9 +3794,71 @@ export function Collection({
                           data-testid='inventory-item-editor-mode'
                         >
                           {itemEditorMode === 'create'
-                            ? 'Creating new item draft.'
+                            ? itemCreateIntent === 'photo'
+                              ? 'Creating new item from photo.'
+                              : itemCreateIntent === 'barcode'
+                                ? 'Creating new item from barcode.'
+                                : 'Creating new item draft.'
                             : `Editing selected item: ${selectedItemContext}`}
                         </p>
+                        {itemEditorMode === 'create' &&
+                        itemCreateIntent !== 'manual' ? (
+                          <div
+                            className='rounded-md border bg-muted/30 p-3'
+                            data-testid='inventory-create-media-panel'
+                          >
+                            {itemCreateIntent === 'photo' ? (
+                              <div className='space-y-2'>
+                                <label
+                                  className='text-sm font-medium'
+                                  htmlFor='inventory-create-photo-input'
+                                >
+                                  Photo
+                                </label>
+                                <input
+                                  id='inventory-create-photo-input'
+                                  type='file'
+                                  accept='image/*'
+                                  data-testid='inventory-create-photo-input'
+                                  onChange={(event) =>
+                                    setItemCreatePhotoFile(
+                                      event.target.files?.[0] ?? null
+                                    )
+                                  }
+                                />
+                                <p className='text-xs text-muted-foreground'>
+                                  This photo will be uploaded after the item is
+                                  created.
+                                </p>
+                              </div>
+                            ) : null}
+                            {itemCreateIntent === 'barcode' ? (
+                              <div className='space-y-2'>
+                                <label
+                                  className='text-sm font-medium'
+                                  htmlFor='inventory-create-barcode-input'
+                                >
+                                  Barcode
+                                </label>
+                                <Input
+                                  id='inventory-create-barcode-input'
+                                  data-testid='inventory-create-barcode-input'
+                                  placeholder='Enter barcode for the new item'
+                                  value={itemCreateBarcodeInput}
+                                  onChange={(event) =>
+                                    setItemCreateBarcodeInput(
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                                <p className='text-xs text-muted-foreground'>
+                                  This barcode will be attached after the item
+                                  is created.
+                                </p>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                           <div className='space-y-2'>
                             <label

@@ -7,7 +7,7 @@ describe('inventory barcode modal', () => {
     })
   }
 
-  it('opens item-scoped barcodes from page and row actions without inline barcodes section', () => {
+  it('opens item-scoped barcodes from row actions without inline barcodes section', () => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
       body: {
@@ -51,7 +51,9 @@ describe('inventory barcode modal', () => {
 
     cy.get('[data-testid="inventory-barcodes-section"]').should('not.exist')
 
-    cy.get('[data-testid="inventory-barcodes-action"]').click()
+    cy.get(
+      '[data-testid="inventory-item-row-item-barcode-alpha"] [data-testid="inventory-row-barcodes-action"]'
+    ).click()
     cy.get('[data-testid="inventory-barcodes-dialog"]')
       .should('be.visible')
       .and('contain', 'Barcode Alpha')

@@ -34,7 +34,10 @@ describe('UI-SCREEN-INVENTORY-PHOTOS', () => {
   }
 
   function openPhotosModal() {
-    cy.get('[data-testid="inventory-photos-action"]').click()
+    cy.get('[data-testid^="inventory-item-row-"]')
+      .first()
+      .find('[data-testid="inventory-row-photos-action"]')
+      .click()
     cy.get('[data-testid="inventory-photos-dialog"]').should('be.visible')
     cy.get('[data-testid="inventory-photos-panel"]').should('be.visible')
   }

@@ -245,6 +245,129 @@ describe("inventory-management", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
   });
 
+  it("UI-SCREEN-INVENTORY-ITEMS-007A creates a new item from the header Photos action", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+    }> = [];
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsPhotoCreate");
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-PHOTO-NEW",
+        title: "Photo Created Item",
+      });
+      const created = {
+        id: "item-photo-new",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: "General",
+      };
+      items.push(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createPhotoItem");
+    cy.intercept("POST", "/api/items/item-photo-new/photos", (req) => {
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: "photo-new-1",
+          filename: "new-inventory-photo.jpg",
+          is_primary: true,
+        },
+      });
+    }).as("uploadNewItemPhoto");
+
+    signIn();
+    cy.wait("@itemsPhotoCreate");
+
+    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-editor-mode"]').should(
+      "contain",
+      "Creating new item from photo"
+    );
+    cy.get('[data-testid="inventory-create-photo-input"]').selectFile({
+      contents: Cypress.Buffer.from("new-item-photo-binary"),
+      fileName: "new-inventory-photo.jpg",
+      mimeType: "image/jpeg",
+    });
+    cy.get('[data-testid="inventory-item-part-number"]').type("PN-PHOTO-NEW");
+    cy.get('[data-testid="inventory-item-title"]').type("Photo Created Item");
+    cy.get('[data-testid="inventory-item-create-submit"]').click();
+
+    cy.wait("@createPhotoItem");
+    cy.wait("@uploadNewItemPhoto");
+    cy.wait("@itemsPhotoCreate");
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-PHOTO-NEW");
+    cy.contains("Photo Created Item").should("be.visible");
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-007B creates a new item from the header Barcodes action", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+    }> = [];
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsBarcodeCreate");
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-BARCODE-NEW",
+        title: "Barcode Created Item",
+      });
+      const created = {
+        id: "item-barcode-new",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: "General",
+      };
+      items.push(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createBarcodeItem");
+    cy.intercept("POST", "/api/items/item-barcode-new/barcodes", (req) => {
+      expect(req.body).to.deep.equal({ barcode: "012345678905" });
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: "barcode-new-1",
+          item_id: "item-barcode-new",
+          barcode: "012345678905",
+        },
+      });
+    }).as("attachNewItemBarcode");
+
+    signIn();
+    cy.wait("@itemsBarcodeCreate");
+
+    cy.get('[data-testid="inventory-barcodes-action"]').click();
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-editor-mode"]').should(
+      "contain",
+      "Creating new item from barcode"
+    );
+    cy.get('[data-testid="inventory-create-barcode-input"]').type("012345678905");
+    cy.get('[data-testid="inventory-item-part-number"]').type("PN-BARCODE-NEW");
+    cy.get('[data-testid="inventory-item-title"]').type("Barcode Created Item");
+    cy.get('[data-testid="inventory-item-create-submit"]').click();
+
+    cy.wait("@createBarcodeItem");
+    cy.wait("@attachNewItemBarcode");
+    cy.wait("@itemsBarcodeCreate");
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BARCODE-NEW");
+    cy.contains("Barcode Created Item").should("be.visible");
+  });
+
   it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection from the compact filter and auto-selects it", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
@@ -364,7 +487,9 @@ describe("inventory-management", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
     cy.contains("Created Inventory Item").should("be.visible");
 
-    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get(
+      '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
+    ).click();
     cy.get('[data-testid="inventory-photos-dialog"]').should("be.visible");
     cy.get('[data-testid="inventory-photo-upload-input"]').selectFile({
       contents: Cypress.Buffer.from("created-photo-binary"),
@@ -391,7 +516,9 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
-    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get(
+      '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
+    ).click();
     cy.get('[data-testid="inventory-photos-dialog"]').should("be.visible");
     cy.contains('[data-testid="inventory-photo-row"]', "created-photo.jpg").should(
       "be.visible"
