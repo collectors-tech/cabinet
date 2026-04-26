@@ -36,7 +36,9 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-workspace"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
     cy.get('[data-testid="collections-members-table"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="collections-selected-name"]').should('not.exist')
+    cy.get('[data-testid="collections-assignment-panel"]').should('not.exist')
     cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
       'contain.text',
       '1996 Topps Kobe Bryant rookie'
@@ -47,14 +49,19 @@ describe('ui-screen-collections', () => {
     )
 
     cy.get('[data-testid="collections-row-store-1"]').click()
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Store 1')
+    cy.get('[data-testid="collections-row-store-1"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
+    )
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Store 1')
     cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
       'contain.text',
       'Shadowless Pikachu'
     )
 
     cy.get('[data-testid="collections-row-overflow"]').click()
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Overflow')
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Overflow')
     cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
       'not.exist'
     )
@@ -70,17 +77,20 @@ describe('ui-screen-collections', () => {
 
     cy.get('[data-testid="collections-row-watch-list"]').click()
     cy.wait('@saveCollectionSelection')
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Watch List')
-    cy.get('[data-testid="collections-active-context-message"]').should(
-      'contain.text',
-      'Active collection is Watch List'
+    cy.get('[data-testid="collections-row-watch-list"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
     )
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Watch List')
+    cy.get('[data-testid="collections-selected-name"]').should('not.exist')
 
     cy.reload()
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Watch List')
-    cy.get('[data-testid="collections-active-context-persistence"]').should(
-      'contain.text',
-      'Persists for this signed-in profile'
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Watch List')
+    cy.get('[data-testid="collections-row-watch-list"]').should(
+      'have.attr',
+      'data-state',
+      'selected'
     )
   })
 
@@ -95,7 +105,7 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-row-collections-alpha"]').should('be.visible')
     cy.reload()
     cy.get('[data-testid="collections-row-collections-alpha"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Collections Alpha')
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Collections Alpha')
   })
 
   it('UI-SCREEN-COLLECTIONS-004 renames a collection from the row workflow and persists after refresh', () => {
@@ -122,10 +132,11 @@ describe('ui-screen-collections', () => {
 
     cy.contains('Store 1 removed from workspace collections.').should('be.visible')
     cy.get('[data-testid="collections-row-store-1"]').should('not.exist')
-
-    cy.get('[data-testid="collections-row-watch-list"]').click()
-    cy.get('[data-testid="collections-assignment-select"]').click()
-    cy.contains('Shadowless Pikachu (Unassigned)').should('be.visible')
+    cy.get('[data-testid="collections-active-context"]').should('contain.text', 'All Items')
+    cy.get('[data-testid="collections-member-row-inventory-item-pikachu-shadowless"]').should(
+      'contain.text',
+      'Currently in Unassigned.'
+    )
   })
 
   it('UI-SCREEN-COLLECTIONS-006 filters collections within the shared table surface', () => {
@@ -138,72 +149,22 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-management-summary"]').should('contain.text', 'Showing 1 of 6 collections.')
   })
 
-  it('UI-SCREEN-COLLECTIONS-007 assigns an item into the selected collection and persists after refresh', () => {
-    signInToCollections()
-    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
-
-    cy.get('[data-testid="collections-row-warehouse-1"]').click()
-    cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="collections-assignment-select"]').click()
-    cy.contains('Base Set Charizard (Unassigned)').click()
-    cy.get('[data-testid="collections-assignment-submit"]').click()
-    cy.wait('@saveCollectionSettings')
-
-    cy.contains('Base Set Charizard assigned to Warehouse 1.').should('be.visible')
-    cy.get('[data-testid="collections-member-base-set-charizard"]').should('be.visible')
-
-    cy.reload()
-    cy.get('[data-testid="collections-selected-name"]').should('contain.text', 'Warehouse 1')
-    cy.get('[data-testid="collections-member-base-set-charizard"]').should('be.visible')
-  })
-
-  it('UI-SCREEN-COLLECTIONS-008 moves an assigned item between collections and persists after refresh', () => {
+  it('UI-SCREEN-COLLECTIONS-007 keeps item assignment actions out of Collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-watch-list"]').click()
     cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
-    cy.get('[data-testid="collections-move-target-1996-topps-kobe-bryant-rookie"]').click()
-    cy.contains('[role="option"]', 'Warehouse 1').click()
-    cy.get('[data-testid="collections-move-submit-1996-topps-kobe-bryant-rookie"]').click({
-      force: true,
-    })
-
-    cy.contains('1996 Topps Kobe Bryant rookie moved to Warehouse 1.').should('be.visible')
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
-
-    cy.get('[data-testid="collections-row-warehouse-1"]').click()
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
-    cy.reload()
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
-  })
-
-  it('UI-SCREEN-COLLECTIONS-008A unassigns an item directly from the selected collection and persists after refresh', () => {
-    signInToCollections()
-    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSettings')
-
-    cy.get('[data-testid="collections-row-watch-list"]').click()
-    cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('be.visible')
-    cy.get('[data-testid="collections-unassign-submit-1996-topps-kobe-bryant-rookie"]').click()
-    cy.wait('@saveCollectionSettings')
-
-    cy.contains('1996 Topps Kobe Bryant rookie removed from Watch List.').should('be.visible')
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
-
-    cy.get('[data-testid="collections-assignment-select"]').click()
-    cy.contains('1996 Topps Kobe Bryant rookie (Unassigned)').should('be.visible')
-
-    cy.reload()
-    cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should('not.exist')
-    cy.get('[data-testid="collections-assignment-select"]').click()
-    cy.contains('1996 Topps Kobe Bryant rookie (Unassigned)').should('be.visible')
+    cy.get('[data-testid="collections-assignment-panel"]').should('not.exist')
+    cy.get('[data-testid^="collections-move-target-"]').should('not.exist')
+    cy.get('[data-testid^="collections-move-submit-"]').should('not.exist')
+    cy.get('[data-testid^="collections-unassign-submit-"]').should('not.exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity', () => {
     signInToCollections()
 
     cy.get('[data-testid="sidebar-nav-link-collections"]').should('be.visible')
-    cy.get('[data-testid="collections-page-icon"]').should('be.visible')
+    cy.get('[data-testid="collections-page-icon"]').should('exist')
     cy.get('[data-testid="sidebar-nav-link-collections"] svg').should('have.class', 'lucide-tag')
     cy.get('[data-testid="collections-page-icon"]').should('have.class', 'lucide-tag')
   })
@@ -218,38 +179,27 @@ describe('ui-screen-collections', () => {
     cy.wait('@saveCollectionSettings')
 
     cy.get('[data-testid="collections-row-profile-persisted-vault"]').click()
-    cy.get('[data-testid="collections-assignment-select"]').click()
-    cy.contains('Base Set Charizard (Unassigned)').click()
-    cy.get('[data-testid="collections-assignment-submit"]').click()
-    cy.wait('@saveCollectionSettings')
 
     cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
       const settings = (response.body.settings ?? {}) as Record<string, string>
       const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
         collections?: string[]
         activeCollection?: string
-        items?: Array<{ id?: string; collectionName?: string | null }>
       }
 
       expect(persisted.collections).to.include('Profile Persisted Vault')
       expect(persisted.activeCollection).to.equal('Profile Persisted Vault')
-      expect(persisted.items).to.satisfy(
-        (items?: Array<{ id?: string; collectionName?: string | null }>) =>
-          Array.isArray(items) &&
-          items.some(
-            (item) =>
-              item.id === 'inventory-item-charizard-base' &&
-              item.collectionName === 'Profile Persisted Vault'
-          )
-      )
     })
 
     cy.reload()
-    cy.get('[data-testid="collections-selected-name"]').should(
+    cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',
       'Profile Persisted Vault'
     )
-    cy.get('[data-testid="collections-member-base-set-charizard"]').should('be.visible')
+    cy.get('[data-testid="collections-members-empty-row"]').should(
+      'contain.text',
+      'No items are currently assigned to Profile Persisted Vault.'
+    )
   })
 
   it('UI-SCREEN-COLLECTIONS-011 switches collection state with the active profile', () => {
@@ -289,7 +239,7 @@ describe('ui-screen-collections', () => {
           cy.visit('/collections/')
 
           cy.get('[data-testid="collections-row-profile-two-vault"]').should('be.visible')
-          cy.get('[data-testid="collections-selected-name"]').should(
+          cy.get('[data-testid="collections-active-context"]').should(
             'contain.text',
             'Profile Two Vault'
           )
@@ -350,7 +300,7 @@ describe('ui-screen-collections', () => {
     cy.visit('/collections/')
     cy.wait('@loadCollectionSettings')
     cy.get('[data-testid="collections-row-wishlist-sync-shelf"]').should('be.visible')
-    cy.get('[data-testid="collections-selected-name"]').should(
+    cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',
       'Wishlist Sync Shelf'
     )
