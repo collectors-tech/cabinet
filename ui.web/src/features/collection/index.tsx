@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -81,117 +82,6 @@ type BarcodeMatch = {
   item_id: string
   barcode: string
   created_at?: string
-}
-
-type CameraImageCapture = {
-  takePhoto: () => Promise<Blob>
-}
-
-type CameraImageCaptureConstructor = new (
-  track: MediaStreamTrack
-) => CameraImageCapture
-
-type CameraWindow = Window & {
-  ImageCapture?: CameraImageCaptureConstructor
-}
-
-function getCameraVideoTrack(stream: MediaStream) {
-  return stream.getVideoTracks()[0] ?? null
-}
-
-function createCameraPhotoFile(blob: Blob) {
-  return new File([blob], `camera-capture-${Date.now()}.jpg`, {
-    type: blob.type || 'image/jpeg',
-  })
-}
-
-function waitForVideoMetadata(video: HTMLVideoElement) {
-  if (video.videoWidth > 0 && video.videoHeight > 0) {
-    return Promise.resolve()
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    function cleanup() {
-      video.removeEventListener('loadedmetadata', onLoaded)
-      video.removeEventListener('error', onError)
-      window.clearTimeout(timeoutID)
-    }
-
-    function onLoaded() {
-      cleanup()
-      resolve()
-    }
-
-    function onError() {
-      cleanup()
-      reject(new Error('camera_video_unavailable'))
-    }
-
-    const timeoutID = window.setTimeout(() => {
-      cleanup()
-      resolve()
-    }, 1500)
-
-    video.addEventListener('loadedmetadata', onLoaded, { once: true })
-    video.addEventListener('error', onError, { once: true })
-  })
-}
-
-function canvasToJpegBlob(canvas: HTMLCanvasElement) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('camera_frame_encode_failed'))
-          return
-        }
-        resolve(blob)
-      },
-      'image/jpeg',
-      0.92
-    )
-  })
-}
-
-async function captureCameraPhotoBlob(stream: MediaStream) {
-  const videoTrack = getCameraVideoTrack(stream)
-  const imageCaptureConstructor =
-    typeof window !== 'undefined'
-      ? (window as CameraWindow).ImageCapture
-      : undefined
-
-  if (imageCaptureConstructor && videoTrack) {
-    return new imageCaptureConstructor(videoTrack).takePhoto()
-  }
-
-  const video = document.createElement('video')
-  video.muted = true
-  video.playsInline = true
-  video.srcObject = stream
-
-  try {
-    await video.play()
-  } catch {
-    // Some browsers block play() on detached media; loadedmetadata is enough.
-  }
-
-  try {
-    await waitForVideoMetadata(video)
-    const width = video.videoWidth || 1280
-    const height = video.videoHeight || 720
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('camera_canvas_unavailable')
-    }
-    context.drawImage(video, 0, 0, width, height)
-    return await canvasToJpegBlob(canvas)
-  } finally {
-    video.pause()
-    video.srcObject = null
-  }
 }
 
 type InventoryItem = {
@@ -1132,6 +1022,8 @@ export function Collection({
   const [folderPropertiesStatusBadge, setFolderPropertiesStatusBadge] =
     useState('')
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const photoCaptureInputRef = useRef<HTMLInputElement | null>(null)
+  const photoUploadInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -2660,7 +2552,7 @@ export function Collection({
   const handlePhotoUpload = useCallback(
     async (file: File | null) => {
       if (!file || !selectedItemID) {
-        return
+        return false
       }
       setPhotosBusy(true)
       setPhotosError(null)
@@ -2678,10 +2570,12 @@ export function Collection({
           throw new Error(`upload_photo_${response.status}`)
         }
         await loadInventoryPhotos()
+        return true
       } catch {
         setPhotosError(
           'Photo upload failed. Retry with a supported image file.'
         )
+        return false
       } finally {
         setPhotosBusy(false)
       }
@@ -2825,40 +2719,38 @@ export function Collection({
     }
   }, [loadInventoryPhotos, selectedItemID])
 
-  const handleTakePhoto = useCallback(async () => {
+  const handlePhotoInputChange = useCallback(
+    async (
+      event: ChangeEvent<HTMLInputElement>,
+      source: 'capture' | 'upload'
+    ) => {
+      const file = event.target.files?.[0] ?? null
+      setCameraError(null)
+      setCameraSuccess(null)
+      const uploaded = await handlePhotoUpload(file)
+      if (uploaded && source === 'capture') {
+        setCameraSuccess('Photo uploaded successfully.')
+      }
+      event.currentTarget.value = ''
+    },
+    [handlePhotoUpload]
+  )
+
+  const handleTakePhoto = useCallback(() => {
     setCameraError(null)
     setCameraSuccess(null)
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.mediaDevices ||
-      typeof navigator.mediaDevices.getUserMedia !== 'function'
-    ) {
+    if (!selectedItemID) {
+      setCameraError('Select an inventory item before taking a photo.')
+      return
+    }
+    if (!photoCaptureInputRef.current) {
       setCameraError(
-        'Camera capture is unavailable on this device. Use Upload File instead.'
+        'Camera picker is unavailable right now. Use Upload File instead.'
       )
       return
     }
-    let stream: MediaStream | null = null
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-      })
-      const photoBlob = await captureCameraPhotoBlob(stream)
-      const file = createCameraPhotoFile(photoBlob)
-      await handlePhotoUpload(file)
-      setCameraSuccess('Camera capture uploaded successfully.')
-    } catch {
-      setCameraError(
-        'Camera permission was denied or unavailable. Use Upload File or your browser camera picker instead.'
-      )
-    } finally {
-      if (stream) {
-        stream.getTracks().forEach((track) => {
-          track.stop()
-        })
-      }
-    }
-  }, [handlePhotoUpload])
+    photoCaptureInputRef.current.click()
+  }, [selectedItemID])
 
   const lookupBarcode = useCallback(async (rawBarcode: string) => {
     const barcode = rawBarcode.trim()
@@ -4155,25 +4047,37 @@ export function Collection({
                           mode.
                         </div>
                         <div className='flex flex-wrap items-center gap-2'>
+                          <input
+                            ref={photoCaptureInputRef}
+                            id='inventory-photo-capture-input'
+                            type='file'
+                            accept='image/*'
+                            capture='environment'
+                            className='sr-only'
+                            data-testid='inventory-photo-capture-input'
+                            disabled={!selectedItemID}
+                            onChange={(event) => {
+                              void handlePhotoInputChange(event, 'capture')
+                            }}
+                          />
                           <Button
                             type='button'
                             variant='outline'
+                            aria-controls='inventory-photo-capture-input'
                             data-testid='inventory-camera-take-photo'
-                            onClick={() => void handleTakePhoto()}
+                            onClick={handleTakePhoto}
                             disabled={!selectedItemID}
                           >
                             Take Photo
                           </Button>
                           <input
+                            ref={photoUploadInputRef}
                             type='file'
                             accept='image/*'
-                            capture='environment'
                             data-testid='inventory-photo-upload-input'
                             disabled={!selectedItemID}
                             onChange={(event) => {
-                              const file = event.target.files?.[0] ?? null
-                              void handlePhotoUpload(file)
-                              event.currentTarget.value = ''
+                              void handlePhotoInputChange(event, 'upload')
                             }}
                           />
                           <Button
