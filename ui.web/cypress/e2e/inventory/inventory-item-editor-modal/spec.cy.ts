@@ -95,10 +95,28 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATED");
     cy.contains("Created Modal Item").should("be.visible");
 
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').click();
+    cy.wait(250);
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-ALPHA");
+    cy.get('[data-testid="row-details-modal"]').should("not.exist");
+    cy.get('[data-testid="row-edit-modal"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
+
     cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
     cy.get('[data-testid="inventory-item-editor-panel"]')
       .should("be.visible")
       .and("contain", "Edit Item");
+    cy.get('[data-testid="inventory-item-editor-panel"]').then(($panel) => {
+      const rect = $panel[0].getBoundingClientRect();
+      expect(rect.left, "editor panel starts on right half").to.be.greaterThan(
+        Cypress.config("viewportWidth") / 2
+      );
+      expect(rect.right, "editor panel is anchored to right edge").to.be.closeTo(
+        Cypress.config("viewportWidth"),
+        24
+      );
+    });
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
     cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");

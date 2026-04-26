@@ -3146,20 +3146,22 @@ export function Collection({
         data-testid='inventory-shell-header'
       >
         <Search className='hidden min-w-32 sm:flex' />
-        <h1
-          className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-lg font-bold tracking-tight lg:block'
-          data-testid='inventory-header-title'
-          title={description}
-          aria-label={description ? `${title} - ${description}` : title}
-        >
-          {title}
-        </h1>
-        <div className='ms-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none sm:gap-3'>
+        <div className='hidden min-w-[8rem] flex-1 justify-center overflow-hidden lg:flex'>
+          <h1
+            className='max-w-full truncate text-lg font-bold tracking-tight'
+            data-testid='inventory-header-title'
+            title={description}
+            aria-label={description ? `${title} - ${description}` : title}
+          >
+            {title}
+          </h1>
+        </div>
+        <div className='flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'>
           <div
-            className='flex min-w-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
+            className='flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
             data-testid='inventory-global-header-actions'
           >
-            <div className='mr-1 hidden min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex'>
+            <div className='mr-1 hidden min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 2xl:flex'>
               <span
                 className='text-xs font-medium text-muted-foreground'
                 data-testid='inventory-header-context'
@@ -3949,7 +3951,7 @@ export function Collection({
                     }}
                   >
                     <SheetContent
-                      side='left'
+                      side='right'
                       className='w-[min(28rem,92vw)] overflow-y-auto sm:max-w-md'
                       data-testid='inventory-item-editor-panel'
                     >

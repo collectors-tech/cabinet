@@ -265,20 +265,22 @@ export function Collections() {
     <>
       <Header fixed data-testid='collections-shell-header'>
         <Search />
-        <h1
-          className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap text-lg font-bold tracking-tight lg:flex'
-          data-testid='collections-header-title'
-          title={collectionsHeaderDescription}
-          aria-label={`Collections - ${collectionsHeaderDescription}`}
-        >
-          <Tag
-            aria-hidden='true'
-            className='h-5 w-5 text-muted-foreground'
-            data-testid='collections-page-icon'
-          />
-          Collections
-        </h1>
-        <div className='ml-auto flex min-w-0 items-center gap-3'>
+        <div className='hidden min-w-0 flex-1 justify-center lg:flex'>
+          <h1
+            className='flex min-w-0 items-center gap-2 text-lg font-bold tracking-tight'
+            data-testid='collections-header-title'
+            title={collectionsHeaderDescription}
+            aria-label={`Collections - ${collectionsHeaderDescription}`}
+          >
+            <Tag
+              aria-hidden='true'
+              className='h-5 w-5 shrink-0 text-muted-foreground'
+              data-testid='collections-page-icon'
+            />
+            <span className='truncate'>Collections</span>
+          </h1>
+        </div>
+        <div className='flex min-w-0 items-center gap-3'>
           <div
             className='flex min-w-0 flex-wrap items-center justify-end gap-2'
             data-testid='collections-global-header-actions'

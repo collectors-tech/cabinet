@@ -754,16 +754,18 @@ export function Tasks({
       <Header fixed data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}>
         <Search />
         {isWishlistRoute ? (
-          <h1
-            className='pointer-events-auto absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-lg font-bold tracking-tight lg:block'
-            data-testid='wishlist-header-title'
-            title={description}
-            aria-label={description ? `${title} - ${description}` : title}
-          >
-            {title}
-          </h1>
+          <div className='hidden min-w-0 flex-1 justify-center lg:flex'>
+            <h1
+              className='truncate text-lg font-bold tracking-tight'
+              data-testid='wishlist-header-title'
+              title={description}
+              aria-label={description ? `${title} - ${description}` : title}
+            >
+              {title}
+            </h1>
+          </div>
         ) : null}
-        <div className='ms-auto flex min-w-0 items-center gap-3'>
+        <div className='flex min-w-0 items-center gap-3'>
           {isWishlistRoute ? (
             <>
               <div
