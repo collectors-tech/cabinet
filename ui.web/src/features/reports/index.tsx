@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ChartColumn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -8,8 +9,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -71,12 +72,21 @@ export function Reports() {
         throw new Error('active_profile_missing')
       }
 
-      const [wishlistResp, statsResp, trendResp, sourceResp] = await Promise.all([
-        fetch(`/api/wishlist/hits?profile_id=${encodeURIComponent(profileID)}`),
-        fetch(`/api/pricing/stats?profile_id=${encodeURIComponent(profileID)}`),
-        fetch(`/api/pricing/trend?profile_id=${encodeURIComponent(profileID)}`),
-        fetch(`/api/pricing/by-source?profile_id=${encodeURIComponent(profileID)}`),
-      ])
+      const [wishlistResp, statsResp, trendResp, sourceResp] =
+        await Promise.all([
+          fetch(
+            `/api/wishlist/hits?profile_id=${encodeURIComponent(profileID)}`
+          ),
+          fetch(
+            `/api/pricing/stats?profile_id=${encodeURIComponent(profileID)}`
+          ),
+          fetch(
+            `/api/pricing/trend?profile_id=${encodeURIComponent(profileID)}`
+          ),
+          fetch(
+            `/api/pricing/by-source?profile_id=${encodeURIComponent(profileID)}`
+          ),
+        ])
 
       if (!wishlistResp.ok) {
         throw new Error(`reports_wishlist_hits_${wishlistResp.status}`)
@@ -167,6 +177,13 @@ export function Reports() {
     <>
       <Header fixed>
         <Search />
+        <HeaderTitle
+          title='Reports'
+          description='Wishlist and pricing analytics with export-ready snapshots.'
+          icon={ChartColumn}
+          testId='reports-header-title'
+          iconTestId='reports-page-icon'
+        />
         <div className='ms-auto flex items-center space-x-4'>
           <LanguageSwitch />
           <ThemeSwitch />
@@ -184,7 +201,11 @@ export function Reports() {
             </p>
           </div>
           <div className='flex gap-2'>
-            <Button variant='outline' onClick={() => void loadReports()} disabled={loading}>
+            <Button
+              variant='outline'
+              onClick={() => void loadReports()}
+              disabled={loading}
+            >
               {loading ? 'Refreshing...' : 'Refresh Reports'}
             </Button>
             <Button
@@ -212,7 +233,10 @@ export function Reports() {
         ) : null}
 
         {exportMessage ? (
-          <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm' data-testid='reports-export-message'>
+          <div
+            className='rounded-md border bg-muted/30 px-3 py-2 text-sm'
+            data-testid='reports-export-message'
+          >
             {exportMessage}
           </div>
         ) : null}
@@ -222,7 +246,9 @@ export function Reports() {
             [1, 2, 3, 4].map((slot) => (
               <Card key={slot}>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Loading...</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Loading...
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>--</div>
@@ -233,15 +259,21 @@ export function Reports() {
             <>
               <Card>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Wishlist Hits</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Wishlist Hits
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>{data?.wishlistHits ?? 0}</div>
+                  <div className='text-2xl font-bold'>
+                    {data?.wishlistHits ?? 0}
+                  </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Price Min</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Price Min
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>
@@ -251,7 +283,9 @@ export function Reports() {
               </Card>
               <Card>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Price Median</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Price Median
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>
@@ -261,7 +295,9 @@ export function Reports() {
               </Card>
               <Card>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Price Latest</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Price Latest
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>

@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { TriangleAlert } from 'lucide-react'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -32,6 +33,13 @@ function RouteComponent() {
     <>
       <Header fixed className='border-b'>
         <Search />
+        <HeaderTitle
+          title='Error'
+          description='Review the current route error state.'
+          icon={TriangleAlert}
+          testId='error-header-title'
+          iconTestId='error-page-icon'
+        />
         <div className='ms-auto flex items-center space-x-4'>
           <LanguageSwitch />
           <ThemeSwitch />

@@ -1,10 +1,6 @@
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Heart } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,17 +10,22 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import {
   collectionKey,
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
-import { TasksTable } from './components/tasks-table'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
-import { tasks } from './data/tasks'
+import { TasksTable } from './components/tasks-table'
 import { type Task } from './data/schema'
+import { tasks } from './data/tasks'
 
 type TasksProps = {
   title?: string
@@ -142,7 +143,14 @@ function buildWishlistCsv(tasksToExport: Task[]) {
   }
 
   return [
-    ['title', 'part_number', 'category', 'priority', 'notes', 'target_price'].join(','),
+    [
+      'title',
+      'part_number',
+      'category',
+      'priority',
+      'notes',
+      'target_price',
+    ].join(','),
     ...tasksToExport.map((task) =>
       [
         escapeCell(task.title),
@@ -228,16 +236,19 @@ export function Tasks({
     setActiveWorkspaceCollection,
     addCollection,
   } = useWorkspaceCollections()
-  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] = useState(false)
+  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] =
+    useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
-  const [inlineCollectionValidationMessage, setInlineCollectionValidationMessage] =
-    useState('')
+  const [
+    inlineCollectionValidationMessage,
+    setInlineCollectionValidationMessage,
+  ] = useState('')
   const [tableData, setTableData] = useState<Task[]>(tasks)
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
-  const [wishlistActionItemID, setWishlistActionItemID] = useState<string | null>(
-    null
-  )
+  const [wishlistActionItemID, setWishlistActionItemID] = useState<
+    string | null
+  >(null)
   const [isWishlistMutating, setIsWishlistMutating] = useState(false)
   const [wishlistPlanningFocus, setWishlistPlanningFocus] =
     useState<WishlistPlanningFocus>(() => {
@@ -417,10 +428,15 @@ export function Tasks({
         await saveWishlistDraft(draft, currentRow)
         await refreshWishlistTable()
         toast.success(
-          currentRow ? `${draft.title} updated.` : `${draft.title} added to wishlist.`
+          currentRow
+            ? `${draft.title} updated.`
+            : `${draft.title} added to wishlist.`
         )
       } catch (error) {
-        if (error instanceof Error && error.message === 'invalid_target_price') {
+        if (
+          error instanceof Error &&
+          error.message === 'invalid_target_price'
+        ) {
           toast.error('Target price must be a positive number.')
         } else {
           toast.error('Wishlist save failed. Try again.')
@@ -470,9 +486,14 @@ export function Tasks({
           await saveWishlistDraft(entry)
         }
         await refreshWishlistTable()
-        toast.success(`Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`)
+        toast.success(
+          `Imported ${entries.length} wishlist entr${entries.length === 1 ? 'y' : 'ies'}.`
+        )
       } catch (error) {
-        if (error instanceof Error && error.message === 'invalid_target_price') {
+        if (
+          error instanceof Error &&
+          error.message === 'invalid_target_price'
+        ) {
           toast.error('Target price must be a positive number.')
         } else {
           toast.error('Wishlist import failed. Try again.')
@@ -511,7 +532,9 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
-        toast.success(`Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+        toast.success(
+          `Updated priority for ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+        )
       } catch {
         toast.error('Bulk priority update failed. Try again.')
         throw new Error('wishlist_bulk_priority_failed')
@@ -581,7 +604,9 @@ export function Tasks({
           }
         }
         await refreshWishlistTable()
-        toast.success(`Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+        toast.success(
+          `Deleted ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+        )
       } catch {
         toast.error('Bulk delete failed. Try again.')
         throw new Error('wishlist_bulk_delete_failed')
@@ -603,7 +628,9 @@ export function Tasks({
     anchor.click()
     anchor.remove()
     window.URL.revokeObjectURL(url)
-    toast.success(`Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`)
+    toast.success(
+      `Exported ${selectedTasks.length} wishlist entr${selectedTasks.length === 1 ? 'y' : 'ies'}.`
+    )
   }, [])
 
   useEffect(() => {
@@ -751,21 +778,21 @@ export function Tasks({
 
   return (
     <>
-      <Header fixed data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}>
+      <Header
+        fixed
+        data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}
+      >
         <Search />
         {isWishlistRoute ? (
-          <div className='hidden min-w-0 flex-1 justify-center lg:flex'>
-            <h1
-              className='truncate text-lg font-bold tracking-tight'
-              data-testid='wishlist-header-title'
-              title={description}
-              aria-label={description ? `${title} - ${description}` : title}
-            >
-              {title}
-            </h1>
-          </div>
+          <HeaderTitle
+            title={title}
+            description={description}
+            icon={Heart}
+            testId='wishlist-header-title'
+            iconTestId='wishlist-page-icon'
+          />
         ) : null}
-        <div className='flex min-w-0 items-center gap-3'>
+        <div className='ms-auto flex min-w-0 items-center gap-3'>
           {isWishlistRoute ? (
             <>
               <div
@@ -866,7 +893,9 @@ export function Tasks({
             onWishlistBulkDelete={
               isWishlistRoute ? handleWishlistBulkDelete : undefined
             }
-            onWishlistExport={isWishlistRoute ? handleWishlistExport : undefined}
+            onWishlistExport={
+              isWishlistRoute ? handleWishlistExport : undefined
+            }
             wishlistActionItemID={wishlistActionItemID}
             isWishlistMutating={isWishlistMutating}
           />

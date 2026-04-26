@@ -9,7 +9,15 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ChevronRight, Ellipsis, GripVertical, Plus } from 'lucide-react'
+import {
+  Barcode,
+  ChevronRight,
+  Ellipsis,
+  GripVertical,
+  Images,
+  ListChecks,
+  Plus,
+} from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -47,7 +55,7 @@ import {
 } from '@/components/ui/sheet'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
-import { Header } from '@/components/layout/header'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -1105,7 +1113,8 @@ export function Collection({
     assignWorkspaceItemToCollection,
   } = useWorkspaceCollections()
   const assignableWorkspaceCollections = useMemo(
-    () => workspaceCollections.filter((collection) => collection !== 'All Items'),
+    () =>
+      workspaceCollections.filter((collection) => collection !== 'All Items'),
     [workspaceCollections]
   )
   const activeWorkspaceCollectionRef = useRef(activeWorkspaceCollection)
@@ -1201,17 +1210,13 @@ export function Collection({
       const defaultCollection =
         currentAssignment && currentAssignment !== 'All Items'
           ? currentAssignment
-          : assignableWorkspaceCollections[0] ?? ''
+          : (assignableWorkspaceCollections[0] ?? '')
       selectInventoryItem(item)
       setAssignCollectionItem(item)
       setAssignCollectionName(defaultCollection)
       setAssignCollectionOpen(true)
     },
-    [
-      assignableWorkspaceCollections,
-      itemFolderAssignments,
-      selectInventoryItem,
-    ]
+    [assignableWorkspaceCollections, itemFolderAssignments, selectInventoryItem]
   )
 
   const handleAssignInventoryItemToCollection = useCallback(async () => {
@@ -2268,7 +2273,12 @@ export function Collection({
       const itemID = row.itemID ?? row.id
       return itemFolderAssignments[itemID] === activeFolderFilterValue
     })
-  }, [activeFolderFilterValue, isInventoryRoute, itemFolderAssignments, tableData])
+  }, [
+    activeFolderFilterValue,
+    isInventoryRoute,
+    itemFolderAssignments,
+    tableData,
+  ])
   const selectedFolderHasNoItems =
     isInventoryRoute &&
     activeFolderFilterValue !== 'All Items' &&
@@ -3038,79 +3048,77 @@ export function Collection({
         data-testid='inventory-shell-header'
       >
         <Search className='hidden min-w-32 sm:flex' />
-        <div className='hidden min-w-[8rem] flex-1 justify-center overflow-hidden lg:flex'>
-          <h1
-            className='max-w-full truncate text-lg font-bold tracking-tight'
-            data-testid='inventory-header-title'
-            title={description}
-            aria-label={description ? `${title} - ${description}` : title}
-          >
-            {title}
-          </h1>
-        </div>
-        <div className='flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'>
+        <HeaderTitle
+          title={title}
+          description={description}
+          icon={ListChecks}
+          testId='inventory-header-title'
+          iconTestId='inventory-page-icon'
+        />
+        <div className='ms-auto flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'>
           <div
             className='flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2'
             data-testid='inventory-global-header-actions'
           >
-            <div className='mr-1 hidden min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 2xl:flex'>
-              <span
-                className='text-xs font-medium text-muted-foreground'
-                data-testid='inventory-header-context'
-              >
-                Collection: {activeFolder}
-              </span>
-            </div>
             {isInventoryRoute ? (
               <>
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
                   data-testid='inventory-barcodes-action'
+                  aria-label='Manage barcodes'
+                  title='Barcodes'
                   onClick={() =>
                     openInventoryBarcodesForItem(
                       selectedInventoryItem ?? inventoryItems[0] ?? null
                     )
                   }
                 >
-                  <span className='hidden sm:inline'>Barcodes</span>
-                  <span className='sm:hidden'>Codes</span>
+                  <Barcode className='size-4 2xl:mr-2' aria-hidden />
+                  <span className='hidden 2xl:inline'>Barcodes</span>
                 </Button>
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
                   data-testid='inventory-photos-action'
+                  aria-label='Manage photos'
+                  title='Photos'
                   onClick={() =>
                     openInventoryPhotosForItem(
                       selectedInventoryItem ?? inventoryItems[0] ?? null
                     )
                   }
                 >
-                  <span className='hidden sm:inline'>Photos</span>
-                  <span className='sm:hidden'>Pics</span>
+                  <Images className='size-4 2xl:mr-2' aria-hidden />
+                  <span className='hidden 2xl:inline'>Photos</span>
                 </Button>
               </>
             ) : null}
             <Button
               type='button'
-              className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
+              className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
               data-testid='inventory-new-action'
+              aria-label='New item'
+              title='New'
               onClick={startCreateItem}
             >
-              <span>New</span>
+              <Plus className='size-4 2xl:mr-2' aria-hidden />
+              <span className='hidden 2xl:inline'>New</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 px-2 text-xs sm:h-9 sm:px-4 sm:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
                   data-testid='inventory-create-menu-trigger'
+                  aria-label='Create menu'
+                  title='Create'
                 >
-                  <span className='hidden sm:inline'>Create</span>
-                  <span className='sm:hidden'>More</span>
+                  <Ellipsis className='size-4 2xl:mr-2' aria-hidden />
+                  <span className='hidden 2xl:inline'>Create</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
@@ -3148,7 +3156,10 @@ export function Collection({
       </Header>
 
       <Main className='space-y-3'>
-        <div className='grid grid-cols-1 gap-4' data-testid='inventory-workspace'>
+        <div
+          className='grid grid-cols-1 gap-4'
+          data-testid='inventory-workspace'
+        >
           <Card className='hidden'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>

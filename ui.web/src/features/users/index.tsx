@@ -1,12 +1,13 @@
-import { getRouteApi } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
+import { getRouteApi } from '@tanstack/react-router'
+import { Users as UsersIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
-import { Button } from '@/components/ui/button'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
@@ -51,6 +52,13 @@ export function Users() {
     <UsersProvider>
       <Header fixed>
         <Search />
+        <HeaderTitle
+          title='Users'
+          description='Manage users and roles.'
+          icon={UsersIcon}
+          testId='users-header-title'
+          iconTestId='users-page-icon'
+        />
         <div className='ms-auto flex items-center space-x-4'>
           <LanguageSwitch />
           <ThemeSwitch />

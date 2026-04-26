@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ComponentType, useEffect, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
@@ -9,6 +9,51 @@ import { SidebarTrigger } from '@/components/ui/sidebar'
 type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   fixed?: boolean
   ref?: React.Ref<HTMLElement>
+}
+
+type HeaderTitleProps = {
+  title: string
+  description?: string
+  icon: ComponentType<{ className?: string; 'aria-hidden'?: true }>
+  testId: string
+  iconTestId?: string
+  className?: string
+}
+
+export function HeaderTitle({
+  title,
+  description,
+  icon: Icon,
+  testId,
+  iconTestId,
+  className,
+}: HeaderTitleProps) {
+  const titleText = title.trim()
+  const hint = description?.trim()
+
+  return (
+    <div
+      className={cn(
+        'pointer-events-none absolute top-1/2 left-1/2 z-10 hidden max-w-[min(34rem,42vw)] -translate-x-1/2 -translate-y-1/2 justify-center md:flex',
+        className
+      )}
+    >
+      <h1
+        className='flex min-w-0 items-center justify-center gap-2 truncate text-center text-lg font-bold tracking-tight'
+        data-testid={testId}
+        data-centered='true'
+        title={hint || titleText}
+        aria-label={hint ? `${titleText} - ${hint}` : titleText}
+      >
+        <Icon
+          aria-hidden
+          className='h-5 w-5 shrink-0 text-muted-foreground'
+          data-testid={iconTestId}
+        />
+        <span className='truncate'>{titleText}</span>
+      </h1>
+    </div>
+  )
 }
 
 export function Header({ className, fixed, children, ...props }: HeaderProps) {

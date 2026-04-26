@@ -52,6 +52,31 @@ describe('ui-foundation-shell-navigation', () => {
     cy.title().should('eq', 'Cabinet - Home')
   })
 
+  it('UI-FOUNDATION-SHELL-NAVIGATION-011 centers primary page titles with route icons and no inline context', () => {
+    function assertCenteredHeader(testId: string, title: string) {
+      cy.get(`[data-testid="${testId}-header-title"]`)
+        .should('be.visible')
+        .and('have.attr', 'data-centered', 'true')
+        .and('contain', title)
+      cy.get(`[data-testid="${testId}-page-icon"]`).should('be.visible')
+      cy.get('header').should('not.contain', 'Active:')
+      cy.get('header').should('not.contain', 'Collection:')
+      cy.get('header').should('not.contain', 'Planning list')
+    }
+
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    assertCenteredHeader('inventory', 'Inventory')
+
+    visibleByTestId('sidebar-nav-link-collections').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)
+    assertCenteredHeader('collections', 'Collections')
+
+    visibleByTestId('sidebar-nav-link-wishlist').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/wishlist\/?$/)
+    assertCenteredHeader('wishlist', 'Wishlist')
+  })
+
   it('UI-FOUNDATION-SHELL-NAVIGATION-004 renders app version and build date metadata in sidebar footer', () => {
     cy.intercept('GET', '/api/runtime', {
       statusCode: 200,
@@ -303,24 +328,16 @@ describe('ui-foundation-shell-navigation', () => {
       ])
   })
 
-  it('UI-FOUNDATION-SHELL-NAVIGATION-003 updates collection context label when folder selection changes', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-003 updates collection browser context when folder selection changes', () => {
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-    cy.get('[data-testid="collection-context-label"]').should(
-      'contain',
-      'All Items'
-    )
     cy.get('[data-testid="collection-active-context"]').should(
       'have.text',
       'All Items'
     )
 
     cy.get('[data-testid="collection-folder-store-1"]').click()
-    cy.get('[data-testid="collection-context-label"]').should(
-      'contain',
-      'Store 1'
-    )
     cy.get('[data-testid="collection-active-context"]').should(
       'have.text',
       'Store 1'
@@ -347,8 +364,8 @@ describe('ui-foundation-shell-navigation', () => {
 
     visibleByTestId('collections-section').should('be.visible')
     visibleByTestId('collections-new-action').click()
-    visibleByTestId('collections-new-input').clear().type('Quick Create Shelf')
-    visibleByTestId('collections-new-save').click()
+    visibleByTestId('collections-create-input').clear().type('Quick Create Shelf')
+    visibleByTestId('collections-create-submit').click()
     visibleByTestId('collections-item-quick-create-shelf').should('be.visible')
 
     signInTo('/inventory/')
@@ -468,7 +485,7 @@ describe('ui-foundation-shell-navigation', () => {
       })
     })
 
-    cy.get('[data-testid="collection-context-label"]').should('be.visible')
+    cy.get('[data-testid="inventory-header-title"]').should('be.visible')
     cy.contains('Folders').should('be.visible')
     cy.contains('Items').should('be.visible')
   })

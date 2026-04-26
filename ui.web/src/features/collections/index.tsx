@@ -26,12 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Header } from '@/components/layout/header'
 import { Input } from '@/components/ui/input'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
 import { Separator } from '@/components/ui/separator'
 import {
   Table,
@@ -41,6 +36,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
   type WorkspaceCollectionSummary,
@@ -66,10 +66,15 @@ function buildCollectionColumns({
       header: 'Collection',
       cell: ({ row }) => (
         <div className='space-y-1'>
-          <div className='font-medium' data-testid={`collections-row-name-${row.original.key}`}>
+          <div
+            className='font-medium'
+            data-testid={`collections-row-name-${row.original.key}`}
+          >
             {row.original.name}
           </div>
-          <div className='text-xs text-muted-foreground'>{row.original.description}</div>
+          <div className='text-xs text-muted-foreground'>
+            {row.original.description}
+          </div>
         </div>
       ),
     },
@@ -77,7 +82,9 @@ function buildCollectionColumns({
       accessorKey: 'itemCount',
       header: 'Items',
       cell: ({ row }) => (
-        <span data-testid={`collections-row-count-${row.original.key}`}>{row.original.itemCount}</span>
+        <span data-testid={`collections-row-count-${row.original.key}`}>
+          {row.original.itemCount}
+        </span>
       ),
     },
     {
@@ -140,9 +147,13 @@ export function Collections() {
     collectionSummaries,
   } = useWorkspaceCollections()
 
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'name', desc: false },
+  ])
   const [globalFilter, setGlobalFilter] = useState('')
-  const [selectedCollectionID, setSelectedCollectionID] = useState<string | null>(null)
+  const [selectedCollectionID, setSelectedCollectionID] = useState<
+    string | null
+  >(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -166,7 +177,9 @@ export function Collections() {
     () =>
       selectedCollectionName === 'All Items'
         ? collectionItems
-        : collectionItems.filter((item) => item.collectionName === selectedCollectionName),
+        : collectionItems.filter(
+            (item) => item.collectionName === selectedCollectionName
+          ),
     [collectionItems, selectedCollectionName]
   )
 
@@ -265,38 +278,22 @@ export function Collections() {
     <>
       <Header fixed data-testid='collections-shell-header'>
         <Search />
-        <div className='hidden min-w-0 flex-1 justify-center lg:flex'>
-          <h1
-            className='flex min-w-0 items-center gap-2 text-lg font-bold tracking-tight'
-            data-testid='collections-header-title'
-            title={collectionsHeaderDescription}
-            aria-label={`Collections - ${collectionsHeaderDescription}`}
-          >
-            <Tag
-              aria-hidden='true'
-              className='h-5 w-5 shrink-0 text-muted-foreground'
-              data-testid='collections-page-icon'
-            />
-            <span className='truncate'>Collections</span>
-          </h1>
-        </div>
-        <div className='flex min-w-0 items-center gap-3'>
+        <HeaderTitle
+          title='Collections'
+          description={collectionsHeaderDescription}
+          icon={Tag}
+          testId='collections-header-title'
+          iconTestId='collections-page-icon'
+        />
+        <div className='ms-auto flex min-w-0 items-center gap-3'>
           <div
             className='flex min-w-0 flex-wrap items-center justify-end gap-2'
             data-testid='collections-global-header-actions'
           >
-            <div className='mr-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
-              <span className='text-xs font-medium text-muted-foreground'>
-                Active:
-              </span>
-              <span
-                className='text-xs font-medium text-muted-foreground'
-                data-testid='collections-active-context'
-              >
-                {selectedCollectionName}
-              </span>
-            </div>
-            <Button data-testid='collections-new-action' onClick={() => setCreateOpen(true)}>
+            <Button
+              data-testid='collections-new-action'
+              onClick={() => setCreateOpen(true)}
+            >
               <Plus className='mr-2 h-4 w-4' />
               New collection
             </Button>
@@ -315,25 +312,31 @@ export function Collections() {
       </Header>
 
       <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
-        <div
-          className='grid gap-4'
-          data-testid='collections-workspace'
-        >
+        <div className='grid gap-4' data-testid='collections-workspace'>
           <Card data-testid='collections-section'>
             <CardContent className='space-y-4'>
-              <div className='flex items-center gap-3' data-testid='collections-management-tools'>
+              <div
+                className='flex items-center gap-3'
+                data-testid='collections-management-tools'
+              >
                 <Input
                   value={globalFilter}
                   onChange={(event) => setGlobalFilter(event.target.value)}
                   placeholder='Filter collections...'
                   data-testid='collections-search-input'
                 />
-                <div className='text-sm text-muted-foreground' data-testid='collections-management-summary'>
+                <div
+                  className='text-sm text-muted-foreground'
+                  data-testid='collections-management-summary'
+                >
                   Showing {filteredCount} of {rows.length} collections.
                 </div>
               </div>
 
-              <div className='rounded-md border' data-testid='collections-shared-table'>
+              <div
+                className='rounded-md border'
+                data-testid='collections-shared-table'
+              >
                 <Table>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
@@ -342,7 +345,10 @@ export function Collections() {
                           <TableHead key={header.id}>
                             {header.isPlaceholder
                               ? null
-                              : flexRender(header.column.columnDef.header, header.getContext())}
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
                           </TableHead>
                         ))}
                       </TableRow>
@@ -364,7 +370,10 @@ export function Collections() {
                           >
                             {row.getVisibleCells().map((cell) => (
                               <TableCell key={cell.id}>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext()
+                                )}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -372,7 +381,10 @@ export function Collections() {
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={columns.length} className='h-24 text-center'>
+                        <TableCell
+                          colSpan={columns.length}
+                          className='h-24 text-center'
+                        >
                           No collections match the current filter.
                         </TableCell>
                       </TableRow>
@@ -387,12 +399,15 @@ export function Collections() {
             <CardHeader>
               <CardTitle>Collection members</CardTitle>
               <CardDescription>
-                Review inventory items assigned to the selected collection. Assign or
-                move items from Inventory row actions.
+                Review inventory items assigned to the selected collection.
+                Assign or move items from Inventory row actions.
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <div className='rounded-md border' data-testid='collections-members-table'>
+              <div
+                className='rounded-md border'
+                data-testid='collections-members-table'
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -412,7 +427,9 @@ export function Collections() {
                             className='font-medium'
                             data-testid={`collections-member-${collectionKey(item.name)}`}
                           >
-                            <span data-testid={`collections-member-name-${collectionKey(item.name)}`}>
+                            <span
+                              data-testid={`collections-member-name-${collectionKey(item.name)}`}
+                            >
                               {item.name}
                             </span>
                           </TableCell>
@@ -429,8 +446,12 @@ export function Collections() {
                       ))
                     ) : (
                       <TableRow data-testid='collections-members-empty-row'>
-                        <TableCell colSpan={3} className='h-24 text-center text-muted-foreground'>
-                          No items are currently assigned to {selectedCollectionName}.
+                        <TableCell
+                          colSpan={3}
+                          className='h-24 text-center text-muted-foreground'
+                        >
+                          No items are currently assigned to{' '}
+                          {selectedCollectionName}.
                         </TableCell>
                       </TableRow>
                     )}
@@ -446,7 +467,9 @@ export function Collections() {
         <DialogContent data-testid='collections-create-dialog'>
           <DialogHeader>
             <DialogTitle>Create collection</DialogTitle>
-            <DialogDescription>Add a new collection row to the management table.</DialogDescription>
+            <DialogDescription>
+              Add a new collection row to the management table.
+            </DialogDescription>
           </DialogHeader>
           <Input
             value={createValue}
@@ -455,7 +478,11 @@ export function Collections() {
             data-testid='collections-create-input'
           />
           <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setCreateOpen(false)}>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setCreateOpen(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -475,7 +502,9 @@ export function Collections() {
         <DialogContent data-testid='collections-edit-dialog'>
           <DialogHeader>
             <DialogTitle>Edit collection</DialogTitle>
-            <DialogDescription>Rename the selected collection through the row workflow.</DialogDescription>
+            <DialogDescription>
+              Rename the selected collection through the row workflow.
+            </DialogDescription>
           </DialogHeader>
           <Input
             value={editValue}
@@ -484,7 +513,11 @@ export function Collections() {
             data-testid='collections-edit-input'
           />
           <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setEditOpen(false)}>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setEditOpen(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -514,7 +547,11 @@ export function Collections() {
               : 'No collection is selected.'}
           </p>
           <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setDeleteOpen(false)}>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setDeleteOpen(false)}
+            >
               Cancel
             </Button>
             <Button
