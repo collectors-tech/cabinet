@@ -25,7 +25,15 @@ declare global {
         profile_key?: string;
         runtime?: { mode?: "auto" | "fixed"; fixed_port?: number };
       }): Chainable<void>;
-      useBootstrappedProfile(profileId: string, profileName: string, options?: { workspace?: boolean; path?: string }): Chainable<void>;
+      useBootstrappedProfile(
+        profileId: string,
+        profileName: string,
+        options?: {
+          workspace?: boolean;
+          path?: string;
+          shellWorkspace?: "navigation" | "assistant" | "inbox";
+        }
+      ): Chainable<void>;
     }
   }
 }
@@ -102,7 +110,11 @@ Cypress.Commands.add("e2eCompleteSetupHelper", (overrides = {}) => {
     });
 });
 
-Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: { workspace?: boolean; path?: string }) => {
+Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: string, options?: {
+  workspace?: boolean;
+  path?: string;
+  shellWorkspace?: "navigation" | "assistant" | "inbox";
+}) => {
   const withWorkspace = options?.workspace ?? true;
   const targetPath = options?.path ?? "/";
   const normalizedTarget = targetPath.endsWith("/") && targetPath.length > 1 ? targetPath.slice(0, -1) : targetPath;
@@ -113,6 +125,9 @@ Cypress.Commands.add("useBootstrappedProfile", (profileId: string, profileName: 
     onBeforeLoad(win) {
       if (withWorkspace) {
         win.localStorage.setItem(`cabinet.workspace.${profileId}`, "1");
+      }
+      if (options?.shellWorkspace) {
+        win.localStorage.setItem(`cabinet.shell.workspace.active.${profileId}`, options.shellWorkspace);
       }
     },
   });
