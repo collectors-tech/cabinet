@@ -1,4 +1,10 @@
-import { type ComponentType, useEffect, useState } from 'react'
+import {
+  type ComponentType,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
@@ -30,20 +36,77 @@ export function HeaderTitle({
 }: HeaderTitleProps) {
   const titleText = title.trim()
   const hint = description?.trim()
+  const titleRef = useRef<HTMLHeadingElement | null>(null)
+  const [isCrowded, setIsCrowded] = useState(false)
+
+  useLayoutEffect(() => {
+    const titleElement = titleRef.current
+    const headerElement = titleElement?.closest('header')
+    if (!titleElement || !headerElement) {
+      return
+    }
+
+    let frame = 0
+    const measure = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const titleRect = titleElement.getBoundingClientRect()
+        const avoidElements = Array.from(
+          headerElement.querySelectorAll('[data-header-title-avoid="true"]')
+        )
+        const overlapsHeaderControls = avoidElements.some((element) => {
+          const controlRect = element.getBoundingClientRect()
+          const hasHorizontalOverlap =
+            titleRect.right > controlRect.left - 8 &&
+            titleRect.left < controlRect.right + 8
+          const hasVerticalOverlap =
+            titleRect.bottom > controlRect.top &&
+            titleRect.top < controlRect.bottom
+
+          return hasHorizontalOverlap && hasVerticalOverlap
+        })
+
+        setIsCrowded(overlapsHeaderControls)
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(measure)
+    resizeObserver.observe(headerElement)
+    resizeObserver.observe(titleElement)
+    Array.from(
+      headerElement.querySelectorAll('[data-header-title-avoid="true"]')
+    ).forEach((element) => resizeObserver.observe(element))
+
+    window.addEventListener('resize', measure)
+    measure()
+
+    return () => {
+      cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [titleText])
 
   return (
     <div
       className={cn(
         'pointer-events-none absolute top-1/2 left-1/2 z-10 hidden max-w-[min(34rem,42vw)] -translate-x-1/2 -translate-y-1/2 justify-center md:flex',
+        isCrowded && 'opacity-0',
         className
       )}
+      data-crowded={isCrowded ? 'true' : 'false'}
     >
       <h1
+        ref={titleRef}
         className='flex min-w-0 items-center justify-center gap-2 truncate text-center text-lg font-bold tracking-tight'
         data-testid={testId}
         data-centered='true'
+        data-crowded={isCrowded ? 'true' : 'false'}
         title={hint || titleText}
-        aria-label={hint ? `${titleText} - ${hint}` : titleText}
+        aria-hidden={isCrowded ? true : undefined}
+        aria-label={
+          isCrowded ? undefined : hint ? `${titleText} - ${hint}` : titleText
+        }
       >
         <Icon
           aria-hidden

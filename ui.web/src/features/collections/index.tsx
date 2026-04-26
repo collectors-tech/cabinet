@@ -285,7 +285,10 @@ export function Collections() {
           testId='collections-header-title'
           iconTestId='collections-page-icon'
         />
-        <div className='ms-auto flex min-w-0 items-center gap-3'>
+        <div
+          className='ms-auto flex min-w-0 items-center gap-3'
+          data-header-title-avoid='true'
+        >
           <div
             className='flex min-w-0 flex-wrap items-center justify-end gap-2'
             data-testid='collections-global-header-actions'

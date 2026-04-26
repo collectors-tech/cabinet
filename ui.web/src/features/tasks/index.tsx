@@ -792,7 +792,10 @@ export function Tasks({
             iconTestId='wishlist-page-icon'
           />
         ) : null}
-        <div className='ms-auto flex min-w-0 items-center gap-3'>
+        <div
+          className='ms-auto flex min-w-0 items-center gap-3'
+          data-header-title-avoid='true'
+        >
           {isWishlistRoute ? (
             <>
               <div
