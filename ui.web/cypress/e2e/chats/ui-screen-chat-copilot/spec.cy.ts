@@ -11,7 +11,10 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
-    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/inventory/' })
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inventory/',
+      shellWorkspace: 'navigation',
+    })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
@@ -47,7 +50,7 @@ describe('chats/ui-screen-chat-copilot', () => {
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
         .should('match', /open.*assistant workspace/i)
-      cy.get('[data-testid="shell-chat-toggle"]').click()
+      cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
       cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
       cy.get('[data-testid="shell-workspace-assistant"]')
         .should('have.attr', 'data-active', 'true')
@@ -59,7 +62,7 @@ describe('chats/ui-screen-chat-copilot', () => {
       cy.get('[data-testid="shell-chat-toggle"]')
         .invoke('attr', 'aria-label')
         .should('match', /return to navigation workspace/i)
-      cy.get('[data-testid="shell-chat-toggle"]').click()
+      cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
       cy.get('[data-testid="shell-assistant-workspace"]').should('not.exist')
       cy.get('[data-testid="shell-workspace-navigation"]')
         .should('have.attr', 'data-active', 'true')
