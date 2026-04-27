@@ -16,11 +16,18 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { AssistantWorkspacePanel } from './assistant-workspace-panel'
 // import { AppTitle } from './app-title'
@@ -64,8 +71,10 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
+  const { state: sidebarState, isMobile } = useSidebar()
   const { t } = useTranslation('nav')
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
+  const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
   const authUser = useAuthStore((state) => state.auth.user)
   const sidebarUser = authUser
     ? {
@@ -310,47 +319,101 @@ export function AppSidebar() {
     }),
     items: group.items.map(translateItem),
   }))
+  const activeWorkspaceIcon =
+    activeWorkspace === 'assistant'
+      ? MessageSquare
+      : activeWorkspace === 'inbox'
+        ? Inbox
+        : PanelLeft
+  const ActiveWorkspaceIcon = activeWorkspaceIcon
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
         <TeamSwitcher teams={sidebarData.teams} />
-        <div className='px-2 pb-2' data-testid='shell-workspace-switcher'>
-          <p className='mb-2 text-xs font-medium text-muted-foreground'>
-            Workspace
+        <div
+          className='px-2 pb-2'
+          data-collapsed={isCollapsedSidebar ? 'true' : 'false'}
+          data-testid='shell-workspace-switcher'
+        >
+          <p
+            className='mb-2 text-xs font-medium text-muted-foreground'
+            data-testid='shell-workspace-label'
+          >
+            {isCollapsedSidebar ? 'Work' : 'Workspace'}
           </p>
-          <div className='grid grid-cols-3 gap-2'>
-            <button
-              type='button'
-              data-testid='shell-workspace-navigation'
-              data-active={activeWorkspace === 'navigation' ? 'true' : 'false'}
-              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-              onClick={() => setActiveWorkspace('navigation')}
-            >
-              <PanelLeft className='h-3.5 w-3.5' />
-              Nav
-            </button>
-            <button
-              type='button'
-              data-testid='shell-workspace-assistant'
-              data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
-              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-              onClick={() => setActiveWorkspace('assistant')}
-            >
-              <MessageSquare className='h-3.5 w-3.5' />
-              Assistant
-            </button>
-            <button
-              type='button'
-              data-testid='shell-workspace-inbox'
-              data-active={activeWorkspace === 'inbox' ? 'true' : 'false'}
-              className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-              onClick={() => setActiveWorkspace('inbox')}
-            >
-              <Inbox className='h-3.5 w-3.5' />
-              Inbox
-            </button>
-          </div>
+          {isCollapsedSidebar ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type='button'
+                  aria-label='Switch workspace'
+                  data-testid='shell-workspace-menu-trigger'
+                  className='inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted'
+                >
+                  <ActiveWorkspaceIcon className='h-4 w-4' />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side='right' align='start' sideOffset={8}>
+                <DropdownMenuItem
+                  data-testid='shell-workspace-menu-navigation'
+                  onClick={() => setActiveWorkspace('navigation')}
+                >
+                  <PanelLeft className='h-4 w-4' />
+                  <span>Nav</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid='shell-workspace-menu-assistant'
+                  onClick={() => setActiveWorkspace('assistant')}
+                >
+                  <MessageSquare className='h-4 w-4' />
+                  <span>Assistant</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid='shell-workspace-menu-inbox'
+                  onClick={() => setActiveWorkspace('inbox')}
+                >
+                  <Inbox className='h-4 w-4' />
+                  <span>Inbox</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className='grid grid-cols-3 gap-2'>
+              <button
+                type='button'
+                data-testid='shell-workspace-navigation'
+                data-active={
+                  activeWorkspace === 'navigation' ? 'true' : 'false'
+                }
+                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                onClick={() => setActiveWorkspace('navigation')}
+              >
+                <PanelLeft className='h-3.5 w-3.5' />
+                Nav
+              </button>
+              <button
+                type='button'
+                data-testid='shell-workspace-assistant'
+                data-active={activeWorkspace === 'assistant' ? 'true' : 'false'}
+                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                onClick={() => setActiveWorkspace('assistant')}
+              >
+                <MessageSquare className='h-3.5 w-3.5' />
+                Assistant
+              </button>
+              <button
+                type='button'
+                data-testid='shell-workspace-inbox'
+                data-active={activeWorkspace === 'inbox' ? 'true' : 'false'}
+                className='inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                onClick={() => setActiveWorkspace('inbox')}
+              >
+                <Inbox className='h-3.5 w-3.5' />
+                Inbox
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Replace <TeamSwitch /> with the following <AppTitle />
@@ -505,23 +568,25 @@ export function AppSidebar() {
           ) : null}
         </div>
         <NavUser user={sidebarUser} />
-        <div
-          className='px-2 pb-2 text-xs text-muted-foreground'
-          data-testid='sidebar-runtime-meta'
-        >
-          <p>
-            Version:{' '}
-            <span data-testid='sidebar-app-version'>
-              {runtimeMeta.appVersion}
-            </span>
-          </p>
-          <p>
-            Build Date:{' '}
-            <span data-testid='sidebar-build-date'>
-              {runtimeMeta.buildDate}
-            </span>
-          </p>
-        </div>
+        {!isCollapsedSidebar ? (
+          <div
+            className='px-2 pb-2 text-xs text-muted-foreground'
+            data-testid='sidebar-runtime-meta'
+          >
+            <p>
+              Version:{' '}
+              <span data-testid='sidebar-app-version'>
+                {runtimeMeta.appVersion}
+              </span>
+            </p>
+            <p>
+              Build Date:{' '}
+              <span data-testid='sidebar-build-date'>
+                {runtimeMeta.buildDate}
+              </span>
+            </p>
+          </div>
+        ) : null}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
