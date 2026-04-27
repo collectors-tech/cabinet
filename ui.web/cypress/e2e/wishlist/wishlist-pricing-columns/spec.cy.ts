@@ -212,22 +212,23 @@ describe("wishlist-pricing-columns", () => {
     expectHeaderVisible("Qty");
     expectHeaderVisible("Needs");
 
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').then(
-      ($checkbox) => {
-        expect($checkbox.prop("checked")).to.eq(false);
-      }
-    );
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
+      .should("have.attr", "role", "checkbox")
+      .and("have.attr", "aria-checked", "false")
+      .and("have.attr", "data-state", "unchecked");
     cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').click({
       force: true,
     });
     cy.wait("@updateWishlistEntry")
       .its("request.body")
       .should("include", { id: "wish-price-1", owned: true });
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').then(
-      ($checkbox) => {
-        expect($checkbox.prop("checked")).to.eq(true);
-      }
-    );
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
+      .should("have.attr", "aria-checked", "true")
+      .and("have.attr", "data-state", "checked");
+    cy.get('[data-testid="wishlist-owned-tick-item-price-1"]')
+      .should("have.class", "opacity-100")
+      .find("polyline")
+      .should("have.attr", "stroke", "rgb(73 103 255)");
 
     cy.get('[data-testid="wishlist-purchase-open-item-price-1"]')
       .click({ force: true });
@@ -294,9 +295,9 @@ describe("wishlist-pricing-columns", () => {
     cy.reload();
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').should(
-      "be.checked"
-    );
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
+      .should("have.attr", "aria-checked", "true")
+      .and("have.attr", "data-state", "checked");
     cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
       "contain.text",
       "$18.25"
