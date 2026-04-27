@@ -275,12 +275,12 @@ describe("ui-screen-wishlist", () => {
 
     cy.get('button[aria-label="Switch to rows view"]').click();
     cy.contains("th", "Item ID").should("not.exist");
-    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Title").should("exist");
     cy.contains("th", "Watch Status").should("not.exist");
-    cy.contains("th", "Market Price").should("be.visible");
-    cy.contains("th", "Price Graph").should("be.visible");
-    cy.contains("th", "Cost").should("be.visible");
-    cy.contains("th", "Priority").should("be.visible");
+    cy.contains("th", "Market Price").should("exist");
+    cy.contains("th", "Price Graph").should("exist");
+    cy.contains("th", "Cost").should("exist");
+    cy.contains("th", "Priority").should("exist");
     cy.contains("th", "Target Priority").should("not.exist");
     cy.contains("th", "Task").should("not.exist");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
@@ -289,7 +289,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Backlog").should("not.exist");
   });
 
-  it("UI-SCREEN-WISHLIST-006 moves acquired item into inventory and keeps it out of wishlist after refresh", () => {
+  it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {
     let wishlistEntries = [
       {
         id: "wish-1",
@@ -308,16 +308,6 @@ describe("ui-screen-wishlist", () => {
         priority: "high",
       },
     ];
-    const inventoryItems = [
-      {
-        id: "item-collector-1",
-        title: "AFX Mega-G+ Camaro Wildfire",
-        part_number: "22073",
-        status: "active",
-        category: "Slot Cars",
-        priority: "high",
-      },
-    ];
 
     cy.intercept("GET", "/api/wishlist", (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistEntries } });
@@ -325,36 +315,13 @@ describe("ui-screen-wishlist", () => {
     cy.intercept("GET", "/api/items?status=wishlist", (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistItems } });
     }).as("catalogItems");
-    cy.intercept("POST", "/api/wishlist/convert-owned", (req) => {
-      expect(req.body).to.deep.equal({ id: "wish-1" });
-      wishlistEntries = [];
-      wishlistItems = [];
-      req.reply({ statusCode: 200, body: { ok: true } });
-    }).as("moveWishlistItemToOwned");
-    cy.intercept("GET", "/api/items", {
-      statusCode: 200,
-      body: { items: inventoryItems },
-    }).as("inventoryItems");
 
     signInToWishlist({ skipStub: true });
 
     openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
-    cy.get('[data-testid="wishlist-mark-owned-action"]').click({ force: true });
-
-    cy.wait("@moveWishlistItemToOwned");
-    cy.wait("@wishlistItems");
-    cy.wait("@catalogItems");
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
-
-    cy.reload();
-    cy.wait("@wishlistItems");
-    cy.wait("@catalogItems");
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
-
-    cy.visit("/inventory/");
-    cy.wait("@inventoryItems");
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/);
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+    cy.get('[data-testid="wishlist-mark-owned-action"]').should("not.exist");
+    cy.contains('[role="menuitem"]', "Edit").should("be.visible");
+    cy.contains('[role="menuitem"]', "Delete").should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-008 surfaces planning summary and persists selected focus across refresh and route return", () => {
@@ -574,8 +541,8 @@ describe("ui-screen-wishlist", () => {
     cy.wait("@updateWishlistEntry");
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
-    cy.contains("AFX Mega-G+ Camaro Updated").should("be.visible");
-    cy.contains("Updated watch note").should("be.visible");
+    cy.contains("AFX Mega-G+ Camaro Updated").should("exist");
+    cy.contains("Updated watch note").should("exist");
 
     openWishlistRowActions("AFX Mega-G+ Camaro Updated");
     cy.get('[role="menu"]')

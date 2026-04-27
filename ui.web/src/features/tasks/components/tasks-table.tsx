@@ -61,7 +61,6 @@ type DataTableProps = {
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
-  onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
   onWishlistBulkPriorityChange?: (
     tasks: Task[],
@@ -83,7 +82,6 @@ type DataTableProps = {
       neededQuantity?: number
     }
   ) => Promise<void>
-  wishlistActionItemID?: string | null
   isWishlistMutating?: boolean
   customFilters?: ReactNode
 }
@@ -236,13 +234,11 @@ export function TasksTable({
   onBarcodeRow,
   onAssignCollectionRow,
   onDeleteRow,
-  onWishlistMarkOwned,
   onWishlistBulkStatusChange,
   onWishlistBulkPriorityChange,
   onWishlistBulkDelete,
   onWishlistExport,
   onWishlistInlineUpdate,
-  wishlistActionItemID,
   isWishlistMutating,
   customFilters,
 }: DataTableProps) {
@@ -272,10 +268,8 @@ export function TasksTable({
         onBarcodeRow,
         onAssignCollectionRow,
         onDeleteRow,
-        onWishlistMarkOwned,
         onWishlistInlineUpdate,
         onWishlistPurchaseRow: openPurchaseDialog,
-        wishlistActionItemID,
       }),
     [
       routePath,
@@ -284,10 +278,8 @@ export function TasksTable({
       onBarcodeRow,
       onAssignCollectionRow,
       onDeleteRow,
-      onWishlistMarkOwned,
       onWishlistInlineUpdate,
       openPurchaseDialog,
-      wishlistActionItemID,
     ]
   )
 

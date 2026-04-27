@@ -29,13 +29,11 @@ type TasksColumnsOptions = {
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
-  onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistInlineUpdate?: (
     task: Task,
     changes: WishlistInlineChanges
   ) => Promise<void>
   onWishlistPurchaseRow?: (task: Task) => void
-  wishlistActionItemID?: string | null
 }
 
 type WishlistInlineChanges = {
@@ -323,10 +321,8 @@ export function getTasksColumns({
   onBarcodeRow,
   onAssignCollectionRow,
   onDeleteRow,
-  onWishlistMarkOwned,
   onWishlistInlineUpdate,
   onWishlistPurchaseRow,
-  wishlistActionItemID,
 }: TasksColumnsOptions): ColumnDef<Task>[] {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
@@ -647,8 +643,6 @@ export function getTasksColumns({
             routePath={routePath}
             onEditRow={onEditRow}
             onDeleteRow={onDeleteRow}
-            onWishlistMarkOwned={onWishlistMarkOwned}
-            wishlistActionItemID={wishlistActionItemID}
           />
         </div>
       ),
