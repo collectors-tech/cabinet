@@ -56,7 +56,7 @@ type DataTableProps = {
   routePath: TasksRoutePath
   currentRecordID?: string
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
-  onEditRow?: (task: Task) => void
+  onEditRow?: (task: Task, navigationRows?: Task[]) => void
   onPhotoRow?: (task: Task) => void
   onBarcodeRow?: (task: Task) => void
   onAssignCollectionRow?: (task: Task) => void
@@ -430,7 +430,7 @@ export function TasksTable({
     if (record) {
       onRecordFocus?.(record.itemID ?? record.id, record.id, record.title)
     }
-    if (isInventoryRoute) {
+    if (isInventoryRoute || routePath === '/_authenticated/wishlist/') {
       return
     }
     if (clickTimerRef.current !== null) {
@@ -453,8 +453,11 @@ export function TasksTable({
       window.clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
     }
-    if (isInventoryRoute && record && onEditRow) {
-      onEditRow(record)
+    if (record && onEditRow) {
+      onEditRow(
+        record,
+        table.getRowModel().rows.map((row) => row.original)
+      )
       return
     }
     openEdit(id)

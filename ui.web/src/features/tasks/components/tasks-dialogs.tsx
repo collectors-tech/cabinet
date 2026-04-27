@@ -16,6 +16,7 @@ type TasksDialogsProps = {
   setOpen: (open: TasksDialogType | null) => void
   currentRow: Task | null
   setCurrentRow: (task: Task | null) => void
+  navigationRows?: Task[]
   onWishlistSubmit?: (
     draft: WishlistEntryDraft,
     currentRow?: Task
@@ -31,6 +32,7 @@ export function TasksDialogs({
   setOpen,
   currentRow,
   setCurrentRow,
+  navigationRows = [],
   onWishlistSubmit,
   onWishlistDelete,
   onWishlistImport,
@@ -52,6 +54,26 @@ export function TasksDialogs({
       setCurrentRow(null)
       clearCurrentRowTimerRef.current = null
     }, 500)
+  }
+
+  const currentRowIndex = currentRow
+    ? navigationRows.findIndex((task) => task.id === currentRow.id)
+    : -1
+  const canNavigatePrevious = currentRowIndex > 0
+  const canNavigateNext =
+    currentRowIndex >= 0 && currentRowIndex < navigationRows.length - 1
+
+  const navigateCurrentRow = (offset: number) => {
+    if (currentRowIndex < 0) {
+      return
+    }
+    const nextRow = navigationRows[currentRowIndex + offset]
+    if (!nextRow) {
+      return
+    }
+    cancelPendingClearCurrentRow()
+    setCurrentRow(nextRow)
+    setOpen('update')
   }
 
   useEffect(() => {
@@ -110,6 +132,10 @@ export function TasksDialogs({
             routePath={routePath}
             onWishlistSubmit={onWishlistSubmit}
             isLoading={isWishlistMutating}
+            canNavigatePrevious={canNavigatePrevious}
+            canNavigateNext={canNavigateNext}
+            onNavigatePrevious={() => navigateCurrentRow(-1)}
+            onNavigateNext={() => navigateCurrentRow(1)}
           />
 
           <ConfirmDialog
