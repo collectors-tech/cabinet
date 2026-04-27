@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   type ColumnDef,
   flexRender,
@@ -28,6 +28,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import {
   Table,
   TableBody,
@@ -183,20 +191,22 @@ export function Collections() {
     [collectionItems, selectedCollectionName]
   )
 
+  const openEditPanel = useCallback((row: CollectionRow) => {
+    setSelectedCollectionID(row.key)
+    setEditValue(row.name)
+    setEditOpen(true)
+  }, [])
+
   const columns = useMemo(
     () =>
       buildCollectionColumns({
-        onEdit: (row) => {
-          setSelectedCollectionID(row.key)
-          setEditValue(row.name)
-          setEditOpen(true)
-        },
+        onEdit: openEditPanel,
         onDelete: (row) => {
           setSelectedCollectionID(row.key)
           setDeleteOpen(true)
         },
       }),
-    []
+    [openEditPanel]
   )
 
   const table = useReactTable({
@@ -227,6 +237,27 @@ export function Collections() {
   })
 
   const filteredCount = table.getFilteredRowModel().rows.length
+  const visibleRows = table
+    .getRowModel()
+    .rows.map((tableRow) => tableRow.original)
+  const selectedVisibleIndex = selectedRow
+    ? visibleRows.findIndex((row) => row.key === selectedRow.key)
+    : -1
+  const canNavigatePrevious = selectedVisibleIndex > 0
+  const canNavigateNext =
+    selectedVisibleIndex >= 0 && selectedVisibleIndex < visibleRows.length - 1
+
+  function navigateEditPanel(offset: number) {
+    if (selectedVisibleIndex < 0) {
+      return
+    }
+    const nextRow = visibleRows[selectedVisibleIndex + offset]
+    if (!nextRow) {
+      return
+    }
+    setSelectedCollectionID(nextRow.key)
+    setEditValue(nextRow.name)
+  }
 
   async function handleSelectCollection(row: CollectionRow) {
     setSelectedCollectionID(row.key)
@@ -329,10 +360,13 @@ export function Collections() {
                   data-testid='collections-search-input'
                 />
                 <div
-                  className='text-sm text-muted-foreground'
+                  className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
                   data-testid='collections-management-summary'
                 >
-                  Showing {filteredCount} of {rows.length} collections.
+                  <span>Showing {filteredCount} of {rows.length} collections.</span>
+                  <span data-testid='collections-active-context'>
+                    Active: {selectedCollectionName}
+                  </span>
                 </div>
               </div>
 
@@ -369,6 +403,9 @@ export function Collections() {
                             data-testid={`collections-row-${row.original.key}`}
                             onClick={() => {
                               void handleSelectCollection(row.original)
+                            }}
+                            onDoubleClick={() => {
+                              openEditPanel(row.original)
                             }}
                           >
                             {row.getVisibleCells().map((cell) => (
@@ -501,21 +538,53 @@ export function Collections() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent data-testid='collections-edit-dialog'>
-          <DialogHeader>
-            <DialogTitle>Edit collection</DialogTitle>
-            <DialogDescription>
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent
+          className='flex flex-col'
+          data-testid='collections-edit-panel'
+          data-side='right'
+          side='right'
+        >
+          <SheetHeader className='text-start'>
+            <SheetTitle>Edit collection</SheetTitle>
+            <SheetDescription>
               Rename the selected collection through the row workflow.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={editValue}
-            onChange={(event) => setEditValue(event.target.value)}
-            placeholder='New collection name'
-            data-testid='collections-edit-input'
-          />
-          <DialogFooter>
+            </SheetDescription>
+            <div className='flex flex-wrap items-center gap-2 pt-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                data-testid='collections-edit-previous'
+                disabled={!canNavigatePrevious}
+                onClick={() => navigateEditPanel(-1)}
+              >
+                Previous
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                data-testid='collections-edit-next'
+                disabled={!canNavigateNext}
+                onClick={() => navigateEditPanel(1)}
+              >
+                Next
+              </Button>
+            </div>
+          </SheetHeader>
+          <div className='flex-1 px-4'>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Collection name</span>
+              <Input
+                value={editValue}
+                onChange={(event) => setEditValue(event.target.value)}
+                placeholder='New collection name'
+                data-testid='collections-edit-input'
+              />
+            </label>
+          </div>
+          <SheetFooter className='gap-2'>
             <Button
               type='button'
               variant='outline'
@@ -532,9 +601,9 @@ export function Collections() {
             >
               Save rename
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent data-testid='collections-delete-dialog'>

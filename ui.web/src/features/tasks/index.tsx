@@ -855,6 +855,7 @@ export function Tasks({
       !isWishlistRoute ||
       wishlistCollectionNormalizedRef.current ||
       activeWorkspaceCollection === 'All Items' ||
+      collectionItems.length > 0 ||
       tableData.length === 0
     ) {
       return
@@ -891,6 +892,7 @@ export function Tasks({
         data-testid='wishlist-table-collection-select'
         value={activeWorkspaceCollection}
         onChange={(event) => {
+          wishlistCollectionNormalizedRef.current = true
           void setActiveWorkspaceCollection(event.target.value)
         }}
       >
@@ -945,6 +947,7 @@ export function Tasks({
             className='h-8 px-3'
             data-testid='wishlist-table-new-collection-save'
             onClick={async () => {
+              wishlistCollectionNormalizedRef.current = true
               const created = await addCollection(inlineCollectionName)
               if (!created) {
                 setInlineCollectionValidationMessage(
