@@ -1,5 +1,36 @@
 describe('inventory-folder-tree-control', () => {
   const folderDragDataType = 'application/x-cabinet-folder-id'
+  const expectedShowcaseFolderCounts = {
+    'all-items': 17,
+    'watch-list': 9,
+    'wishlist-focus': 6,
+    'store-1': 14,
+    'store-2': 3,
+    'store-3': 11,
+    'store-4': 7,
+    'store-5': 19,
+    'store-6': 4,
+    'store-7': 13,
+    'store-8': 8,
+    'store-9': 16,
+    'store-10': 2,
+    warehouses: 12,
+    'warehouse-1': 5,
+    'warehouse-2': 18,
+    'warehouse-3': 10,
+    'archive-a': 15,
+    'archive-b': 4,
+    'archive-c': 1,
+    'archive-d': 20,
+    'archive-e': 6,
+    'archive-f': 9,
+    'archive-g': 11,
+    'archive-h': 3,
+    'archive-i': 17,
+    'archive-j': 8,
+    'archive-k': 13,
+    'archive-l': 0,
+  } as const
 
   function getFocusableElements(doc: Document) {
     return Array.from(
@@ -276,16 +307,40 @@ describe('inventory-folder-tree-control', () => {
   })
 
   it('UI-SCREEN-INVENTORY-FOLDER-TREE-013 renders structured metadata without breaking row readability', () => {
+    const emptyFolders = Object.entries(expectedShowcaseFolderCounts).filter(
+      ([, count]) => count === 0
+    )
+
+    expect(emptyFolders, 'showcase seed has one intentionally empty folder').to.have.length(1)
+    expect(emptyFolders[0][0], 'empty showcase folder').to.equal('archive-l')
+
+    Object.entries(expectedShowcaseFolderCounts).forEach(([folderID, count]) => {
+      expect(count, `${folderID} count is within showcase range`).to.be.within(0, 20)
+      if (count > 0) {
+        expect(count, `${folderID} populated folder count`).to.be.greaterThan(0)
+      }
+    })
+
+    cy.get('[data-testid="folder-tree-item-all-items"]').scrollIntoView()
     cy.get('[data-testid="folder-tree-secondary-all-items"]')
       .should('be.visible')
       .and('have.text', 'Entire catalog')
     cy.get('[data-testid="folder-tree-count-all-items"]')
       .should('be.visible')
-      .and('have.text', '124')
+      .and('have.text', String(expectedShowcaseFolderCounts['all-items']))
     cy.get('[data-testid="folder-tree-badge-all-items"]')
       .should('be.visible')
       .and('have.text', 'Live')
 
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+
+    Object.entries(expectedShowcaseFolderCounts).forEach(([folderID, count]) => {
+      cy.get(`[data-testid="folder-tree-count-${folderID}"]`)
+        .scrollIntoView()
+        .should('have.text', String(count))
+    })
+
+    cy.get('[data-testid="folder-tree-item-all-items"]').scrollIntoView()
     cy.get('[data-testid="folder-tree-item-all-items"]').then(($row) => {
       const rowRect = $row[0].getBoundingClientRect()
 
@@ -300,11 +355,14 @@ describe('inventory-folder-tree-control', () => {
       })
     })
 
-    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click()
+    cy.get('[data-testid="folder-tree-item-warehouse-1"]').scrollIntoView()
     cy.get('[data-testid="folder-tree-secondary-warehouse-1"]')
       .should('be.visible')
       .and('have.text', 'Pallet zone A')
-    cy.get('[data-testid="folder-tree-count-warehouse-1"]').should('have.text', '15')
+    cy.get('[data-testid="folder-tree-count-warehouse-1"]').should(
+      'have.text',
+      String(expectedShowcaseFolderCounts['warehouse-1'])
+    )
     cy.get('[data-testid="folder-tree-item-warehouse-1"]')
       .should('have.attr', 'role', 'treeitem')
       .click()
