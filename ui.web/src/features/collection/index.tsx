@@ -615,6 +615,16 @@ function buildWorkspaceCollectionFilterOptions(
   }))
 }
 
+function buildFolderTreeFilterOptions(
+  nodes: FolderNode[],
+  level = 0
+): Array<FolderNode & { level: number }> {
+  return nodes.flatMap((node) => [
+    { ...node, level },
+    ...buildFolderTreeFilterOptions(node.children ?? [], level + 1),
+  ])
+}
+
 function buildUniqueFolderID(name: string, nodes: FolderNode[]): string {
   const slug = slugifyFolderName(name) || 'folder'
   const existingIDs = new Set<string>()
@@ -1471,14 +1481,18 @@ export function Collection({
 
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
-      const safeFolder = workspaceCollections.includes(nextFolder)
-        ? nextFolder
-        : 'All Items'
+      const safeFolder =
+        workspaceCollections.includes(nextFolder) ||
+        folderTreeContainsName(folderTree, nextFolder)
+          ? nextFolder
+          : 'All Items'
       setActiveFolder(safeFolder)
       setCollectionBrowserOpen(false)
-      void setActiveWorkspaceCollection(safeFolder)
+      if (workspaceCollections.includes(safeFolder)) {
+        void setActiveWorkspaceCollection(safeFolder)
+      }
     },
-    [setActiveWorkspaceCollection, workspaceCollections]
+    [folderTree, setActiveWorkspaceCollection, workspaceCollections]
   )
 
   const resolveInventoryItemFromTask = useCallback(
@@ -2461,10 +2475,13 @@ export function Collection({
     }),
     [activeFolder, folderTree, tableData.length]
   )
-  const folderFilterOptions = useMemo(
-    () => buildWorkspaceCollectionFilterOptions(workspaceCollections),
-    [workspaceCollections]
-  )
+  const folderFilterOptions = useMemo(() => {
+    const treeOptions = buildFolderTreeFilterOptions(folderTree)
+    if (treeOptions.length > 0) {
+      return treeOptions
+    }
+    return buildWorkspaceCollectionFilterOptions(workspaceCollections)
+  }, [folderTree, workspaceCollections])
   const activeFolderIsAvailable = folderFilterOptions.some(
     (folder) => folder.name === activeFolder
   )
@@ -3556,10 +3573,10 @@ export function Collection({
 
       <Main className='space-y-3'>
         <div
-          className='grid grid-cols-1 gap-4'
+          className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'
         >
-          <Card className='hidden'>
+          <Card className='flex min-h-[32rem] flex-col overflow-hidden'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -3607,7 +3624,7 @@ export function Collection({
               <div
                 role='tree'
                 aria-label='Inventory folders'
-                data-testid='inventory-folder-tree-legacy'
+                data-testid='inventory-folder-tree'
                 className='max-h-[42rem] min-h-[26rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
                 <div
