@@ -7,7 +7,7 @@ describe("inventory-compact-collection-filter", () => {
     });
   }
 
-  it("uses compact collection filters instead of the folder tree panel", () => {
+  it("keeps compact collection filters alongside the folder tree panel", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
       body: {
@@ -44,7 +44,8 @@ describe("inventory-compact-collection-filter", () => {
     cy.reload();
     cy.wait("@itemsCollectionFilter");
 
-    cy.get('[data-testid="inventory-folder-tree"]').should("not.exist");
+    cy.get('[data-testid="inventory-folder-tree"]').should("be.visible");
+    cy.get('[data-testid="folder-tree-item-store-1"]').should("be.visible");
     cy.get('[data-testid="inventory-collection-filter"]').should("be.visible");
     cy.get('[data-testid="inventory-collection-add-root"]')
       .should("be.visible")
