@@ -21,6 +21,7 @@ export const taskSchema = z.object({
   pricePaid: z.number().optional(),
   purchaseUrl: z.string().optional(),
   purchaseDate: z.string().optional(),
+  purchaseCondition: z.string().optional(),
   quantity: z.number().optional(),
   neededQuantity: z.number().optional(),
 })

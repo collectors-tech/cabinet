@@ -120,6 +120,7 @@ type WishlistEntryPayload = {
   price_paid?: number
   purchase_url?: string
   purchase_date?: string
+  purchase_condition?: string
   quantity?: number
   needed_quantity?: number
 }
@@ -131,6 +132,7 @@ type WishlistInlineChanges = {
   pricePaid?: number
   purchaseUrl?: string
   purchaseDate?: string
+  purchaseCondition?: string
   quantity?: number
   neededQuantity?: number
 }
@@ -383,6 +385,7 @@ export function Tasks({
               : undefined,
           purchaseUrl: wishlistEntry?.purchase_url?.trim(),
           purchaseDate: wishlistEntry?.purchase_date?.trim(),
+          purchaseCondition: wishlistEntry?.purchase_condition?.trim(),
           quantity:
             typeof wishlistEntry?.quantity === 'number'
               ? wishlistEntry.quantity
@@ -563,6 +566,8 @@ export function Tasks({
       const nextPurchaseUrl = changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
       const nextPurchaseDate =
         changes.purchaseDate ?? currentTask.purchaseDate ?? ''
+      const nextPurchaseCondition =
+        changes.purchaseCondition ?? currentTask.purchaseCondition ?? ''
       const nextQuantity = changes.quantity ?? currentTask.quantity ?? 0
       const nextNeededQuantity =
         changes.neededQuantity ?? currentTask.neededQuantity ?? 1
@@ -597,6 +602,7 @@ export function Tasks({
               pricePaid: nextPricePaid,
               purchaseUrl: nextPurchaseUrl,
               purchaseDate: nextPurchaseDate,
+              purchaseCondition: nextPurchaseCondition,
               quantity: nextQuantity,
               neededQuantity: nextNeededQuantity,
             }
@@ -614,6 +620,7 @@ export function Tasks({
                 pricePaid: nextPricePaid,
                 purchaseUrl: nextPurchaseUrl,
                 purchaseDate: nextPurchaseDate,
+                purchaseCondition: nextPurchaseCondition,
                 quantity: nextQuantity,
                 neededQuantity: nextNeededQuantity,
               }
@@ -641,6 +648,9 @@ export function Tasks({
         }
         if (changes.purchaseDate !== undefined) {
           requestBody.purchase_date = nextPurchaseDate
+        }
+        if (changes.purchaseCondition !== undefined) {
+          requestBody.purchase_condition = nextPurchaseCondition
         }
         if (changes.quantity !== undefined) {
           requestBody.quantity = nextQuantity
