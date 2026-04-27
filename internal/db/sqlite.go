@@ -282,6 +282,12 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			notes TEXT NOT NULL DEFAULT '',
 			highlight_hit INTEGER NOT NULL DEFAULT 1,
 			below_target_now INTEGER NOT NULL DEFAULT 0,
+			owned INTEGER NOT NULL DEFAULT 0,
+			price_paid REAL NOT NULL DEFAULT 0,
+			purchase_url TEXT NOT NULL DEFAULT '',
+			purchase_date TEXT NOT NULL DEFAULT '',
+			quantity INTEGER NOT NULL DEFAULT 0,
+			needed_quantity INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
@@ -552,6 +558,30 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "below_target_now", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.below_target_now: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "owned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.owned: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "price_paid", "REAL NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.price_paid: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_url: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_date", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_date: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "quantity", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.quantity: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "needed_quantity", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.needed_quantity: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
 		conn.Close()

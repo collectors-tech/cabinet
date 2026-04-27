@@ -17,6 +17,12 @@ export const taskSchema = z.object({
   marketPrice: z.number().optional(),
   priceTrend: z.enum(['up', 'steady', 'down', 'unknown']).optional(),
   highlightHit: z.boolean().optional(),
+  owned: z.boolean().optional(),
+  pricePaid: z.number().optional(),
+  purchaseUrl: z.string().optional(),
+  purchaseDate: z.string().optional(),
+  quantity: z.number().optional(),
+  neededQuantity: z.number().optional(),
 })
 
 export type Task = z.infer<typeof taskSchema>

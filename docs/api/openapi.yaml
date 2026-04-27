@@ -1910,6 +1910,18 @@ components:
             item_id: { type: string }
             created_at: { type: string }
             updated_at: { type: string }
+    Photo:
+      type: object
+      properties:
+        id: { type: string }
+        item_id: { type: string }
+        filename: { type: string }
+        original_path: { type: string }
+        preview_path: { type: string }
+        thumbnail_path: { type: string }
+        is_primary: { type: boolean }
+        display_order: { type: integer }
+        created_at: { type: string }
     ScannerQuerySetInput:
       type: object
       required: [name, keywords]
@@ -1981,6 +1993,12 @@ components:
         priority: { type: string }
         notes: { type: string }
         highlight_hit: { type: boolean }
+        owned: { type: boolean }
+        price_paid: { type: number }
+        purchase_url: { type: string }
+        purchase_date: { type: string, format: date }
+        quantity: { type: integer }
+        needed_quantity: { type: integer }
     WishlistEntry:
       allOf:
         - $ref: "#/components/schemas/WishlistEntryInput"

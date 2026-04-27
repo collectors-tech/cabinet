@@ -2861,6 +2861,24 @@ func New(cfg config.Config) (*App, error) {
 					if _, ok := raw["below_target_now"]; !ok {
 						req.BelowTargetNow = existing.BelowTargetNow
 					}
+					if _, ok := raw["owned"]; !ok {
+						req.Owned = existing.Owned
+					}
+					if _, ok := raw["price_paid"]; !ok {
+						req.PricePaid = existing.PricePaid
+					}
+					if _, ok := raw["purchase_url"]; !ok {
+						req.PurchaseURL = existing.PurchaseURL
+					}
+					if _, ok := raw["purchase_date"]; !ok {
+						req.PurchaseDate = existing.PurchaseDate
+					}
+					if _, ok := raw["quantity"]; !ok {
+						req.Quantity = existing.Quantity
+					}
+					if _, ok := raw["needed_quantity"]; !ok {
+						req.NeededQuantity = existing.NeededQuantity
+					}
 				}
 			}
 			if err := wishlistSvc.UpdateForProfile(r.Context(), profileID, req); err != nil {

@@ -3,10 +3,11 @@ import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
   ImageIcon,
+  MinusIcon,
+  PlusIcon,
   TagsIcon,
   TrendingDownIcon,
   TrendingUpIcon,
-  MinusIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,9 +32,21 @@ type TasksColumnsOptions = {
   onWishlistMarkOwned?: (task: Task) => Promise<void>
   onWishlistInlineUpdate?: (
     task: Task,
-    changes: { targetPrice?: number; priority?: string }
+    changes: WishlistInlineChanges
   ) => Promise<void>
+  onWishlistPurchaseRow?: (task: Task) => void
   wishlistActionItemID?: string | null
+}
+
+type WishlistInlineChanges = {
+  targetPrice?: number
+  priority?: string
+  owned?: boolean
+  pricePaid?: number
+  purchaseUrl?: string
+  purchaseDate?: string
+  quantity?: number
+  neededQuantity?: number
 }
 
 function formatMoney(value: number | undefined) {
@@ -98,7 +111,7 @@ function WishlistCostCell({
   task: Task
   onWishlistInlineUpdate?: (
     task: Task,
-    changes: { targetPrice?: number; priority?: string }
+    changes: WishlistInlineChanges
   ) => Promise<void>
 }) {
   const [draft, setDraft] = useState(formatCostDraft(task.targetPrice))
@@ -153,7 +166,7 @@ function WishlistPriorityCell({
   task: Task
   onWishlistInlineUpdate?: (
     task: Task,
-    changes: { targetPrice?: number; priority?: string }
+    changes: WishlistInlineChanges
   ) => Promise<void>
 }) {
   const persistPriority = (nextPriority: string) => {
@@ -184,6 +197,124 @@ function WishlistPriorityCell({
   )
 }
 
+function WishlistOwnedCell({
+  task,
+  onWishlistInlineUpdate,
+  onWishlistPurchaseRow,
+}: {
+  task: Task
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: WishlistInlineChanges
+  ) => Promise<void>
+  onWishlistPurchaseRow?: (task: Task) => void
+}) {
+  return (
+    <div
+      className='flex min-w-[5rem] items-center gap-1'
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <input
+        type='checkbox'
+        checked={Boolean(task.owned)}
+        data-testid={`wishlist-owned-checkbox-${task.id}`}
+        aria-label={`Owned status for ${task.title}`}
+        className='h-4 w-4 rounded border'
+        onChange={(event) => {
+          void onWishlistInlineUpdate?.(task, { owned: event.target.checked })
+        }}
+      />
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        className='h-8 w-8'
+        data-testid={`wishlist-purchase-open-${task.id}`}
+        aria-label={`Add purchase details for ${task.title}`}
+        onClick={() => onWishlistPurchaseRow?.(task)}
+      >
+        <PlusIcon className='h-4 w-4' />
+      </Button>
+    </div>
+  )
+}
+
+function WishlistPricePaidCell({ task }: { task: Task }) {
+  return (
+    <span
+      className='min-w-[76px] font-medium'
+      data-testid={`wishlist-price-paid-value-${task.id}`}
+    >
+      {formatMoney(task.pricePaid)}
+    </span>
+  )
+}
+
+function WishlistNumberCell({
+  task,
+  field,
+  label,
+  value,
+  onWishlistInlineUpdate,
+}: {
+  task: Task
+  field: 'quantity' | 'neededQuantity'
+  label: string
+  value: number | undefined
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: WishlistInlineChanges
+  ) => Promise<void>
+}) {
+  const [draft, setDraft] = useState(String(value ?? 0))
+
+  useEffect(() => {
+    setDraft(String(value ?? 0))
+  }, [value])
+
+  const persist = async () => {
+    const parsed = Number(draft.trim())
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      setDraft(String(value ?? 0))
+      return
+    }
+    if ((value ?? 0) === parsed) {
+      return
+    }
+    await onWishlistInlineUpdate?.(task, { [field]: parsed })
+  }
+
+  return (
+    <Input
+      type='number'
+      min='0'
+      step='1'
+      inputMode='numeric'
+      value={draft}
+      data-testid={
+        field === 'quantity'
+          ? `wishlist-qty-input-${task.id}`
+          : `wishlist-needs-input-${task.id}`
+      }
+      aria-label={`${label} for ${task.title}`}
+      className='h-8 w-[4.5rem]'
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        void persist()
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 export function getTasksColumns({
   routePath,
   onEditRow,
@@ -193,6 +324,7 @@ export function getTasksColumns({
   onDeleteRow,
   onWishlistMarkOwned,
   onWishlistInlineUpdate,
+  onWishlistPurchaseRow,
   wishlistActionItemID,
 }: TasksColumnsOptions): ColumnDef<Task>[] {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
@@ -322,6 +454,29 @@ export function getTasksColumns({
     ...(isWishlistRoute
       ? [
           {
+            accessorKey: 'owned',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Owned' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <WishlistOwnedCell
+                task={row.original}
+                onWishlistInlineUpdate={onWishlistInlineUpdate}
+                onWishlistPurchaseRow={onWishlistPurchaseRow}
+              />
+            ),
+            enableSorting: false,
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'pricePaid',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Price Paid' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => <WishlistPricePaidCell task={row.original} />,
+          } satisfies ColumnDef<Task>,
+          {
             accessorKey: 'marketPrice',
             header: ({ column }) => (
               <DataTableColumnHeader column={column} title='Market Price' />
@@ -351,6 +506,38 @@ export function getTasksColumns({
             cell: ({ row }) => (
               <WishlistCostCell
                 task={row.original}
+                onWishlistInlineUpdate={onWishlistInlineUpdate}
+              />
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'quantity',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Qty' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <WishlistNumberCell
+                task={row.original}
+                field='quantity'
+                label='Quantity'
+                value={row.original.quantity}
+                onWishlistInlineUpdate={onWishlistInlineUpdate}
+              />
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'neededQuantity',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Needs' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <WishlistNumberCell
+                task={row.original}
+                field='neededQuantity'
+                label='Needs'
+                value={row.original.neededQuantity}
                 onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
             ),

@@ -122,6 +122,23 @@ type WishlistEntryPayload = {
   below_target_now?: boolean
   target_price?: number
   highlight_hit?: boolean
+  owned?: boolean
+  price_paid?: number
+  purchase_url?: string
+  purchase_date?: string
+  quantity?: number
+  needed_quantity?: number
+}
+
+type WishlistInlineChanges = {
+  targetPrice?: number
+  priority?: string
+  owned?: boolean
+  pricePaid?: number
+  purchaseUrl?: string
+  purchaseDate?: string
+  quantity?: number
+  neededQuantity?: number
 }
 
 function normalizeWishlistPriority(raw: string) {
@@ -375,6 +392,21 @@ export function Tasks({
           marketPrice: pricingSummary.marketPrice,
           priceTrend: pricingSummary.priceTrend,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
+          owned: Boolean(wishlistEntry?.owned),
+          pricePaid:
+            typeof wishlistEntry?.price_paid === 'number'
+              ? wishlistEntry.price_paid
+              : undefined,
+          purchaseUrl: wishlistEntry?.purchase_url?.trim(),
+          purchaseDate: wishlistEntry?.purchase_date?.trim(),
+          quantity:
+            typeof wishlistEntry?.quantity === 'number'
+              ? wishlistEntry.quantity
+              : 0,
+          neededQuantity:
+            typeof wishlistEntry?.needed_quantity === 'number'
+              ? wishlistEntry.needed_quantity
+              : 1,
         } satisfies Task
       })
     )
@@ -527,7 +559,7 @@ export function Tasks({
   const handleWishlistInlineUpdate = useCallback(
     async (
       task: Task,
-      changes: { targetPrice?: number; priority?: string }
+      changes: WishlistInlineChanges
     ) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
@@ -542,6 +574,14 @@ export function Tasks({
         changes.priority ?? currentTask.priority
       )
       let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
+      const nextOwned = changes.owned ?? currentTask.owned ?? false
+      const nextPricePaid = changes.pricePaid ?? currentTask.pricePaid ?? 0
+      const nextPurchaseUrl = changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
+      const nextPurchaseDate =
+        changes.purchaseDate ?? currentTask.purchaseDate ?? ''
+      const nextQuantity = changes.quantity ?? currentTask.quantity ?? 0
+      const nextNeededQuantity =
+        changes.neededQuantity ?? currentTask.neededQuantity ?? 1
 
       if (changes.targetPrice === undefined) {
         try {
@@ -569,6 +609,12 @@ export function Tasks({
               ...candidate,
               priority: nextPriority,
               targetPrice: nextTargetPrice,
+              owned: nextOwned,
+              pricePaid: nextPricePaid,
+              purchaseUrl: nextPurchaseUrl,
+              purchaseDate: nextPurchaseDate,
+              quantity: nextQuantity,
+              neededQuantity: nextNeededQuantity,
             }
           : candidate
       )
@@ -580,6 +626,12 @@ export function Tasks({
                 ...candidate,
                 priority: nextPriority,
                 targetPrice: nextTargetPrice,
+                owned: nextOwned,
+                pricePaid: nextPricePaid,
+                purchaseUrl: nextPurchaseUrl,
+                purchaseDate: nextPurchaseDate,
+                quantity: nextQuantity,
+                neededQuantity: nextNeededQuantity,
               }
             : candidate
         )
@@ -593,6 +645,24 @@ export function Tasks({
         }
         if (changes.targetPrice !== undefined) {
           requestBody.target_price = nextTargetPrice
+        }
+        if (changes.owned !== undefined) {
+          requestBody.owned = nextOwned
+        }
+        if (changes.pricePaid !== undefined) {
+          requestBody.price_paid = nextPricePaid
+        }
+        if (changes.purchaseUrl !== undefined) {
+          requestBody.purchase_url = nextPurchaseUrl
+        }
+        if (changes.purchaseDate !== undefined) {
+          requestBody.purchase_date = nextPurchaseDate
+        }
+        if (changes.quantity !== undefined) {
+          requestBody.quantity = nextQuantity
+        }
+        if (changes.neededQuantity !== undefined) {
+          requestBody.needed_quantity = nextNeededQuantity
         }
 
         const response = await fetch('/api/wishlist', {
