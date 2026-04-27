@@ -51,7 +51,7 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
 
     cy.get('[data-testid="inventory-ai-assist-section"]').should('not.exist')
     cy.get('[data-testid="inventory-quick-create"]').should('not.exist')
-    cy.contains('Collection Browser')
+    cy.contains(/Folders:\s*\d+/)
       .closest('[data-slot="card"]')
       .within(() => {
         cy.get('[data-testid="inventory-quick-create-input"]').should('not.exist')

@@ -92,7 +92,7 @@ describe("inventory responsive table-first redesign", () => {
     signIn();
     cy.wait("@alphaPhotos");
 
-    cy.contains("Collection Browser").should("be.visible");
+    cy.contains("Collection Browser").should("not.exist");
     cy.get('[data-testid="inventory-folder-tree"]').should("not.exist");
     cy.get('[data-testid="inventory-folder-tree-legacy"]').should("not.be.visible");
     cy.get('[data-testid="inventory-collection-filter"]').should("be.visible");

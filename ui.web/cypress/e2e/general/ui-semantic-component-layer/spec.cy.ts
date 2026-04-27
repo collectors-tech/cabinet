@@ -11,7 +11,8 @@ describe("ui-semantic-component-layer", () => {
     signInToInventory();
     cy.get('[data-slot="sidebar"]').should("be.visible");
     cy.get("header").first().should("be.visible");
-    cy.contains("Collection Browser").should("be.visible");
+    cy.contains("Collection Browser").should("not.exist");
+    cy.contains(/Folders:\s*\d+/).should("be.visible");
     cy.get('[data-testid="profile-dropdown-trigger"]:visible').first().click();
     cy.contains('[data-slot="dropdown-menu-item"]', "Sign out").click();
     cy.contains(/sign out/i).should("be.visible");
@@ -21,7 +22,7 @@ describe("ui-semantic-component-layer", () => {
     signInToInventory();
     cy.get('[data-slot="card"]').its("length").should("be.greaterThan", 1);
     cy.get("button").contains("New").should("be.visible");
-    cy.contains("Collection Browser").closest('[data-slot="card"]').should("be.visible");
+    cy.contains(/Folders:\s*\d+/).closest('[data-slot="card"]').should("be.visible");
   });
 
   it("UI-SEMANTIC-COMPONENT-LAYER-003 keeps shell stable across top-level route switches", () => {
@@ -55,7 +56,7 @@ describe("ui-semantic-component-layer", () => {
 
   it("UI-SEMANTIC-COMPONENT-LAYER-005 reuses domain blocks in inventory and wishlist", () => {
     signInToInventory();
-    cy.get('input[placeholder="Filter by title or ID..."]').should("be.visible");
+    cy.get('input[placeholder="Filter by title or part number..."]').should("be.visible");
     cy.visit("/wishlist");
     cy.get('input[placeholder="Filter by title or ID..."]').should("be.visible");
     cy.get("table").should("be.visible");
@@ -72,9 +73,9 @@ describe("ui-semantic-component-layer", () => {
 
   it("UI-SEMANTIC-COMPONENT-LAYER-007 keeps keyboard-accessible shell interactions", () => {
     signInToInventory();
-    cy.get('[data-testid="folder-tree-item-store-1"]').focus().type("{enter}");
+    cy.get('[data-testid="inventory-collection-filter-select"]').select("Store 1");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
-    cy.get('[data-testid="folder-tree-item-store-2"]').focus().type("{enter}");
+    cy.get('[data-testid="inventory-collection-filter-select"]').select("Store 2");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 2");
   });
 });
