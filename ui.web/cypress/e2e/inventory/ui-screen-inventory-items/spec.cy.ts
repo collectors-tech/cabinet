@@ -35,7 +35,7 @@ describe("inventory-management", () => {
     cy.contains("Oops! Something went wrong").should("not.exist");
 
     cy.contains("Inventory").should("be.visible");
-    cy.contains("Collection Browser").should("be.visible");
+    cy.contains("Collection Browser").should("not.exist");
     cy.get('[data-testid="inventory-new-action"]').should("be.visible");
     cy.get('[data-testid="inventory-create-menu-trigger"]').should("be.visible");
 
@@ -137,7 +137,7 @@ describe("inventory-management", () => {
     cy.get("table").should("be.visible");
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-004 keeps summary compact in Collection Browser header and removes duplicate strips", () => {
+  it("UI-SCREEN-INVENTORY-ITEMS-004 keeps summary compact without duplicate strips or redundant section heading", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
       body: {
@@ -158,8 +158,9 @@ describe("inventory-management", () => {
 
     cy.contains("Command Row").should("not.exist");
     cy.contains("Summary Strip").should("not.exist");
+    cy.contains("Collection Browser").should("not.exist");
 
-    cy.contains("Collection Browser")
+    cy.contains(/Folders:\s*\d+/)
       .closest('[data-slot="card"]')
       .within(() => {
         cy.contains(/Folders:\s*\d+/).should("be.visible");
