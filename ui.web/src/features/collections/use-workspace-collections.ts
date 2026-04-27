@@ -140,7 +140,8 @@ function buildDefaultSummary(name: string): WorkspaceCollectionSummary {
     scopeLabel: 'Custom collection',
     statusLabel: 'Active',
     updatedLabel: 'Updated just now',
-    description: 'Custom workspace collection created from the management surface.',
+    description:
+      'Custom workspace collection created from the management surface.',
   }
 }
 
@@ -235,12 +236,8 @@ function serializeWorkspaceCollectionsState(
 }
 
 export function useWorkspaceCollections() {
-  const {
-    activeProfileId,
-    loading,
-    settings,
-    saveSettings,
-  } = useProfileSettings()
+  const { activeProfileId, loading, settings, saveSettings } =
+    useProfileSettings()
   const persistedState = useMemo(
     () =>
       loading
@@ -281,9 +278,13 @@ export function useWorkspaceCollections() {
       return {
         ...base,
         itemCount:
-          name === 'All Items' ? Math.max(base.itemCount, assignedCount) : assignedCount,
+          name === 'All Items'
+            ? Math.max(base.itemCount, assignedCount)
+            : assignedCount,
         updatedLabel:
-          assignedCount > 0 && name !== 'All Items' ? 'Updated just now' : base.updatedLabel,
+          assignedCount > 0 && name !== 'All Items'
+            ? 'Updated just now'
+            : base.updatedLabel,
       }
     })
   }, [workspaceCollections, workspaceItems])
@@ -317,7 +318,11 @@ export function useWorkspaceCollections() {
     const normalizedNext = normalizeCollectionName(nextName)
     const currentKey = collectionKey(normalizedCurrent)
     const nextKey = collectionKey(normalizedNext)
-    if (!normalizedCurrent || !normalizedNext || normalizedCurrent === 'All Items') {
+    if (
+      !normalizedCurrent ||
+      !normalizedNext ||
+      normalizedCurrent === 'All Items'
+    ) {
       return null
     }
     const exists = workspaceCollections.some(
@@ -331,9 +336,7 @@ export function useWorkspaceCollections() {
 
     await persistWorkspaceCollectionsState({
       collections: workspaceCollections.map((collection) =>
-        collectionKey(collection) === currentKey
-          ? normalizedNext
-          : collection
+        collectionKey(collection) === currentKey ? normalizedNext : collection
       ),
       activeCollection:
         collectionKey(activeWorkspaceCollection) === currentKey
@@ -371,7 +374,8 @@ export function useWorkspaceCollections() {
           ? 'All Items'
           : activeWorkspaceCollection,
       items: workspaceItems.map((item) =>
-        item.collectionName && collectionKey(item.collectionName) === normalizedKey
+        item.collectionName &&
+        collectionKey(item.collectionName) === normalizedKey
           ? { ...item, collectionName: null }
           : item
       ),
@@ -385,10 +389,18 @@ export function useWorkspaceCollections() {
     collectionName: string
   ): Promise<WorkspaceCollectionItem | null> => {
     const normalizedCollection = normalizeCollectionName(collectionName)
-    if (!itemID || !normalizedCollection || normalizedCollection === 'All Items') {
+    if (
+      !itemID ||
+      !normalizedCollection ||
+      normalizedCollection === 'All Items'
+    ) {
       return Promise.resolve(null)
     }
-    if (!workspaceCollections.some((collection) => collection === normalizedCollection)) {
+    if (
+      !workspaceCollections.some(
+        (collection) => collection === normalizedCollection
+      )
+    ) {
       return Promise.resolve(null)
     }
 
@@ -397,8 +409,7 @@ export function useWorkspaceCollections() {
         ? { ...item, collectionName: normalizedCollection }
         : item
     )
-    const updatedItem =
-      updatedItems.find((item) => item.id === itemID) ?? null
+    const updatedItem = updatedItems.find((item) => item.id === itemID) ?? null
 
     if (!updatedItem) {
       return Promise.resolve(null)
@@ -453,6 +464,50 @@ export function useWorkspaceCollections() {
     }).then(() => normalizedItem)
   }
 
+  const ensureWorkspaceCollectionAndAssignItem = (
+    item: WorkspaceCollectionItem,
+    collectionName: string
+  ): Promise<WorkspaceCollectionItem | null> => {
+    const normalizedCollection = normalizeCollectionName(collectionName)
+    if (
+      !item.id ||
+      !normalizedCollection ||
+      normalizedCollection === 'All Items'
+    ) {
+      return Promise.resolve(null)
+    }
+
+    const existingCollection =
+      workspaceCollections.find(
+        (collection) =>
+          collection.toLowerCase() === normalizedCollection.toLowerCase()
+      ) ?? null
+    const targetCollection = existingCollection ?? normalizedCollection
+    const nextCollections = existingCollection
+      ? workspaceCollections
+      : [...workspaceCollections, targetCollection]
+    const normalizedItem = normalizeWorkspaceCollectionItem({
+      ...item,
+      collectionName: targetCollection,
+    })
+    const existingItem = workspaceItems.some(
+      (workspaceItem) => workspaceItem.id === normalizedItem.id
+    )
+    const updatedItems = existingItem
+      ? workspaceItems.map((workspaceItem) =>
+          workspaceItem.id === normalizedItem.id
+            ? normalizedItem
+            : workspaceItem
+        )
+      : [...workspaceItems, normalizedItem]
+
+    return persistWorkspaceCollectionsState({
+      collections: nextCollections,
+      activeCollection: targetCollection,
+      items: updatedItems,
+    }).then(() => normalizedItem)
+  }
+
   const unassignItemFromCollection = (
     itemID: string
   ): Promise<WorkspaceCollectionItem | null> => {
@@ -502,6 +557,7 @@ export function useWorkspaceCollections() {
     collectionItems,
     assignItemToCollection,
     assignWorkspaceItemToCollection,
+    ensureWorkspaceCollectionAndAssignItem,
     unassignItemFromCollection,
   }
 }
