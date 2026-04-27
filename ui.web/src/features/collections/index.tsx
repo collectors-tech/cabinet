@@ -431,10 +431,12 @@ export function Collections() {
           >
             <Button
               data-testid='collections-new-action'
+              size='icon'
+              aria-label='New collection'
+              title='New collection'
               onClick={() => setCreateOpen(true)}
             >
-              <Plus className='mr-2 h-4 w-4' />
-              New collection
+              <Plus className='h-4 w-4' aria-hidden='true' />
             </Button>
           </div>
           <Separator

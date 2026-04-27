@@ -182,10 +182,15 @@ describe('workspace header action lanes', () => {
       .should('be.visible')
       .within(() => {
         cy.contains('Planning list').should('not.exist')
-        cy.get('[data-testid="wishlist-new-action"]').should('be.visible')
-        cy.get('[data-testid="wishlist-create-menu-trigger"]').should(
-          'be.visible'
-        )
+        cy.get('[data-testid="wishlist-new-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'New')
+        cy.get('[data-testid="wishlist-create-collection-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'Create')
+        cy.get('[data-testid="wishlist-import-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'Import')
       })
     cy.get('[data-testid="wishlist-header-action-separator"]').should('be.visible')
     cy.contains(
@@ -220,7 +225,11 @@ describe('workspace header action lanes', () => {
       .should('be.visible')
       .within(() => {
         cy.get('[data-testid="collections-page-icon"]').should('not.exist')
-        cy.get('[data-testid="collections-new-action"]').should('be.visible')
+        cy.get('[data-testid="collections-new-action"]')
+          .should('be.visible')
+          .and('have.attr', 'aria-label', 'New collection')
+          .and('have.attr', 'title', 'New collection')
+          .and('not.contain.text', 'New collection')
       })
     cy.get('[data-testid="collections-header-action-separator"]').should('be.visible')
     cy.contains(
