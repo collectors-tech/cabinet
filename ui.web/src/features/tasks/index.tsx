@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Heart } from 'lucide-react'
+import { FolderPlus, Heart, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -241,12 +235,10 @@ function buildWishlistCsv(tasksToExport: Task[]) {
 }
 
 function TasksHeaderActions({
-  isWishlistRoute,
   onOpenCollectionCreate,
   onCreate,
   onImport,
 }: {
-  isWishlistRoute: boolean
   onOpenCollectionCreate: () => void
   onCreate: () => void
   onImport: () => void
@@ -258,44 +250,36 @@ function TasksHeaderActions({
     >
       <Button
         type='button'
+        size='icon'
         data-testid='wishlist-new-action'
+        aria-label='New wishlist item'
+        title='New wishlist item'
         onClick={onCreate}
       >
-        New
+        <Plus className='h-4 w-4' aria-hidden='true' />
       </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type='button'
-            variant='outline'
-            data-testid='wishlist-create-menu-trigger'
-          >
-            Create
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
-          <DropdownMenuItem
-            data-testid='wishlist-create-menu-entry'
-            onClick={onCreate}
-          >
-            New Wishlist Entry
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            data-testid='wishlist-create-menu-import'
-            onClick={onImport}
-          >
-            Import Wishlist
-          </DropdownMenuItem>
-          {isWishlistRoute ? (
-            <DropdownMenuItem
-              data-testid='wishlist-create-menu-collection'
-              onClick={onOpenCollectionCreate}
-            >
-              New Collection
-            </DropdownMenuItem>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        data-testid='wishlist-create-collection-action'
+        aria-label='Create collection'
+        title='Create collection'
+        onClick={onOpenCollectionCreate}
+      >
+        <FolderPlus className='h-4 w-4' aria-hidden='true' />
+      </Button>
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        data-testid='wishlist-import-action'
+        aria-label='Import wishlist entries'
+        title='Import wishlist entries'
+        onClick={onImport}
+      >
+        <Upload className='h-4 w-4' aria-hidden='true' />
+      </Button>
     </div>
   )
 }
@@ -1073,7 +1057,6 @@ export function Tasks({
                 data-testid='wishlist-global-header-actions'
               >
                 <TasksHeaderActions
-                  isWishlistRoute={isWishlistRoute}
                   onOpenCollectionCreate={() => {
                     setInlineCollectionValidationMessage('')
                     setInlineCollectionInputOpen(true)

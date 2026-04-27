@@ -102,8 +102,19 @@ describe("ui-screen-wishlist", () => {
 
     cy.contains("Wishlist").should("be.visible");
     cy.get('[data-testid="wishlist-global-header-actions"]').within(() => {
-      cy.get('[data-testid="wishlist-new-action"]').should("be.visible");
-      cy.get('[data-testid="wishlist-create-menu-trigger"]').should("be.visible");
+      cy.get('[data-testid="wishlist-new-action"]')
+        .should("be.visible")
+        .and("have.attr", "aria-label", "New wishlist item")
+        .and("not.contain.text", "New");
+      cy.get('[data-testid="wishlist-create-collection-action"]')
+        .should("be.visible")
+        .and("have.attr", "aria-label", "Create collection")
+        .and("not.contain.text", "Create");
+      cy.get('[data-testid="wishlist-import-action"]')
+        .should("be.visible")
+        .and("have.attr", "aria-label", "Import wishlist entries")
+        .and("not.contain.text", "Import");
+      cy.get('[data-testid="wishlist-create-menu-trigger"]').should("not.exist");
     });
     cy.contains(
       "Track wanted items, target prices, and planning decisions before they become owned inventory."
@@ -156,23 +167,35 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Delete selected wishlist entries"]').should("be.visible");
   });
 
-  it("UI-SCREEN-WISHLIST-002 opens create and import actions from Create menu", () => {
+  it("UI-SCREEN-WISHLIST-002 exposes direct compact header actions", () => {
     signInToWishlist();
 
-    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
-    cy.get('[data-testid="wishlist-create-menu-entry"]').should("be.visible");
-    cy.get('[data-testid="wishlist-create-menu-import"]').should("be.visible");
+    cy.get('[data-testid="wishlist-global-header-actions"]').within(() => {
+      cy.get('[data-testid="wishlist-new-action"]')
+        .should("be.visible")
+        .and("have.attr", "title", "New wishlist item");
+      cy.get('[data-testid="wishlist-create-collection-action"]')
+        .should("be.visible")
+        .and("have.attr", "title", "Create collection");
+      cy.get('[data-testid="wishlist-import-action"]')
+        .should("be.visible")
+        .and("have.attr", "title", "Import wishlist entries");
+      cy.get('[data-testid="wishlist-create-menu-trigger"]').should("not.exist");
+    });
   });
 
-  it("UI-SCREEN-WISHLIST-004 shows dedicated New action with adjacent Create menu", () => {
+  it("UI-SCREEN-WISHLIST-004 shows icon-only header actions", () => {
     signInToWishlist();
 
     cy.get('[data-testid="wishlist-new-action"]')
       .should("be.visible")
-      .and("contain", "New");
-    cy.get('[data-testid="wishlist-create-menu-trigger"]')
+      .and("not.contain", "New");
+    cy.get('[data-testid="wishlist-create-collection-action"]')
       .should("be.visible")
-      .and("contain", "Create");
+      .and("not.contain", "Create");
+    cy.get('[data-testid="wishlist-import-action"]')
+      .should("be.visible")
+      .and("not.contain", "Import");
   });
 
   it("UI-SCREEN-WISHLIST-005 supports inline collection create and auto-select", () => {
@@ -454,7 +477,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
   });
 
-  it("UI-SCREEN-WISHLIST-009 wires New and Create actions into real wishlist dialogs", () => {
+  it("UI-SCREEN-WISHLIST-009 wires direct header actions into real wishlist dialogs", () => {
     signInToWishlist();
 
     cy.get('[data-testid="wishlist-new-action"]').click();
@@ -462,14 +485,12 @@ describe("ui-screen-wishlist", () => {
 
     cy.contains("button", "Close").click();
 
-    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
-    cy.get('[data-testid="wishlist-create-menu-entry"]').click();
-    cy.contains("Create Wishlist Entry").should("be.visible");
+    cy.get('[data-testid="wishlist-create-collection-action"]').click();
+    cy.get('[data-testid="wishlist-table-new-collection-name"]').should(
+      "be.visible"
+    );
 
-    cy.contains("button", "Close").click();
-
-    cy.get('[data-testid="wishlist-create-menu-trigger"]').click();
-    cy.get('[data-testid="wishlist-create-menu-import"]').click();
+    cy.get('[data-testid="wishlist-import-action"]').click();
     cy.contains("Import Wishlist Entries").should("be.visible");
   });
 
