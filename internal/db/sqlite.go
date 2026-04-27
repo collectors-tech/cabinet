@@ -286,6 +286,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			price_paid REAL NOT NULL DEFAULT 0,
 			purchase_url TEXT NOT NULL DEFAULT '',
 			purchase_date TEXT NOT NULL DEFAULT '',
+			purchase_condition TEXT NOT NULL DEFAULT '',
 			quantity INTEGER NOT NULL DEFAULT 0,
 			needed_quantity INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -574,6 +575,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_date", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.purchase_date: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_condition", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_condition: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "quantity", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()

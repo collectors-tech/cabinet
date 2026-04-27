@@ -149,6 +149,7 @@ describe("wishlist-pricing-columns", () => {
         price_paid: 0,
         purchase_url: "",
         purchase_date: "",
+        purchase_condition: "",
         quantity: 0,
         needed_quantity: 1,
       },
@@ -234,10 +235,22 @@ describe("wishlist-pricing-columns", () => {
       "have.value",
       today
     );
+    cy.get('[data-testid="wishlist-purchase-quantity"]').should(
+      "have.value",
+      "0"
+    );
+    cy.get('[data-testid="wishlist-purchase-condition"]').should(
+      "have.value",
+      ""
+    );
     cy.get('[data-testid="wishlist-purchase-price-paid"]')
       .click()
       .should("have.value", "")
       .type("18.25");
+    cy.get('[data-testid="wishlist-purchase-quantity"]').type(
+      "{selectall}2"
+    );
+    cy.get('[data-testid="wishlist-purchase-condition"]').type("Used - boxed");
     cy.get('[data-testid="wishlist-purchase-url"]').type(
       "https://example.test/purchase"
     );
@@ -250,6 +263,8 @@ describe("wishlist-pricing-columns", () => {
         price_paid: 18.25,
         purchase_url: "https://example.test/purchase",
         purchase_date: today,
+        purchase_condition: "Used - boxed",
+        quantity: 2,
       });
     cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
       "contain.text",
@@ -257,12 +272,12 @@ describe("wishlist-pricing-columns", () => {
     );
 
     cy.get('[data-testid="wishlist-qty-input-item-price-1"]').type(
-      "{selectall}2{enter}",
+      "{selectall}3{enter}",
       { force: true }
     );
     cy.wait("@updateWishlistEntry")
       .its("request.body")
-      .should("include", { id: "wish-price-1", quantity: 2 });
+      .should("include", { id: "wish-price-1", quantity: 3 });
     cy.get('[data-testid="wishlist-needs-input-item-price-1"]').type(
       "{selectall}5{enter}",
       { force: true }
@@ -283,11 +298,18 @@ describe("wishlist-pricing-columns", () => {
     );
     cy.get('[data-testid="wishlist-qty-input-item-price-1"]').should(
       "have.value",
-      "2"
+      "3"
     );
     cy.get('[data-testid="wishlist-needs-input-item-price-1"]').should(
       "have.value",
       "5"
+    );
+    cy.get('[data-testid="wishlist-purchase-open-item-price-1"]').click({
+      force: true,
+    });
+    cy.get('[data-testid="wishlist-purchase-condition"]').should(
+      "have.value",
+      "Used - boxed"
     );
   });
 });

@@ -2873,6 +2873,9 @@ func New(cfg config.Config) (*App, error) {
 					if _, ok := raw["purchase_date"]; !ok {
 						req.PurchaseDate = existing.PurchaseDate
 					}
+					if _, ok := raw["purchase_condition"]; !ok {
+						req.PurchaseCondition = existing.PurchaseCondition
+					}
 					if _, ok := raw["quantity"]; !ok {
 						req.Quantity = existing.Quantity
 					}

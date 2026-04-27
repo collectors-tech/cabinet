@@ -45,6 +45,7 @@ type WishlistInlineChanges = {
   pricePaid?: number
   purchaseUrl?: string
   purchaseDate?: string
+  purchaseCondition?: string
   quantity?: number
   neededQuantity?: number
 }

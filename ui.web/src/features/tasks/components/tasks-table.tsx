@@ -78,6 +78,7 @@ type DataTableProps = {
       pricePaid?: number
       purchaseUrl?: string
       purchaseDate?: string
+      purchaseCondition?: string
       quantity?: number
       neededQuantity?: number
     }
@@ -250,12 +251,16 @@ export function TasksTable({
   const [purchasePricePaid, setPurchasePricePaid] = useState('')
   const [purchaseUrl, setPurchaseUrl] = useState('')
   const [purchaseDate, setPurchaseDate] = useState(todayISODate())
+  const [purchaseQuantity, setPurchaseQuantity] = useState('0')
+  const [purchaseCondition, setPurchaseCondition] = useState('')
   const priceClearedOnFocusRef = useRef(false)
   const openPurchaseDialog = useCallback((task: Task) => {
     setPurchaseTask(task)
     setPurchasePricePaid(formatMoneyDraft(task.pricePaid || task.marketPrice))
     setPurchaseUrl(task.purchaseUrl ?? '')
     setPurchaseDate(task.purchaseDate || todayISODate())
+    setPurchaseQuantity(String(task.quantity ?? 0))
+    setPurchaseCondition(task.purchaseCondition ?? '')
     priceClearedOnFocusRef.current = false
   }, [])
   const columns = useMemo(
@@ -702,18 +707,31 @@ export function TasksTable({
       )
       return
     }
+    const parsedQuantity = Number(purchaseQuantity.trim())
+    if (
+      !Number.isInteger(parsedQuantity) ||
+      Number.isNaN(parsedQuantity) ||
+      parsedQuantity < 0
+    ) {
+      setPurchaseQuantity(String(purchaseTask.quantity ?? 0))
+      return
+    }
 
     await onWishlistInlineUpdate?.(purchaseTask, {
       owned: true,
       pricePaid: parsedPrice,
       purchaseUrl: purchaseUrl.trim(),
       purchaseDate: purchaseDate || todayISODate(),
+      purchaseCondition: purchaseCondition.trim(),
+      quantity: parsedQuantity,
     })
     setPurchaseTask(null)
   }, [
     onWishlistInlineUpdate,
+    purchaseCondition,
     purchaseDate,
     purchasePricePaid,
+    purchaseQuantity,
     purchaseTask,
     purchaseUrl,
   ])
@@ -1091,6 +1109,27 @@ export function TasksTable({
                 value={purchaseDate}
                 data-testid='wishlist-purchase-date'
                 onChange={(event) => setPurchaseDate(event.target.value)}
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Qty</span>
+              <Input
+                type='number'
+                min='0'
+                step='1'
+                inputMode='numeric'
+                value={purchaseQuantity}
+                data-testid='wishlist-purchase-quantity'
+                onChange={(event) => setPurchaseQuantity(event.target.value)}
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Condition</span>
+              <Input
+                value={purchaseCondition}
+                data-testid='wishlist-purchase-condition'
+                placeholder='New, boxed, loose...'
+                onChange={(event) => setPurchaseCondition(event.target.value)}
               />
             </label>
             <label className='space-y-2 text-sm font-medium sm:col-span-2'>

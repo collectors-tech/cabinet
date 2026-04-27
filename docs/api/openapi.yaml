@@ -1997,6 +1997,7 @@ components:
         price_paid: { type: number }
         purchase_url: { type: string }
         purchase_date: { type: string, format: date }
+        purchase_condition: { type: string }
         quantity: { type: integer }
         needed_quantity: { type: integer }
     WishlistEntry:
