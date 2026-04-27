@@ -144,4 +144,140 @@ describe("inventory item editor modal", () => {
     cy.contains("Bravo Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });
+
+  it("creates a draft item when any single field is provided", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+      brand: string;
+      priority: string;
+      description: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body).to.include({
+        title: "Only Title Draft",
+        brand: "Unknown",
+        category: "General",
+      });
+      const created = {
+        id: "item-title-only",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: req.body.category,
+        brand: req.body.brand,
+        priority: "medium",
+        description: req.body.description,
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createTitleOnlyItem");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-title"]').type("Only Title Draft");
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@createTitleOnlyItem");
+    cy.wait("@itemsList");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.contains("Only Title Draft").should("be.visible");
+  });
+
+  it("creates a draft item from only a captured image", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+      brand: string;
+      priority: string;
+      description: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body).to.include({
+        title: "Photo draft item",
+        brand: "Unknown",
+        category: "General",
+      });
+      const created = {
+        id: "item-photo-only",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: req.body.category,
+        brand: req.body.brand,
+        priority: "medium",
+        description: req.body.description,
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createPhotoOnlyItem");
+
+    cy.intercept("POST", "/api/items/item-photo-only/photos", (req) => {
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: "photo-draft-1",
+          filename: "captured-draft.jpg",
+          is_primary: true,
+        },
+      });
+    }).as("uploadPhotoOnlyItem");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-create-take-image"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-photo-input"]').selectFile({
+      contents: Cypress.Buffer.from("captured-photo-binary"),
+      fileName: "captured-draft.jpg",
+      mimeType: "image/jpeg",
+    });
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@createPhotoOnlyItem");
+    cy.wait("@uploadPhotoOnlyItem");
+    cy.wait("@itemsList");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.contains("Photo draft item").should("be.visible");
+  });
+
+  it("keeps an empty draft item blocked until a field or image is provided", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsList");
+    cy.intercept("POST", "/api/items").as("createItem");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.get('[data-testid="inventory-item-save-error"]')
+      .should("be.visible")
+      .and("contain", "Enter at least one field or add an image before saving.");
+    cy.get("@createItem.all").should("have.length", 0);
+  });
 });
