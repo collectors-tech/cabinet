@@ -46,6 +46,11 @@ describe("inventory-compact-collection-filter", () => {
 
     cy.get('[data-testid="inventory-folder-tree"]').should("not.exist");
     cy.get('[data-testid="inventory-collection-filter"]').should("be.visible");
+    cy.get('[data-testid="inventory-collection-add-root"]')
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Create collection")
+      .and("have.attr", "title", "Create collection")
+      .and("not.contain", "New Collection");
     cy.get('[data-testid="inventory-collection-filter-selected"]').should(
       "contain",
       "All Items"
