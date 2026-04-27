@@ -101,7 +101,7 @@ describe("ui-screen-wishlist", () => {
     signInToWishlist();
 
     cy.contains("Wishlist").should("be.visible");
-    cy.get('[data-testid="wishlist-page-header"]').within(() => {
+    cy.get('[data-testid="wishlist-global-header-actions"]').within(() => {
       cy.get('[data-testid="wishlist-new-action"]').should("be.visible");
       cy.get('[data-testid="wishlist-create-menu-trigger"]').should("be.visible");
     });
