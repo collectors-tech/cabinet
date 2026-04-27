@@ -243,7 +243,10 @@ export function Tasks({
     inlineCollectionValidationMessage,
     setInlineCollectionValidationMessage,
   ] = useState('')
-  const [tableData, setTableData] = useState<Task[]>(tasks)
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+  const [tableData, setTableData] = useState<Task[]>(() =>
+    isWishlistRoute ? [] : tasks
+  )
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [wishlistActionItemID, setWishlistActionItemID] = useState<
@@ -259,8 +262,6 @@ export function Tasks({
         window.localStorage.getItem(WISHLIST_PLANNING_FOCUS_STORAGE_KEY)
       )
     })
-  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
-
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -317,6 +318,7 @@ export function Tasks({
     }
 
     let cancelled = false
+    setTableData([])
     void loadWishlistData()
       .then((mapped) => {
         if (!cancelled) {
