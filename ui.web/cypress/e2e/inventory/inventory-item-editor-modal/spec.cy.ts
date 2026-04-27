@@ -195,6 +195,139 @@ describe("inventory item editor modal", () => {
     cy.contains("Only Title Draft").should("be.visible");
   });
 
+  it("creates an item into an existing collection from the create modal", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+      brand: string;
+      priority: string;
+      description: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-STORE-1",
+        title: "Store One Created Item",
+      });
+      const created = {
+        id: "item-store-one-created",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: req.body.category,
+        brand: req.body.brand,
+        priority: "medium",
+        description: req.body.description,
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createStoreOneItem");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-collection"]')
+      .should("be.visible")
+      .clear()
+      .type("Store 1");
+    cy.get('[data-testid="inventory-item-part-number"]').type("PN-STORE-1");
+    cy.get('[data-testid="inventory-item-title"]').type("Store One Created Item");
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@createStoreOneItem");
+    cy.wait("@itemsList");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+      "contain",
+      "Store 1"
+    );
+    cy.contains("Store One Created Item").should("be.visible");
+    cy.window().then((win) => {
+      expect(
+        JSON.parse(
+          win.localStorage.getItem("cabinet.inventory.item-folder-assignments.v1") ??
+            "{}"
+        )
+      ).to.include({ "item-store-one-created": "Store 1" });
+    });
+  });
+
+  it("creates a new collection from typed create modal collection text", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+      brand: string;
+      priority: string;
+      description: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body).to.include({
+        part_number: "PN-MODAL-SHELF",
+        title: "Modal Shelf Item",
+      });
+      const created = {
+        id: "item-modal-shelf",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: req.body.category,
+        brand: req.body.brand,
+        priority: "medium",
+        description: req.body.description,
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createModalShelfItem");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-collection"]').clear().type("Modal Shelf");
+    cy.get('[data-testid="inventory-item-part-number"]').type("PN-MODAL-SHELF");
+    cy.get('[data-testid="inventory-item-title"]').type("Modal Shelf Item");
+    cy.get('[data-testid="inventory-item-save"]').click();
+
+    cy.wait("@createModalShelfItem");
+    cy.wait("@itemsList");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Modal Shelf");
+    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+      "contain",
+      "Modal Shelf"
+    );
+    cy.get('[data-testid="inventory-collection-filter-select"]').should(
+      "contain",
+      "Modal Shelf"
+    );
+    cy.contains("Modal Shelf Item").should("be.visible");
+    cy.window().then((win) => {
+      expect(
+        JSON.parse(
+          win.localStorage.getItem("cabinet.inventory.item-folder-assignments.v1") ??
+            "{}"
+        )
+      ).to.include({ "item-modal-shelf": "Modal Shelf" });
+    });
+  });
+
   it("creates a draft item from only a captured image", () => {
     const items: Array<{
       id: string;

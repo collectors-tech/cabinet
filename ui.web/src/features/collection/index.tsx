@@ -472,6 +472,10 @@ function normalizeInventoryCreatePayload(
   }
 }
 
+function normalizeCollectionInput(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
 function compactQuickCreateText(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
@@ -1216,6 +1220,7 @@ export function Collection({
     null
   )
   const [itemCreateBarcodeInput, setItemCreateBarcodeInput] = useState('')
+  const [itemCreateCollectionName, setItemCreateCollectionName] = useState('')
   const [itemSaveBusy, setItemSaveBusy] = useState(false)
   const [itemSaveError, setItemSaveError] = useState<string | null>(null)
   const [itemSaveSuccess, setItemSaveSuccess] = useState<string | null>(null)
@@ -1263,6 +1268,7 @@ export function Collection({
     setActiveWorkspaceCollection,
     addCollection,
     assignWorkspaceItemToCollection,
+    ensureWorkspaceCollectionAndAssignItem,
   } = useWorkspaceCollections()
   const assignableWorkspaceCollections = useMemo(
     () =>
@@ -1284,6 +1290,7 @@ export function Collection({
     setItemCreateIntent('manual')
     setItemCreatePhotoFile(null)
     setItemCreateBarcodeInput('')
+    setItemCreateCollectionName('')
   }, [])
 
   const startCreateItem = useCallback(
@@ -1294,6 +1301,9 @@ export function Collection({
       setItemCreateIntent(intent)
       setItemCreatePhotoFile(null)
       setItemCreateBarcodeInput('')
+      setItemCreateCollectionName(
+        activeFolder !== 'All Items' ? activeFolder : ''
+      )
       setItemSaveError(null)
       setItemSaveSuccess(null)
       setPasteCreateInput('')
@@ -1303,7 +1313,7 @@ export function Collection({
       selectInventoryItem(null)
       setItemEditorOpen(true)
     },
-    [selectInventoryItem]
+    [activeFolder, selectInventoryItem]
   )
 
   const startCreateItemFromPhoto = useCallback(() => {
@@ -2698,6 +2708,16 @@ export function Collection({
     const pendingCreateBarcode = itemCreateBarcodeInput.trim()
     const hasCreatePhoto = wasCreateMode && itemCreatePhotoFile !== null
     const hasCreateBarcode = wasCreateMode && pendingCreateBarcode !== ''
+    const pendingCreateCollection = wasCreateMode
+      ? normalizeCollectionInput(itemCreateCollectionName)
+      : ''
+    const targetCreateCollection =
+      pendingCreateCollection && pendingCreateCollection !== 'All Items'
+        ? (workspaceCollections.find(
+            (collection) =>
+              collection.toLowerCase() === pendingCreateCollection.toLowerCase()
+          ) ?? pendingCreateCollection)
+        : ''
     const payload = wasCreateMode
       ? normalizeInventoryCreatePayload(trimmedDraft, {
           barcode: pendingCreateBarcode,
@@ -2748,6 +2768,39 @@ export function Collection({
       }
       const saved = (await response.json()) as { id?: string }
       const savedID = saved.id?.trim() ?? selectedItemID
+      if (wasCreateMode && targetCreateCollection) {
+        setFolderTree((previous) =>
+          folderTreeContainsName(previous, targetCreateCollection)
+            ? previous
+            : [
+                ...previous,
+                {
+                  id: buildUniqueFolderID(targetCreateCollection, previous),
+                  name: targetCreateCollection,
+                },
+              ]
+        )
+        const workspaceItem: WorkspaceCollectionItem = {
+          id: savedID,
+          name: payload.title || payload.part_number,
+          detail:
+            [payload.brand, payload.category].filter(Boolean).join(' - ') ||
+            'Inventory item',
+          collectionName: targetCreateCollection,
+        }
+        const assigned = await ensureWorkspaceCollectionAndAssignItem(
+          workspaceItem,
+          targetCreateCollection
+        )
+        if (!assigned) {
+          throw new Error('create_item_collection_assignment')
+        }
+        setItemFolderAssignments((current) => ({
+          ...current,
+          [savedID]: targetCreateCollection,
+        }))
+        setActiveFolder(targetCreateCollection)
+      }
       if (wasCreateMode && itemCreatePhotoFile) {
         const photoBody = new FormData()
         photoBody.append('file', itemCreatePhotoFile)
@@ -2795,13 +2848,16 @@ export function Collection({
     }
   }, [
     itemCreateBarcodeInput,
+    itemCreateCollectionName,
     itemCreateIntent,
     itemCreatePhotoFile,
     itemDraft,
     itemEditorMode,
+    ensureWorkspaceCollectionAndAssignItem,
     loadInventoryItems,
     resetCreateAttachments,
     selectedItemID,
+    workspaceCollections,
   ])
 
   const handlePhotoUpload = useCallback(
@@ -4128,6 +4184,37 @@ export function Collection({
                                 </div>
                               ) : null}
                             </div>
+                          </div>
+                        ) : null}
+                        {itemEditorMode === 'create' ? (
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-collection'
+                            >
+                              Collection
+                            </label>
+                            <Input
+                              id='inventory-item-collection'
+                              list='inventory-item-collection-options'
+                              data-testid='inventory-item-collection'
+                              placeholder='Choose or type a collection'
+                              value={itemCreateCollectionName}
+                              onChange={(event) =>
+                                setItemCreateCollectionName(event.target.value)
+                              }
+                            />
+                            <datalist id='inventory-item-collection-options'>
+                              {assignableWorkspaceCollections.map(
+                                (collection) => (
+                                  <option key={collection} value={collection} />
+                                )
+                              )}
+                            </datalist>
+                            <p className='text-xs text-muted-foreground'>
+                              Type a new collection name to create it with this
+                              item.
+                            </p>
                           </div>
                         ) : null}
                         <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
