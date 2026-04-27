@@ -247,6 +247,41 @@ describe("ui-screen-wishlist", () => {
     cy.contains("F1 Silverline").should("be.visible");
   });
 
+  it("UI-SCREEN-WISHLIST-014 does not inherit the Collections screen selection", () => {
+    stubWishlistData();
+    cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
+    cy.intercept("PUT", "/api/profiles/e2e-profile-001/settings").as(
+      "saveCollectionSettings"
+    );
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: "/collections/",
+      });
+    });
+    cy.wait("@profileSettings");
+
+    cy.get('[data-testid="collections-row-store-1"]').click();
+    cy.wait("@saveCollectionSettings");
+    cy.get('[data-testid="collections-active-context"]').should(
+      "contain.text",
+      "Store 1"
+    );
+
+    cy.visit("/wishlist/");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.wait("@profileSettings");
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+      "contain.text",
+      "All Items"
+    );
+    cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+    cy.contains("F1 Silverline").should("be.visible");
+    cy.contains("No results.").should("not.exist");
+  });
+
   it("UI-SCREEN-WISHLIST-012 uses compact table collection filter instead of separate picker section", () => {
     signInToWishlist();
 
