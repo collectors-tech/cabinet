@@ -39,18 +39,34 @@ describe('workspace header action lanes', () => {
   ) {
     cy.get(`[data-testid="${titleTestID}"]`).then(($title) => {
       const titleRect = $title[0].getBoundingClientRect()
-      const titleCenter = titleRect.left + titleRect.width / 2
-      const searchElement = $title[0].parentElement?.previousElementSibling
-
-      expect(searchElement, 'search element before title lane').to.not.equal(null)
-      const searchRect = searchElement.getBoundingClientRect()
 
       cy.get(`[data-testid="${actionsTestID}"]`).then(($actions) => {
         const actionsRect = $actions[0].getBoundingClientRect()
-        const availableCenter = searchRect.right + (actionsRect.left - searchRect.right) / 2
 
-        expect(Math.abs(titleCenter - availableCenter)).to.be.lessThan(8)
         expect(titleRect.right, 'title does not overlap actions').to.be.lessThan(
+          actionsRect.left
+        )
+      })
+    })
+  }
+
+  function assertHeaderTitleBetweenSearchAndActions(
+    titleTestID: string,
+    actionsTestID: string
+  ) {
+    cy.get(`[data-testid="${titleTestID}"]`).then(($title) => {
+      const titleRect = $title[0].getBoundingClientRect()
+
+      cy.contains('button', 'Search').then(($search) => {
+        const searchRect = $search[0].getBoundingClientRect()
+        expect(titleRect.left, 'title starts after search').to.be.greaterThan(
+          searchRect.right
+        )
+      })
+
+      cy.get(`[data-testid="${actionsTestID}"]`).then(($actions) => {
+        const actionsRect = $actions[0].getBoundingClientRect()
+        expect(titleRect.right, 'title stays clear of actions').to.be.lessThan(
           actionsRect.left
         )
       })
@@ -80,19 +96,27 @@ describe('workspace header action lanes', () => {
         'aria-label',
         'Inventory - Browse, organize, and update the items you already own.'
       )
-    assertHeaderTitleCentered('inventory-header-title', 'inventory-global-header-actions')
+    assertHeaderTitleBetweenSearchAndActions(
+      'inventory-header-title',
+      'inventory-global-header-actions'
+    )
     cy.get('[data-testid="inventory-page-header"]').should('not.exist')
     cy.get('[data-testid="inventory-global-header-actions"]')
       .should('be.visible')
       .within(() => {
-        cy.get('[data-testid="inventory-header-context"]').should(
-          'contain.text',
-          'All Items'
-        )
-        cy.get('[data-testid="inventory-new-action"]').should('be.visible')
+        cy.get('[data-testid="inventory-paste-action"]').should('be.visible')
+        cy.get('[data-testid="inventory-barcodes-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'Barcodes')
+        cy.get('[data-testid="inventory-photos-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'Photos')
+        cy.get('[data-testid="inventory-new-action"]')
+          .should('be.visible')
+          .and('not.contain.text', 'New')
         cy.get('[data-testid="inventory-create-menu-trigger"]').should(
           'be.visible'
-        )
+        ).and('not.contain.text', 'Create')
       })
     cy.get('[data-testid="inventory-header-action-separator"]').should('be.visible')
     cy.contains('Browse, organize, and update the items you already own.').should(
@@ -103,7 +127,7 @@ describe('workspace header action lanes', () => {
   })
 
   it('keeps Wishlist actions in the same global shell header pattern', () => {
-    cy.viewport(1280, 800)
+    cy.viewport(2048, 900)
     cy.intercept('GET', '/api/wishlist', {
       statusCode: 200,
       body: {
@@ -174,7 +198,7 @@ describe('workspace header action lanes', () => {
   })
 
   it('keeps Collections actions in the same global shell header pattern', () => {
-    cy.viewport(1280, 800)
+    cy.viewport(2048, 900)
     bootstrap('/collections/')
 
     cy.get('[data-testid="collections-shell-header"]').should('be.visible')

@@ -34,19 +34,37 @@ describe('ui-page-header-title', () => {
     })
   }
 
+  function assertInventoryHeaderTitleBetweenSearchAndActions() {
+    cy.get('[data-testid="inventory-header-title"]')
+      .should('be.visible')
+      .and('contain', 'Inventory')
+    cy.get('[data-testid="inventory-page-icon"]').should('be.visible')
+    cy.get('[data-testid="inventory-header-title"]').then(($title) => {
+      const titleRect = $title[0].getBoundingClientRect()
+      cy.contains('button', 'Search').then(($search) => {
+        const searchRect = $search[0].getBoundingClientRect()
+        expect(titleRect.left).to.be.greaterThan(searchRect.right)
+      })
+      cy.get('[data-testid="inventory-global-header-actions"]').then(
+        ($actions) => {
+          const actionsRect = $actions[0].getBoundingClientRect()
+          expect(titleRect.right).to.be.lessThan(actionsRect.left - 8)
+        }
+      )
+    })
+  }
+
   beforeEach(() => {
     cy.clearCookies()
     cy.clearLocalStorage()
   })
 
-  it('UI-PAGE-HEADER-TITLE-001 hides crowded titles instead of overlapping header actions', () => {
+  it('UI-PAGE-HEADER-TITLE-001 keeps Inventory title visible between search and compact actions', () => {
     cy.viewport(1240, 720)
 
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-    cy.get('[data-testid="inventory-header-title"]')
-      .should('have.attr', 'data-crowded', 'true')
-      .and('not.be.visible')
+    assertInventoryHeaderTitleBetweenSearchAndActions()
     cy.get('[data-testid="inventory-global-header-actions"]').should('be.visible')
     cy.get('header').should('not.contain', 'Active:')
     cy.get('header').should('not.contain', 'Collection:')
@@ -58,8 +76,7 @@ describe('ui-page-header-title', () => {
 
     signInTo('/inventory/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-    assertCenteredHeader('inventory', 'Inventory')
-    assertHeaderTitleDoesNotOverlapActions('inventory')
+    assertInventoryHeaderTitleBetweenSearchAndActions()
 
     cy.visit('/collections/')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)

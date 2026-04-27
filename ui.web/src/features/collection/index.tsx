@@ -15,6 +15,7 @@ import {
   Barcode,
   ChevronRight,
   ClipboardPaste,
+  CircleArrowUp,
   Ellipsis,
   GripVertical,
   Images,
@@ -22,7 +23,6 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
-  Save,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -63,7 +63,7 @@ import {
 } from '@/components/ui/sheet'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
-import { Header, HeaderTitle } from '@/components/layout/header'
+import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -120,6 +120,11 @@ type InventoryItemDraft = {
 }
 
 type InventoryCreateIntent = 'manual' | 'photo' | 'barcode'
+
+type PasteCreateHistoryEntry = {
+  kind: 'url' | 'text' | 'prompt'
+  value: string
+}
 
 type FolderNode = {
   id: string
@@ -454,6 +459,34 @@ function humanizeQuickCreatePathSegment(value: string): string {
   )
 }
 
+function formatPasteCreateHistory(entries: PasteCreateHistoryEntry[]): string {
+  return entries
+    .map((entry) => {
+      const label =
+        entry.kind === 'url'
+          ? 'Pasted URL'
+          : entry.kind === 'text'
+            ? 'Pasted text'
+            : 'Prompt'
+      return `- ${label}: ${entry.value}`
+    })
+    .join('\n')
+}
+
+function buildPasteCreateDescription(
+  entries: PasteCreateHistoryEntry[],
+  sourceURL?: string
+) {
+  const sections: string[] = []
+  if (sourceURL) {
+    sections.push(`Source link: ${sourceURL}`)
+  }
+  if (entries.length > 0) {
+    sections.push(`Creation history:\n${formatPasteCreateHistory(entries)}`)
+  }
+  return sections.join('\n\n')
+}
+
 function buildQuickCreateDraft(value: string): InventoryItemDraft {
   const source = value.trim()
   try {
@@ -476,7 +509,10 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         title,
         brand: 'Unknown',
         category: 'General',
-        description: `Source URL: ${source}`,
+        description: buildPasteCreateDescription(
+          [{ kind: 'url', value: source }],
+          source
+        ),
       }
     }
   } catch {
@@ -489,7 +525,16 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     title,
     brand: 'Unknown',
     category: 'General',
-    description: source,
+    description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
+  }
+}
+
+function isLikelyURL(value: string) {
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
   }
 }
 
@@ -1161,12 +1206,15 @@ export function Collection({
   const [barcodeMatches, setBarcodeMatches] = useState<BarcodeMatch[]>([])
   const [barcodeLookupCompleted, setBarcodeLookupCompleted] = useState(false)
   const [lastLookupBarcode, setLastLookupBarcode] = useState('')
-  const [quickCreateInput, setQuickCreateInput] = useState('')
-  const [quickCreateBusy, setQuickCreateBusy] = useState(false)
-  const [quickCreateError, setQuickCreateError] = useState<string | null>(null)
-  const [quickCreateSuccess, setQuickCreateSuccess] = useState<string | null>(
+  const [pasteCreateInput, setPasteCreateInput] = useState('')
+  const [pasteCreateBusy, setPasteCreateBusy] = useState(false)
+  const [pasteCreateError, setPasteCreateError] = useState<string | null>(null)
+  const [pasteCreateSuccess, setPasteCreateSuccess] = useState<string | null>(
     null
   )
+  const [pasteCreateHistory, setPasteCreateHistory] = useState<
+    PasteCreateHistoryEntry[]
+  >([])
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
@@ -1211,6 +1259,10 @@ export function Collection({
       setItemCreateBarcodeInput('')
       setItemSaveError(null)
       setItemSaveSuccess(null)
+      setPasteCreateInput('')
+      setPasteCreateError(null)
+      setPasteCreateSuccess(null)
+      setPasteCreateHistory([])
       selectInventoryItem(null)
       setItemEditorOpen(true)
     },
@@ -3038,55 +3090,75 @@ export function Collection({
     )}/external-search?source=ebay&region=AU`
   }, [lastLookupBarcode])
 
-  const handlePasteQuickCreate = useCallback(async () => {
-    setQuickCreateError(null)
-    setQuickCreateSuccess(null)
+  const processPasteCreateInput = useCallback(
+    (rawValue?: string, historyOverride?: PasteCreateHistoryEntry[]) => {
+      const source = (rawValue ?? pasteCreateInput).trim()
+      if (source === '') {
+        setPasteCreateError('Paste a URL or text before processing an item.')
+        setPasteCreateSuccess(null)
+        return false
+      }
+
+      setPasteCreateBusy(true)
+      setPasteCreateError(null)
+      setPasteCreateSuccess(null)
+      try {
+        const baseHistory = historyOverride ?? pasteCreateHistory
+        const nextEntry: PasteCreateHistoryEntry =
+          baseHistory.length === 0
+            ? { kind: isLikelyURL(source) ? 'url' : 'text', value: source }
+            : { kind: 'prompt', value: source }
+        const nextHistory = [...baseHistory, nextEntry]
+        const sourceURL =
+          nextHistory.find((entry) => entry.kind === 'url')?.value ?? undefined
+        const generatedDraft = buildQuickCreateDraft(source)
+
+        setItemDraft((current) => {
+          const shouldHydrateIdentity = nextEntry.kind !== 'prompt'
+          return {
+            part_number: shouldHydrateIdentity
+              ? generatedDraft.part_number
+              : current.part_number,
+            title: shouldHydrateIdentity ? generatedDraft.title : current.title,
+            brand: shouldHydrateIdentity ? generatedDraft.brand : current.brand,
+            category: shouldHydrateIdentity
+              ? generatedDraft.category
+              : current.category,
+            description: buildPasteCreateDescription(nextHistory, sourceURL),
+          }
+        })
+        setPasteCreateHistory(nextHistory)
+        setPasteCreateSuccess('Paste processed into the item draft.')
+        return true
+      } finally {
+        setPasteCreateBusy(false)
+      }
+    },
+    [pasteCreateHistory, pasteCreateInput]
+  )
+
+  const startPasteCreateItem = useCallback(async () => {
+    startCreateItem('manual')
+    setPasteCreateError(null)
+    setPasteCreateSuccess(null)
     if (!navigator.clipboard?.readText) {
-      setQuickCreateError(
+      setPasteCreateError(
         'Clipboard paste is not available here. Paste into the field manually.'
       )
       return
     }
     try {
       const text = await navigator.clipboard.readText()
-      setQuickCreateInput(text)
+      setPasteCreateInput(text)
+      if (text.trim() !== '') {
+        processPasteCreateInput(text, [])
+      }
     } catch {
-      setQuickCreateError(
+      setPasteCreateError(
         'Clipboard paste was blocked. Paste into the field manually.'
       )
     }
-  }, [])
-
-  const handleSaveQuickCreate = useCallback(async () => {
-    const source = quickCreateInput.trim()
-    if (source === '') {
-      setQuickCreateError('Paste a URL or text before saving an item.')
-      setQuickCreateSuccess(null)
-      return
-    }
-    setQuickCreateBusy(true)
-    setQuickCreateError(null)
-    setQuickCreateSuccess(null)
-    try {
-      const payload = buildQuickCreateDraft(source)
-      const response = await fetch('/api/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!response.ok) {
-        throw new Error(`quick_create_item_${response.status}`)
-      }
-      const saved = (await response.json()) as { id?: string }
-      await loadInventoryItems(saved.id?.trim())
-      setQuickCreateInput('')
-      setQuickCreateSuccess('Item created and selected.')
-    } catch {
-      setQuickCreateError('Unable to create an item from this paste. Retry.')
-    } finally {
-      setQuickCreateBusy(false)
-    }
-  }, [loadInventoryItems, quickCreateInput])
+  }, [processPasteCreateInput, startCreateItem])
 
   const folderDragOverlay =
     typeof document !== 'undefined' && draggedFolderNode && dragPreviewPosition
@@ -3242,13 +3314,19 @@ export function Collection({
         data-testid='inventory-shell-header'
       >
         <Search className='hidden min-w-32 sm:flex' />
-        <HeaderTitle
-          title={title}
-          description={description}
-          icon={ListChecks}
-          testId='inventory-header-title'
-          iconTestId='inventory-page-icon'
-        />
+        <h1
+          className='hidden min-w-0 shrink-0 items-center gap-2 truncate text-lg font-bold tracking-tight md:flex'
+          data-testid='inventory-header-title'
+          title={description || title}
+          aria-label={description ? `${title} - ${description}` : title}
+        >
+          <ListChecks
+            className='h-5 w-5 shrink-0 text-muted-foreground'
+            data-testid='inventory-page-icon'
+            aria-hidden
+          />
+          <span className='truncate'>{title}</span>
+        </h1>
         <div
           className='ms-auto flex min-w-0 shrink-0 items-center justify-end gap-2 sm:gap-3'
           data-header-title-avoid='true'
@@ -3262,52 +3340,59 @@ export function Collection({
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9'
+                  data-testid='inventory-paste-action'
+                  aria-label='Paste URL or text into a new item'
+                  title='Paste URL or text into a new item'
+                  onClick={() => void startPasteCreateItem()}
+                >
+                  <ClipboardPaste className='size-4' aria-hidden />
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9'
                   data-testid='inventory-barcodes-action'
                   aria-label='Create item from barcode'
                   title='Create item from barcode'
                   onClick={startCreateItemFromBarcode}
                 >
-                  <Barcode className='size-4 2xl:mr-2' aria-hidden />
-                  <span className='hidden 2xl:inline'>Barcodes</span>
+                  <Barcode className='size-4' aria-hidden />
                 </Button>
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9'
                   data-testid='inventory-photos-action'
                   aria-label='Create item from photo'
                   title='Create item from photo'
                   onClick={startCreateItemFromPhoto}
                 >
-                  <Images className='size-4 2xl:mr-2' aria-hidden />
-                  <span className='hidden 2xl:inline'>Photos</span>
+                  <Images className='size-4' aria-hidden />
                 </Button>
               </>
             ) : null}
             <Button
               type='button'
-              className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
+              className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9'
               data-testid='inventory-new-action'
               aria-label='New item'
               title='New'
               onClick={startManualCreateItem}
             >
-              <Plus className='size-4 2xl:mr-2' aria-hidden />
-              <span className='hidden 2xl:inline'>New</span>
+              <Plus className='size-4' aria-hidden />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   type='button'
                   variant='outline'
-                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9 2xl:w-auto 2xl:px-4 2xl:text-sm'
+                  className='h-8 w-8 px-0 text-xs sm:h-9 sm:w-9'
                   data-testid='inventory-create-menu-trigger'
                   aria-label='Create menu'
                   title='Create'
                 >
-                  <Ellipsis className='size-4 2xl:mr-2' aria-hidden />
-                  <span className='hidden 2xl:inline'>Create</span>
+                  <Ellipsis className='size-4' aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
@@ -3652,68 +3737,8 @@ export function Collection({
           </Card>
 
           <Card>
-            <CardHeader className='gap-3 sm:flex-row sm:items-start sm:justify-between'>
-              <CardTitle className='shrink-0'>Collection Browser</CardTitle>
-              {routePath === '/_authenticated/inventory/' ? (
-                <form
-                  className='flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end'
-                  data-testid='inventory-quick-create'
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    void handleSaveQuickCreate()
-                  }}
-                >
-                  <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center'>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      data-testid='inventory-quick-create-paste'
-                      onClick={() => void handlePasteQuickCreate()}
-                    >
-                      <ClipboardPaste className='size-4' aria-hidden='true' />
-                      Paste
-                    </Button>
-                    <Input
-                      className='w-full sm:w-72 lg:w-96'
-                      placeholder='Paste URL or text'
-                      aria-label='Paste URL or text to create inventory item'
-                      data-testid='inventory-quick-create-input'
-                      value={quickCreateInput}
-                      onChange={(event) => {
-                        setQuickCreateInput(event.target.value)
-                        setQuickCreateError(null)
-                        setQuickCreateSuccess(null)
-                      }}
-                    />
-                    <Button
-                      type='submit'
-                      data-testid='inventory-quick-create-save'
-                      disabled={quickCreateBusy}
-                    >
-                      <Save className='size-4' aria-hidden='true' />
-                      {quickCreateBusy ? 'Saving...' : 'Save'}
-                    </Button>
-                  </div>
-                  {quickCreateError ? (
-                    <p
-                      className='text-sm text-destructive'
-                      data-testid='inventory-quick-create-error'
-                      role='alert'
-                    >
-                      {quickCreateError}
-                    </p>
-                  ) : null}
-                  {quickCreateSuccess ? (
-                    <p
-                      className='text-sm text-muted-foreground'
-                      data-testid='inventory-quick-create-success'
-                      role='status'
-                    >
-                      {quickCreateSuccess}
-                    </p>
-                  ) : null}
-                </form>
-              ) : null}
+            <CardHeader>
+              <CardTitle>Collection Browser</CardTitle>
             </CardHeader>
             <CardContent className='space-y-4'>
               <p className='text-sm text-muted-foreground'>
@@ -3891,6 +3916,10 @@ export function Collection({
                       if (!open) {
                         setItemSaveError(null)
                         resetCreateAttachments()
+                        setPasteCreateInput('')
+                        setPasteCreateError(null)
+                        setPasteCreateSuccess(null)
+                        setPasteCreateHistory([])
                       }
                     }}
                   >
@@ -3926,6 +3955,73 @@ export function Collection({
                                 : 'Creating new item draft.'
                             : `Editing selected item: ${selectedItemContext}`}
                         </p>
+                        {itemEditorMode === 'create' ? (
+                          <div
+                            className='space-y-3 rounded-md border bg-muted/20 p-3'
+                            data-testid='inventory-create-paste-panel'
+                          >
+                            <div className='flex gap-2'>
+                              <Input
+                                placeholder='Paste URL or text'
+                                aria-label='Paste URL or text to process into item fields'
+                                data-testid='inventory-create-paste-input'
+                                value={pasteCreateInput}
+                                onChange={(event) => {
+                                  setPasteCreateInput(event.target.value)
+                                  setPasteCreateError(null)
+                                  setPasteCreateSuccess(null)
+                                }}
+                              />
+                              <Button
+                                type='button'
+                                size='icon'
+                                data-testid='inventory-create-paste-process'
+                                aria-label='Process pasted URL or text'
+                                title='Process pasted URL or text'
+                                disabled={pasteCreateBusy}
+                                onClick={() => processPasteCreateInput()}
+                              >
+                                <CircleArrowUp
+                                  className='size-5'
+                                  aria-hidden='true'
+                                />
+                              </Button>
+                            </div>
+                            {pasteCreateError ? (
+                              <p
+                                className='text-sm text-destructive'
+                                data-testid='inventory-create-paste-error'
+                                role='alert'
+                              >
+                                {pasteCreateError}
+                              </p>
+                            ) : null}
+                            {pasteCreateSuccess ? (
+                              <p
+                                className='text-sm text-muted-foreground'
+                                data-testid='inventory-create-paste-success'
+                                role='status'
+                              >
+                                {pasteCreateSuccess}
+                              </p>
+                            ) : null}
+                            {pasteCreateHistory.length > 0 ? (
+                              <div
+                                className='rounded-md border bg-background/50 p-2 text-xs text-muted-foreground'
+                                data-testid='inventory-create-source-history'
+                              >
+                                <p className='font-medium text-foreground'>
+                                  Creation history
+                                </p>
+                                <pre className='mt-1 whitespace-pre-wrap font-sans'>
+                                  {formatPasteCreateHistory(
+                                    pasteCreateHistory
+                                  )}
+                                </pre>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {itemEditorMode === 'create' &&
                         itemCreateIntent !== 'manual' ? (
                           <div

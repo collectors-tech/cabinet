@@ -36,8 +36,8 @@ describe("inventory-management", () => {
 
     cy.contains("Inventory").should("be.visible");
     cy.contains("Collection Browser").should("be.visible");
-    cy.contains("button", "New").should("be.visible");
-    cy.contains("button", "Create").should("be.visible");
+    cy.get('[data-testid="inventory-new-action"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-menu-trigger"]').should("be.visible");
 
     cy.get('button[aria-label="Switch to cards view"]').click();
     cy.contains("Status:").should("be.visible");
@@ -192,14 +192,16 @@ describe("inventory-management", () => {
 
     cy.get('[data-testid="inventory-new-action"]')
       .should("be.visible")
-      .and("contain", "New")
+      .and("have.attr", "aria-label", "New item")
+      .and("not.contain", "New")
       .click();
     cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
     cy.get('[data-testid="inventory-item-create-cancel"]').click();
 
     cy.get('[data-testid="inventory-create-menu-trigger"]')
       .should("be.visible")
-      .and("contain", "Create")
+      .and("have.attr", "aria-label", "Create menu")
+      .and("not.contain", "Create")
       .click();
     cy.get('[data-testid="inventory-create-menu-item"]').should("be.visible").click();
     cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
