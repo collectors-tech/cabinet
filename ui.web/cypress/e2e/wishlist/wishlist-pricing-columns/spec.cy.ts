@@ -1,0 +1,130 @@
+describe("wishlist-pricing-columns", () => {
+  function openWishlist() {
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, {
+        path: "/wishlist/",
+      });
+    });
+  }
+
+  it("shows buying columns and persists inline cost and priority edits", () => {
+    let wishlistEntries = [
+      {
+        id: "wish-price-1",
+        item_id: "item-price-1",
+        priority: "medium",
+        below_target_now: false,
+        notes: "Watch clean boxed examples",
+        target_price: 25,
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-price-1",
+            title: "Wishlist Pricing Candidate",
+            part_number: "WPC-001",
+            status: "wishlist",
+            category: "Cards",
+            priority: "medium",
+          },
+        ],
+      },
+    }).as("catalogItems");
+    cy.intercept("GET", "/api/pricing/stats?item_id=item-price-1", {
+      statusCode: 200,
+      body: { min: 18, median: 21, latest: 22.5 },
+    }).as("priceStats");
+    cy.intercept("GET", "/api/pricing/trend?item_id=item-price-1", {
+      statusCode: 200,
+      body: {
+        points: [
+          { date: "2026-04-25", latest: 24 },
+          { date: "2026-04-26", latest: 22.5 },
+        ],
+      },
+    }).as("priceTrend");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      expect(req.body.id).to.eq("wish-price-1");
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === req.body.id
+          ? {
+              ...entry,
+              priority: req.body.priority ?? entry.priority,
+              target_price: req.body.target_price ?? entry.target_price,
+              notes: req.body.notes ?? entry.notes,
+              highlight_hit: req.body.highlight_hit ?? entry.highlight_hit,
+              below_target_now:
+                req.body.below_target_now ?? entry.below_target_now,
+            }
+          : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistEntry");
+
+    openWishlist();
+
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.wait("@priceStats");
+    cy.wait("@priceTrend");
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("th", "Item ID").should("not.exist");
+    cy.contains("th", "Market Price").should("be.visible");
+    cy.contains("th", "Price Graph").should("be.visible");
+    cy.contains("th", "Cost").should("be.visible");
+    cy.contains("th", "Priority").should("be.visible");
+    cy.contains("th", "Target Priority").should("not.exist");
+
+    cy.contains("Wishlist Pricing Candidate").should("be.visible");
+    cy.contains("$22.50").should("be.visible");
+    cy.get('[data-testid="wishlist-price-trend-item-price-1"]')
+      .should("have.attr", "aria-label", "Price trending down")
+      .and("be.visible");
+
+    cy.get('[data-testid="wishlist-cost-input-item-price-1"]')
+      .clear()
+      .type("19.75{enter}");
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", {
+        id: "wish-price-1",
+        target_price: 19.75,
+      });
+
+    cy.get('[data-testid="wishlist-priority-select-item-price-1"]').then(
+      ($select) => {
+        const select = $select[0] as HTMLSelectElement;
+        select.value = "high";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    );
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", {
+        id: "wish-price-1",
+        priority: "high",
+      });
+
+    cy.reload();
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.get('[data-testid="wishlist-cost-input-item-price-1"]').should(
+      "have.value",
+      "19.75"
+    );
+    cy.get('[data-testid="wishlist-priority-select-item-price-1"]').should(
+      "have.value",
+      "high"
+    );
+  });
+});

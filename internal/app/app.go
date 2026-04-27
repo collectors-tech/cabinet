@@ -2826,9 +2826,42 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(created)
 		case http.MethodPut:
 			var req wishlist.Entry
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var raw map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
+			}
+			encoded, err := json.Marshal(raw)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if err := json.Unmarshal(encoded, &req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if strings.TrimSpace(req.ID) != "" {
+				existing, err := wishlistSvc.GetByIDForProfile(r.Context(), profileID, req.ID)
+				if err == nil {
+					if _, ok := raw["item_id"]; !ok {
+						req.ItemID = existing.ItemID
+					}
+					if _, ok := raw["target_price"]; !ok {
+						req.TargetPrice = existing.TargetPrice
+					}
+					if _, ok := raw["priority"]; !ok {
+						req.Priority = existing.Priority
+					}
+					if _, ok := raw["notes"]; !ok {
+						req.Notes = existing.Notes
+					}
+					if _, ok := raw["highlight_hit"]; !ok {
+						req.HighlightHit = existing.HighlightHit
+					}
+					if _, ok := raw["below_target_now"]; !ok {
+						req.BelowTargetNow = existing.BelowTargetNow
+					}
+				}
 			}
 			if err := wishlistSvc.UpdateForProfile(r.Context(), profileID, req); err != nil {
 				http.Error(w, `{"error":"failed_to_update_wishlist"}`, http.StatusBadRequest)

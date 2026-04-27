@@ -1,8 +1,17 @@
+import { useEffect, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { BarcodeIcon, ImageIcon, TagsIcon } from 'lucide-react'
+import {
+  BarcodeIcon,
+  ImageIcon,
+  TagsIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+  MinusIcon,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { labels, priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
@@ -20,16 +29,159 @@ type TasksColumnsOptions = {
   onAssignCollectionRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
   onWishlistMarkOwned?: (task: Task) => Promise<void>
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: { targetPrice?: number; priority?: string }
+  ) => Promise<void>
   wishlistActionItemID?: string | null
 }
 
-const wishlistStatusLabels: Record<string, string> = {
-  wishlist: 'Watching',
-  discovered: 'Below target',
+function formatMoney(value: number | undefined) {
+  if (typeof value !== 'number' || value <= 0) {
+    return '-'
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value)
 }
 
-function formatWishlistStatus(status: string) {
-  return wishlistStatusLabels[status] ?? status
+function formatCostDraft(value: number | undefined) {
+  if (typeof value !== 'number' || value <= 0) {
+    return ''
+  }
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+function WishlistPriceTrendCell({ task }: { task: Task }) {
+  const trend = task.priceTrend ?? 'unknown'
+  const trendConfig = {
+    up: {
+      label: 'Price trending up',
+      icon: TrendingUpIcon,
+      className: 'text-red-300',
+    },
+    steady: {
+      label: 'Price steady',
+      icon: MinusIcon,
+      className: 'text-muted-foreground',
+    },
+    down: {
+      label: 'Price trending down',
+      icon: TrendingDownIcon,
+      className: 'text-emerald-300',
+    },
+    unknown: {
+      label: 'Price trend unknown',
+      icon: MinusIcon,
+      className: 'text-muted-foreground',
+    },
+  }[trend]
+  const Icon = trendConfig.icon
+
+  return (
+    <span
+      className='flex min-w-[44px] items-center justify-center'
+      data-testid={`wishlist-price-trend-${task.id}`}
+      aria-label={trendConfig.label}
+      title={trendConfig.label}
+    >
+      <Icon className={`size-4 ${trendConfig.className}`} />
+    </span>
+  )
+}
+
+function WishlistCostCell({
+  task,
+  onWishlistInlineUpdate,
+}: {
+  task: Task
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: { targetPrice?: number; priority?: string }
+  ) => Promise<void>
+}) {
+  const [draft, setDraft] = useState(formatCostDraft(task.targetPrice))
+
+  useEffect(() => {
+    setDraft(formatCostDraft(task.targetPrice))
+  }, [task.targetPrice])
+
+  const persist = async () => {
+    const trimmed = draft.trim()
+    const nextValue = trimmed === '' ? 0 : Number(trimmed)
+    if (Number.isNaN(nextValue) || nextValue < 0) {
+      setDraft(formatCostDraft(task.targetPrice))
+      return
+    }
+    if ((task.targetPrice ?? 0) === nextValue) {
+      return
+    }
+    await onWishlistInlineUpdate?.(task, { targetPrice: nextValue })
+  }
+
+  return (
+    <Input
+      type='number'
+      min='0'
+      step='0.01'
+      inputMode='decimal'
+      value={draft}
+      data-testid={`wishlist-cost-input-${task.id}`}
+      aria-label={`Cost for ${task.title}`}
+      className='h-8 w-[6.5rem]'
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        void persist()
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
+function WishlistPriorityCell({
+  task,
+  onWishlistInlineUpdate,
+}: {
+  task: Task
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: { targetPrice?: number; priority?: string }
+  ) => Promise<void>
+}) {
+  const persistPriority = (nextPriority: string) => {
+    if (nextPriority === task.priority) {
+      return
+    }
+    void onWishlistInlineUpdate?.(task, { priority: nextPriority })
+  }
+
+  return (
+    <select
+      className='h-8 min-w-[6.75rem] rounded-md border bg-background px-2 text-sm'
+      value={task.priority}
+      data-testid={`wishlist-priority-select-${task.id}`}
+      aria-label={`Priority for ${task.title}`}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        persistPriority(event.target.value)
+      }}
+    >
+      {priorities.map((priority) => (
+        <option key={priority.value} value={priority.value}>
+          {priority.label}
+        </option>
+      ))}
+    </select>
+  )
 }
 
 export function getTasksColumns({
@@ -40,6 +192,7 @@ export function getTasksColumns({
   onAssignCollectionRow,
   onDeleteRow,
   onWishlistMarkOwned,
+  onWishlistInlineUpdate,
   wishlistActionItemID,
 }: TasksColumnsOptions): ColumnDef<Task>[] {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
@@ -70,27 +223,33 @@ export function getTasksColumns({
       enableSorting: false,
       enableHiding: false,
     },
-    {
-      accessorKey: 'id',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={
-            isInventoryRoute ? 'Part #' : isWishlistRoute ? 'Item ID' : 'Task'
-          }
-        />
-      ),
-      cell: ({ row }) => <div className='w-[120px]'>{row.getValue('id')}</div>,
-      enableSorting: false,
-      enableHiding: false,
-    },
+    ...(isWishlistRoute
+      ? []
+      : [
+          {
+            accessorKey: 'id',
+            header: ({ column }) => (
+              <DataTableColumnHeader
+                column={column}
+                title={isInventoryRoute ? 'Part #' : 'Task'}
+              />
+            ),
+            cell: ({ row }) => (
+              <div className='w-[120px]'>{row.getValue('id')}</div>
+            ),
+            enableSorting: false,
+            enableHiding: false,
+          } satisfies ColumnDef<Task>,
+        ]),
     {
       accessorKey: 'title',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='Title' />
       ),
       meta: {
-        className: 'ps-1 max-w-0 w-2/3',
+        className: isWishlistRoute
+          ? 'ps-1 min-w-[12rem]'
+          : 'ps-1 max-w-0 w-2/3',
         tdClassName: 'ps-4',
       },
       cell: ({ row }) => {
@@ -115,79 +274,110 @@ export function getTasksColumns({
         )
       },
     },
-    {
-      accessorKey: 'status',
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={
-            isInventoryRoute
-              ? 'Condition'
-              : isWishlistRoute
-                ? 'Watch Status'
-                : 'Status'
-          }
-        />
-      ),
-      meta: { className: 'ps-1', tdClassName: 'ps-4' },
-      cell: ({ row }) => {
-        if (isInventoryRoute) {
-          return (
-            <div className='flex min-w-[100px] items-center gap-2'>
-              <span className='capitalize'>
-                {String(row.getValue('status'))}
+    ...(isWishlistRoute
+      ? []
+      : [
+          {
+            accessorKey: 'status',
+            header: ({ column }) => (
+              <DataTableColumnHeader
+                column={column}
+                title={isInventoryRoute ? 'Condition' : 'Status'}
+              />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => {
+              if (isInventoryRoute) {
+                return (
+                  <div className='flex min-w-[100px] items-center gap-2'>
+                    <span className='capitalize'>
+                      {String(row.getValue('status'))}
+                    </span>
+                  </div>
+                )
+              }
+
+              const status = statuses.find(
+                (status) => status.value === row.getValue('status')
+              )
+
+              if (!status) {
+                return null
+              }
+
+              return (
+                <div className='flex w-[100px] items-center gap-2'>
+                  {status.icon && (
+                    <status.icon className='size-4 text-muted-foreground' />
+                  )}
+                  <span>{status.label}</span>
+                </div>
+              )
+            },
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
+          } satisfies ColumnDef<Task>,
+        ]),
+    ...(isWishlistRoute
+      ? [
+          {
+            accessorKey: 'marketPrice',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Market Price' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span className='min-w-[76px] font-medium'>
+                {formatMoney(row.original.marketPrice)}
               </span>
-            </div>
-          )
-        }
-
-        if (isWishlistRoute) {
-          return (
-            <div className='flex min-w-[120px] items-center gap-2'>
-              <span>{formatWishlistStatus(row.original.status)}</span>
-            </div>
-          )
-        }
-
-        const status = statuses.find(
-          (status) => status.value === row.getValue('status')
-        )
-
-        if (!status) {
-          return null
-        }
-
-        return (
-          <div className='flex w-[100px] items-center gap-2'>
-            {status.icon && (
-              <status.icon className='size-4 text-muted-foreground' />
-            )}
-            <span>{status.label}</span>
-          </div>
-        )
-      },
-      filterFn: (row, id, value) => {
-        return value.includes(row.getValue(id))
-      },
-    },
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'priceTrend',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Price Graph' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => <WishlistPriceTrendCell task={row.original} />,
+            enableSorting: false,
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'targetPrice',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Cost' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <WishlistCostCell
+                task={row.original}
+                onWishlistInlineUpdate={onWishlistInlineUpdate}
+              />
+            ),
+          } satisfies ColumnDef<Task>,
+        ]
+      : []),
     {
       accessorKey: 'priority',
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
-          title={
-            isInventoryRoute
-              ? 'Category'
-              : isWishlistRoute
-                ? 'Target Priority'
-                : 'Priority'
-          }
+          title={isInventoryRoute ? 'Category' : 'Priority'}
         />
       ),
       meta: { className: 'ps-1', tdClassName: 'ps-3' },
       cell: ({ row }) => {
         if (isInventoryRoute) {
           return <span>{row.original.label || 'Uncategorized'}</span>
+        }
+
+        if (isWishlistRoute) {
+          return (
+            <WishlistPriorityCell
+              task={row.original}
+              onWishlistInlineUpdate={onWishlistInlineUpdate}
+            />
+          )
         }
 
         const priority = priorities.find(

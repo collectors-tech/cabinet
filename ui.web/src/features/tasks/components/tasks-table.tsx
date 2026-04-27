@@ -69,6 +69,10 @@ type DataTableProps = {
   ) => Promise<void>
   onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
   onWishlistExport?: (tasks: Task[]) => void
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: { targetPrice?: number; priority?: string }
+  ) => Promise<void>
   wishlistActionItemID?: string | null
   isWishlistMutating?: boolean
   customFilters?: ReactNode
@@ -216,6 +220,7 @@ export function TasksTable({
   onWishlistBulkPriorityChange,
   onWishlistBulkDelete,
   onWishlistExport,
+  onWishlistInlineUpdate,
   wishlistActionItemID,
   isWishlistMutating,
   customFilters,
@@ -231,6 +236,7 @@ export function TasksTable({
         onAssignCollectionRow,
         onDeleteRow,
         onWishlistMarkOwned,
+        onWishlistInlineUpdate,
         wishlistActionItemID,
       }),
     [
@@ -241,6 +247,7 @@ export function TasksTable({
       onAssignCollectionRow,
       onDeleteRow,
       onWishlistMarkOwned,
+      onWishlistInlineUpdate,
       wishlistActionItemID,
     ]
   )
@@ -319,10 +326,15 @@ export function TasksTable({
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     globalFilterFn: (row, _columnId, filterValue) => {
-      const id = String(row.getValue('id')).toLowerCase()
+      const id = row.original.id.toLowerCase()
+      const partNumber = (row.original.partNumber ?? '').toLowerCase()
       const title = String(row.getValue('title')).toLowerCase()
       const searchValue = String(filterValue).toLowerCase()
-      return id.includes(searchValue) || title.includes(searchValue)
+      return (
+        id.includes(searchValue) ||
+        partNumber.includes(searchValue) ||
+        title.includes(searchValue)
+      )
     },
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -653,7 +665,7 @@ export function TasksTable({
         searchPlaceholder={
           isInventoryRoute
             ? 'Filter by title or part number...'
-            : 'Filter by title or ID...'
+            : 'Filter by title or part number...'
         }
         filters={[
           {
@@ -792,7 +804,12 @@ export function TasksTable({
 
       {viewMode === 'rows' ? (
         <div className='overflow-x-auto rounded-md border'>
-          <Table className='min-w-[42rem]'>
+          <Table
+            className={cn(
+              'min-w-[42rem]',
+              routePath === '/_authenticated/wishlist/' ? 'min-w-[56rem]' : ''
+            )}
+          >
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
