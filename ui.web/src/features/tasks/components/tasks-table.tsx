@@ -71,7 +71,16 @@ type DataTableProps = {
   onWishlistExport?: (tasks: Task[]) => void
   onWishlistInlineUpdate?: (
     task: Task,
-    changes: { targetPrice?: number; priority?: string }
+    changes: {
+      targetPrice?: number
+      priority?: string
+      owned?: boolean
+      pricePaid?: number
+      purchaseUrl?: string
+      purchaseDate?: string
+      quantity?: number
+      neededQuantity?: number
+    }
   ) => Promise<void>
   wishlistActionItemID?: string | null
   isWishlistMutating?: boolean
@@ -205,6 +214,17 @@ function formatWishlistStatus(status: string) {
   return status
 }
 
+function formatMoneyDraft(value: number | undefined) {
+  if (typeof value !== 'number' || value <= 0) {
+    return ''
+  }
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export function TasksTable({
   data,
   routePath,
@@ -226,6 +246,18 @@ export function TasksTable({
   customFilters,
 }: DataTableProps) {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
+  const [purchaseTask, setPurchaseTask] = useState<Task | null>(null)
+  const [purchasePricePaid, setPurchasePricePaid] = useState('')
+  const [purchaseUrl, setPurchaseUrl] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState(todayISODate())
+  const priceClearedOnFocusRef = useRef(false)
+  const openPurchaseDialog = useCallback((task: Task) => {
+    setPurchaseTask(task)
+    setPurchasePricePaid(formatMoneyDraft(task.pricePaid || task.marketPrice))
+    setPurchaseUrl(task.purchaseUrl ?? '')
+    setPurchaseDate(task.purchaseDate || todayISODate())
+    priceClearedOnFocusRef.current = false
+  }, [])
   const columns = useMemo(
     () =>
       getTasksColumns({
@@ -237,6 +269,7 @@ export function TasksTable({
         onDeleteRow,
         onWishlistMarkOwned,
         onWishlistInlineUpdate,
+        onWishlistPurchaseRow: openPurchaseDialog,
         wishlistActionItemID,
       }),
     [
@@ -248,6 +281,7 @@ export function TasksTable({
       onDeleteRow,
       onWishlistMarkOwned,
       onWishlistInlineUpdate,
+      openPurchaseDialog,
       wishlistActionItemID,
     ]
   )
@@ -656,6 +690,34 @@ export function TasksTable({
       }))
   }, [data, isInventoryRoute])
 
+  const savePurchaseDetails = useCallback(async () => {
+    if (!purchaseTask) {
+      return
+    }
+
+    const parsedPrice = Number(purchasePricePaid.trim())
+    if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+      setPurchasePricePaid(
+        formatMoneyDraft(purchaseTask.pricePaid || purchaseTask.marketPrice)
+      )
+      return
+    }
+
+    await onWishlistInlineUpdate?.(purchaseTask, {
+      owned: true,
+      pricePaid: parsedPrice,
+      purchaseUrl: purchaseUrl.trim(),
+      purchaseDate: purchaseDate || todayISODate(),
+    })
+    setPurchaseTask(null)
+  }, [
+    onWishlistInlineUpdate,
+    purchaseDate,
+    purchasePricePaid,
+    purchaseTask,
+    purchaseUrl,
+  ])
+
   return (
     <div
       className={cn(
@@ -985,6 +1047,80 @@ export function TasksTable({
         onWishlistExport={onWishlistExport}
         isWishlistMutating={isWishlistMutating}
       />
+      <Dialog
+        open={purchaseTask !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPurchaseTask(null)
+          }
+        }}
+      >
+        <DialogContent
+          data-testid='wishlist-purchase-dialog'
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Add purchase details</DialogTitle>
+            <DialogDescription>
+              Record what you paid and where this wishlist item was purchased.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-4 sm:grid-cols-2'>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Price paid</span>
+              <Input
+                type='number'
+                min='0'
+                step='0.01'
+                inputMode='decimal'
+                value={purchasePricePaid}
+                data-testid='wishlist-purchase-price-paid'
+                onFocus={() => {
+                  if (!priceClearedOnFocusRef.current) {
+                    setPurchasePricePaid('')
+                    priceClearedOnFocusRef.current = true
+                  }
+                }}
+                onChange={(event) => setPurchasePricePaid(event.target.value)}
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Purchase date</span>
+              <Input
+                type='date'
+                value={purchaseDate}
+                data-testid='wishlist-purchase-date'
+                onChange={(event) => setPurchaseDate(event.target.value)}
+              />
+            </label>
+            <label className='space-y-2 text-sm font-medium sm:col-span-2'>
+              <span>URL</span>
+              <Input
+                value={purchaseUrl}
+                data-testid='wishlist-purchase-url'
+                placeholder='https://'
+                onChange={(event) => setPurchaseUrl(event.target.value)}
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setPurchaseTask(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              data-testid='wishlist-purchase-save'
+              onClick={() => void savePurchaseDetails()}
+            >
+              Save purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent data-testid='row-details-modal'>
           <DialogHeader>

@@ -45,7 +45,7 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 		t.Fatal("expected item id")
 	}
 
-	createWish := doRequest(t, a, http.MethodPost, "/api/wishlist", strings.NewReader(`{"item_id":"`+item.ID+`","target_price":42,"priority":"high","notes":"manual watch state","below_target_now":true,"highlight_hit":true}`), map[string]string{"Content-Type": "application/json"})
+	createWish := doRequest(t, a, http.MethodPost, "/api/wishlist", strings.NewReader(`{"item_id":"`+item.ID+`","target_price":42,"priority":"high","notes":"manual watch state","below_target_now":true,"highlight_hit":true,"owned":true,"price_paid":37.5,"purchase_url":"https://example.test/receipt","purchase_date":"2026-04-27","quantity":2,"needed_quantity":5}`), map[string]string{"Content-Type": "application/json"})
 	if createWish.Code != http.StatusCreated {
 		t.Fatalf("create wishlist status=%d body=%s", createWish.Code, createWish.Body.String())
 	}
@@ -53,6 +53,7 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 		ID             string `json:"id"`
 		BelowTargetNow bool   `json:"below_target_now"`
 		HighlightHit   bool   `json:"highlight_hit"`
+		Owned          bool   `json:"owned"`
 	}
 	if err := json.NewDecoder(createWish.Body).Decode(&created); err != nil {
 		t.Fatalf("decode created wishlist: %v", err)
@@ -66,8 +67,11 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 	if !created.HighlightHit {
 		t.Fatalf("expected created wishlist to persist highlight_hit=true, got %+v", created)
 	}
+	if !created.Owned {
+		t.Fatalf("expected created wishlist to persist owned=true, got %+v", created)
+	}
 
-	updateWish := doRequest(t, a, http.MethodPut, "/api/wishlist", strings.NewReader(`{"id":"`+created.ID+`","item_id":"`+item.ID+`","target_price":42,"priority":"medium","notes":"updated manual watch state","below_target_now":false,"highlight_hit":false}`), map[string]string{"Content-Type": "application/json"})
+	updateWish := doRequest(t, a, http.MethodPut, "/api/wishlist", strings.NewReader(`{"id":"`+created.ID+`","item_id":"`+item.ID+`","target_price":42,"priority":"medium","notes":"updated manual watch state","below_target_now":false,"highlight_hit":false,"owned":true,"price_paid":35.25,"purchase_url":"https://example.test/updated-receipt","purchase_date":"2026-04-28","quantity":3,"needed_quantity":4}`), map[string]string{"Content-Type": "application/json"})
 	if updateWish.Code != http.StatusOK {
 		t.Fatalf("update wishlist status=%d body=%s", updateWish.Code, updateWish.Body.String())
 	}
@@ -78,11 +82,17 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 	}
 	var listPayload struct {
 		Items []struct {
-			ID             string `json:"id"`
-			BelowTargetNow bool   `json:"below_target_now"`
-			HighlightHit   bool   `json:"highlight_hit"`
-			Priority       string `json:"priority"`
-			Notes          string `json:"notes"`
+			ID             string  `json:"id"`
+			BelowTargetNow bool    `json:"below_target_now"`
+			HighlightHit   bool    `json:"highlight_hit"`
+			Priority       string  `json:"priority"`
+			Notes          string  `json:"notes"`
+			Owned          bool    `json:"owned"`
+			PricePaid      float64 `json:"price_paid"`
+			PurchaseURL    string  `json:"purchase_url"`
+			PurchaseDate   string  `json:"purchase_date"`
+			Quantity       int     `json:"quantity"`
+			NeededQuantity int     `json:"needed_quantity"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(listWish.Body).Decode(&listPayload); err != nil {
@@ -103,6 +113,9 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 	if listPayload.Items[0].Notes != "updated manual watch state" {
 		t.Fatalf("expected updated wishlist notes to persist, got %+v", listPayload.Items[0])
 	}
+	if !listPayload.Items[0].Owned || listPayload.Items[0].PricePaid != 35.25 || listPayload.Items[0].PurchaseURL != "https://example.test/updated-receipt" || listPayload.Items[0].PurchaseDate != "2026-04-28" || listPayload.Items[0].Quantity != 3 || listPayload.Items[0].NeededQuantity != 4 {
+		t.Fatalf("expected ownership metadata round-trip after update, got %+v", listPayload.Items[0])
+	}
 
 	partialUpdate := doRequest(t, a, http.MethodPut, "/api/wishlist", strings.NewReader(`{"id":"`+created.ID+`","priority":"high"}`), map[string]string{"Content-Type": "application/json"})
 	if partialUpdate.Code != http.StatusOK {
@@ -121,6 +134,12 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 			HighlightHit   bool    `json:"highlight_hit"`
 			Priority       string  `json:"priority"`
 			Notes          string  `json:"notes"`
+			Owned          bool    `json:"owned"`
+			PricePaid      float64 `json:"price_paid"`
+			PurchaseURL    string  `json:"purchase_url"`
+			PurchaseDate   string  `json:"purchase_date"`
+			Quantity       int     `json:"quantity"`
+			NeededQuantity int     `json:"needed_quantity"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(listAfterPartialUpdate.Body).Decode(&partialPayload); err != nil {
@@ -140,5 +159,8 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 	}
 	if partialPayload.Items[0].BelowTargetNow || partialPayload.Items[0].HighlightHit {
 		t.Fatalf("expected partial update to preserve false watch flags, got %+v", partialPayload.Items[0])
+	}
+	if !partialPayload.Items[0].Owned || partialPayload.Items[0].PricePaid != 35.25 || partialPayload.Items[0].PurchaseURL != "https://example.test/updated-receipt" || partialPayload.Items[0].PurchaseDate != "2026-04-28" || partialPayload.Items[0].Quantity != 3 || partialPayload.Items[0].NeededQuantity != 4 {
+		t.Fatalf("expected partial update to preserve ownership metadata, got %+v", partialPayload.Items[0])
 	}
 }
