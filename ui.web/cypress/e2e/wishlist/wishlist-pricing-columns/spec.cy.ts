@@ -235,7 +235,7 @@ describe("wishlist-pricing-columns", () => {
     cy.get('[data-testid="wishlist-purchase-dialog"]').should("be.visible");
     cy.get('[data-testid="wishlist-purchase-price-paid"]').should(
       "have.value",
-      "22.50"
+      "25"
     );
     cy.get('[data-testid="wishlist-purchase-date"]').should(
       "have.value",
@@ -243,7 +243,7 @@ describe("wishlist-pricing-columns", () => {
     );
     cy.get('[data-testid="wishlist-purchase-quantity"]').should(
       "have.value",
-      "0"
+      "1"
     );
     cy.get('[data-testid="wishlist-purchase-condition"]').should(
       "have.value",
@@ -316,6 +316,95 @@ describe("wishlist-pricing-columns", () => {
     cy.get('[data-testid="wishlist-purchase-condition"]').should(
       "have.value",
       "Used - boxed"
+    );
+  });
+
+  it("saves default purchase values when fields are untouched", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    let wishlistEntries = [
+      {
+        id: "wish-default-1",
+        item_id: "item-default-1",
+        priority: "medium",
+        below_target_now: false,
+        target_price: 25,
+        owned: false,
+        price_paid: 0,
+        quantity: 0,
+        needed_quantity: 1,
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-default-1",
+            title: "Wishlist Default Purchase Candidate",
+            status: "wishlist",
+            category: "Cards",
+            priority: "medium",
+          },
+        ],
+      },
+    }).as("catalogItems");
+    cy.intercept("GET", "/api/pricing/stats?item_id=item-default-1", {
+      statusCode: 200,
+      body: { latest: 22.5 },
+    }).as("priceStats");
+    cy.intercept("GET", "/api/pricing/trend?item_id=item-default-1", {
+      statusCode: 200,
+      body: { points: [] },
+    }).as("priceTrend");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      expect(req.body.id).to.eq("wish-default-1");
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === req.body.id ? { ...entry, ...req.body } : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistEntry");
+
+    openWishlist();
+
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.wait("@priceStats");
+    cy.wait("@priceTrend");
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-purchase-open-item-default-1"]').click({
+      force: true,
+    });
+    cy.get('[data-testid="wishlist-purchase-price-paid"]').should(
+      "have.value",
+      "25"
+    );
+    cy.get('[data-testid="wishlist-purchase-quantity"]').should(
+      "have.value",
+      "1"
+    );
+    cy.get('[data-testid="wishlist-purchase-date"]').should(
+      "have.value",
+      today
+    );
+    cy.get('[data-testid="wishlist-purchase-save"]').click();
+
+    cy.wait("@updateWishlistEntry")
+      .its("request.body")
+      .should("include", {
+        id: "wish-default-1",
+        owned: true,
+        price_paid: 25,
+        purchase_date: today,
+        quantity: 1,
+      });
+    cy.get('[data-testid="wishlist-price-paid-value-item-default-1"]').should(
+      "contain.text",
+      "$25.00"
     );
   });
 });

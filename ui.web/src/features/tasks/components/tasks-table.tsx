@@ -221,6 +221,14 @@ function formatMoneyDraft(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
+function defaultPurchasePrice(task: Task) {
+  return task.pricePaid || task.targetPrice || task.marketPrice
+}
+
+function defaultPurchaseQuantity(task: Task) {
+  return task.quantity && task.quantity > 0 ? task.quantity : 1
+}
+
 function todayISODate() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -254,10 +262,10 @@ export function TasksTable({
   const priceClearedOnFocusRef = useRef(false)
   const openPurchaseDialog = useCallback((task: Task) => {
     setPurchaseTask(task)
-    setPurchasePricePaid(formatMoneyDraft(task.pricePaid || task.marketPrice))
+    setPurchasePricePaid(formatMoneyDraft(defaultPurchasePrice(task)))
     setPurchaseUrl(task.purchaseUrl ?? '')
     setPurchaseDate(task.purchaseDate || todayISODate())
-    setPurchaseQuantity(String(task.quantity ?? 0))
+    setPurchaseQuantity(String(defaultPurchaseQuantity(task)))
     setPurchaseCondition(task.purchaseCondition ?? '')
     priceClearedOnFocusRef.current = false
   }, [])
@@ -703,9 +711,7 @@ export function TasksTable({
 
     const parsedPrice = Number(purchasePricePaid.trim())
     if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
-      setPurchasePricePaid(
-        formatMoneyDraft(purchaseTask.pricePaid || purchaseTask.marketPrice)
-      )
+      setPurchasePricePaid(formatMoneyDraft(defaultPurchasePrice(purchaseTask)))
       return
     }
     const parsedQuantity = Number(purchaseQuantity.trim())
@@ -714,7 +720,7 @@ export function TasksTable({
       Number.isNaN(parsedQuantity) ||
       parsedQuantity < 0
     ) {
-      setPurchaseQuantity(String(purchaseTask.quantity ?? 0))
+      setPurchaseQuantity(String(defaultPurchaseQuantity(purchaseTask)))
       return
     }
 
