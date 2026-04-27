@@ -615,16 +615,6 @@ function buildWorkspaceCollectionFilterOptions(
   }))
 }
 
-function buildFolderTreeFilterOptions(
-  nodes: FolderNode[],
-  level = 0
-): Array<FolderNode & { level: number }> {
-  return nodes.flatMap((node) => [
-    { ...node, level },
-    ...buildFolderTreeFilterOptions(node.children ?? [], level + 1),
-  ])
-}
-
 function buildUniqueFolderID(name: string, nodes: FolderNode[]): string {
   const slug = slugifyFolderName(name) || 'folder'
   const existingIDs = new Set<string>()
@@ -2476,12 +2466,8 @@ export function Collection({
     [activeFolder, folderTree, tableData.length]
   )
   const folderFilterOptions = useMemo(() => {
-    const treeOptions = buildFolderTreeFilterOptions(folderTree)
-    if (treeOptions.length > 0) {
-      return treeOptions
-    }
     return buildWorkspaceCollectionFilterOptions(workspaceCollections)
-  }, [folderTree, workspaceCollections])
+  }, [workspaceCollections])
   const activeFolderIsAvailable = folderFilterOptions.some(
     (folder) => folder.name === activeFolder
   )
