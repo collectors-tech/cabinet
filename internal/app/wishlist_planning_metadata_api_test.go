@@ -103,4 +103,42 @@ func TestWishlistEndpointPersistsManualWatchStatusForActiveProfile(t *testing.T)
 	if listPayload.Items[0].Notes != "updated manual watch state" {
 		t.Fatalf("expected updated wishlist notes to persist, got %+v", listPayload.Items[0])
 	}
+
+	partialUpdate := doRequest(t, a, http.MethodPut, "/api/wishlist", strings.NewReader(`{"id":"`+created.ID+`","priority":"high"}`), map[string]string{"Content-Type": "application/json"})
+	if partialUpdate.Code != http.StatusOK {
+		t.Fatalf("partial update wishlist status=%d body=%s", partialUpdate.Code, partialUpdate.Body.String())
+	}
+
+	listAfterPartialUpdate := doRequest(t, a, http.MethodGet, "/api/wishlist", nil, nil)
+	if listAfterPartialUpdate.Code != http.StatusOK {
+		t.Fatalf("list wishlist after partial update status=%d body=%s", listAfterPartialUpdate.Code, listAfterPartialUpdate.Body.String())
+	}
+	var partialPayload struct {
+		Items []struct {
+			ID             string  `json:"id"`
+			TargetPrice    float64 `json:"target_price"`
+			BelowTargetNow bool    `json:"below_target_now"`
+			HighlightHit   bool    `json:"highlight_hit"`
+			Priority       string  `json:"priority"`
+			Notes          string  `json:"notes"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(listAfterPartialUpdate.Body).Decode(&partialPayload); err != nil {
+		t.Fatalf("decode partial wishlist payload: %v", err)
+	}
+	if len(partialPayload.Items) != 1 {
+		t.Fatalf("expected one wishlist entry after partial update, got %+v", partialPayload.Items)
+	}
+	if partialPayload.Items[0].Priority != "high" {
+		t.Fatalf("expected partial update to set priority=high, got %+v", partialPayload.Items[0])
+	}
+	if partialPayload.Items[0].TargetPrice != 42 {
+		t.Fatalf("expected partial update to preserve target_price=42, got %+v", partialPayload.Items[0])
+	}
+	if partialPayload.Items[0].Notes != "updated manual watch state" {
+		t.Fatalf("expected partial update to preserve notes, got %+v", partialPayload.Items[0])
+	}
+	if partialPayload.Items[0].BelowTargetNow || partialPayload.Items[0].HighlightHit {
+		t.Fatalf("expected partial update to preserve false watch flags, got %+v", partialPayload.Items[0])
+	}
 }

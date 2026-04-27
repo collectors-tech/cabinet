@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -107,6 +107,13 @@ type WishlistItemPayload = {
   priority?: string
 }
 
+type WishlistPriceTrend = 'up' | 'steady' | 'down' | 'unknown'
+
+type WishlistPricingSummary = {
+  marketPrice?: number
+  priceTrend: WishlistPriceTrend
+}
+
 type WishlistEntryPayload = {
   id?: string
   item_id?: string
@@ -131,6 +138,58 @@ function normalizeTargetPrice(raw: string) {
     throw new Error('invalid_target_price')
   }
   return parsed
+}
+
+function inferWishlistPriceTrend(
+  points: Array<{ latest?: number }> | undefined
+): WishlistPriceTrend {
+  const values = (points ?? [])
+    .map((point) => point.latest)
+    .filter((value): value is number => typeof value === 'number')
+
+  if (values.length < 2) {
+    return 'unknown'
+  }
+
+  const previous = values[values.length - 2] ?? 0
+  const latest = values[values.length - 1] ?? 0
+  const difference = latest - previous
+  if (Math.abs(difference) < 0.01) {
+    return 'steady'
+  }
+  return difference > 0 ? 'up' : 'down'
+}
+
+async function loadWishlistPricingSummary(
+  itemID: string
+): Promise<WishlistPricingSummary> {
+  try {
+    const [statsResponse, trendResponse] = await Promise.all([
+      fetch(`/api/pricing/stats?item_id=${encodeURIComponent(itemID)}`),
+      fetch(`/api/pricing/trend?item_id=${encodeURIComponent(itemID)}`),
+    ])
+
+    let marketPrice: number | undefined
+    if (statsResponse.ok) {
+      const statsPayload = (await statsResponse.json()) as { latest?: number }
+      marketPrice =
+        typeof statsPayload.latest === 'number' && statsPayload.latest > 0
+          ? statsPayload.latest
+          : undefined
+    }
+
+    let priceTrend: WishlistPriceTrend = 'unknown'
+    if (trendResponse.ok) {
+      const trendPayload = (await trendResponse.json()) as {
+        points?: Array<{ latest?: number }>
+      }
+      priceTrend = inferWishlistPriceTrend(trendPayload.points)
+    }
+
+    return { marketPrice, priceTrend }
+  } catch {
+    return { priceTrend: 'unknown' }
+  }
 }
 
 function buildWishlistCsv(tasksToExport: Task[]) {
@@ -247,6 +306,7 @@ export function Tasks({
   const [tableData, setTableData] = useState<Task[]>(() =>
     isWishlistRoute ? [] : tasks
   )
+  const tableDataRef = useRef(tableData)
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [wishlistActionItemID, setWishlistActionItemID] = useState<
@@ -262,6 +322,7 @@ export function Tasks({
         window.localStorage.getItem(WISHLIST_PLANNING_FOCUS_STORAGE_KEY)
       )
     })
+  const wishlistCollectionNormalizedRef = useRef(false)
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -284,32 +345,43 @@ export function Tasks({
       }
       wishlistByItemID.set(itemID, entry)
     })
-    return (itemsPayload.items ?? []).map((item, index) => {
-      const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
-      const wishlistEntry = wishlistByItemID.get(itemID)
-      return {
-        id: itemID,
-        itemID: itemID,
-        wishlistEntryID: wishlistEntry?.id?.trim(),
-        title:
-          item.title?.trim() ||
-          item.part_number?.trim() ||
-          `Wishlist item ${index + 1}`,
-        partNumber: item.part_number?.trim(),
-        status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
-        label: item.category?.trim() || 'collection',
-        priority:
-          wishlistEntry?.priority?.trim() || item.priority?.trim() || 'medium',
-        notes: wishlistEntry?.notes?.trim(),
-        belowTargetNow: Boolean(wishlistEntry?.below_target_now),
-        targetPrice:
-          typeof wishlistEntry?.target_price === 'number'
-            ? wishlistEntry.target_price
-            : undefined,
-        highlightHit: Boolean(wishlistEntry?.highlight_hit),
-      } satisfies Task
-    })
+    return Promise.all(
+      (itemsPayload.items ?? []).map(async (item, index) => {
+        const itemID = item.id?.trim() || `wishlist-item-${index + 1}`
+        const wishlistEntry = wishlistByItemID.get(itemID)
+        const pricingSummary = await loadWishlistPricingSummary(itemID)
+        return {
+          id: itemID,
+          itemID: itemID,
+          wishlistEntryID: wishlistEntry?.id?.trim(),
+          title:
+            item.title?.trim() ||
+            item.part_number?.trim() ||
+            `Wishlist item ${index + 1}`,
+          partNumber: item.part_number?.trim(),
+          status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
+          label: item.category?.trim() || 'collection',
+          priority:
+            wishlistEntry?.priority?.trim() ||
+            item.priority?.trim() ||
+            'medium',
+          notes: wishlistEntry?.notes?.trim(),
+          belowTargetNow: Boolean(wishlistEntry?.below_target_now),
+          targetPrice:
+            typeof wishlistEntry?.target_price === 'number'
+              ? wishlistEntry.target_price
+              : undefined,
+          marketPrice: pricingSummary.marketPrice,
+          priceTrend: pricingSummary.priceTrend,
+          highlightHit: Boolean(wishlistEntry?.highlight_hit),
+        } satisfies Task
+      })
+    )
   }, [])
+
+  useEffect(() => {
+    tableDataRef.current = tableData
+  }, [tableData])
 
   useEffect(() => {
     if (!isWishlistRoute) {
@@ -449,6 +521,97 @@ export function Tasks({
       }
     },
     [refreshWishlistTable, saveWishlistDraft]
+  )
+
+  const handleWishlistInlineUpdate = useCallback(
+    async (
+      task: Task,
+      changes: { targetPrice?: number; priority?: string }
+    ) => {
+      const wishlistEntryID = task.wishlistEntryID?.trim()
+      if (!wishlistEntryID) {
+        toast.error('Wishlist entry is missing update metadata.')
+        return
+      }
+
+      const currentTask =
+        tableDataRef.current.find((candidate) => candidate.id === task.id) ??
+        task
+      const nextPriority = normalizeWishlistPriority(
+        changes.priority ?? currentTask.priority
+      )
+      let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
+
+      if (changes.targetPrice === undefined) {
+        try {
+          const latestWishlistResponse = await fetch('/api/wishlist')
+          if (latestWishlistResponse.ok) {
+            const latestWishlistPayload =
+              (await latestWishlistResponse.json()) as {
+                items?: WishlistEntryPayload[]
+              }
+            const latestEntry = (latestWishlistPayload.items ?? []).find(
+              (entry) => entry.id?.trim() === wishlistEntryID
+            )
+            if (typeof latestEntry?.target_price === 'number') {
+              nextTargetPrice = latestEntry.target_price
+            }
+          }
+        } catch {
+          // Keep the local row value if the latest entry cannot be read.
+        }
+      }
+
+      const nextTableData = tableDataRef.current.map((candidate) =>
+        candidate.id === task.id
+          ? {
+              ...candidate,
+              priority: nextPriority,
+              targetPrice: nextTargetPrice,
+            }
+          : candidate
+      )
+      tableDataRef.current = nextTableData
+      setTableData((previous) =>
+        previous.map((candidate) =>
+          candidate.id === task.id
+            ? {
+                ...candidate,
+                priority: nextPriority,
+                targetPrice: nextTargetPrice,
+              }
+            : candidate
+        )
+      )
+      setIsWishlistMutating(true)
+      try {
+        const requestBody: Record<string, unknown> = {
+          id: wishlistEntryID,
+          item_id: task.itemID,
+          priority: nextPriority,
+        }
+        if (changes.targetPrice !== undefined) {
+          requestBody.target_price = nextTargetPrice
+        }
+
+        const response = await fetch('/api/wishlist', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        })
+        if (!response.ok) {
+          throw new Error('wishlist_inline_update_failed')
+        }
+        await refreshWishlistTable()
+        toast.success('Wishlist row updated.')
+      } catch {
+        toast.error('Wishlist row update failed. Try again.')
+        throw new Error('wishlist_inline_update_failed')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable]
   )
 
   const handleWishlistDelete = useCallback(
@@ -686,6 +849,37 @@ export function Tasks({
     wishlistPlanningFocus,
   ])
 
+  useEffect(() => {
+    if (
+      !isWishlistRoute ||
+      wishlistCollectionNormalizedRef.current ||
+      activeWorkspaceCollection === 'All Items' ||
+      tableData.length === 0
+    ) {
+      return
+    }
+
+    wishlistCollectionNormalizedRef.current = true
+    const wishlistItemIDs = new Set(
+      tableData.map((task) => task.itemID ?? task.id)
+    )
+    const collectionHasWishlistRows = collectionItems.some(
+      (item) =>
+        item.collectionName === activeWorkspaceCollection &&
+        wishlistItemIDs.has(item.id)
+    )
+
+    if (!collectionHasWishlistRows) {
+      void setActiveWorkspaceCollection('All Items')
+    }
+  }, [
+    activeWorkspaceCollection,
+    collectionItems,
+    isWishlistRoute,
+    setActiveWorkspaceCollection,
+    tableData,
+  ])
+
   const wishlistCollectionFilter = isWishlistRoute ? (
     <div
       className='flex flex-wrap items-center gap-2'
@@ -900,6 +1094,9 @@ export function Tasks({
             }
             onWishlistExport={
               isWishlistRoute ? handleWishlistExport : undefined
+            }
+            onWishlistInlineUpdate={
+              isWishlistRoute ? handleWishlistInlineUpdate : undefined
             }
             wishlistActionItemID={wishlistActionItemID}
             isWishlistMutating={isWishlistMutating}

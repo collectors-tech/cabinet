@@ -117,7 +117,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Status:").should("be.visible");
 
     cy.contains("button", "Rows").click();
-    cy.get('input[placeholder="Filter by title or ID..."]').type("no-match-wishlist");
+    cy.get('input[placeholder="Filter by title or part number..."]').type("no-match-wishlist");
     cy.contains("No results.").should("be.visible");
   });
 
@@ -128,9 +128,19 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Wishlist Sample Grail Chase").should("be.visible");
     cy.contains("Wishlist Sample Price Drop Watch").should("be.visible");
     cy.contains("Wishlist Sample Steady Watch").should("be.visible");
-    cy.contains("Below target").should("be.visible");
-    cy.contains("High").should("be.visible");
-    cy.contains("Low").should("be.visible");
+    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
+      "contain",
+      "1"
+    );
+    cy.get('select[data-testid^="wishlist-priority-select-"]').then(
+      ($selects) => {
+        const values = [...$selects].map(
+          (select) => (select as HTMLSelectElement).value
+        );
+        expect(values).to.include("high");
+        expect(values).to.include("low");
+      }
+    );
   });
 
   it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
@@ -241,15 +251,17 @@ describe("ui-screen-wishlist", () => {
     signInToWishlist();
 
     cy.get('button[aria-label="Switch to rows view"]').click();
-    cy.contains("th", "Item ID").should("be.visible");
+    cy.contains("th", "Item ID").should("not.exist");
     cy.contains("th", "Title").should("be.visible");
-    cy.contains("th", "Watch Status").should("be.visible");
-    cy.contains("th", "Target Priority").should("be.visible");
+    cy.contains("th", "Watch Status").should("not.exist");
+    cy.contains("th", "Market Price").should("be.visible");
+    cy.contains("th", "Price Graph").should("be.visible");
+    cy.contains("th", "Cost").should("be.visible");
+    cy.contains("th", "Priority").should("be.visible");
+    cy.contains("th", "Target Priority").should("not.exist");
     cy.contains("th", "Task").should("not.exist");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
-    cy.contains("item-collector-1").should("be.visible");
-    cy.contains("Watching").should("be.visible");
-    cy.contains("Below target").should("be.visible");
+    cy.contains("22073").should("not.exist");
     cy.contains(/TASK-\d+/).should("not.exist");
     cy.contains("Backlog").should("not.exist");
   });
