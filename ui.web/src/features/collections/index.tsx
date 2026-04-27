@@ -480,6 +480,7 @@ export function Collections() {
 
               <div
                 className='overflow-x-auto rounded-md border'
+                data-table-surface='true'
                 data-testid='collections-shared-table'
               >
                 <Table>
@@ -540,6 +541,9 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
+              <div data-testid='collections-table-pagination'>
+                <DataTablePagination table={table} />
+              </div>
             </CardContent>
           </Card>
 
@@ -570,6 +574,7 @@ export function Collections() {
               </div>
               <div
                 className='overflow-x-auto rounded-md border'
+                data-table-surface='true'
                 data-testid='collections-members-table'
               >
                 <Table>
@@ -621,7 +626,9 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
-              <DataTablePagination table={membersTable} />
+              <div data-testid='collections-members-table-pagination'>
+                <DataTablePagination table={membersTable} />
+              </div>
             </CardContent>
           </Card>
         </div>
