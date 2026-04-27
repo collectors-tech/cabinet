@@ -390,6 +390,9 @@ describe("inventory-management", () => {
     signIn();
     cy.wait("@itemsInline");
 
+    cy.get('[data-testid="inventory-collection-add-root"]')
+      .should("have.attr", "aria-label", "Create collection")
+      .and("not.contain", "New Collection");
     cy.get('[data-testid="inventory-collection-add-root"]').click();
     cy.get('[data-testid="folder-tree-name-input"]').type("Inline Alpha");
     cy.get('[data-testid="folder-tree-create-submit"]').click();

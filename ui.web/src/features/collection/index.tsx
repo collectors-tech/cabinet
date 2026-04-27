@@ -3336,15 +3336,18 @@ export function Collection({
       <Button
         type='button'
         variant='outline'
-        className='h-8 px-2 text-xs'
+        size='icon'
+        className='size-8'
         data-testid='inventory-collection-add-root'
+        aria-label='Create collection'
+        title='Create collection'
         onClick={() => {
           setFolderCreateParentID(null)
           setFolderCreateName('')
           setFolderCreateOpen(true)
         }}
       >
-        + New Collection
+        <Plus className='size-4' aria-hidden='true' />
       </Button>
       {folderDragOverlay}
     </div>
