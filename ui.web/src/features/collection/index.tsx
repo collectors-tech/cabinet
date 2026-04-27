@@ -51,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
@@ -100,6 +101,31 @@ type BarcodeMatch = {
   created_at?: string
 }
 
+type InventoryBarcode = BarcodeMatch
+
+type InventoryInstance = {
+  id: string
+  item_id: string
+  condition: string
+  status: string
+  quantity: number
+  storage_location: string
+  acquisition_price: number
+  acquisition_date: string
+  notes: string
+  created_at?: string
+  updated_at?: string
+}
+
+type InventoryPriceSnapshot = {
+  snapshot_date: string
+  source: string
+  min_price: number
+  median_price: number
+  latest_price: number
+  stock_count: number
+}
+
 type InventoryItem = {
   id: string
   part_number: string
@@ -109,6 +135,9 @@ type InventoryItem = {
   brand: string
   priority: string
   description: string
+  notes: string
+  tags: string[]
+  source_urls: string[]
 }
 
 type InventoryItemDraft = {
@@ -117,6 +146,9 @@ type InventoryItemDraft = {
   brand: string
   category: string
   description: string
+  notes: string
+  tags: string
+  source_urls: string
 }
 
 type InventoryCreateIntent = 'manual' | 'text' | 'photo' | 'barcode'
@@ -422,6 +454,9 @@ function emptyInventoryItemDraft(): InventoryItemDraft {
     brand: '',
     category: '',
     description: '',
+    notes: '',
+    tags: '',
+    source_urls: '',
   }
 }
 
@@ -432,6 +467,9 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     brand: item.brand,
     category: item.category,
     description: item.description,
+    notes: item.notes,
+    tags: item.tags.join(', '),
+    source_urls: item.source_urls.join('\n'),
   }
 }
 
@@ -453,6 +491,9 @@ function normalizeInventoryCreatePayload(
     brand: draft.brand.trim(),
     category: draft.category.trim(),
     description: draft.description.trim(),
+    notes: draft.notes.trim(),
+    tags: draft.tags.trim(),
+    source_urls: draft.source_urls.trim(),
   }
   const titleSeed =
     trimmed.title ||
@@ -469,7 +510,24 @@ function normalizeInventoryCreatePayload(
     brand: trimmed.brand || 'Unknown',
     category: trimmed.category || 'General',
     description: trimmed.description,
+    notes: trimmed.notes,
+    tags: trimmed.tags,
+    source_urls: trimmed.source_urls,
   }
+}
+
+function splitInventoryListField(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter((entry, index, entries) => entry !== '' && entries.indexOf(entry) === index)
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value)
 }
 
 function normalizeCollectionInput(value: string): string {
@@ -554,6 +612,9 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
           [{ kind: 'url', value: source }],
           source
         ),
+        notes: '',
+        tags: '',
+        source_urls: source,
       }
     }
   } catch {
@@ -567,6 +628,9 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     brand: 'Unknown',
     category: 'General',
     description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
+    notes: '',
+    tags: '',
+    source_urls: '',
   }
 }
 
@@ -1188,6 +1252,17 @@ export function Collection({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
+  const [inventoryBarcodes, setInventoryBarcodes] = useState<InventoryBarcode[]>(
+    []
+  )
+  const [inventoryInstances, setInventoryInstances] = useState<
+    InventoryInstance[]
+  >([])
+  const [inventoryPricing, setInventoryPricing] = useState<
+    InventoryPriceSnapshot[]
+  >([])
+  const [itemDetailLoading, setItemDetailLoading] = useState(false)
+  const [itemDetailError, setItemDetailError] = useState<string | null>(null)
   const [photosDialogOpen, setPhotosDialogOpen] = useState(false)
   const [barcodesDialogOpen, setBarcodesDialogOpen] = useState(false)
   const [photosLoading, setPhotosLoading] = useState(false)
@@ -1262,7 +1337,10 @@ export function Collection({
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
+  const [galleryPreviewPhotoIndex, setGalleryPreviewPhotoIndex] =
+    useState<number | null>(null)
   const inventoryPhotoRequestIDRef = useRef(0)
+  const inventoryItemDetailRequestIDRef = useRef(0)
   const selectedItemIDRef = useRef('')
   const {
     workspaceCollections,
@@ -1530,6 +1608,9 @@ export function Collection({
             brand?: string
             priority?: string
             description?: string
+            notes?: string
+            tags?: string[]
+            source_urls?: string[]
           }>
         }
         const items = (payload.items ?? [])
@@ -1542,6 +1623,17 @@ export function Collection({
             brand: item.brand?.trim() || 'Unknown',
             priority: item.priority?.trim() || 'medium',
             description: item.description?.trim() ?? '',
+            notes: item.notes?.trim() ?? '',
+            tags: Array.isArray(item.tags)
+              ? item.tags
+                  .map((tag) => tag.trim())
+                  .filter((tag, index, tags) => tag !== '' && tags.indexOf(tag) === index)
+              : [],
+            source_urls: Array.isArray(item.source_urls)
+              ? item.source_urls
+                  .map((url) => url.trim())
+                  .filter((url, index, urls) => url !== '' && urls.indexOf(url) === index)
+              : [],
           }))
           .filter((item) => item.id !== '')
         const mapped: Task[] = items.map(inventoryItemToTask)
@@ -2533,6 +2625,23 @@ export function Collection({
   )
   const selectedPhoto =
     selectedPhotoIndex === null ? null : inventoryPhotos[selectedPhotoIndex]
+  const galleryPhotoIndex =
+    galleryPreviewPhotoIndex !== null &&
+    galleryPreviewPhotoIndex >= 0 &&
+    galleryPreviewPhotoIndex < inventoryPhotos.length
+      ? galleryPreviewPhotoIndex
+      : Math.max(
+          0,
+          inventoryPhotos.findIndex((photo) => photo.is_primary)
+        )
+  const galleryPhoto = inventoryPhotos[galleryPhotoIndex] ?? null
+  const latestPriceSnapshot = inventoryPricing[inventoryPricing.length - 1] ?? null
+  const primaryInstance = inventoryInstances[0] ?? null
+  const totalAcquisitionPrice = inventoryInstances.reduce(
+    (total, instance) =>
+      total + Number(instance.acquisition_price || 0) * Math.max(1, Number(instance.quantity || 1)),
+    0
+  )
   useEffect(() => {
     const previous = activeWorkspaceCollectionRef.current
     activeWorkspaceCollectionRef.current = activeWorkspaceCollection
@@ -2607,9 +2716,87 @@ export function Collection({
     void loadInventoryPhotos()
   }, [loadInventoryPhotos])
 
+  const loadInventoryItemDetails = useCallback(async () => {
+    if (!isInventoryRoute || !selectedItemID) {
+      inventoryItemDetailRequestIDRef.current += 1
+      setInventoryBarcodes([])
+      setInventoryInstances([])
+      setInventoryPricing([])
+      setItemDetailLoading(false)
+      setItemDetailError(null)
+      return
+    }
+
+    const requestID = inventoryItemDetailRequestIDRef.current + 1
+    inventoryItemDetailRequestIDRef.current = requestID
+    setItemDetailLoading(true)
+    setItemDetailError(null)
+
+    const loadJSON = async <T,>(url: string): Promise<T | null> => {
+      try {
+        const response = await fetch(url)
+        if (!response.ok) {
+          return null
+        }
+        return (await response.json()) as T
+      } catch {
+        return null
+      }
+    }
+
+    const [barcodesPayload, instancesPayload, pricingPayload] =
+      await Promise.all([
+        loadJSON<{ barcodes?: InventoryBarcode[] }>(
+          `/api/items/${encodeURIComponent(selectedItemID)}/barcodes`
+        ),
+        loadJSON<{ instances?: InventoryInstance[] }>(
+          `/api/items/${encodeURIComponent(selectedItemID)}/instances`
+        ),
+        loadJSON<{ history?: InventoryPriceSnapshot[] }>(
+          `/api/pricing/history?item_id=${encodeURIComponent(selectedItemID)}`
+        ),
+      ])
+
+    if (inventoryItemDetailRequestIDRef.current !== requestID) {
+      return
+    }
+
+    setInventoryBarcodes(
+      (barcodesPayload?.barcodes ?? []).filter(
+        (record) => record.id.trim() !== '' && record.barcode.trim() !== ''
+      )
+    )
+    setInventoryInstances(
+      (instancesPayload?.instances ?? []).filter(
+        (instance) => instance.id.trim() !== ''
+      )
+    )
+    setInventoryPricing(pricingPayload?.history ?? [])
+
+    if (!barcodesPayload && !instancesPayload && !pricingPayload) {
+      setItemDetailError('Item evidence and pricing details could not be loaded.')
+    }
+    setItemDetailLoading(false)
+  }, [isInventoryRoute, selectedItemID])
+
+  useEffect(() => {
+    void loadInventoryItemDetails()
+  }, [loadInventoryItemDetails])
+
   useEffect(() => {
     setSelectedPhotoIndex(null)
+    setGalleryPreviewPhotoIndex(null)
   }, [selectedItemID])
+
+  useEffect(() => {
+    if (
+      galleryPreviewPhotoIndex !== null &&
+      (galleryPreviewPhotoIndex < 0 ||
+        galleryPreviewPhotoIndex >= inventoryPhotos.length)
+    ) {
+      setGalleryPreviewPhotoIndex(null)
+    }
+  }, [galleryPreviewPhotoIndex, inventoryPhotos.length])
 
   useEffect(() => {
     setPhotoRebuildError(null)
@@ -2729,6 +2916,9 @@ export function Collection({
       brand: itemDraft.brand.trim(),
       category: itemDraft.category.trim(),
       description: itemDraft.description.trim(),
+      notes: itemDraft.notes.trim(),
+      tags: itemDraft.tags.trim(),
+      source_urls: itemDraft.source_urls.trim(),
     }
     const pendingCreateBarcode = itemCreateBarcodeInput.trim()
     const hasCreatePhoto = wasCreateMode && itemCreatePhotoFile !== null
@@ -2743,12 +2933,17 @@ export function Collection({
               collection.toLowerCase() === pendingCreateCollection.toLowerCase()
           ) ?? pendingCreateCollection)
         : ''
-    const payload = wasCreateMode
+    const normalizedPayload = wasCreateMode
       ? normalizeInventoryCreatePayload(trimmedDraft, {
           barcode: pendingCreateBarcode,
           hasPhoto: hasCreatePhoto,
         })
       : trimmedDraft
+    const payload = {
+      ...normalizedPayload,
+      tags: splitInventoryListField(normalizedPayload.tags),
+      source_urls: splitInventoryListField(normalizedPayload.source_urls),
+    }
     if (itemEditorMode === 'edit' && !selectedItemID) {
       setItemSaveError('Select an existing inventory item before editing.')
       setItemSaveSuccess(null)
@@ -3196,6 +3391,7 @@ export function Collection({
       }
       setBarcodeAddSuccess(`Barcode ${barcode} added.`)
       setBarcodeAddInput('')
+      void loadInventoryItemDetails()
       if (lastLookupBarcode === barcode) {
         await lookupBarcode(barcode)
       }
@@ -3204,7 +3400,13 @@ export function Collection({
     } finally {
       setBarcodeAddBusy(false)
     }
-  }, [barcodeAddInput, lastLookupBarcode, lookupBarcode, selectedItemID])
+  }, [
+    barcodeAddInput,
+    lastLookupBarcode,
+    loadInventoryItemDetails,
+    lookupBarcode,
+    selectedItemID,
+  ])
 
   const externalSearchHref = useMemo(() => {
     if (!lastLookupBarcode) {
@@ -3250,6 +3452,9 @@ export function Collection({
               ? generatedDraft.category
               : current.category,
             description: buildPasteCreateDescription(nextHistory, sourceURL),
+            notes: current.notes,
+            tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
+            source_urls: sourceURL ?? current.source_urls,
           }
         })
         setPasteCreateHistory(nextHistory)
@@ -4497,7 +4702,7 @@ export function Collection({
                   >
                     <SheetContent
                       side='right'
-                      className='w-[min(28rem,92vw)] overflow-y-auto sm:max-w-md'
+                      className='w-[min(30rem,92vw)] overflow-y-auto sm:max-w-[30rem]'
                       data-testid='inventory-item-editor-panel'
                     >
                       <SheetHeader className='text-start'>
@@ -4510,6 +4715,96 @@ export function Collection({
                         className='space-y-4 px-4'
                         data-testid='inventory-item-edit-panel'
                       >
+                        <section
+                          className='space-y-3 rounded-xl border bg-card/40 p-3'
+                          data-testid='inventory-item-gallery'
+                        >
+                          <div className='flex items-center justify-between gap-3'>
+                            <div>
+                              <h3 className='text-sm font-semibold'>Images</h3>
+                              <p className='text-xs text-muted-foreground'>
+                                Preview item photos and open the gallery viewer.
+                              </p>
+                            </div>
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              data-testid='inventory-item-gallery-open'
+                              disabled={!galleryPhoto}
+                              onClick={() => {
+                                if (galleryPhoto) {
+                                  setSelectedPhotoIndex(galleryPhotoIndex)
+                                }
+                              }}
+                            >
+                              Open
+                            </Button>
+                          </div>
+                          {photosLoading ? (
+                            <div className='rounded-md border p-3 text-sm text-muted-foreground'>
+                              Loading images...
+                            </div>
+                          ) : galleryPhoto ? (
+                            <button
+                              type='button'
+                              className='block w-full overflow-hidden rounded-lg border bg-muted/20 text-left'
+                              onClick={() => setSelectedPhotoIndex(galleryPhotoIndex)}
+                            >
+                              <img
+                                data-testid='inventory-item-gallery-preview'
+                                src={`/api/items/${encodeURIComponent(
+                                  selectedItemID
+                                )}/photos/${encodeURIComponent(
+                                  galleryPhoto.id
+                                )}/file?variant=preview&v=${photoImageVersion}`}
+                                alt={galleryPhoto.filename}
+                                className='h-56 w-full object-contain'
+                              />
+                            </button>
+                          ) : (
+                            <div
+                              className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                              data-testid='inventory-item-gallery-empty'
+                            >
+                              No images attached yet.
+                            </div>
+                          )}
+                          {inventoryPhotos.length > 0 ? (
+                            <div
+                              className='flex gap-2 overflow-x-auto pb-1'
+                              data-testid='inventory-item-gallery-filmstrip'
+                            >
+                              {inventoryPhotos.map((photo, index) => (
+                                <button
+                                  key={photo.id}
+                                  type='button'
+                                  className={cn(
+                                    'min-w-24 rounded-md border p-1 text-left text-xs',
+                                    index === galleryPhotoIndex
+                                      ? 'border-primary bg-primary/10'
+                                      : 'bg-background'
+                                  )}
+                                  data-testid='inventory-item-gallery-thumb'
+                                  onClick={() => setGalleryPreviewPhotoIndex(index)}
+                                >
+                                  <img
+                                    src={`/api/items/${encodeURIComponent(
+                                      selectedItemID
+                                    )}/photos/${encodeURIComponent(
+                                      photo.id
+                                    )}/file?variant=thumbnail&v=${photoImageVersion}`}
+                                    alt={photo.filename}
+                                    className='h-14 w-full rounded object-cover'
+                                  />
+                                  <span className='mt-1 block truncate'>
+                                    {photo.filename}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </section>
                         <div className='grid grid-cols-1 gap-3'>
                           <div className='space-y-2'>
                             <label
@@ -4595,7 +4890,7 @@ export function Collection({
                           >
                             Description
                           </label>
-                          <Input
+                          <Textarea
                             id='inventory-panel-item-description'
                             data-testid='inventory-item-description'
                             value={itemDraft.description}
@@ -4607,6 +4902,197 @@ export function Collection({
                             }
                           />
                         </div>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-tags'
+                            >
+                              Tags
+                            </label>
+                            <Input
+                              id='inventory-panel-item-tags'
+                              data-testid='inventory-item-tags'
+                              placeholder='sealed, rare, boxed'
+                              value={itemDraft.tags}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  tags: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-source-urls'
+                            >
+                              URLs
+                            </label>
+                            <Textarea
+                              id='inventory-panel-item-source-urls'
+                              data-testid='inventory-item-source-urls'
+                              placeholder='One source URL per line'
+                              value={itemDraft.source_urls}
+                              onChange={(event) =>
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  source_urls: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        {splitInventoryListField(itemDraft.source_urls).length > 0 ? (
+                          <div className='flex flex-wrap gap-2 text-sm'>
+                            {splitInventoryListField(itemDraft.source_urls).map(
+                              (url, index) => (
+                                <a
+                                  key={`${url}-${index}`}
+                                  href={url}
+                                  target='_blank'
+                                  rel='noreferrer'
+                                  className='rounded-full border px-3 py-1 text-primary underline-offset-4 hover:underline'
+                                  data-testid={`inventory-item-source-url-${index}`}
+                                >
+                                  Source {index + 1}
+                                </a>
+                              )
+                            )}
+                          </div>
+                        ) : null}
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-panel-item-notes'
+                          >
+                            Notes
+                          </label>
+                          <Textarea
+                            id='inventory-panel-item-notes'
+                            data-testid='inventory-item-notes'
+                            placeholder='Private item notes'
+                            value={itemDraft.notes}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                notes: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <section
+                          className='space-y-2 rounded-xl border bg-card/40 p-3'
+                          data-testid='inventory-item-pricing-panel'
+                        >
+                          <h3 className='text-sm font-semibold'>Pricing</h3>
+                          <div className='grid grid-cols-1 gap-2 text-sm md:grid-cols-2'>
+                            <div>
+                              <span className='text-muted-foreground'>
+                                Paid / unit
+                              </span>
+                              <p className='font-medium'>
+                                {primaryInstance?.acquisition_price
+                                  ? formatMoney(primaryInstance.acquisition_price)
+                                  : 'Not recorded'}
+                              </p>
+                            </div>
+                            <div>
+                              <span className='text-muted-foreground'>
+                                Latest market
+                              </span>
+                              <p className='font-medium'>
+                                {latestPriceSnapshot
+                                  ? formatMoney(latestPriceSnapshot.latest_price)
+                                  : 'No market price'}
+                              </p>
+                            </div>
+                          </div>
+                          {latestPriceSnapshot ? (
+                            <p className='text-xs text-muted-foreground'>
+                              {latestPriceSnapshot.source} median{' '}
+                              {formatMoney(latestPriceSnapshot.median_price)} on{' '}
+                              {latestPriceSnapshot.snapshot_date}
+                            </p>
+                          ) : null}
+                          {totalAcquisitionPrice > 0 ? (
+                            <p className='text-xs text-muted-foreground'>
+                              Total paid across quantities:{' '}
+                              {formatMoney(totalAcquisitionPrice)}
+                            </p>
+                          ) : null}
+                        </section>
+                        <section
+                          className='space-y-2 rounded-xl border bg-card/40 p-3'
+                          data-testid='inventory-item-barcodes-panel'
+                        >
+                          <div className='flex items-center justify-between gap-3'>
+                            <h3 className='text-sm font-semibold'>Barcodes</h3>
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              onClick={() => setBarcodesDialogOpen(true)}
+                            >
+                              Manage
+                            </Button>
+                          </div>
+                          {inventoryBarcodes.length > 0 ? (
+                            <div className='flex flex-wrap gap-2'>
+                              {inventoryBarcodes.map((record) => (
+                                <Badge key={record.id} variant='secondary'>
+                                  {record.barcode}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className='text-sm text-muted-foreground'>
+                              No barcodes attached yet.
+                            </p>
+                          )}
+                        </section>
+                        <section
+                          className='space-y-2 rounded-xl border bg-card/40 p-3'
+                          data-testid='inventory-item-instance-notes'
+                        >
+                          <h3 className='text-sm font-semibold'>
+                            Item Evidence
+                          </h3>
+                          {itemDetailLoading ? (
+                            <p className='text-sm text-muted-foreground'>
+                              Loading evidence...
+                            </p>
+                          ) : null}
+                          {itemDetailError ? (
+                            <p className='text-sm text-destructive'>
+                              {itemDetailError}
+                            </p>
+                          ) : null}
+                          {inventoryInstances.length > 0 ? (
+                            <div className='space-y-2'>
+                              {inventoryInstances.map((instance) => (
+                                <div
+                                  key={instance.id}
+                                  className='rounded-md border p-2 text-sm'
+                                >
+                                  <p className='font-medium'>
+                                    Qty {instance.quantity} ·{' '}
+                                    {instance.condition || 'condition unknown'} ·{' '}
+                                    {instance.storage_location || 'no location'}
+                                  </p>
+                                  <p className='text-muted-foreground'>
+                                    {instance.notes || 'No instance notes.'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className='text-sm text-muted-foreground'>
+                              No instance evidence recorded.
+                            </p>
+                          )}
+                        </section>
                         {itemSaveError ? (
                           <div
                             className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'

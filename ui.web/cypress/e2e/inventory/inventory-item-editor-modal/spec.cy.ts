@@ -145,6 +145,171 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });
 
+  it("shows gallery, evidence, pricing, tags, urls, description, notes, and navigation in the item edit panel", () => {
+    const items = [
+      {
+        id: "item-alpha",
+        part_number: "PN-ALPHA",
+        title: "Alpha Item",
+        status: "active",
+        category: "Cars",
+        brand: "AFX",
+        priority: "medium",
+        description: "Alpha public description",
+        notes: "Alpha private item notes",
+        tags: ["sealed", "rare"],
+        source_urls: ["https://example.test/source-alpha"],
+      },
+      {
+        id: "item-bravo",
+        part_number: "PN-BRAVO",
+        title: "Bravo Item",
+        status: "active",
+        category: "Trains",
+        brand: "Tyco",
+        priority: "medium",
+        description: "Bravo description",
+        notes: "Bravo private notes",
+        tags: ["loose"],
+        source_urls: [],
+      },
+    ];
+
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items },
+    }).as("itemsList");
+
+    cy.intercept("GET", "/api/items/item-alpha/photos", {
+      statusCode: 200,
+      body: {
+        photos: [
+          { id: "alpha-front", filename: "alpha-front.jpg", is_primary: true },
+          { id: "alpha-back", filename: "alpha-back.jpg", is_primary: false },
+        ],
+      },
+    }).as("alphaPhotos");
+    cy.intercept("GET", "/api/items/item-alpha/photos/*/file?*", {
+      statusCode: 200,
+      headers: { "content-type": "image/gif" },
+      body: "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+    });
+    cy.intercept("GET", "/api/items/item-alpha/barcodes", {
+      statusCode: 200,
+      body: {
+        barcodes: [
+          {
+            id: "barcode-alpha",
+            item_id: "item-alpha",
+            barcode: "1234567890123",
+            created_at: "2026-04-28T01:00:00Z",
+          },
+        ],
+      },
+    }).as("alphaBarcodes");
+    cy.intercept("GET", "/api/items/item-alpha/instances", {
+      statusCode: 200,
+      body: {
+        instances: [
+          {
+            id: "instance-alpha",
+            item_id: "item-alpha",
+            condition: "sealed",
+            status: "sealed",
+            quantity: 2,
+            storage_location: "Shelf A",
+            acquisition_price: 49.95,
+            acquisition_date: "2026-04-21",
+            notes: "Shelf note",
+            created_at: "2026-04-21T00:00:00Z",
+            updated_at: "2026-04-22T00:00:00Z",
+          },
+        ],
+      },
+    }).as("alphaInstances");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-alpha", {
+      statusCode: 200,
+      body: {
+        history: [
+          {
+            snapshot_date: "2026-04-27",
+            source: "ebay",
+            min_price: 52,
+            median_price: 60,
+            latest_price: 64,
+            stock_count: 3,
+          },
+        ],
+      },
+    }).as("alphaPricing");
+
+    signIn();
+    cy.wait("@itemsList");
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+
+    cy.wait("@alphaPhotos");
+    cy.wait("@alphaBarcodes");
+    cy.wait("@alphaInstances");
+    cy.wait("@alphaPricing");
+
+    cy.get('[data-testid="inventory-item-editor-panel"]')
+      .should("be.visible")
+      .and("contain", "Edit Item");
+    cy.get('[data-testid="inventory-item-gallery"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-gallery-preview"]')
+      .should("be.visible")
+      .and("have.attr", "alt", "alpha-front.jpg");
+    cy.get('[data-testid="inventory-item-gallery-thumb"]').should("have.length", 2);
+    cy.get('[data-testid="inventory-item-gallery-thumb"]').eq(1).click();
+    cy.get('[data-testid="inventory-item-gallery-preview"]').should(
+      "have.attr",
+      "alt",
+      "alpha-back.jpg"
+    );
+    cy.get('[data-testid="inventory-item-gallery-open"]').click();
+    cy.get('[data-testid="inventory-photo-fullscreen"]')
+      .should("be.visible")
+      .and("contain", "alpha-back.jpg");
+    cy.get('[data-testid="inventory-photo-prev"]').click();
+    cy.get('[data-testid="inventory-photo-fullscreen"]').should(
+      "contain",
+      "alpha-front.jpg"
+    );
+    cy.get('[data-testid="inventory-photo-fullscreen-close"]').click();
+
+    cy.get('[data-testid="inventory-item-tags"]').should(
+      "have.value",
+      "sealed, rare"
+    );
+    cy.get('[data-testid="inventory-item-source-url-0"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.attr", "href", "https://example.test/source-alpha");
+    cy.get('[data-testid="inventory-item-pricing-panel"]')
+      .scrollIntoView()
+      .should("contain", "$49.95")
+      .and("contain", "$64.00")
+      .and("contain", "ebay");
+    cy.get('[data-testid="inventory-item-barcodes-panel"]').should(
+      "contain",
+      "1234567890123"
+    );
+    cy.get('[data-testid="inventory-item-notes"]').should(
+      "have.value",
+      "Alpha private item notes"
+    );
+    cy.get('[data-testid="inventory-item-instance-notes"]').should(
+      "contain",
+      "Shelf note"
+    );
+    cy.get('[data-testid="inventory-item-description"]').should(
+      "have.value",
+      "Alpha public description"
+    );
+    cy.get('[data-testid="inventory-item-editor-next"]').click();
+    cy.get('[data-testid="inventory-item-title"]').should("have.value", "Bravo Item");
+  });
+
   it("uses one create modal for manual, paste, photo, and barcode header actions", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,

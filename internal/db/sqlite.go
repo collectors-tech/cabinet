@@ -126,7 +126,9 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			scale TEXT NOT NULL DEFAULT '',
 			series TEXT NOT NULL DEFAULT '',
 			description TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
+			source_urls_json TEXT NOT NULL DEFAULT '[]',
 			for_sale INTEGER NOT NULL DEFAULT 0,
 			structured_offers_json TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -547,6 +549,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "canonical_items", "deleted_by", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.deleted_by: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "notes", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.notes: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "source_urls_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.source_urls_json: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()
