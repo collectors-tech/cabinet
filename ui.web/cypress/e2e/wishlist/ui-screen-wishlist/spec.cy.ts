@@ -97,6 +97,21 @@ describe("ui-screen-wishlist", () => {
     cy.get('[role="menu"]').should("be.visible");
   }
 
+  function collectionFilterOptionKey(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function selectWishlistCollection(collectionName: string) {
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').click();
+    cy.get(
+      `[data-testid="wishlist-table-collection-option-${collectionFilterOptionKey(collectionName)}"]`
+    ).click();
+  }
+
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
     signInToWishlist();
 
@@ -232,7 +247,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
 
-    cy.get('[data-testid="wishlist-table-collection-select"]').select("Overflow");
+    selectWishlistCollection("Overflow");
     cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       "contain",
       "Overflow"
@@ -242,7 +257,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("F1 Silverline").should("not.exist");
     cy.contains("No results.").should("be.visible");
 
-    cy.get('[data-testid="wishlist-table-collection-select"]').select("All Items");
+    selectWishlistCollection("All Items");
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
   });
@@ -292,10 +307,15 @@ describe("ui-screen-wishlist", () => {
     cy.get('[data-testid="wishlist-table-add-collection"]').should(
       "be.visible"
     );
-
-    cy.get('[data-testid="wishlist-table-collection-select"]').select(
-      "Overflow"
+    cy.get('[data-testid="wishlist-table-collection-select"]').should(
+      "not.exist"
     );
+    cy.get('[data-testid="wishlist-table-collection-trigger"]')
+      .should("be.visible")
+      .and("contain.text", "Collection")
+      .and("contain.text", "All Items");
+
+    selectWishlistCollection("Overflow");
     cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       "contain",
       "Overflow"

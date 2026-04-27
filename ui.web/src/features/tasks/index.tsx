@@ -5,16 +5,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { DataTableFacetedFilter } from '@/components/data-table'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import {
-  collectionKey,
-  useWorkspaceCollections,
-} from '@/features/collections/use-workspace-collections'
+import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
 import { TasksTable } from './components/tasks-table'
@@ -898,24 +896,19 @@ export function Tasks({
       className='flex flex-wrap items-center gap-2'
       data-testid='wishlist-table-collection-filter'
     >
-      <select
-        className='h-8 min-w-[10rem] rounded-md border bg-background px-2 text-sm'
-        data-testid='wishlist-table-collection-select'
-        value={wishlistActiveCollection}
-        onChange={(event) => {
-          setWishlistActiveCollection(event.target.value)
+      <DataTableFacetedFilter<Task, string>
+        title='Collection'
+        options={workspaceCollections.map((collection) => ({
+          label: collection,
+          value: collection,
+        }))}
+        selectedValues={new Set([wishlistActiveCollection])}
+        onSelectedValuesChange={(values) => {
+          setWishlistActiveCollection(values[0] ?? 'All Items')
         }}
-      >
-        {workspaceCollections.map((collection) => (
-          <option
-            key={collection}
-            value={collection}
-            data-testid={`wishlist-table-collection-option-${collectionKey(collection)}`}
-          >
-            {collection}
-          </option>
-        ))}
-      </select>
+        singleSelect
+        testIdPrefix='wishlist-table-collection'
+      />
       <span
         className='text-xs text-muted-foreground'
         data-testid='wishlist-table-collection-selected'

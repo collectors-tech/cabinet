@@ -21,6 +21,25 @@ describe('ui-screen-collections', () => {
     cy.wait('@loadCollectionSettings')
   }
 
+  function collectionFilterOptionKey(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
+  function selectWishlistCollection(collectionName: string) {
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').click()
+    cy.get(
+      `[data-testid="wishlist-table-collection-option-${collectionFilterOptionKey(collectionName)}"]`
+    ).click()
+  }
+
+  function openWishlistCollectionFilter() {
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').click()
+  }
+
   it('UI-SCREEN-COLLECTIONS-001 renders shared collections management table', () => {
     signInToCollections()
 
@@ -358,19 +377,17 @@ describe('ui-screen-collections', () => {
     cy.contains('Store 2 renamed to Store 2 Routed.').should('be.visible')
 
     cy.visit('/wishlist/')
-    cy.get('[data-testid="wishlist-table-collection-select"]').select('Store 2 Routed')
+    selectWishlistCollection('Store 2 Routed')
     cy.get('[data-testid="wishlist-table-collection-selected"]').should(
       'contain.text',
       'Store 2 Routed'
     )
-    cy.get('[data-testid="wishlist-table-collection-select"] option').then(
-      ($options) => {
-        const optionLabels = [...$options].map((option) =>
-          option.textContent?.trim()
-        )
-        expect(optionLabels).to.include('Store 2 Routed')
-        expect(optionLabels).not.to.include('Store 2')
-      }
+    openWishlistCollectionFilter()
+    cy.get('[data-testid="wishlist-table-collection-option-store-2-routed"]').should(
+      'exist'
+    )
+    cy.get('[data-testid="wishlist-table-collection-option-store-2"]').should(
+      'not.exist'
     )
   })
 
@@ -431,9 +448,9 @@ describe('ui-screen-collections', () => {
       'contain.text',
       'All Items'
     )
-    cy.get('[data-testid="wishlist-table-collection-select"] option').then(($options) => {
-      const optionLabels = [...$options].map((option) => option.textContent?.trim())
-      expect(optionLabels).not.to.include('Store 1')
-    })
+    openWishlistCollectionFilter()
+    cy.get('[data-testid="wishlist-table-collection-option-store-1"]').should(
+      'not.exist'
+    )
   })
 })
