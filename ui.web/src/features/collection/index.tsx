@@ -1429,12 +1429,12 @@ export function Collection({
   }, [startCreateItem])
 
   const openInventoryItemEditor = useCallback(
-    (item: InventoryItem | null) => {
+    (item: InventoryItem | null, surface: 'dialog' | 'panel' = 'panel') => {
       if (!item) {
         return
       }
       setItemEditorMode('edit')
-      setItemEditorSurface('panel')
+      setItemEditorSurface(surface)
       setItemDraft(inventoryItemToDraft(item))
       setItemSaveError(null)
       setItemSaveSuccess(null)
@@ -2614,9 +2614,10 @@ export function Collection({
         inventoryItems.find((item) => item.id === nextID) ??
         inventoryItems.find((item) => item.part_number === nextRow.id) ??
         null
-      openInventoryItemEditor(nextItem)
+      openInventoryItemEditor(nextItem, itemEditorSurface)
     },
     [
+      itemEditorSurface,
       inventoryItems,
       openInventoryItemEditor,
       selectedVisibleInventoryIndex,
@@ -4144,9 +4145,13 @@ export function Collection({
                   setItemSaveSuccess(null)
                   selectInventoryItem(matchedItem)
                 }}
+                onOpenDetailsRow={(task) => {
+                  const matchedItem = resolveInventoryItemFromTask(task)
+                  openInventoryItemEditor(matchedItem, 'panel')
+                }}
                 onEditRow={(task) => {
                   const matchedItem = resolveInventoryItemFromTask(task)
-                  openInventoryItemEditor(matchedItem)
+                  openInventoryItemEditor(matchedItem, 'dialog')
                 }}
                 onPhotoRow={(task) => {
                   const matchedItem = resolveInventoryItemFromTask(task)
@@ -4612,6 +4617,72 @@ export function Collection({
                             }
                           />
                         </div>
+                        {itemEditorMode === 'edit' ? (
+                          <>
+                            <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                              <div className='space-y-2'>
+                                <label
+                                  className='text-sm font-medium'
+                                  htmlFor='inventory-item-tags'
+                                >
+                                  Tags
+                                </label>
+                                <Input
+                                  id='inventory-item-tags'
+                                  data-testid='inventory-item-tags'
+                                  placeholder='sealed, rare, boxed'
+                                  value={itemDraft.tags}
+                                  onChange={(event) =>
+                                    setItemDraft((current) => ({
+                                      ...current,
+                                      tags: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className='space-y-2'>
+                                <label
+                                  className='text-sm font-medium'
+                                  htmlFor='inventory-item-source-urls'
+                                >
+                                  URLs
+                                </label>
+                                <Textarea
+                                  id='inventory-item-source-urls'
+                                  data-testid='inventory-item-source-urls'
+                                  placeholder='One source URL per line'
+                                  value={itemDraft.source_urls}
+                                  onChange={(event) =>
+                                    setItemDraft((current) => ({
+                                      ...current,
+                                      source_urls: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-item-notes'
+                              >
+                                Notes
+                              </label>
+                              <Textarea
+                                id='inventory-item-notes'
+                                data-testid='inventory-item-notes'
+                                placeholder='Private item notes'
+                                value={itemDraft.notes}
+                                onChange={(event) =>
+                                  setItemDraft((current) => ({
+                                    ...current,
+                                    notes: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </>
+                        ) : null}
                         {itemSaveError ? (
                           <div
                             className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'

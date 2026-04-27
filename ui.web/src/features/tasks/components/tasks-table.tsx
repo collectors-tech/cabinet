@@ -56,6 +56,7 @@ type DataTableProps = {
   routePath: TasksRoutePath
   currentRecordID?: string
   onRecordFocus?: (itemID: string, recordID: string, title: string) => void
+  onOpenDetailsRow?: (task: Task, navigationRows?: Task[]) => void
   onEditRow?: (task: Task, navigationRows?: Task[]) => void
   onPhotoRow?: (task: Task) => void
   onBarcodeRow?: (task: Task) => void
@@ -229,6 +230,7 @@ export function TasksTable({
   routePath,
   currentRecordID,
   onRecordFocus,
+  onOpenDetailsRow,
   onEditRow,
   onPhotoRow,
   onBarcodeRow,
@@ -483,6 +485,13 @@ export function TasksTable({
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
+    }
+    if (record && onOpenDetailsRow) {
+      onOpenDetailsRow(
+        record,
+        table.getRowModel().rows.map((row) => row.original)
+      )
+      return
     }
     if (record && onEditRow) {
       onEditRow(
