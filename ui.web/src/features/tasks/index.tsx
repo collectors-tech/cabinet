@@ -106,6 +106,7 @@ type WishlistPriceTrend = 'up' | 'steady' | 'down' | 'unknown'
 type WishlistPricingSummary = {
   marketPrice?: number
   priceTrend: WishlistPriceTrend
+  priceHistory: number[]
 }
 
 type WishlistEntryPayload = {
@@ -192,16 +193,20 @@ async function loadWishlistPricingSummary(
     }
 
     let priceTrend: WishlistPriceTrend = 'unknown'
+    let priceHistory: number[] = []
     if (trendResponse.ok) {
       const trendPayload = (await trendResponse.json()) as {
         points?: Array<{ latest?: number }>
       }
+      priceHistory = (trendPayload.points ?? [])
+        .map((point) => point.latest)
+        .filter((value): value is number => typeof value === 'number')
       priceTrend = inferWishlistPriceTrend(trendPayload.points)
     }
 
-    return { marketPrice, priceTrend }
+    return { marketPrice, priceTrend, priceHistory }
   } catch {
-    return { priceTrend: 'unknown' }
+    return { priceTrend: 'unknown', priceHistory: [] }
   }
 }
 
@@ -370,6 +375,7 @@ export function Tasks({
               : undefined,
           marketPrice: pricingSummary.marketPrice,
           priceTrend: pricingSummary.priceTrend,
+          priceHistory: pricingSummary.priceHistory,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
           owned: Boolean(wishlistEntry?.owned),
           pricePaid:
