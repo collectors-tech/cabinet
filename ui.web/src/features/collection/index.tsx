@@ -119,7 +119,7 @@ type InventoryItemDraft = {
   description: string
 }
 
-type InventoryCreateIntent = 'manual' | 'photo' | 'barcode'
+type InventoryCreateIntent = 'manual' | 'text' | 'photo' | 'barcode'
 
 type PasteCreateHistoryEntry = {
   kind: 'url' | 'text' | 'prompt'
@@ -1183,6 +1183,8 @@ export function Collection({
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const photoCaptureInputRef = useRef<HTMLInputElement | null>(null)
   const photoUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const createPasteInputRef = useRef<HTMLInputElement | null>(null)
+  const createBarcodeInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
@@ -1285,6 +1287,26 @@ export function Collection({
   useEffect(() => {
     selectedItemIDRef.current = selectedItemID
   }, [selectedItemID])
+
+  useEffect(() => {
+    if (
+      !itemEditorOpen ||
+      itemEditorMode !== 'create' ||
+      itemEditorSurface !== 'dialog'
+    ) {
+      return
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      if (itemCreateIntent === 'barcode') {
+        createBarcodeInputRef.current?.focus()
+      } else if (itemCreateIntent === 'text') {
+        createPasteInputRef.current?.focus()
+      }
+    }, 0)
+
+    return () => window.clearTimeout(focusTimer)
+  }, [itemCreateIntent, itemEditorMode, itemEditorOpen, itemEditorSurface])
 
   const resetCreateAttachments = useCallback(() => {
     setItemCreateIntent('manual')
@@ -2815,7 +2837,7 @@ export function Collection({
           throw new Error(`create_item_photo_${photoResponse.status}`)
         }
       }
-      if (wasCreateMode && itemCreateIntent === 'barcode') {
+      if (hasCreateBarcode) {
         const barcodeResponse = await fetch(
           `/api/items/${encodeURIComponent(savedID)}/barcodes`,
           {
@@ -2832,7 +2854,7 @@ export function Collection({
       setItemSaveSuccess(
         wasCreateMode && hasCreatePhoto
           ? 'Item created with photo and selected.'
-          : wasCreateMode && itemCreateIntent === 'barcode' && hasCreateBarcode
+          : hasCreateBarcode
             ? 'Item created with barcode and selected.'
             : wasCreateMode
               ? 'Item created and selected for follow-up media attach.'
@@ -3238,7 +3260,7 @@ export function Collection({
   )
 
   const startPasteCreateItem = useCallback(async () => {
-    startCreateItem('manual')
+    startCreateItem('text')
     setPasteCreateError(null)
     setPasteCreateSuccess(null)
     if (!navigator.clipboard?.readText) {
@@ -4023,7 +4045,10 @@ export function Collection({
                       }
                     }}
                   >
-                    <DialogContent data-testid='inventory-item-editor-dialog'>
+                    <DialogContent
+                      className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'
+                      data-testid='inventory-item-editor-dialog'
+                    >
                       <div
                         className='space-y-4'
                         data-testid={
@@ -4035,11 +4060,7 @@ export function Collection({
                         <DialogHeader>
                           <DialogTitle>
                             {itemEditorMode === 'create'
-                              ? itemCreateIntent === 'photo'
-                                ? 'Create Item From Photo'
-                                : itemCreateIntent === 'barcode'
-                                  ? 'Create Item From Barcode'
-                                  : 'Create Item'
+                              ? 'Create Item'
                               : 'Edit Item'}
                           </DialogTitle>
                         </DialogHeader>
@@ -4060,12 +4081,75 @@ export function Collection({
                             className='space-y-3 rounded-md border bg-muted/20 p-3'
                             data-testid='inventory-create-paste-panel'
                           >
+                            <div
+                              className='flex flex-wrap gap-2'
+                              data-testid='inventory-create-mode-actions'
+                            >
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant={
+                                  itemCreateIntent === 'text'
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                data-testid='inventory-create-text-mode'
+                                onClick={() => {
+                                  setItemCreateIntent('text')
+                                  createPasteInputRef.current?.focus()
+                                }}
+                              >
+                                <ClipboardPaste
+                                  className='size-4'
+                                  aria-hidden='true'
+                                />
+                                Text
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant={
+                                  itemCreateIntent === 'photo'
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                data-testid='inventory-create-photo-mode'
+                                onClick={() => {
+                                  setItemCreateIntent('photo')
+                                }}
+                              >
+                                <Images className='size-4' aria-hidden='true' />
+                                Image
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant={
+                                  itemCreateIntent === 'barcode'
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                data-testid='inventory-create-barcode-mode'
+                                onClick={() => {
+                                  setItemCreateIntent('barcode')
+                                  createBarcodeInputRef.current?.focus()
+                                }}
+                              >
+                                <Barcode
+                                  className='size-4'
+                                  aria-hidden='true'
+                                />
+                                Barcode
+                              </Button>
+                            </div>
                             <div className='flex gap-2'>
                               <Input
+                                ref={createPasteInputRef}
                                 placeholder='Paste URL or text'
                                 aria-label='Paste URL or text to process into item fields'
                                 data-testid='inventory-create-paste-input'
                                 value={pasteCreateInput}
+                                onFocus={() => setItemCreateIntent('text')}
                                 onChange={(event) => {
                                   setPasteCreateInput(event.target.value)
                                   setPasteCreateError(null)
@@ -4124,6 +4208,7 @@ export function Collection({
                           <div
                             className='rounded-md border bg-muted/30 p-3'
                             data-testid='inventory-create-media-panel'
+                            data-active-mode={itemCreateIntent}
                           >
                             <div className='grid gap-3 md:grid-cols-2'>
                               <div className='space-y-2'>
@@ -4132,7 +4217,10 @@ export function Collection({
                                   variant='outline'
                                   data-testid='inventory-create-take-image'
                                 >
-                                  <label htmlFor='inventory-create-photo-input'>
+                                  <label
+                                    htmlFor='inventory-create-photo-input'
+                                    onClick={() => setItemCreateIntent('photo')}
+                                  >
                                     <Images
                                       className='size-4'
                                       aria-hidden='true'
@@ -4146,11 +4234,12 @@ export function Collection({
                                   accept='image/*'
                                   capture='environment'
                                   data-testid='inventory-create-photo-input'
-                                  onChange={(event) =>
+                                  onChange={(event) => {
+                                    setItemCreateIntent('photo')
                                     setItemCreatePhotoFile(
                                       event.target.files?.[0] ?? null
                                     )
-                                  }
+                                  }}
                                 />
                                 <p className='text-xs text-muted-foreground'>
                                   {itemCreatePhotoFile
@@ -4158,31 +4247,32 @@ export function Collection({
                                     : 'Take or choose a photo to create an image-only draft.'}
                                 </p>
                               </div>
-                              {itemCreateIntent === 'barcode' ? (
-                                <div className='space-y-2'>
-                                  <label
-                                    className='text-sm font-medium'
-                                    htmlFor='inventory-create-barcode-input'
-                                  >
-                                    Barcode
-                                  </label>
-                                  <Input
-                                    id='inventory-create-barcode-input'
-                                    data-testid='inventory-create-barcode-input'
-                                    placeholder='Enter barcode for the new item'
-                                    value={itemCreateBarcodeInput}
-                                    onChange={(event) =>
-                                      setItemCreateBarcodeInput(
-                                        event.target.value
-                                      )
-                                    }
-                                  />
-                                  <p className='text-xs text-muted-foreground'>
-                                    This barcode will be attached after the item
-                                    is created.
-                                  </p>
-                                </div>
-                              ) : null}
+                              <div className='space-y-2'>
+                                <label
+                                  className='text-sm font-medium'
+                                  htmlFor='inventory-create-barcode-input'
+                                >
+                                  Barcode
+                                </label>
+                                <Input
+                                  ref={createBarcodeInputRef}
+                                  id='inventory-create-barcode-input'
+                                  data-testid='inventory-create-barcode-input'
+                                  placeholder='Enter barcode for the new item'
+                                  value={itemCreateBarcodeInput}
+                                  onFocus={() => setItemCreateIntent('barcode')}
+                                  onChange={(event) => {
+                                    setItemCreateIntent('barcode')
+                                    setItemCreateBarcodeInput(
+                                      event.target.value
+                                    )
+                                  }}
+                                />
+                                <p className='text-xs text-muted-foreground'>
+                                  This barcode will be attached after the item
+                                  is created.
+                                </p>
+                              </div>
                             </div>
                           </div>
                         ) : null}
