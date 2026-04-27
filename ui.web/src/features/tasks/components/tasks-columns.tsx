@@ -9,6 +9,7 @@ import {
   TrendingDownIcon,
   TrendingUpIcon,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -265,22 +266,51 @@ function WishlistOwnedCell({
   ) => Promise<void>
   onWishlistPurchaseRow?: (task: Task) => void
 }) {
+  const owned = Boolean(task.owned)
+
   return (
     <div
       className='flex min-w-[5rem] items-center gap-1'
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <input
-        type='checkbox'
-        checked={Boolean(task.owned)}
+      <button
+        type='button'
+        role='checkbox'
+        aria-checked={owned}
+        data-state={owned ? 'checked' : 'unchecked'}
         data-testid={`wishlist-owned-checkbox-${task.id}`}
         aria-label={`Owned status for ${task.title}`}
-        className='h-4 w-4 rounded border'
-        onChange={(event) => {
-          void onWishlistInlineUpdate?.(task, { owned: event.target.checked })
+        className={cn(
+          'relative flex h-7 w-12 items-center justify-center rounded-md border transition-colors',
+          owned
+            ? 'border-slate-700 bg-slate-950 shadow-inner'
+            : 'border-border bg-background hover:bg-accent/40'
+        )}
+        onClick={() => {
+          void onWishlistInlineUpdate?.(task, { owned: !owned })
         }}
-      />
+      >
+        <svg
+          viewBox='0 0 34 18'
+          aria-hidden='true'
+          className={cn(
+            'h-4 w-9 transition-opacity',
+            owned ? 'opacity-100' : 'opacity-0'
+          )}
+          data-testid={`wishlist-owned-tick-${task.id}`}
+          preserveAspectRatio='none'
+        >
+          <polyline
+            points='1,11 7,14 13,11 19,11 25,12 33,3'
+            fill='none'
+            stroke='rgb(73 103 255)'
+            strokeWidth='3'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+          />
+        </svg>
+      </button>
       <Button
         type='button'
         variant='outline'
