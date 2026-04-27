@@ -145,6 +145,69 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });
 
+  it("uses one create modal for manual, paste, photo, and barcode header actions", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsList");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and("contain", "Create Item")
+      .and("not.contain", "Create Item From");
+    cy.get('[data-testid="inventory-create-paste-input"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-take-image"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="inventory-create-barcode-input"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+
+    cy.get('[data-testid="inventory-barcodes-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and("contain", "Create Item")
+      .and("not.contain", "Create Item From Barcode");
+    cy.get('[data-testid="inventory-create-paste-input"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-take-image"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="inventory-create-barcode-input"]')
+      .should("be.visible")
+      .and("be.focused");
+    cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+
+    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and("contain", "Create Item")
+      .and("not.contain", "Create Item From Photo");
+    cy.get('[data-testid="inventory-create-paste-input"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-barcode-input"]').should("be.visible");
+    cy.get('[data-testid="inventory-create-media-panel"]').should(
+      "have.attr",
+      "data-active-mode",
+      "photo"
+    );
+    cy.get('[data-testid="inventory-item-editor-cancel"]').click();
+
+    cy.get('[data-testid="inventory-paste-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and("contain", "Create Item")
+      .and("not.contain", "Create Item From");
+    cy.get('[data-testid="inventory-create-paste-input"]')
+      .should("be.visible")
+      .and("be.focused");
+    cy.get('[data-testid="inventory-create-take-image"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="inventory-create-barcode-input"]').should("be.visible");
+  });
+
   it("creates a draft item when any single field is provided", () => {
     const items: Array<{
       id: string;
