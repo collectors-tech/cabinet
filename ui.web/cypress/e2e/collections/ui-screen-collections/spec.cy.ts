@@ -25,6 +25,7 @@ describe('ui-screen-collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-section"]').should('be.visible')
+    cy.get('[data-testid="collections-table-toolbar"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
     cy.contains('Collections table').should('not.exist')
     cy.contains(
@@ -38,7 +39,9 @@ describe('ui-screen-collections', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-workspace"]').should('be.visible')
+    cy.get('[data-testid="collections-table-toolbar"]').should('be.visible')
     cy.get('[data-testid="collections-shared-table"]').should('be.visible')
+    cy.get('[data-testid="collections-members-table-toolbar"]').should('be.visible')
     cy.get('[data-testid="collections-members-table"]').should('be.visible')
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'All Items')
     cy.get('[data-testid="collections-selected-name"]').should('not.exist')
@@ -151,6 +154,27 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-row-watch-list"]').should('be.visible')
     cy.get('[data-testid="collections-row-all-items"]').should('not.exist')
     cy.get('[data-testid="collections-management-summary"]').should('contain.text', 'Showing 1 of 6 collections.')
+  })
+
+  it('UI-SCREEN-COLLECTIONS-017 filters collection members within the members table surface', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-row-all-items"]').click()
+    cy.get('[data-testid="collections-members-summary"]').should(
+      'contain.text',
+      'Showing 5 of 5 items.'
+    )
+    cy.get('[data-testid="collections-members-search-input"]').type('charizard')
+    cy.get('[data-testid="collections-member-row-inventory-item-charizard-base"]').should(
+      'exist'
+    )
+    cy.get('[data-testid="collections-member-row-inventory-item-kobe-rookie"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="collections-members-summary"]').should(
+      'contain.text',
+      'Showing 1 of 5 items.'
+    )
   })
 
   it('UI-SCREEN-COLLECTIONS-007 keeps item assignment actions out of Collections', () => {
