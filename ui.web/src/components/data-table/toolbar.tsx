@@ -9,6 +9,7 @@ type DataTableToolbarProps<TData> = {
   table: Table<TData>
   searchPlaceholder?: string
   searchKey?: string
+  searchInputTestId?: string
   customFilters?: React.ReactNode
   filters?: {
     columnId: string
@@ -25,6 +26,7 @@ export function DataTableToolbar<TData>({
   table,
   searchPlaceholder = 'Filter...',
   searchKey,
+  searchInputTestId,
   customFilters,
   filters = [],
 }: DataTableToolbarProps<TData>) {
@@ -37,6 +39,7 @@ export function DataTableToolbar<TData>({
         {searchKey ? (
           <Input
             placeholder={searchPlaceholder}
+            data-testid={searchInputTestId}
             value={
               (table.getColumn(searchKey)?.getFilterValue() as string) ?? ''
             }
@@ -48,6 +51,7 @@ export function DataTableToolbar<TData>({
         ) : (
           <Input
             placeholder={searchPlaceholder}
+            data-testid={searchInputTestId}
             value={table.getState().globalFilter ?? ''}
             onChange={(event) => table.setGlobalFilter(event.target.value)}
             className='h-8 w-[150px] lg:w-[250px]'

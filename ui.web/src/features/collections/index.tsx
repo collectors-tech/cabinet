@@ -3,7 +3,10 @@ import {
   type ColumnDef,
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   type SortingState,
   useReactTable,
@@ -51,6 +54,12 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
+  DataTableColumnHeader,
+  DataTablePagination,
+  DataTableToolbar,
+} from '@/components/data-table'
+import {
+  type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
   collectionKey,
   useWorkspaceCollections,
@@ -60,6 +69,7 @@ const collectionsHeaderDescription =
   'Manage collection rows and item placement from the shared Cabinet table surface.'
 
 type CollectionRow = WorkspaceCollectionSummary
+type CollectionMemberRow = WorkspaceCollectionItem
 
 function buildCollectionColumns({
   onEdit,
@@ -71,7 +81,9 @@ function buildCollectionColumns({
   return [
     {
       accessorKey: 'name',
-      header: 'Collection',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Collection' />
+      ),
       cell: ({ row }) => (
         <div className='space-y-1'>
           <div
@@ -88,7 +100,9 @@ function buildCollectionColumns({
     },
     {
       accessorKey: 'itemCount',
-      header: 'Items',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Items' />
+      ),
       cell: ({ row }) => (
         <span data-testid={`collections-row-count-${row.original.key}`}>
           {row.original.itemCount}
@@ -97,15 +111,21 @@ function buildCollectionColumns({
     },
     {
       accessorKey: 'scopeLabel',
-      header: 'Scope',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Scope' />
+      ),
     },
     {
       accessorKey: 'statusLabel',
-      header: 'Status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Status' />
+      ),
     },
     {
       accessorKey: 'updatedLabel',
-      header: 'Updated',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Updated' />
+      ),
     },
     {
       id: 'actions',
@@ -144,6 +164,52 @@ function buildCollectionColumns({
   ]
 }
 
+function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
+  return [
+    {
+      accessorKey: 'name',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Item' />
+      ),
+      cell: ({ row }) => (
+        <span
+          className='font-medium'
+          data-testid={`collections-member-${collectionKey(row.original.name)}`}
+        >
+          <span
+            data-testid={`collections-member-name-${collectionKey(row.original.name)}`}
+          >
+            {row.original.name}
+          </span>
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'detail',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Details' />
+      ),
+      cell: ({ row }) => (
+        <span className='text-muted-foreground'>{row.original.detail}</span>
+      ),
+    },
+    {
+      accessorKey: 'collectionName',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Current collection' />
+      ),
+      cell: ({ row }) => (
+        <span
+          className='text-muted-foreground'
+          data-testid={`collections-member-current-${collectionKey(row.original.name)}`}
+        >
+          Currently in {row.original.collectionName ?? 'Unassigned'}.
+        </span>
+      ),
+    },
+  ]
+}
+
 export function Collections() {
   const {
     activeWorkspaceCollection,
@@ -159,6 +225,10 @@ export function Collections() {
     { id: 'name', desc: false },
   ])
   const [globalFilter, setGlobalFilter] = useState('')
+  const [memberSorting, setMemberSorting] = useState<SortingState>([
+    { id: 'name', desc: false },
+  ])
+  const [memberGlobalFilter, setMemberGlobalFilter] = useState('')
   const [selectedCollectionID, setSelectedCollectionID] = useState<
     string | null
   >(null)
@@ -208,7 +278,9 @@ export function Collections() {
       }),
     [openEditPanel]
   )
+  const memberColumns = useMemo(() => buildCollectionMemberColumns(), [])
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -234,9 +306,42 @@ export function Collections() {
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+  })
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const membersTable = useReactTable({
+    data: selectedCollectionItems,
+    columns: memberColumns,
+    state: {
+      sorting: memberSorting,
+      globalFilter: memberGlobalFilter,
+    },
+    onSortingChange: setMemberSorting,
+    onGlobalFilterChange: setMemberGlobalFilter,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const searchValue = String(filterValue).trim().toLowerCase()
+      if (!searchValue) {
+        return true
+      }
+      return [
+        row.original.name,
+        row.original.detail,
+        row.original.collectionName ?? 'Unassigned',
+      ].some((value) => value.toLowerCase().includes(searchValue))
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
   const filteredCount = table.getFilteredRowModel().rows.length
+  const filteredMemberCount = membersTable.getFilteredRowModel().rows.length
   const visibleRows = table
     .getRowModel()
     .rows.map((tableRow) => tableRow.original)
@@ -350,15 +455,16 @@ export function Collections() {
           <Card data-testid='collections-section'>
             <CardContent className='space-y-4'>
               <div
-                className='flex items-center gap-3'
+                className='space-y-3'
                 data-testid='collections-management-tools'
               >
-                <Input
-                  value={globalFilter}
-                  onChange={(event) => setGlobalFilter(event.target.value)}
-                  placeholder='Filter collections...'
-                  data-testid='collections-search-input'
-                />
+                <div data-testid='collections-table-toolbar'>
+                  <DataTableToolbar
+                    table={table}
+                    searchPlaceholder='Filter collections...'
+                    searchInputTestId='collections-search-input'
+                  />
+                </div>
                 <div
                   className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
                   data-testid='collections-management-summary'
@@ -371,7 +477,7 @@ export function Collections() {
               </div>
 
               <div
-                className='rounded-md border'
+                className='overflow-x-auto rounded-md border'
                 data-testid='collections-shared-table'
               >
                 <Table>
@@ -444,60 +550,76 @@ export function Collections() {
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
+              <div className='space-y-3'>
+                <div data-testid='collections-members-table-toolbar'>
+                  <DataTableToolbar
+                    table={membersTable}
+                    searchPlaceholder='Filter collection members...'
+                    searchInputTestId='collections-members-search-input'
+                  />
+                </div>
+                <p
+                  className='text-sm text-muted-foreground'
+                  data-testid='collections-members-summary'
+                >
+                  Showing {filteredMemberCount} of{' '}
+                  {selectedCollectionItems.length} items.
+                </p>
+              </div>
               <div
-                className='rounded-md border'
+                className='overflow-x-auto rounded-md border'
                 data-testid='collections-members-table'
               >
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Details</TableHead>
-                      <TableHead>Current collection</TableHead>
-                    </TableRow>
+                    {membersTable.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
                   </TableHeader>
                   <TableBody>
-                    {selectedCollectionItems.length ? (
-                      selectedCollectionItems.map((item) => (
+                    {membersTable.getRowModel().rows.length ? (
+                      membersTable.getRowModel().rows.map((row) => (
                         <TableRow
-                          key={item.id}
-                          data-testid={`collections-member-row-${item.id}`}
+                          key={row.id}
+                          data-testid={`collections-member-row-${row.original.id}`}
                         >
-                          <TableCell
-                            className='font-medium'
-                            data-testid={`collections-member-${collectionKey(item.name)}`}
-                          >
-                            <span
-                              data-testid={`collections-member-name-${collectionKey(item.name)}`}
-                            >
-                              {item.name}
-                            </span>
-                          </TableCell>
-                          <TableCell className='text-muted-foreground'>
-                            {item.detail}
-                          </TableCell>
-                          <TableCell
-                            className='text-muted-foreground'
-                            data-testid={`collections-member-current-${collectionKey(item.name)}`}
-                          >
-                            Currently in {item.collectionName ?? 'Unassigned'}.
-                          </TableCell>
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       ))
                     ) : (
                       <TableRow data-testid='collections-members-empty-row'>
                         <TableCell
-                          colSpan={3}
+                          colSpan={memberColumns.length}
                           className='h-24 text-center text-muted-foreground'
                         >
-                          No items are currently assigned to{' '}
-                          {selectedCollectionName}.
+                          {selectedCollectionItems.length
+                            ? 'No collection members match the current filter.'
+                            : `No items are currently assigned to ${selectedCollectionName}.`}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
               </div>
+              <DataTablePagination table={membersTable} />
             </CardContent>
           </Card>
         </div>
