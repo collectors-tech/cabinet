@@ -309,6 +309,7 @@ export function Tasks({
   const tableDataRef = useRef(tableData)
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
+  const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
   const [wishlistActionItemID, setWishlistActionItemID] = useState<
     string | null
   >(null)
@@ -1072,11 +1073,13 @@ export function Tasks({
             data={displayedData}
             routePath={routePath}
             customFilters={wishlistCollectionFilter}
-            onEditRow={(task) => {
+            onEditRow={(task, navigationRows) => {
+              setDialogNavigationRows(navigationRows ?? displayedData)
               setCurrentDialogRow(task)
               setDialogOpen('update')
             }}
             onDeleteRow={(task) => {
+              setDialogNavigationRows([])
               setCurrentDialogRow(task)
               setDialogOpen('delete')
             }}
@@ -1110,6 +1113,7 @@ export function Tasks({
         setOpen={setDialogOpen}
         currentRow={currentDialogRow}
         setCurrentRow={setCurrentDialogRow}
+        navigationRows={dialogNavigationRows}
         onWishlistSubmit={isWishlistRoute ? handleWishlistSubmit : undefined}
         onWishlistDelete={isWishlistRoute ? handleWishlistDelete : undefined}
         onWishlistImport={isWishlistRoute ? handleWishlistImport : undefined}

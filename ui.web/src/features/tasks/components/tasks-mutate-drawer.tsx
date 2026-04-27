@@ -46,6 +46,10 @@ type TaskMutateDrawerProps = {
     currentRow?: Task
   ) => Promise<void>
   isLoading?: boolean
+  canNavigatePrevious?: boolean
+  canNavigateNext?: boolean
+  onNavigatePrevious?: () => void
+  onNavigateNext?: () => void
 }
 
 const taskFormSchema = z.object({
@@ -93,6 +97,10 @@ export function TasksMutateDrawer({
   routePath,
   onWishlistSubmit,
   isLoading = false,
+  canNavigatePrevious = false,
+  canNavigateNext = false,
+  onNavigatePrevious,
+  onNavigateNext,
 }: TaskMutateDrawerProps) {
   const isUpdate = !!currentRow
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
@@ -153,7 +161,14 @@ export function TasksMutateDrawer({
   if (isWishlistRoute) {
     return (
       <Sheet open={open} onOpenChange={handleClose}>
-        <SheetContent className='flex flex-col'>
+        <SheetContent
+          className='flex flex-col'
+          data-testid={
+            isUpdate ? 'wishlist-edit-panel' : 'wishlist-create-panel'
+          }
+          data-side='right'
+          side='right'
+        >
           <SheetHeader className='text-start'>
             <SheetTitle>
               {isUpdate ? 'Edit Wishlist Entry' : 'Create Wishlist Entry'}
@@ -163,6 +178,30 @@ export function TasksMutateDrawer({
                 ? 'Update the selected wishlist entry and keep planning details in sync.'
                 : 'Create a new wishlist entry with the details you want to track.'}
             </SheetDescription>
+            {isUpdate ? (
+              <div className='flex flex-wrap items-center gap-2 pt-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  data-testid='wishlist-edit-previous'
+                  disabled={!canNavigatePrevious || isLoading}
+                  onClick={onNavigatePrevious}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  data-testid='wishlist-edit-next'
+                  disabled={!canNavigateNext || isLoading}
+                  onClick={onNavigateNext}
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
           </SheetHeader>
           <Form {...wishlistForm}>
             <form
