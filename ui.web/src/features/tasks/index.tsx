@@ -291,13 +291,8 @@ export function Tasks({
   description = '',
   routePath = '/_authenticated/inventory/',
 }: TasksProps) {
-  const {
-    workspaceCollections,
-    activeWorkspaceCollection,
-    collectionItems,
-    setActiveWorkspaceCollection,
-    addCollection,
-  } = useWorkspaceCollections()
+  const { workspaceCollections, collectionItems, addCollection } =
+    useWorkspaceCollections()
   const [inlineCollectionInputOpen, setInlineCollectionInputOpen] =
     useState(false)
   const [inlineCollectionName, setInlineCollectionName] = useState('')
@@ -306,6 +301,8 @@ export function Tasks({
     setInlineCollectionValidationMessage,
   ] = useState('')
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+  const [wishlistActiveCollection, setWishlistActiveCollection] =
+    useState('All Items')
   const [tableData, setTableData] = useState<Task[]>(() =>
     isWishlistRoute ? [] : tasks
   )
@@ -323,7 +320,6 @@ export function Tasks({
         window.localStorage.getItem(WISHLIST_PLANNING_FOCUS_STORAGE_KEY)
       )
     })
-  const wishlistCollectionNormalizedRef = useRef(false)
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -512,10 +508,7 @@ export function Tasks({
   )
 
   const handleWishlistInlineUpdate = useCallback(
-    async (
-      task: Task,
-      changes: WishlistInlineChanges
-    ) => {
+    async (task: Task, changes: WishlistInlineChanges) => {
       const wishlistEntryID = task.wishlistEntryID?.trim()
       if (!wishlistEntryID) {
         toast.error('Wishlist entry is missing update metadata.')
@@ -531,7 +524,8 @@ export function Tasks({
       let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
       const nextOwned = changes.owned ?? currentTask.owned ?? false
       const nextPricePaid = changes.pricePaid ?? currentTask.pricePaid ?? 0
-      const nextPurchaseUrl = changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
+      const nextPurchaseUrl =
+        changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
       const nextPurchaseDate =
         changes.purchaseDate ?? currentTask.purchaseDate ?? ''
       const nextPurchaseCondition =
@@ -861,13 +855,13 @@ export function Tasks({
     const focusedData = tableData.filter((task) =>
       matchesWishlistPlanningFocus(task, wishlistPlanningFocus)
     )
-    if (activeWorkspaceCollection === 'All Items') {
+    if (wishlistActiveCollection === 'All Items') {
       return focusedData
     }
 
     const selectedCollectionItemIDs = new Set(
       collectionItems
-        .filter((item) => item.collectionName === activeWorkspaceCollection)
+        .filter((item) => item.collectionName === wishlistActiveCollection)
         .map((item) => item.id)
     )
 
@@ -875,44 +869,23 @@ export function Tasks({
       selectedCollectionItemIDs.has(task.itemID ?? task.id)
     )
   }, [
-    activeWorkspaceCollection,
     collectionItems,
     isWishlistRoute,
     tableData,
+    wishlistActiveCollection,
     wishlistPlanningFocus,
   ])
 
   useEffect(() => {
     if (
       !isWishlistRoute ||
-      wishlistCollectionNormalizedRef.current ||
-      activeWorkspaceCollection === 'All Items' ||
-      collectionItems.length > 0 ||
-      tableData.length === 0
+      workspaceCollections.includes(wishlistActiveCollection)
     ) {
       return
     }
 
-    wishlistCollectionNormalizedRef.current = true
-    const wishlistItemIDs = new Set(
-      tableData.map((task) => task.itemID ?? task.id)
-    )
-    const collectionHasWishlistRows = collectionItems.some(
-      (item) =>
-        item.collectionName === activeWorkspaceCollection &&
-        wishlistItemIDs.has(item.id)
-    )
-
-    if (!collectionHasWishlistRows) {
-      void setActiveWorkspaceCollection('All Items')
-    }
-  }, [
-    activeWorkspaceCollection,
-    collectionItems,
-    isWishlistRoute,
-    setActiveWorkspaceCollection,
-    tableData,
-  ])
+    setWishlistActiveCollection('All Items')
+  }, [isWishlistRoute, wishlistActiveCollection, workspaceCollections])
 
   const wishlistCollectionFilter = isWishlistRoute ? (
     <div
@@ -922,10 +895,9 @@ export function Tasks({
       <select
         className='h-8 min-w-[10rem] rounded-md border bg-background px-2 text-sm'
         data-testid='wishlist-table-collection-select'
-        value={activeWorkspaceCollection}
+        value={wishlistActiveCollection}
         onChange={(event) => {
-          wishlistCollectionNormalizedRef.current = true
-          void setActiveWorkspaceCollection(event.target.value)
+          setWishlistActiveCollection(event.target.value)
         }}
       >
         {workspaceCollections.map((collection) => (
@@ -942,7 +914,7 @@ export function Tasks({
         className='text-xs text-muted-foreground'
         data-testid='wishlist-table-collection-selected'
       >
-        {activeWorkspaceCollection}
+        {wishlistActiveCollection}
       </span>
       <Button
         type='button'
@@ -979,7 +951,6 @@ export function Tasks({
             className='h-8 px-3'
             data-testid='wishlist-table-new-collection-save'
             onClick={async () => {
-              wishlistCollectionNormalizedRef.current = true
               const created = await addCollection(inlineCollectionName)
               if (!created) {
                 setInlineCollectionValidationMessage(
@@ -990,6 +961,7 @@ export function Tasks({
               setInlineCollectionValidationMessage('')
               setInlineCollectionName('')
               setInlineCollectionInputOpen(false)
+              setWishlistActiveCollection(created)
             }}
           >
             Save
