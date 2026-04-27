@@ -65,6 +65,62 @@ function formatCostDraft(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
+function buildSparklinePoints(values: number[]) {
+  const width = 88
+  const height = 28
+  const padding = 3
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const step =
+    values.length > 1 ? (width - padding * 2) / (values.length - 1) : 0
+
+  return values
+    .map((value, index) => {
+      const x = padding + index * step
+      const y =
+        height - padding - ((value - min) / range) * (height - padding * 2)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+}
+
+function WishlistPriceSparkline({
+  task,
+  label,
+}: {
+  task: Task
+  label: string
+}) {
+  const values = (task.priceHistory ?? []).filter(
+    (value) => typeof value === 'number' && Number.isFinite(value)
+  )
+
+  if (values.length < 2) {
+    return null
+  }
+
+  return (
+    <svg
+      viewBox='0 0 88 28'
+      role='img'
+      aria-label={`${label} chart`}
+      className='h-7 w-[88px] rounded bg-slate-950/60'
+      data-testid={`wishlist-price-sparkline-${task.id}`}
+      preserveAspectRatio='none'
+    >
+      <polyline
+        points={buildSparklinePoints(values)}
+        fill='none'
+        stroke='rgb(73 103 255)'
+        strokeWidth='2.5'
+        strokeLinecap='round'
+        strokeLinejoin='round'
+      />
+    </svg>
+  )
+}
+
 function WishlistPriceTrendCell({ task }: { task: Task }) {
   const trend = task.priceTrend ?? 'unknown'
   const trendConfig = {
@@ -92,14 +148,15 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
   const Icon = trendConfig.icon
 
   return (
-    <span
-      className='flex min-w-[44px] items-center justify-center'
+    <div
+      className='flex min-w-[8.5rem] items-center gap-2'
       data-testid={`wishlist-price-trend-${task.id}`}
       aria-label={trendConfig.label}
       title={trendConfig.label}
     >
       <Icon className={`size-4 ${trendConfig.className}`} />
-    </span>
+      <WishlistPriceSparkline task={task} label={trendConfig.label} />
+    </div>
   )
 }
 

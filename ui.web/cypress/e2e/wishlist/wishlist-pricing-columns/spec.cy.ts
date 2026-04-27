@@ -97,6 +97,11 @@ describe("wishlist-pricing-columns", () => {
       .scrollIntoView()
       .should("have.attr", "aria-label", "Price trending down")
       .and("be.visible");
+    cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]')
+      .should("be.visible")
+      .find("polyline")
+      .should("have.attr", "points")
+      .and("not.be.empty");
 
     cy.get('[data-testid="wishlist-cost-input-item-price-1"]')
       .scrollIntoView()
