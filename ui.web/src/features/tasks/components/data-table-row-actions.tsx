@@ -18,8 +18,6 @@ type DataTableRowActionsProps<TData> = {
   routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
   onEditRow?: (task: Task) => void
   onDeleteRow?: (task: Task) => void
-  onWishlistMarkOwned?: (task: Task) => Promise<void>
-  wishlistActionItemID?: string | null
 }
 
 export function DataTableRowActions<TData>({
@@ -27,12 +25,9 @@ export function DataTableRowActions<TData>({
   routePath,
   onEditRow,
   onDeleteRow,
-  onWishlistMarkOwned,
-  wishlistActionItemID,
 }: DataTableRowActionsProps<TData>) {
   const task = taskSchema.parse(row.original)
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
-  const isWishlistActionPending = wishlistActionItemID === task.id
   const [open, setOpen] = useState(false)
 
   return (
@@ -69,23 +64,6 @@ export function DataTableRowActions<TData>({
           event.stopPropagation()
         }}
       >
-        {isWishlistRoute ? (
-          <>
-            <DropdownMenuItem
-              data-testid='wishlist-mark-owned-action'
-              disabled={!task.wishlistEntryID || isWishlistActionPending}
-              onSelect={(event) => {
-                event.stopPropagation()
-                if (onWishlistMarkOwned) {
-                  void onWishlistMarkOwned(task)
-                }
-              }}
-            >
-              {isWishlistActionPending ? 'Moving...' : 'Mark owned'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        ) : null}
         <DropdownMenuItem
           onSelect={(event) => {
             event.stopPropagation()

@@ -313,9 +313,6 @@ export function Tasks({
   const [dialogOpen, setDialogOpen] = useState<TasksDialogType | null>(null)
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
-  const [wishlistActionItemID, setWishlistActionItemID] = useState<
-    string | null
-  >(null)
   const [isWishlistMutating, setIsWishlistMutating] = useState(false)
   const [wishlistPlanningFocus, setWishlistPlanningFocus] =
     useState<WishlistPlanningFocus>(() => {
@@ -427,35 +424,6 @@ export function Tasks({
       cancelled = true
     }
   }, [isWishlistRoute, loadWishlistData])
-
-  const handleWishlistMarkOwned = useCallback(
-    async (task: Task) => {
-      const wishlistEntryID = task.wishlistEntryID?.trim()
-      if (!wishlistEntryID) {
-        toast.error('Wishlist entry is missing transition metadata.')
-        return
-      }
-      setWishlistActionItemID(task.id)
-      try {
-        const response = await fetch('/api/wishlist/convert-owned', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: wishlistEntryID }),
-        })
-        if (!response.ok) {
-          throw new Error('failed_to_move_wishlist_item_to_owned')
-        }
-        const mapped = await loadWishlistData()
-        setTableData(mapped)
-        toast.success(`${task.title} moved to inventory.`)
-      } catch {
-        toast.error('Move to inventory failed. Try again.')
-      } finally {
-        setWishlistActionItemID(null)
-      }
-    },
-    [loadWishlistData]
-  )
 
   const refreshWishlistTable = useCallback(async () => {
     const mapped = await loadWishlistData()
@@ -1149,9 +1117,6 @@ export function Tasks({
               setCurrentDialogRow(task)
               setDialogOpen('delete')
             }}
-            onWishlistMarkOwned={
-              isWishlistRoute ? handleWishlistMarkOwned : undefined
-            }
             onWishlistBulkStatusChange={
               isWishlistRoute ? handleWishlistBulkStatusChange : undefined
             }
@@ -1167,7 +1132,6 @@ export function Tasks({
             onWishlistInlineUpdate={
               isWishlistRoute ? handleWishlistInlineUpdate : undefined
             }
-            wishlistActionItemID={wishlistActionItemID}
             isWishlistMutating={isWishlistMutating}
           />
         </div>
