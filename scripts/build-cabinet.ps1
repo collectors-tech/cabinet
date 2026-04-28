@@ -7,23 +7,30 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $repoRoot "scripts\lib\cabinet-console.ps1")
+
 $targetDir = Join-Path $repoRoot $OutputDir
 $targetPath = Join-Path $targetDir $BinaryName
+
+Write-CabinetBanner -Command "build-cabinet" -Summary "Build static UI assets and the Cabinet runtime binary."
 
 if (-not (Test-Path $targetDir)) {
   New-Item -ItemType Directory -Path $targetDir | Out-Null
 }
 
-Write-Host "[build-cabinet] Building ui.web static bundle first"
+Write-CabinetSection "Static UI"
+Write-CabinetStatus -State "run" -Message "Building ui.web static bundle first."
 & (Join-Path $repoRoot "scripts\build-ui-static.ps1") -InstallDeps:$InstallUIDeps
 if ($LASTEXITCODE -ne 0) {
   throw "ui.web build failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "[build-cabinet] Building to $targetPath"
+Write-CabinetSection "Runtime"
+Write-CabinetKeyValue -Key "Output" -Value $targetPath
+Write-CabinetStatus -State "run" -Message "Building Cabinet executable."
 go build -o $targetPath ./cmd/cabinet
 if ($LASTEXITCODE -ne 0) {
   throw "go build failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "[build-cabinet] Done"
+Write-CabinetStatus -State "ok" -Message "Cabinet build complete."
