@@ -311,6 +311,161 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Bravo Item");
   });
 
+  it("edits existing item pricing evidence and creates default instance evidence from the right panel", () => {
+    const items = [
+      {
+        id: "item-alpha",
+        part_number: "PN-ALPHA",
+        title: "Alpha Item",
+        status: "active",
+        category: "Cars",
+        brand: "AFX",
+        priority: "medium",
+        description: "Alpha description",
+        notes: "Alpha notes",
+        tags: [],
+        source_urls: [],
+      },
+      {
+        id: "item-bravo",
+        part_number: "PN-BRAVO",
+        title: "Bravo Item",
+        status: "active",
+        category: "Trains",
+        brand: "Tyco",
+        priority: "medium",
+        description: "Bravo description",
+        notes: "Bravo notes",
+        tags: [],
+        source_urls: [],
+      },
+    ];
+    let alphaInstances = [
+      {
+        id: "instance-alpha",
+        item_id: "item-alpha",
+        condition: "used",
+        status: "loose",
+        quantity: 2,
+        storage_location: "Shelf A",
+        acquisition_price: 49.95,
+        acquisition_date: "2026-04-21",
+        notes: "Shelf note",
+      },
+    ];
+    let bravoInstances: Array<{
+      id: string;
+      item_id: string;
+      condition: string;
+      status: string;
+      quantity: number;
+      storage_location: string;
+      acquisition_price: number;
+      acquisition_date: string;
+      notes: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+    cy.intercept("GET", "/api/items/*/photos", {
+      statusCode: 200,
+      body: { photos: [] },
+    });
+    cy.intercept("GET", "/api/items/*/barcodes", {
+      statusCode: 200,
+      body: { barcodes: [] },
+    });
+    cy.intercept("GET", "/api/pricing/history?item_id=*", {
+      statusCode: 200,
+      body: { history: [] },
+    });
+    cy.intercept("GET", "/api/items/item-alpha/instances", (req) => {
+      req.reply({ statusCode: 200, body: { instances: alphaInstances } });
+    }).as("alphaInstances");
+    cy.intercept("GET", "/api/items/item-bravo/instances", (req) => {
+      req.reply({ statusCode: 200, body: { instances: bravoInstances } });
+    }).as("bravoInstances");
+    cy.intercept("PUT", "/api/items/item-alpha", (req) => {
+      req.reply({ statusCode: 200, body: { ...items[0], ...req.body } });
+    }).as("updateAlphaItem");
+    cy.intercept("PUT", "/api/items/item-bravo", (req) => {
+      req.reply({ statusCode: 200, body: { ...items[1], ...req.body } });
+    }).as("updateBravoItem");
+    cy.intercept("PUT", "/api/items/item-alpha/instances/instance-alpha", (req) => {
+      expect(req.body).to.include({
+        condition: "graded",
+        status: "sealed",
+        quantity: 3,
+        storage_location: "Vault B",
+        acquisition_price: 75.5,
+        acquisition_date: "2026-04-22",
+        notes: "Updated evidence note",
+      });
+      alphaInstances = [{ ...alphaInstances[0], ...req.body }];
+      req.reply({ statusCode: 200, body: alphaInstances[0] });
+    }).as("updateAlphaInstance");
+    cy.intercept("POST", "/api/items/item-bravo/instances", (req) => {
+      expect(req.body).to.include({
+        condition: "new",
+        status: "loose",
+        quantity: 1,
+        storage_location: "Case C",
+        acquisition_price: 22,
+        acquisition_date: "2026-04-23",
+        notes: "New instance evidence",
+      });
+      const created = {
+        id: "instance-bravo-created",
+        item_id: "item-bravo",
+        ...req.body,
+      };
+      bravoInstances = [created];
+      req.reply({ statusCode: 201, body: created });
+    }).as("createBravoInstance");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+    cy.wait("@alphaInstances");
+    cy.get('[data-testid="inventory-instance-price"]').clear().type("75.50");
+    cy.get('[data-testid="inventory-instance-quantity"]').clear().type("3");
+    cy.get('[data-testid="inventory-instance-condition"]').clear().type("graded");
+    cy.get('[data-testid="inventory-instance-status"]').clear().type("sealed");
+    cy.get('[data-testid="inventory-instance-storage-location"]')
+      .clear()
+      .type("Vault B");
+    cy.get('[data-testid="inventory-instance-acquisition-date"]')
+      .clear()
+      .type("2026-04-22");
+    cy.get('[data-testid="inventory-instance-notes-field"]')
+      .clear()
+      .type("Updated evidence note");
+    cy.get('[data-testid="inventory-item-save"]').click();
+    cy.wait("@updateAlphaItem");
+    cy.wait("@updateAlphaInstance");
+
+    cy.get('[data-testid="inventory-item-row-item-bravo"]').dblclick();
+    cy.wait("@bravoInstances");
+    cy.get('[data-testid="inventory-instance-price"]').clear().type("22");
+    cy.get('[data-testid="inventory-instance-quantity"]').clear().type("1");
+    cy.get('[data-testid="inventory-instance-condition"]').clear().type("new");
+    cy.get('[data-testid="inventory-instance-status"]').clear().type("loose");
+    cy.get('[data-testid="inventory-instance-storage-location"]')
+      .clear()
+      .type("Case C");
+    cy.get('[data-testid="inventory-instance-acquisition-date"]')
+      .clear()
+      .type("2026-04-23");
+    cy.get('[data-testid="inventory-instance-notes-field"]')
+      .clear()
+      .type("New instance evidence");
+    cy.get('[data-testid="inventory-item-save"]').click();
+    cy.wait("@updateBravoItem");
+    cy.wait("@createBravoInstance");
+  });
+
   it("uses one create modal for manual, paste, photo, and barcode header actions", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,

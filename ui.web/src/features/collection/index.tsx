@@ -51,7 +51,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
@@ -62,6 +61,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
@@ -149,6 +149,16 @@ type InventoryItemDraft = {
   notes: string
   tags: string
   source_urls: string
+}
+
+type InventoryInstanceDraft = {
+  acquisition_price: string
+  quantity: string
+  condition: string
+  status: string
+  storage_location: string
+  acquisition_date: string
+  notes: string
 }
 
 type InventoryCreateIntent = 'manual' | 'text' | 'photo' | 'barcode'
@@ -473,6 +483,48 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
   }
 }
 
+function emptyInventoryInstanceDraft(): InventoryInstanceDraft {
+  return {
+    acquisition_price: '',
+    quantity: '',
+    condition: '',
+    status: '',
+    storage_location: '',
+    acquisition_date: '',
+    notes: '',
+  }
+}
+
+function inventoryInstanceToDraft(
+  instance: InventoryInstance | null
+): InventoryInstanceDraft {
+  if (!instance) {
+    return emptyInventoryInstanceDraft()
+  }
+  return {
+    acquisition_price:
+      typeof instance.acquisition_price === 'number' &&
+      instance.acquisition_price > 0
+        ? String(instance.acquisition_price)
+        : '',
+    quantity:
+      typeof instance.quantity === 'number' && instance.quantity > 0
+        ? String(instance.quantity)
+        : '',
+    condition: instance.condition ?? '',
+    status: instance.status ?? '',
+    storage_location: instance.storage_location ?? '',
+    acquisition_date: instance.acquisition_date ?? '',
+    notes: instance.notes ?? '',
+  }
+}
+
+function hasInventoryInstanceDraftValue(
+  draft: InventoryInstanceDraft
+): boolean {
+  return Object.values(draft).some((value) => value.trim() !== '')
+}
+
 function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
   return Object.values(draft).some((value) => value.trim() !== '')
 }
@@ -520,7 +572,10 @@ function splitInventoryListField(value: string): string[] {
   return value
     .split(/[\n,]/)
     .map((entry) => entry.trim())
-    .filter((entry, index, entries) => entry !== '' && entries.indexOf(entry) === index)
+    .filter(
+      (entry, index, entries) =>
+        entry !== '' && entries.indexOf(entry) === index
+    )
 }
 
 function formatMoney(value: number): string {
@@ -1252,9 +1307,9 @@ export function Collection({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [inventoryPhotos, setInventoryPhotos] = useState<InventoryPhoto[]>([])
-  const [inventoryBarcodes, setInventoryBarcodes] = useState<InventoryBarcode[]>(
-    []
-  )
+  const [inventoryBarcodes, setInventoryBarcodes] = useState<
+    InventoryBarcode[]
+  >([])
   const [inventoryInstances, setInventoryInstances] = useState<
     InventoryInstance[]
   >([])
@@ -1291,6 +1346,8 @@ export function Collection({
   const [itemDraft, setItemDraft] = useState<InventoryItemDraft>(
     emptyInventoryItemDraft
   )
+  const [itemInstanceDraft, setItemInstanceDraft] =
+    useState<InventoryInstanceDraft>(emptyInventoryInstanceDraft)
   const [itemCreateIntent, setItemCreateIntent] =
     useState<InventoryCreateIntent>('manual')
   const [itemCreatePhotoFile, setItemCreatePhotoFile] = useState<File | null>(
@@ -1337,8 +1394,9 @@ export function Collection({
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
-  const [galleryPreviewPhotoIndex, setGalleryPreviewPhotoIndex] =
-    useState<number | null>(null)
+  const [galleryPreviewPhotoIndex, setGalleryPreviewPhotoIndex] = useState<
+    number | null
+  >(null)
   const inventoryPhotoRequestIDRef = useRef(0)
   const inventoryItemDetailRequestIDRef = useRef(0)
   const selectedItemIDRef = useRef('')
@@ -1398,6 +1456,7 @@ export function Collection({
       setItemEditorMode('create')
       setItemEditorSurface('dialog')
       setItemDraft(emptyInventoryItemDraft())
+      setItemInstanceDraft(emptyInventoryInstanceDraft())
       setItemCreateIntent(intent)
       setItemCreatePhotoFile(null)
       setItemCreateBarcodeInput('')
@@ -1436,6 +1495,7 @@ export function Collection({
       setItemEditorMode('edit')
       setItemEditorSurface(surface)
       setItemDraft(inventoryItemToDraft(item))
+      setItemInstanceDraft(emptyInventoryInstanceDraft())
       setItemSaveError(null)
       setItemSaveSuccess(null)
       selectInventoryItem(item)
@@ -1627,12 +1687,18 @@ export function Collection({
             tags: Array.isArray(item.tags)
               ? item.tags
                   .map((tag) => tag.trim())
-                  .filter((tag, index, tags) => tag !== '' && tags.indexOf(tag) === index)
+                  .filter(
+                    (tag, index, tags) =>
+                      tag !== '' && tags.indexOf(tag) === index
+                  )
               : [],
             source_urls: Array.isArray(item.source_urls)
               ? item.source_urls
                   .map((url) => url.trim())
-                  .filter((url, index, urls) => url !== '' && urls.indexOf(url) === index)
+                  .filter(
+                    (url, index, urls) =>
+                      url !== '' && urls.indexOf(url) === index
+                  )
               : [],
           }))
           .filter((item) => item.id !== '')
@@ -2636,13 +2702,23 @@ export function Collection({
           inventoryPhotos.findIndex((photo) => photo.is_primary)
         )
   const galleryPhoto = inventoryPhotos[galleryPhotoIndex] ?? null
-  const latestPriceSnapshot = inventoryPricing[inventoryPricing.length - 1] ?? null
+  const latestPriceSnapshot =
+    inventoryPricing[inventoryPricing.length - 1] ?? null
   const primaryInstance = inventoryInstances[0] ?? null
   const totalAcquisitionPrice = inventoryInstances.reduce(
     (total, instance) =>
-      total + Number(instance.acquisition_price || 0) * Math.max(1, Number(instance.quantity || 1)),
+      total +
+      Number(instance.acquisition_price || 0) *
+        Math.max(1, Number(instance.quantity || 1)),
     0
   )
+  useEffect(() => {
+    if (!itemEditorOpen || itemEditorMode !== 'edit') {
+      return
+    }
+    setItemInstanceDraft(inventoryInstanceToDraft(primaryInstance))
+  }, [itemEditorMode, itemEditorOpen, primaryInstance, selectedItemID])
+
   useEffect(() => {
     const previous = activeWorkspaceCollectionRef.current
     activeWorkspaceCollectionRef.current = activeWorkspaceCollection
@@ -2775,7 +2851,9 @@ export function Collection({
     setInventoryPricing(pricingPayload?.history ?? [])
 
     if (!barcodesPayload && !instancesPayload && !pricingPayload) {
-      setItemDetailError('Item evidence and pricing details could not be loaded.')
+      setItemDetailError(
+        'Item evidence and pricing details could not be loaded.'
+      )
     }
     setItemDetailLoading(false)
   }, [isInventoryRoute, selectedItemID])
@@ -2974,6 +3052,47 @@ export function Collection({
     setItemSaveError(null)
     setItemSaveSuccess(null)
     try {
+      let instancePayload: InventoryInstance | null = null
+      const shouldSaveInstance =
+        !wasCreateMode &&
+        (primaryInstance !== null ||
+          hasInventoryInstanceDraftValue(itemInstanceDraft))
+      if (shouldSaveInstance) {
+        const priceText = itemInstanceDraft.acquisition_price.trim()
+        const quantityText = itemInstanceDraft.quantity.trim()
+        const acquisitionPrice =
+          priceText === '' ? 0 : Number.parseFloat(priceText)
+        const quantity =
+          quantityText === ''
+            ? primaryInstance?.quantity || 1
+            : Number.parseInt(quantityText, 10)
+        if (!Number.isFinite(acquisitionPrice) || acquisitionPrice < 0) {
+          setItemSaveError('Paid / unit must be a valid positive amount.')
+          setItemSaveSuccess(null)
+          setItemSaveBusy(false)
+          return
+        }
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          setItemSaveError('Quantity must be a whole number above zero.')
+          setItemSaveSuccess(null)
+          setItemSaveBusy(false)
+          return
+        }
+        instancePayload = {
+          id: primaryInstance?.id ?? '',
+          item_id: selectedItemID,
+          condition: itemInstanceDraft.condition.trim(),
+          status:
+            itemInstanceDraft.status.trim().toLowerCase() ||
+            primaryInstance?.status ||
+            'loose',
+          quantity,
+          storage_location: itemInstanceDraft.storage_location.trim(),
+          acquisition_price: acquisitionPrice,
+          acquisition_date: itemInstanceDraft.acquisition_date.trim(),
+          notes: itemInstanceDraft.notes.trim(),
+        }
+      }
       const response = await fetch(
         itemEditorMode === 'create'
           ? '/api/items'
@@ -3049,6 +3168,33 @@ export function Collection({
           throw new Error(`create_item_barcode_${barcodeResponse.status}`)
         }
       }
+      if (instancePayload) {
+        const instanceResponse = await fetch(
+          primaryInstance
+            ? `/api/items/${encodeURIComponent(
+                savedID
+              )}/instances/${encodeURIComponent(primaryInstance.id)}`
+            : `/api/items/${encodeURIComponent(savedID)}/instances`,
+          {
+            method: primaryInstance ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(instancePayload),
+          }
+        )
+        if (!instanceResponse.ok) {
+          throw new Error(`save_item_instance_${instanceResponse.status}`)
+        }
+        const savedInstance =
+          (await instanceResponse.json()) as InventoryInstance
+        setInventoryInstances((current) => {
+          if (primaryInstance) {
+            return current.map((instance) =>
+              instance.id === savedInstance.id ? savedInstance : instance
+            )
+          }
+          return [savedInstance, ...current]
+        })
+      }
       setItemEditorMode('edit')
       setItemSaveSuccess(
         wasCreateMode && hasCreatePhoto
@@ -3057,9 +3203,14 @@ export function Collection({
             ? 'Item created with barcode and selected.'
             : wasCreateMode
               ? 'Item created and selected for follow-up media attach.'
-              : 'Item changes saved and reloaded from the API.'
+              : instancePayload
+                ? 'Item and evidence changes saved and reloaded from the API.'
+                : 'Item changes saved and reloaded from the API.'
       )
       await loadInventoryItems(savedID)
+      if (instancePayload) {
+        await loadInventoryItemDetails()
+      }
       setItemEditorOpen(false)
       resetCreateAttachments()
     } catch {
@@ -3073,9 +3224,12 @@ export function Collection({
     itemCreateIntent,
     itemCreatePhotoFile,
     itemDraft,
+    itemInstanceDraft,
     itemEditorMode,
     ensureWorkspaceCollectionAndAssignItem,
+    loadInventoryItemDetails,
     loadInventoryItems,
+    primaryInstance,
     resetCreateAttachments,
     selectedItemID,
     workspaceCollections,
@@ -4820,7 +4974,9 @@ export function Collection({
                             <button
                               type='button'
                               className='block w-full overflow-hidden rounded-lg border bg-muted/20 text-left'
-                              onClick={() => setSelectedPhotoIndex(galleryPhotoIndex)}
+                              onClick={() =>
+                                setSelectedPhotoIndex(galleryPhotoIndex)
+                              }
                             >
                               <img
                                 data-testid='inventory-item-gallery-preview'
@@ -4857,7 +5013,9 @@ export function Collection({
                                       : 'bg-background'
                                   )}
                                   data-testid='inventory-item-gallery-thumb'
-                                  onClick={() => setGalleryPreviewPhotoIndex(index)}
+                                  onClick={() =>
+                                    setGalleryPreviewPhotoIndex(index)
+                                  }
                                 >
                                   <img
                                     src={`/api/items/${encodeURIComponent(
@@ -5015,7 +5173,8 @@ export function Collection({
                             />
                           </div>
                         </div>
-                        {splitInventoryListField(itemDraft.source_urls).length > 0 ? (
+                        {splitInventoryListField(itemDraft.source_urls).length >
+                        0 ? (
                           <div className='flex flex-wrap gap-2 text-sm'>
                             {splitInventoryListField(itemDraft.source_urls).map(
                               (url, index) => (
@@ -5058,16 +5217,29 @@ export function Collection({
                           data-testid='inventory-item-pricing-panel'
                         >
                           <h3 className='text-sm font-semibold'>Pricing</h3>
-                          <div className='grid grid-cols-1 gap-2 text-sm md:grid-cols-2'>
-                            <div>
-                              <span className='text-muted-foreground'>
+                          <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-instance-price'
+                              >
                                 Paid / unit
-                              </span>
-                              <p className='font-medium'>
-                                {primaryInstance?.acquisition_price
-                                  ? formatMoney(primaryInstance.acquisition_price)
-                                  : 'Not recorded'}
-                              </p>
+                              </label>
+                              <Input
+                                id='inventory-instance-price'
+                                data-testid='inventory-instance-price'
+                                type='number'
+                                min='0'
+                                step='0.01'
+                                placeholder='0.00'
+                                value={itemInstanceDraft.acquisition_price}
+                                onChange={(event) =>
+                                  setItemInstanceDraft((current) => ({
+                                    ...current,
+                                    acquisition_price: event.target.value,
+                                  }))
+                                }
+                              />
                             </div>
                             <div>
                               <span className='text-muted-foreground'>
@@ -5075,9 +5247,54 @@ export function Collection({
                               </span>
                               <p className='font-medium'>
                                 {latestPriceSnapshot
-                                  ? formatMoney(latestPriceSnapshot.latest_price)
+                                  ? formatMoney(
+                                      latestPriceSnapshot.latest_price
+                                    )
                                   : 'No market price'}
                               </p>
+                            </div>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-instance-quantity'
+                              >
+                                Quantity
+                              </label>
+                              <Input
+                                id='inventory-instance-quantity'
+                                data-testid='inventory-instance-quantity'
+                                type='number'
+                                min='1'
+                                step='1'
+                                placeholder='1'
+                                value={itemInstanceDraft.quantity}
+                                onChange={(event) =>
+                                  setItemInstanceDraft((current) => ({
+                                    ...current,
+                                    quantity: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-instance-acquisition-date'
+                              >
+                                Acquisition date
+                              </label>
+                              <Input
+                                id='inventory-instance-acquisition-date'
+                                data-testid='inventory-instance-acquisition-date'
+                                type='date'
+                                value={itemInstanceDraft.acquisition_date}
+                                onChange={(event) =>
+                                  setItemInstanceDraft((current) => ({
+                                    ...current,
+                                    acquisition_date: event.target.value,
+                                  }))
+                                }
+                              />
                             </div>
                           </div>
                           {latestPriceSnapshot ? (
@@ -5085,6 +5302,12 @@ export function Collection({
                               {latestPriceSnapshot.source} median{' '}
                               {formatMoney(latestPriceSnapshot.median_price)} on{' '}
                               {latestPriceSnapshot.snapshot_date}
+                            </p>
+                          ) : null}
+                          {primaryInstance?.acquisition_price ? (
+                            <p className='text-xs text-muted-foreground'>
+                              Current paid / unit:{' '}
+                              {formatMoney(primaryInstance.acquisition_price)}
                             </p>
                           ) : null}
                           {totalAcquisitionPrice > 0 ? (
@@ -5149,7 +5372,8 @@ export function Collection({
                                 >
                                   <p className='font-medium'>
                                     Qty {instance.quantity} ·{' '}
-                                    {instance.condition || 'condition unknown'} ·{' '}
+                                    {instance.condition || 'condition unknown'}{' '}
+                                    ·{' '}
                                     {instance.storage_location || 'no location'}
                                   </p>
                                   <p className='text-muted-foreground'>
@@ -5163,6 +5387,88 @@ export function Collection({
                               No instance evidence recorded.
                             </p>
                           )}
+                          <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-instance-condition'
+                              >
+                                Condition
+                              </label>
+                              <Input
+                                id='inventory-instance-condition'
+                                data-testid='inventory-instance-condition'
+                                placeholder='sealed, graded, used'
+                                value={itemInstanceDraft.condition}
+                                onChange={(event) =>
+                                  setItemInstanceDraft((current) => ({
+                                    ...current,
+                                    condition: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className='space-y-2'>
+                              <label
+                                className='text-sm font-medium'
+                                htmlFor='inventory-instance-status'
+                              >
+                                Status
+                              </label>
+                              <Input
+                                id='inventory-instance-status'
+                                data-testid='inventory-instance-status'
+                                placeholder='sealed, loose, blister'
+                                value={itemInstanceDraft.status}
+                                onChange={(event) =>
+                                  setItemInstanceDraft((current) => ({
+                                    ...current,
+                                    status: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-instance-storage-location'
+                            >
+                              Storage location
+                            </label>
+                            <Input
+                              id='inventory-instance-storage-location'
+                              data-testid='inventory-instance-storage-location'
+                              placeholder='Shelf A, Vault B, Case C'
+                              value={itemInstanceDraft.storage_location}
+                              onChange={(event) =>
+                                setItemInstanceDraft((current) => ({
+                                  ...current,
+                                  storage_location: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-instance-notes-field'
+                            >
+                              Instance notes
+                            </label>
+                            <Textarea
+                              id='inventory-instance-notes-field'
+                              data-testid='inventory-instance-notes-field'
+                              placeholder='Evidence, purchase, grading, or storage notes'
+                              value={itemInstanceDraft.notes}
+                              onChange={(event) =>
+                                setItemInstanceDraft((current) => ({
+                                  ...current,
+                                  notes: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
                         </section>
                         {itemSaveError ? (
                           <div
