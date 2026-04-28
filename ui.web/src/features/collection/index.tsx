@@ -13,6 +13,7 @@ import {
   ArrowDown,
   ArrowUp,
   Barcode,
+  Check,
   ChevronRight,
   ClipboardPaste,
   CircleArrowUp,
@@ -81,6 +82,16 @@ import { TasksProvider } from '@/features/tasks/components/tasks-provider'
 import { TasksTable } from '@/features/tasks/components/tasks-table'
 import { type Task } from '@/features/tasks/data/schema'
 import { tasks } from '@/features/tasks/data/tasks'
+import {
+  defaultInventoryCategoryOptions,
+  inventoryCategoryOptionsSettingsKey,
+  joinCategoryValue,
+  normalizeCategoryName,
+  normalizeCategoryOptions,
+  parseCategoryOptions,
+  serializeCategoryOptions,
+  splitCategoryValue,
+} from '@/features/inventory/category-options'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -578,6 +589,116 @@ function splitInventoryListField(value: string): string[] {
       (entry, index, entries) =>
         entry !== '' && entries.indexOf(entry) === index
     )
+}
+
+type InventoryCategoryPickerProps = {
+  id: string
+  testId: string
+  value: string
+  options: string[]
+  onChange: (value: string) => void
+  onAddOption: (value: string) => void
+}
+
+function InventoryCategoryPicker({
+  id,
+  testId,
+  value,
+  options,
+  onChange,
+  onAddOption,
+}: InventoryCategoryPickerProps) {
+  const [newCategory, setNewCategory] = useState('')
+  const selectedCategories = splitCategoryValue(value)
+  const normalizedOptions = normalizeCategoryOptions([
+    ...defaultInventoryCategoryOptions,
+    ...options,
+    ...selectedCategories,
+  ])
+
+  const toggleCategory = (category: string) => {
+    const selected = selectedCategories.some(
+      (value) => value.toLowerCase() === category.toLowerCase()
+    )
+    const next = selected
+      ? selectedCategories.filter(
+          (value) => value.toLowerCase() !== category.toLowerCase()
+        )
+      : [...selectedCategories, category]
+    onChange(joinCategoryValue(next))
+  }
+
+  const addCategory = () => {
+    const normalized = normalizeCategoryName(newCategory)
+    if (normalized === '') {
+      return
+    }
+    onAddOption(normalized)
+    onChange(joinCategoryValue([...selectedCategories, normalized]))
+    setNewCategory('')
+  }
+
+  return (
+    <div className='space-y-2'>
+      <Input
+        id={id}
+        data-testid={testId}
+        value={value}
+        placeholder='Choose or type categories'
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div
+        className='rounded-md border bg-background p-2'
+        data-testid={`${testId}-dropdown`}
+      >
+        <div className='mb-2 flex flex-wrap gap-2'>
+          {normalizedOptions.map((category) => {
+            const selected = selectedCategories.some(
+              (value) => value.toLowerCase() === category.toLowerCase()
+            )
+            return (
+              <Button
+                key={category}
+                type='button'
+                size='sm'
+                variant={selected ? 'default' : 'outline'}
+                className='h-8 gap-1'
+                data-testid={`${testId}-option-${category}`}
+                aria-pressed={selected}
+                onClick={() => toggleCategory(category)}
+              >
+                {selected ? <Check className='size-3.5' aria-hidden /> : null}
+                {category}
+              </Button>
+            )
+          })}
+        </div>
+        <div className='flex gap-2'>
+          <Input
+            data-testid={`${testId}-new`}
+            value={newCategory}
+            placeholder='New category'
+            onChange={(event) => setNewCategory(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                addCategory()
+              }
+            }}
+          />
+          <Button
+            type='button'
+            variant='outline'
+            data-testid={`${testId}-add`}
+            disabled={normalizeCategoryName(newCategory) === ''}
+            onClick={addCategory}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function formatMoney(value: number): string {
@@ -1169,6 +1290,27 @@ async function loadProfileInventoryItemFolderAssignments(
   )
 }
 
+async function loadProfileInventoryCategoryOptions(
+  profileID: string
+): Promise<string[] | null> {
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return null
+  }
+
+  const response = await fetch(
+    `/api/profiles/${encodeURIComponent(profileID)}/settings`
+  )
+  if (!response.ok) {
+    return null
+  }
+
+  const payload = (await response.json()) as ProfileSettingsPayload
+  return parseCategoryOptions(
+    payload.settings?.[inventoryCategoryOptionsSettingsKey] ?? null
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1258,6 +1400,45 @@ async function saveProfileInventoryItemFolderAssignments(
       settings: {
         ...(payload.settings ?? {}),
         [inventoryItemFolderAssignmentsSettingsKey]: nextAssignmentsValue,
+      },
+    }),
+  })
+}
+
+async function saveProfileInventoryCategoryOptions(
+  profileID: string,
+  categories: string[]
+): Promise<void> {
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return
+  }
+
+  const response = await fetch(
+    `/api/profiles/${encodeURIComponent(profileID)}/settings`
+  )
+  if (!response.ok) {
+    return
+  }
+
+  const payload = (await response.json()) as ProfileSettingsPayload
+  const nextCategoriesValue = serializeCategoryOptions(categories)
+  if (
+    payload.settings?.[inventoryCategoryOptionsSettingsKey] ===
+    nextCategoriesValue
+  ) {
+    return
+  }
+
+  await fetch(`/api/profiles/${encodeURIComponent(profileID)}/settings`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      settings: {
+        ...(payload.settings ?? {}),
+        [inventoryCategoryOptionsSettingsKey]: nextCategoriesValue,
       },
     }),
   })
@@ -1377,6 +1558,9 @@ export function Collection({
   const [itemFolderAssignments, setItemFolderAssignments] = useState<
     Record<string, string>
   >(() => loadInventoryItemFolderAssignments())
+  const [categoryOptions, setCategoryOptions] = useState<string[]>(
+    defaultInventoryCategoryOptions
+  )
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<
     string | null
@@ -2755,6 +2939,30 @@ export function Collection({
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
     [inventoryItems, selectedItemID]
   )
+  const inventoryCategoryOptions = useMemo(
+    () =>
+      normalizeCategoryOptions([
+        ...categoryOptions,
+        ...inventoryItems.flatMap((item) => splitCategoryValue(item.category)),
+      ]),
+    [categoryOptions, inventoryItems]
+  )
+  const addInventoryCategoryOption = useCallback(
+    (category: string) => {
+      const normalized = normalizeCategoryName(category)
+      if (normalized === '') {
+        return
+      }
+      setCategoryOptions((current) => {
+        const next = normalizeCategoryOptions([...current, normalized])
+        if (activeProfileID) {
+          void saveProfileInventoryCategoryOptions(activeProfileID, next)
+        }
+        return next
+      })
+    },
+    [activeProfileID]
+  )
   const visibleTableData = useMemo(() => {
     if (!isInventoryRoute || activeFolderFilterValue === 'All Items') {
       return tableData
@@ -3058,6 +3266,8 @@ export function Collection({
         const remoteTree = await loadProfileWorkspaceSnapshot(activeProfileID)
         const remoteAssignments =
           await loadProfileInventoryItemFolderAssignments(activeProfileID)
+        const remoteCategories =
+          await loadProfileInventoryCategoryOptions(activeProfileID)
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
@@ -3065,6 +3275,10 @@ export function Collection({
           remoteAssignments && Object.keys(remoteAssignments).length > 0
             ? remoteAssignments
             : localAssignments
+        const nextCategories =
+          remoteCategories && remoteCategories.length > 0
+            ? remoteCategories
+            : defaultInventoryCategoryOptions
 
         if (cancelled) {
           return
@@ -3072,6 +3286,7 @@ export function Collection({
 
         setFolderTree(nextTree)
         setItemFolderAssignments(nextAssignments)
+        setCategoryOptions(nextCategories)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3086,6 +3301,7 @@ export function Collection({
         const nextTree = localTree ?? initialFolderTree
         setFolderTree(nextTree)
         setItemFolderAssignments(localAssignments)
+        setCategoryOptions(defaultInventoryCategoryOptions)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -4873,14 +5089,16 @@ export function Collection({
                             >
                               Category
                             </label>
-                            <Input
+                            <InventoryCategoryPicker
                               id='inventory-item-category'
-                              data-testid='inventory-item-category'
+                              testId='inventory-item-category'
                               value={itemDraft.category}
-                              onChange={(event) =>
+                              options={inventoryCategoryOptions}
+                              onAddOption={addInventoryCategoryOption}
+                              onChange={(category) =>
                                 setItemDraft((current) => ({
                                   ...current,
-                                  category: event.target.value,
+                                  category,
                                 }))
                               }
                             />
@@ -5323,14 +5541,16 @@ export function Collection({
                             >
                               Category
                             </label>
-                            <Input
+                            <InventoryCategoryPicker
                               id='inventory-panel-item-category'
-                              data-testid='inventory-item-category'
+                              testId='inventory-item-category'
                               value={itemDraft.category}
-                              onChange={(event) =>
+                              options={inventoryCategoryOptions}
+                              onAddOption={addInventoryCategoryOption}
+                              onChange={(category) =>
                                 setItemDraft((current) => ({
                                   ...current,
-                                  category: event.target.value,
+                                  category,
                                 }))
                               }
                             />

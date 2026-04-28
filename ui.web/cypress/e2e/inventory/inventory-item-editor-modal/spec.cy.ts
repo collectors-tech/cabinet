@@ -146,6 +146,76 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });
 
+  it("selects multiple reusable categories and saves a newly typed category for future inventory edits", () => {
+    const items = [
+      {
+        id: "item-category-alpha",
+        part_number: "PN-CAT-ALPHA",
+        title: "Category Alpha Item",
+        status: "active",
+        category: "Cars",
+        brand: "AFX",
+        priority: "medium",
+        description: "Category alpha description",
+      },
+    ];
+
+    cy.intercept("GET", "/api/profiles/*/settings", {
+      statusCode: 200,
+      body: {
+        settings: {
+          "inventory.category-options.v1": JSON.stringify([
+            "General",
+            "Cars",
+            "Model Kit",
+          ]),
+        },
+      },
+    }).as("profileSettings");
+
+    cy.intercept("PUT", "/api/profiles/*/settings", (req) => {
+      const settings = req.body?.settings ?? {};
+      const categories = JSON.parse(
+        settings["inventory.category-options.v1"] ?? "[]"
+      );
+      if (categories.includes("Garage Kit")) {
+        req.alias = "saveCategorySettings";
+      }
+      req.reply({ statusCode: 200, body: { settings } });
+    });
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("PUT", "/api/items/item-category-alpha", (req) => {
+      expect(req.body.category).to.equal("Cars, Model Kit, Garage Kit");
+      items[0] = { ...items[0], ...req.body };
+      req.reply({ statusCode: 200, body: items[0] });
+    }).as("updateCategoryAlpha");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-item-row-item-category-alpha"]').dblclick();
+    cy.get('[data-testid="inventory-item-category"]').should("have.value", "Cars");
+    cy.get('[data-testid="inventory-item-category-option-Model Kit"]').click();
+    cy.get('[data-testid="inventory-item-category-new"]').type("Garage Kit");
+    cy.get('[data-testid="inventory-item-category-add"]').click();
+    cy.wait("@saveCategorySettings");
+    cy.get('[data-testid="inventory-item-category"]')
+      .should("have.value", "Cars, Model Kit, Garage Kit");
+    cy.get('[data-testid="inventory-item-save"]').click();
+    cy.wait("@updateCategoryAlpha");
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-item-row-item-category-alpha"] [data-testid="task-row-actions-trigger"]').click();
+    cy.contains('[role="menuitem"]', "Edit").click();
+    cy.get('[data-testid="inventory-item-category-option-Garage Kit"]').should(
+      "be.visible"
+    );
+  });
+
   it("shows gallery, evidence, pricing, tags, urls, description, notes, and navigation in the item edit panel", () => {
     const items = [
       {

@@ -21,6 +21,7 @@ describe('ui-screen-settings', () => {
       { path: '/settings/notifications', title: 'Notifications' },
       { path: '/settings/display', title: 'Display' },
       { path: '/settings/storage', title: 'Storage' },
+      { path: '/settings/categories', title: 'Categories' },
       { path: '/settings/operations', title: 'Operations' },
       { path: '/settings/billing', title: 'Billing' },
     ]
@@ -40,6 +41,7 @@ describe('ui-screen-settings', () => {
       ['Notifications', '/settings/notifications'],
       ['Display', '/settings/display'],
       ['Storage', '/settings/storage'],
+      ['Categories', '/settings/categories'],
       ['Operations', '/settings/operations'],
       ['Billing', '/settings/billing'],
     ] as const
