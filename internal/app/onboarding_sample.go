@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
+
+const inventoryFolderItemAssignmentsSettingsKey = "inventory.folder-item-assignments.v1"
 
 type onboardingSampleSeedResult struct {
 	CreatedItems            int  `json:"created_items"`
@@ -28,6 +31,104 @@ type onboardingSampleSpec struct {
 	WishlistNotes          string
 	WishlistHighlightHit   bool
 	WishlistBelowTargetNow bool
+	FolderName             string
+}
+
+func generatedShowcaseInventorySpecs() []onboardingSampleSpec {
+	type folderPlan struct {
+		Name  string
+		Count int
+	}
+
+	plans := []folderPlan{
+		{Name: "Watch List", Count: 4},
+		{Name: "Wishlist Focus", Count: 3},
+		{Name: "Store 1", Count: 5},
+		{Name: "Store 2", Count: 3},
+		{Name: "Store 3", Count: 6},
+		{Name: "Store 4", Count: 4},
+		{Name: "Store 5", Count: 7},
+		{Name: "Store 6", Count: 2},
+		{Name: "Store 7", Count: 5},
+		{Name: "Store 8", Count: 3},
+		{Name: "Store 9", Count: 6},
+		{Name: "Store 10", Count: 2},
+		{Name: "Warehouse 1", Count: 5},
+		{Name: "Warehouse 2", Count: 6},
+		{Name: "Warehouse 3", Count: 4},
+		{Name: "Archive A", Count: 4},
+		{Name: "Archive B", Count: 2},
+		{Name: "Archive C", Count: 1},
+		{Name: "Archive D", Count: 5},
+		{Name: "Archive E", Count: 2},
+		{Name: "Archive F", Count: 3},
+		{Name: "Archive G", Count: 3},
+		{Name: "Archive H", Count: 2},
+		{Name: "Archive I", Count: 4},
+		{Name: "Archive J", Count: 2},
+		{Name: "Archive K", Count: 3},
+	}
+	categories := []string{
+		"Diecast",
+		"Slot Car",
+		"Trading Card",
+		"Action Figure",
+		"Comic",
+		"Model Kit",
+		"Video Game",
+		"Vinyl",
+	}
+	brands := []string{
+		"Hot Wheels",
+		"Matchbox",
+		"Pokemon",
+		"Marvel",
+		"Bandai",
+		"Nintendo",
+		"Hasbro",
+		"Cabinet",
+	}
+	conditions := []string{"Mint", "Near Mint", "Excellent", "Very Good", "Good"}
+	statuses := []string{"sealed", "blister", "loose", "custom", "on_track"}
+
+	specs := make([]onboardingSampleSpec, 0, 96)
+	sequence := 1
+	for _, plan := range plans {
+		for index := 1; index <= plan.Count; index++ {
+			category := categories[(sequence-1)%len(categories)]
+			brand := brands[(sequence-1)%len(brands)]
+			condition := conditions[(sequence-1)%len(conditions)]
+			status := statuses[(sequence-1)%len(statuses)]
+			specs = append(specs, onboardingSampleSpec{
+				Item: collection.Item{
+					Brand:       brand,
+					Category:    category,
+					PartNumber:  fmt.Sprintf("CAB-SHOW-%03d", sequence),
+					Title:       fmt.Sprintf("%s Showcase Item %02d", plan.Name, index),
+					Make:        brand,
+					Model:       fmt.Sprintf("%s Sample %02d", category, index),
+					Year:        fmt.Sprintf("%d", 1980+(sequence%45)),
+					Scale:       "Sample",
+					Series:      "Showcase Inventory",
+					Description: fmt.Sprintf("Distinct showcase inventory item assigned only to %s.", plan.Name),
+					Tags:        []string{"showcase", "sample", "inventory"},
+				},
+				Instance: collection.Instance{
+					Condition:        condition,
+					Status:           status,
+					Quantity:         1 + (sequence % 3),
+					StorageLocation:  fmt.Sprintf("%s Bin %02d", plan.Name, index),
+					AcquisitionPrice: float64(5 + (sequence % 60)),
+					AcquisitionDate:  fmt.Sprintf("2026-02-%02d", 1+(sequence%27)),
+					Notes:            "Generated showcase inventory row with exclusive folder membership.",
+				},
+				FolderName: plan.Name,
+			})
+			sequence++
+		}
+	}
+
+	return specs
 }
 
 func seedOnboardingSampleData(
@@ -77,6 +178,7 @@ func seedOnboardingSampleData(
 			WishlistPriority:     "high",
 			WishlistNotes:        "Sample grail chase: buy when a clean card lands near target.",
 			WishlistHighlightHit: true,
+			FolderName:           "Watch List",
 		},
 		{
 			Item: collection.Item{
@@ -106,6 +208,7 @@ func seedOnboardingSampleData(
 			WishlistPriority:     "low",
 			WishlistNotes:        "Sample steady watch: useful comparison item, not urgent.",
 			WishlistHighlightHit: false,
+			FolderName:           "Store 1",
 		},
 		{
 			Item: collection.Item{
@@ -136,6 +239,7 @@ func seedOnboardingSampleData(
 			WishlistNotes:          "Sample price-drop candidate: below target should bubble up.",
 			WishlistHighlightHit:   true,
 			WishlistBelowTargetNow: true,
+			FolderName:             "Wishlist Focus",
 		},
 		{
 			Item: collection.Item{
@@ -165,6 +269,7 @@ func seedOnboardingSampleData(
 			WishlistPriority:     "medium",
 			WishlistNotes:        "Sample display target: watch for boxed examples.",
 			WishlistHighlightHit: true,
+			FolderName:           "Store 2",
 		},
 		{
 			Item: collection.Item{
@@ -194,6 +299,7 @@ func seedOnboardingSampleData(
 			WishlistPriority:     "medium",
 			WishlistNotes:        "Sample silver-age target: review condition before buying.",
 			WishlistHighlightHit: true,
+			FolderName:           "Warehouse 1",
 		},
 		{
 			Item: collection.Item{
@@ -220,8 +326,10 @@ func seedOnboardingSampleData(
 			},
 			Wishlist:    false,
 			TargetPrice: 0,
+			FolderName:  "Warehouse 2",
 		},
 	}
+	specs = append(specs, generatedShowcaseInventorySpecs()...)
 
 	existingItems, err := collectionRepo.ListItemsByProfile(ctx, active.ID)
 	if err != nil {
@@ -239,6 +347,11 @@ func seedOnboardingSampleData(
 	wishlistByItemID := make(map[string]wishlist.Entry, len(existingWishlist))
 	for _, entry := range existingWishlist {
 		wishlistByItemID[entry.ItemID] = entry
+	}
+
+	folderAssignments := map[string]string{}
+	if rawAssignments := settings[inventoryFolderItemAssignmentsSettingsKey]; rawAssignments != "" {
+		_ = json.Unmarshal([]byte(rawAssignments), &folderAssignments)
 	}
 
 	result := onboardingSampleSeedResult{
@@ -268,6 +381,10 @@ func seedOnboardingSampleData(
 				return onboardingSampleSeedResult{}, fmt.Errorf("create instance for %s: %w", item.ID, createErr)
 			}
 			result.CreatedInstances++
+		}
+
+		if spec.FolderName != "" {
+			folderAssignments[item.ID] = spec.FolderName
 		}
 
 		if spec.Wishlist {
@@ -308,7 +425,14 @@ func seedOnboardingSampleData(
 
 	result.TotalItems = len(totalItems)
 	result.TotalWishlistEntries = len(totalWishlist)
-	if err := profiles.PutSettings(ctx, active.ID, map[string]string{"onboarding.sample_data_seeded": "1"}); err != nil {
+	folderAssignmentsJSON, err := json.Marshal(folderAssignments)
+	if err != nil {
+		return onboardingSampleSeedResult{}, fmt.Errorf("marshal folder assignments: %w", err)
+	}
+	if err := profiles.PutSettings(ctx, active.ID, map[string]string{
+		"onboarding.sample_data_seeded":           "1",
+		inventoryFolderItemAssignmentsSettingsKey: string(folderAssignmentsJSON),
+	}); err != nil {
 		return onboardingSampleSeedResult{}, fmt.Errorf("mark onboarding seeded: %w", err)
 	}
 

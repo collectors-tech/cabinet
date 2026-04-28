@@ -230,6 +230,8 @@ const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
 const inventoryWorkspaceSettingsStorageKeyPrefix =
   'cabinet.inventory.workspace-settings.v2.'
 const inventoryFolderTreeSettingsKey = 'inventory.folder-tree.v2'
+const inventoryItemFolderAssignmentsSettingsKey =
+  'inventory.folder-item-assignments.v1'
 const inventoryItemFolderAssignmentsStorageKey =
   'cabinet.inventory.item-folder-assignments.v1'
 const inventoryItemDragDataType = 'application/x-cabinet-inventory-item-id'
@@ -951,6 +953,69 @@ function folderTreeContainsName(
   )
 }
 
+function resolveFolderAssignmentName(
+  nodes: FolderNode[],
+  assignment: string
+): string {
+  const normalizedAssignment = assignment.trim()
+  if (normalizedAssignment === '') {
+    return ''
+  }
+
+  for (const node of nodes) {
+    if (
+      node.name === normalizedAssignment ||
+      node.id === normalizedAssignment
+    ) {
+      return node.name
+    }
+    const childMatch = resolveFolderAssignmentName(
+      node.children ?? [],
+      normalizedAssignment
+    )
+    if (childMatch) {
+      return childMatch
+    }
+  }
+
+  return normalizedAssignment
+}
+
+function selectionExistsInInventoryFolders(
+  collections: string[],
+  nodes: FolderNode[],
+  targetName: string
+): boolean {
+  const normalizedTarget = targetName.trim()
+  return (
+    normalizedTarget !== '' &&
+    (collections.includes(normalizedTarget) ||
+      folderTreeContainsName(nodes, normalizedTarget))
+  )
+}
+
+function parseInventoryItemFolderAssignments(
+  value: string | null | undefined
+): Record<string, string> {
+  if (!value) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([itemID, folderName]) => [
+          itemID.trim(),
+          typeof folderName === 'string' ? folderName.trim() : '',
+        ])
+        .filter(([itemID, folderName]) => itemID !== '' && folderName !== '')
+    )
+  } catch {
+    return {}
+  }
+}
+
 function sanitizeFolderNodes(value: unknown): FolderNode[] {
   if (!Array.isArray(value)) {
     return initialFolderTree
@@ -1083,6 +1148,27 @@ async function loadProfileWorkspaceSnapshot(
   )
 }
 
+async function loadProfileInventoryItemFolderAssignments(
+  profileID: string
+): Promise<Record<string, string> | null> {
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return null
+  }
+
+  const response = await fetch(
+    `/api/profiles/${encodeURIComponent(profileID)}/settings`
+  )
+  if (!response.ok) {
+    return null
+  }
+
+  const payload = (await response.json()) as ProfileSettingsPayload
+  return parseInventoryItemFolderAssignments(
+    payload.settings?.[inventoryItemFolderAssignmentsSettingsKey] ?? null
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1138,6 +1224,45 @@ async function saveProfileWorkspaceSnapshot(
   })
 }
 
+async function saveProfileInventoryItemFolderAssignments(
+  profileID: string,
+  assignments: Record<string, string>
+): Promise<void> {
+  const normalizedProfileID = profileID.trim()
+  if (normalizedProfileID === '') {
+    return
+  }
+
+  const response = await fetch(
+    `/api/profiles/${encodeURIComponent(profileID)}/settings`
+  )
+  if (!response.ok) {
+    return
+  }
+
+  const payload = (await response.json()) as ProfileSettingsPayload
+  const nextAssignmentsValue = JSON.stringify(assignments)
+  if (
+    payload.settings?.[inventoryItemFolderAssignmentsSettingsKey] ===
+    nextAssignmentsValue
+  ) {
+    return
+  }
+
+  await fetch(`/api/profiles/${encodeURIComponent(profileID)}/settings`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      settings: {
+        ...(payload.settings ?? {}),
+        [inventoryItemFolderAssignmentsSettingsKey]: nextAssignmentsValue,
+      },
+    }),
+  })
+}
+
 function loadInventoryTreeState() {
   if (typeof window === 'undefined') {
     return {
@@ -1177,26 +1302,9 @@ function loadInventoryItemFolderAssignments(): Record<string, string> {
     return {}
   }
 
-  try {
-    const raw = window.localStorage.getItem(
-      inventoryItemFolderAssignmentsStorageKey
-    )
-    if (!raw) {
-      return {}
-    }
-
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([itemID, folderName]) => [
-          itemID.trim(),
-          typeof folderName === 'string' ? folderName.trim() : '',
-        ])
-        .filter(([itemID, folderName]) => itemID !== '' && folderName !== '')
-    )
-  } catch {
-    return {}
-  }
+  return parseInventoryItemFolderAssignments(
+    window.localStorage.getItem(inventoryItemFolderAssignmentsStorageKey)
+  )
 }
 
 function readInventoryItemDragID(dataTransfer: DataTransfer): string {
@@ -1611,8 +1719,11 @@ export function Collection({
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
       const safeFolder =
-        workspaceCollections.includes(nextFolder) ||
-        folderTreeContainsName(folderTree, nextFolder)
+        selectionExistsInInventoryFolders(
+          workspaceCollections,
+          folderTree,
+          nextFolder
+        )
           ? nextFolder
           : 'All Items'
       setActiveFolder(safeFolder)
@@ -1757,7 +1868,13 @@ export function Collection({
       inventoryItemFolderAssignmentsStorageKey,
       JSON.stringify(itemFolderAssignments)
     )
-  }, [itemFolderAssignments])
+    if (activeProfileID && workspaceSnapshotReady) {
+      void saveProfileInventoryItemFolderAssignments(
+        activeProfileID,
+        itemFolderAssignments
+      )
+    }
+  }, [activeProfileID, itemFolderAssignments, workspaceSnapshotReady])
 
   const visibleTreeNodes = useMemo(() => {
     const nodes: Array<{ id: string; name: string; hasChildren: boolean }> = []
@@ -2629,7 +2746,7 @@ export function Collection({
   }, [workspaceCollections])
   const activeFolderIsAvailable = folderFilterOptions.some(
     (folder) => folder.name === activeFolder
-  )
+  ) || folderTreeContainsName(folderTree, activeFolder)
   const activeFolderFilterValue = activeFolderIsAvailable
     ? activeFolder
     : 'All Items'
@@ -2645,10 +2762,16 @@ export function Collection({
 
     return tableData.filter((row) => {
       const itemID = row.itemID ?? row.id
-      return itemFolderAssignments[itemID] === activeFolderFilterValue
+      return (
+        resolveFolderAssignmentName(
+          folderTree,
+          itemFolderAssignments[itemID] ?? ''
+        ) === activeFolderFilterValue
+      )
     })
   }, [
     activeFolderFilterValue,
+    folderTree,
     isInventoryRoute,
     itemFolderAssignments,
     tableData,
@@ -2933,14 +3056,22 @@ export function Collection({
     const hydrateWorkspaceSnapshot = async () => {
       try {
         const remoteTree = await loadProfileWorkspaceSnapshot(activeProfileID)
+        const remoteAssignments =
+          await loadProfileInventoryItemFolderAssignments(activeProfileID)
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
+        const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
+        const nextAssignments =
+          remoteAssignments && Object.keys(remoteAssignments).length > 0
+            ? remoteAssignments
+            : localAssignments
 
         if (cancelled) {
           return
         }
 
         setFolderTree(nextTree)
+        setItemFolderAssignments(nextAssignments)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -2951,8 +3082,10 @@ export function Collection({
         }
 
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
+        const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = localTree ?? initialFolderTree
         setFolderTree(nextTree)
+        setItemFolderAssignments(localAssignments)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )

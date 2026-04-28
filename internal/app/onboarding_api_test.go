@@ -114,8 +114,41 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	if firstPayload.TotalItems < 6 {
 		t.Fatalf("expected at least 6 seeded items for representative sample content, got %+v", firstPayload)
 	}
+	if firstPayload.TotalItems < 30 {
+		t.Fatalf("expected richer inventory sample content across folders, got %+v", firstPayload)
+	}
 	if firstPayload.TotalWishlist < 3 {
 		t.Fatalf("expected seeded wishlist coverage, got %+v", firstPayload)
+	}
+
+	settingsResp := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/settings", nil, nil)
+	if settingsResp.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settingsResp.Code, settingsResp.Body.String())
+	}
+	var settingsPayload struct {
+		Settings map[string]string `json:"settings"`
+	}
+	if err := json.NewDecoder(settingsResp.Body).Decode(&settingsPayload); err != nil {
+		t.Fatalf("decode settings payload: %v", err)
+	}
+	var folderAssignments map[string]string
+	if err := json.Unmarshal([]byte(settingsPayload.Settings["inventory.folder-item-assignments.v1"]), &folderAssignments); err != nil {
+		t.Fatalf("decode inventory folder assignments: %v", err)
+	}
+	if len(folderAssignments) < 30 {
+		t.Fatalf("expected folder assignments for richer sample inventory, got %d: %+v", len(folderAssignments), folderAssignments)
+	}
+	seenFolders := make(map[string]struct{})
+	for itemID, folderName := range folderAssignments {
+		if strings.TrimSpace(itemID) == "" || strings.TrimSpace(folderName) == "" {
+			t.Fatalf("expected non-empty item and folder assignments, got item=%q folder=%q", itemID, folderName)
+		}
+		seenFolders[strings.TrimSpace(folderName)] = struct{}{}
+	}
+	for _, requiredFolder := range []string{"Store 1", "Store 3", "Warehouse 2", "Archive A"} {
+		if _, ok := seenFolders[requiredFolder]; !ok {
+			t.Fatalf("expected seeded folder assignment for %q, got folders=%+v", requiredFolder, seenFolders)
+		}
 	}
 
 	wishlistResp := doRequest(t, a, http.MethodGet, "/api/wishlist", nil, nil)
