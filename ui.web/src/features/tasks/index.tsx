@@ -101,10 +101,23 @@ type WishlistItemPayload = {
 
 type WishlistPriceTrend = 'up' | 'steady' | 'down' | 'unknown'
 
+type WishlistPriceHistorySnapshot = {
+  snapshot_date?: string
+  source?: string
+  latest_price?: number
+  stock_count?: number
+}
+
 type WishlistPricingSummary = {
   marketPrice?: number
   priceTrend: WishlistPriceTrend
   priceHistory: number[]
+  priceHistoryDates: string[]
+  priceSampleCount: number
+  priceFirstDate?: string
+  priceLatestDate?: string
+  priceSources: string[]
+  priceStockCount?: number
 }
 
 type WishlistEntryPayload = {
@@ -176,9 +189,10 @@ async function loadWishlistPricingSummary(
   itemID: string
 ): Promise<WishlistPricingSummary> {
   try {
-    const [statsResponse, trendResponse] = await Promise.all([
+    const [statsResponse, trendResponse, historyResponse] = await Promise.all([
       fetch(`/api/pricing/stats?item_id=${encodeURIComponent(itemID)}`),
       fetch(`/api/pricing/trend?item_id=${encodeURIComponent(itemID)}`),
+      fetch(`/api/pricing/history?item_id=${encodeURIComponent(itemID)}`),
     ])
 
     let marketPrice: number | undefined
@@ -192,19 +206,73 @@ async function loadWishlistPricingSummary(
 
     let priceTrend: WishlistPriceTrend = 'unknown'
     let priceHistory: number[] = []
+    let priceHistoryDates: string[] = []
     if (trendResponse.ok) {
       const trendPayload = (await trendResponse.json()) as {
-        points?: Array<{ latest?: number }>
+        points?: Array<{ date?: string; latest?: number }>
       }
       priceHistory = (trendPayload.points ?? [])
         .map((point) => point.latest)
         .filter((value): value is number => typeof value === 'number')
+      priceHistoryDates = (trendPayload.points ?? [])
+        .map((point) => point.date?.trim())
+        .filter((value): value is string => Boolean(value))
       priceTrend = inferWishlistPriceTrend(trendPayload.points)
     }
 
-    return { marketPrice, priceTrend, priceHistory }
+    let history: WishlistPriceHistorySnapshot[] = []
+    if (historyResponse.ok) {
+      const historyPayload = (await historyResponse.json()) as {
+        history?: WishlistPriceHistorySnapshot[]
+      }
+      history = historyPayload.history ?? []
+    }
+
+    const sourceSet = new Set<string>()
+    let priceStockCount = 0
+    history.forEach((snapshot) => {
+      const source = snapshot.source?.trim()
+      if (source) {
+        sourceSet.add(source)
+      }
+      if (typeof snapshot.stock_count === 'number') {
+        priceStockCount += snapshot.stock_count
+      }
+    })
+
+    const historyDates = history
+      .map((snapshot) => snapshot.snapshot_date?.trim())
+      .filter((value): value is string => Boolean(value))
+    const allDates = [...priceHistoryDates, ...historyDates].sort()
+    const latestHistoryPrice = [...history]
+      .reverse()
+      .find(
+        (snapshot) =>
+          typeof snapshot.latest_price === 'number' && snapshot.latest_price > 0
+      )?.latest_price
+    if (!marketPrice && latestHistoryPrice) {
+      marketPrice = latestHistoryPrice
+    }
+
+    return {
+      marketPrice,
+      priceTrend,
+      priceHistory,
+      priceHistoryDates,
+      priceSampleCount: Math.max(priceHistory.length, history.length),
+      priceFirstDate: allDates[0],
+      priceLatestDate: allDates[allDates.length - 1],
+      priceSources: Array.from(sourceSet).sort(),
+      priceStockCount: priceStockCount > 0 ? priceStockCount : undefined,
+    }
   } catch {
-    return { priceTrend: 'unknown', priceHistory: [] }
+    return {
+      priceTrend: 'unknown',
+      priceHistory: [],
+      priceHistoryDates: [],
+      priceSampleCount: 0,
+      priceSources: [],
+    }
   }
 }
 
@@ -374,6 +442,12 @@ export function Tasks({
           marketPrice: pricingSummary.marketPrice,
           priceTrend: pricingSummary.priceTrend,
           priceHistory: pricingSummary.priceHistory,
+          priceHistoryDates: pricingSummary.priceHistoryDates,
+          priceSampleCount: pricingSummary.priceSampleCount,
+          priceFirstDate: pricingSummary.priceFirstDate,
+          priceLatestDate: pricingSummary.priceLatestDate,
+          priceSources: pricingSummary.priceSources,
+          priceStockCount: pricingSummary.priceStockCount,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
           owned: Boolean(wishlistEntry?.owned),
           pricePaid:

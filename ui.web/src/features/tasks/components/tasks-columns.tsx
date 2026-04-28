@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
+  CheckIcon,
   ImageIcon,
   MinusIcon,
   PlusIcon,
@@ -100,12 +101,18 @@ function WishlistPriceSparkline({
   if (values.length < 2) {
     return null
   }
+  const sampleCount = task.priceSampleCount ?? values.length
+  const dateRange =
+    task.priceFirstDate && task.priceLatestDate
+      ? `${task.priceFirstDate} to ${task.priceLatestDate}`
+      : 'date range unavailable'
+  const accessibleLabel = `${label}: ${sampleCount} price points, ${dateRange}, latest ${formatMoney(task.marketPrice)}`
 
   return (
     <svg
       viewBox='0 0 88 28'
       role='img'
-      aria-label={`${label} chart`}
+      aria-label={accessibleLabel}
       className='h-7 w-[88px] rounded bg-slate-950/60'
       data-testid={`wishlist-price-sparkline-${task.id}`}
       preserveAspectRatio='none'
@@ -147,16 +154,45 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
     },
   }[trend]
   const Icon = trendConfig.icon
+  const hasHistory = (task.priceHistory ?? []).length >= 2
+  const sampleCount = task.priceSampleCount ?? task.priceHistory?.length ?? 0
+  const sourceText =
+    task.priceSources && task.priceSources.length > 0
+      ? task.priceSources.join(', ')
+      : 'No source yet'
+  const dateText =
+    task.priceFirstDate && task.priceLatestDate
+      ? `${task.priceFirstDate} - ${task.priceLatestDate}`
+      : 'Awaiting pricing history'
+  const stockText =
+    typeof task.priceStockCount === 'number'
+      ? `${task.priceStockCount} available`
+      : 'stock unknown'
 
   return (
     <div
-      className='flex min-w-[8.5rem] items-center gap-2'
+      className='flex min-w-[11rem] items-center gap-2'
       data-testid={`wishlist-price-trend-${task.id}`}
       aria-label={trendConfig.label}
-      title={trendConfig.label}
+      title={`${trendConfig.label}. ${sampleCount} points. ${dateText}. Sources: ${sourceText}. ${stockText}.`}
     >
       <Icon className={`size-4 ${trendConfig.className}`} />
-      <WishlistPriceSparkline task={task} label={trendConfig.label} />
+      {hasHistory ? (
+        <WishlistPriceSparkline task={task} label={trendConfig.label} />
+      ) : (
+        <span
+          className='text-xs text-muted-foreground'
+          data-testid={`wishlist-price-graph-empty-${task.id}`}
+        >
+          No history
+        </span>
+      )}
+      <span
+        className='sr-only'
+        data-testid={`wishlist-price-graph-meta-${task.id}`}
+      >
+        {`${sampleCount} points ${dateText} ${sourceText} ${stockText}`}
+      </span>
     </div>
   )
 }
@@ -291,25 +327,14 @@ function WishlistOwnedCell({
           void onWishlistInlineUpdate?.(task, { owned: !owned })
         }}
       >
-        <svg
-          viewBox='0 0 34 18'
+        <CheckIcon
           aria-hidden='true'
           className={cn(
-            'h-4 w-9 transition-opacity',
+            'h-4 w-4 transition-opacity',
             owned ? 'opacity-100' : 'opacity-0'
           )}
           data-testid={`wishlist-owned-tick-${task.id}`}
-          preserveAspectRatio='none'
-        >
-          <polyline
-            points='1,11 7,14 13,11 19,11 25,12 33,3'
-            fill='none'
-            stroke='rgb(73 103 255)'
-            strokeWidth='3'
-            strokeLinecap='round'
-            strokeLinejoin='round'
-          />
-        </svg>
+        />
       </button>
       <Button
         type='button'
@@ -567,7 +592,10 @@ export function getTasksColumns({
             ),
             meta: { className: 'ps-1', tdClassName: 'ps-4' },
             cell: ({ row }) => (
-              <span className='min-w-[76px] font-medium'>
+              <span
+                className='min-w-[76px] font-medium'
+                data-testid={`wishlist-market-price-${row.original.id}`}
+              >
                 {formatMoney(row.original.marketPrice)}
               </span>
             ),

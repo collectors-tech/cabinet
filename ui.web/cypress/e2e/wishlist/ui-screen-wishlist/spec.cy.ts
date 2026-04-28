@@ -42,6 +42,56 @@ describe("ui-screen-wishlist", () => {
         ],
       },
     }).as("catalogItems");
+    cy.intercept("GET", "/api/pricing/stats?item_id=item-collector-1", {
+      statusCode: 200,
+      body: { min: 35, median: 40, latest: 42.5 },
+    }).as("priceStatsCollector1");
+    cy.intercept("GET", "/api/pricing/trend?item_id=item-collector-1", {
+      statusCode: 200,
+      body: {
+        points: [
+          { date: "2026-04-01", latest: 36 },
+          { date: "2026-04-08", latest: 39 },
+          { date: "2026-04-15", latest: 38 },
+          { date: "2026-04-22", latest: 42.5 },
+        ],
+      },
+    }).as("priceTrendCollector1");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-collector-1", {
+      statusCode: 200,
+      body: {
+        history: [
+          {
+            snapshot_date: "2026-04-01",
+            source: "ebay",
+            min_price: 34,
+            median_price: 36,
+            latest_price: 36,
+            stock_count: 3,
+          },
+          {
+            snapshot_date: "2026-04-22",
+            source: "ebay",
+            min_price: 40,
+            median_price: 41,
+            latest_price: 42.5,
+            stock_count: 5,
+          },
+        ],
+      },
+    }).as("priceHistoryCollector1");
+    cy.intercept("GET", "/api/pricing/stats?item_id=item-collector-2", {
+      statusCode: 200,
+      body: { min: 0, median: 0, latest: 0 },
+    }).as("priceStatsCollector2");
+    cy.intercept("GET", "/api/pricing/trend?item_id=item-collector-2", {
+      statusCode: 200,
+      body: { points: [] },
+    }).as("priceTrendCollector2");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-collector-2", {
+      statusCode: 200,
+      body: { history: [] },
+    }).as("priceHistoryCollector2");
   }
 
   function signInToWishlist(options?: { skipStub?: boolean }) {
@@ -342,6 +392,43 @@ describe("ui-screen-wishlist", () => {
     cy.contains("22073").should("not.exist");
     cy.contains(/TASK-\d+/).should("not.exist");
     cy.contains("Backlog").should("not.exist");
+  });
+
+  it("UI-SCREEN-WISHLIST-015 renders item pricing trajectory from pricing APIs", () => {
+    signInToWishlist();
+
+    cy.wait("@priceStatsCollector1");
+    cy.wait("@priceTrendCollector1");
+    cy.wait("@priceHistoryCollector1");
+    cy.get('button[aria-label="Switch to rows view"]').click();
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
+      cy.get('[data-testid="wishlist-owned-tick-item-collector-1"]').should(
+        "exist"
+      );
+      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]')
+        .find("polyline")
+        .should("not.exist");
+      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]')
+        .find('[data-testid="wishlist-price-sparkline-item-collector-1"]')
+        .should("not.exist");
+      cy.get('[data-testid="wishlist-price-trend-item-collector-1"]')
+        .find('[data-testid="wishlist-price-sparkline-item-collector-1"]')
+        .should("be.visible");
+      cy.get('[data-testid="wishlist-market-price-item-collector-1"]').should(
+        "contain.text",
+        "$42.50"
+      );
+      cy.get('[data-testid="wishlist-price-sparkline-item-collector-1"]')
+        .should("be.visible")
+        .and("have.attr", "aria-label")
+        .and("contain", "4 price points");
+      cy.get('[data-testid="wishlist-price-graph-meta-item-collector-1"]')
+        .should("contain.text", "4 points")
+        .and("contain.text", "2026-04-01")
+        .and("contain.text", "2026-04-22")
+        .and("contain.text", "ebay");
+    });
   });
 
   it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {

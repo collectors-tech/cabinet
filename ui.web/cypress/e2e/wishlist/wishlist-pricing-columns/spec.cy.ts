@@ -56,6 +56,25 @@ describe("wishlist-pricing-columns", () => {
         ],
       },
     }).as("priceTrend");
+    cy.intercept("GET", "/api/pricing/history?item_id=item-price-1", {
+      statusCode: 200,
+      body: {
+        history: [
+          {
+            snapshot_date: "2026-04-25",
+            source: "ebay",
+            latest_price: 24,
+            stock_count: 2,
+          },
+          {
+            snapshot_date: "2026-04-26",
+            source: "ebay",
+            latest_price: 22.5,
+            stock_count: 3,
+          },
+        ],
+      },
+    }).as("priceHistory");
     cy.intercept("PUT", "/api/wishlist", (req) => {
       expect(req.body.id).to.eq("wish-price-1");
       wishlistEntries = wishlistEntries.map((entry) =>
@@ -80,6 +99,7 @@ describe("wishlist-pricing-columns", () => {
     cy.wait("@catalogItems");
     cy.wait("@priceStats");
     cy.wait("@priceTrend");
+    cy.wait("@priceHistory");
 
     cy.get('button[aria-label="Switch to rows view"]').click();
     cy.contains("th", "Item ID").should("not.exist");
@@ -227,8 +247,10 @@ describe("wishlist-pricing-columns", () => {
       .and("have.attr", "data-state", "checked");
     cy.get('[data-testid="wishlist-owned-tick-item-price-1"]')
       .should("have.class", "opacity-100")
+      .and("have.attr", "aria-hidden", "true");
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
       .find("polyline")
-      .should("have.attr", "stroke", "rgb(73 103 255)");
+      .should("not.exist");
 
     cy.get('[data-testid="wishlist-purchase-open-item-price-1"]')
       .click({ force: true });
