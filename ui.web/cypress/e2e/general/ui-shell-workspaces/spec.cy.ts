@@ -63,7 +63,7 @@ describe('general/ui-shell-workspaces', () => {
   it('UI-SHELL-WORKSPACES-004 keeps Assistant, Inbox, and /chats semantics distinct', () => {
     openInventory()
     cy.get('[data-testid="shell-workspace-assistant"]').click()
-    cy.contains('[data-testid="shell-assistant-workspace"]', 'Persistent route-aware helper workspace for guided actions.').should('exist')
+    cy.contains('[data-testid="shell-assistant-workspace"]', 'Route-aware agent for database work, evidence checks, and item links.').should('exist')
 
     cy.get('[data-testid="shell-workspace-inbox"]').click()
     cy.contains('[data-testid="shell-inbox-workspace"]', 'simple catch-up list').should('exist')

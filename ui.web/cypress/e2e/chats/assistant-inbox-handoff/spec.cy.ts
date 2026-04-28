@@ -12,6 +12,10 @@ describe('chats/assistant-inbox-handoff', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
     cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-id"]').should(($threadId) => {
+      expect($threadId.text().trim()).not.to.eq('')
+      expect($threadId.text().trim()).not.to.eq('bootstrapping')
+    })
     cy.get('[data-testid="shell-assistant-compose-input"]').type('check this inventory route asynchronously')
     cy.get('[data-testid="shell-assistant-send-button"]').click()
     cy.wait('@assistantMessage').its('response.statusCode').should('eq', 201)
