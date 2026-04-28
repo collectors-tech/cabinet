@@ -3646,6 +3646,32 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
+	mux.HandleFunc("/api/chat/inbox/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		inboxID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/inbox/"))
+		if inboxID == "" {
+			http.Error(w, `{"error":"inbox_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Status    string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		item, err := chatSvc.UpdateInboxItemStatus(r.Context(), req.ProfileID, inboxID, req.Status)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_chat_inbox_item"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(item)
+	})
 	mux.HandleFunc("/api/chat/attachments", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

@@ -1,5 +1,6 @@
 describe('general/ui-shell-workspaces', () => {
   function openInventory() {
+    cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
@@ -65,7 +66,7 @@ describe('general/ui-shell-workspaces', () => {
     cy.contains('[data-testid="shell-assistant-workspace"]', 'Persistent route-aware helper workspace for guided actions.').should('exist')
 
     cy.get('[data-testid="shell-workspace-inbox"]').click()
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'Notifications and asynchronous assistant outcomes will surface here.').should('exist')
+    cy.contains('[data-testid="shell-inbox-workspace"]', 'simple catch-up list').should('exist')
     cy.contains('[data-testid="shell-inbox-workspace"]', 'Assistant Thread').should('not.exist')
 
     cy.visit('/chats')
