@@ -34,6 +34,13 @@ export type WishlistEntryDraft = {
   priority: string
   notes: string
   targetPrice: string
+  owned: boolean
+  pricePaid: string
+  purchaseUrl: string
+  purchaseDate: string
+  purchaseCondition: string
+  quantity: string
+  neededQuantity: string
 }
 
 type TaskMutateDrawerProps = {
@@ -65,29 +72,73 @@ const wishlistFormSchema = z.object({
   category: z.string(),
   priority: z.string().trim().min(1, 'Please choose a priority.'),
   notes: z.string(),
+  owned: z.boolean(),
   targetPrice: z.string().refine((value) => {
       if (value.trim() === '') {
         return true
       }
       return !Number.isNaN(Number(value)) && Number(value) >= 0
     }, 'Target price must be a positive number.'),
+  pricePaid: z.string().refine((value) => {
+    if (value.trim() === '') {
+      return true
+    }
+    return !Number.isNaN(Number(value)) && Number(value) >= 0
+  }, 'Price paid must be a positive number.'),
+  purchaseUrl: z.string(),
+  purchaseDate: z.string(),
+  purchaseCondition: z.string(),
+  quantity: z.string().refine((value) => {
+    if (value.trim() === '') {
+      return true
+    }
+    return Number.isInteger(Number(value)) && Number(value) >= 0
+  }, 'Quantity must be a whole number.'),
+  neededQuantity: z.string().refine((value) => {
+    if (value.trim() === '') {
+      return true
+    }
+    return Number.isInteger(Number(value)) && Number(value) >= 0
+  }, 'Needed quantity must be a whole number.'),
 })
 
 type TaskForm = z.infer<typeof taskFormSchema>
 type WishlistForm = z.infer<typeof wishlistFormSchema>
 
 function wishlistDefaults(currentRow?: Task): WishlistForm {
+  const formatMoneyDraft = (value: number | undefined) =>
+    typeof value === 'number' && value > 0 ? value.toFixed(2) : ''
+  const formatIntegerDraft = (value: number | undefined, fallback: number) =>
+    String(typeof value === 'number' ? value : fallback)
+
   return {
     title: currentRow?.title ?? '',
     partNumber: currentRow?.partNumber ?? '',
     category: currentRow?.label ?? '',
     priority: currentRow?.priority ?? 'medium',
     notes: currentRow?.notes ?? '',
+    owned: Boolean(currentRow?.owned),
     targetPrice:
       typeof currentRow?.targetPrice === 'number' && currentRow.targetPrice > 0
         ? String(currentRow.targetPrice)
         : '',
+    pricePaid: formatMoneyDraft(currentRow?.pricePaid),
+    purchaseUrl: currentRow?.purchaseUrl ?? '',
+    purchaseDate: currentRow?.purchaseDate ?? '',
+    purchaseCondition: currentRow?.purchaseCondition ?? '',
+    quantity: formatIntegerDraft(currentRow?.quantity, 0),
+    neededQuantity: formatIntegerDraft(currentRow?.neededQuantity, 1),
   }
+}
+
+function formatDisplayMoney(value: number | undefined) {
+  if (typeof value !== 'number' || value <= 0) {
+    return '-'
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value)
 }
 
 export function TasksMutateDrawer({
@@ -151,6 +202,13 @@ export function TasksMutateDrawer({
         priority: data.priority.trim(),
         notes: data.notes.trim(),
         targetPrice: data.targetPrice.trim(),
+        owned: data.owned,
+        pricePaid: data.pricePaid.trim(),
+        purchaseUrl: data.purchaseUrl.trim(),
+        purchaseDate: data.purchaseDate.trim(),
+        purchaseCondition: data.purchaseCondition.trim(),
+        quantity: data.quantity.trim(),
+        neededQuantity: data.neededQuantity.trim(),
       },
       currentRow
     )
@@ -248,6 +306,22 @@ export function TasksMutateDrawer({
                   </FormItem>
                 )}
               />
+              {currentRow ? (
+                <div className='rounded-md border p-3 text-sm'>
+                  <p data-testid='wishlist-edit-item-id'>
+                    <span className='font-medium'>Item ID:</span>{' '}
+                    {currentRow.itemID ?? currentRow.id}
+                  </p>
+                  <p data-testid='wishlist-edit-entry-id'>
+                    <span className='font-medium'>Wishlist entry:</span>{' '}
+                    {currentRow.wishlistEntryID ?? '-'}
+                  </p>
+                  <p>
+                    <span className='font-medium'>Collection/context:</span>{' '}
+                    {currentRow.label}
+                  </p>
+                </div>
+              ) : null}
               <FormField
                 control={wishlistForm.control}
                 name='priority'
@@ -269,6 +343,61 @@ export function TasksMutateDrawer({
               />
               <FormField
                 control={wishlistForm.control}
+                name='owned'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Owned</FormLabel>
+                    <FormControl>
+                      <button
+                        type='button'
+                        role='checkbox'
+                        aria-checked={field.value}
+                        data-testid='wishlist-edit-owned'
+                        className='flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm'
+                        onClick={() => field.onChange(!field.value)}
+                      >
+                        <span>
+                          {field.value ? 'Owned' : 'Still on wishlist'}
+                        </span>
+                        <span aria-hidden='true'>
+                          {field.value ? 'Yes' : 'No'}
+                        </span>
+                      </button>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {currentRow ? (
+                <div className='grid gap-3 rounded-md border p-3 text-sm sm:grid-cols-2'>
+                  <div>
+                    <p className='text-muted-foreground'>Market Price</p>
+                    <p
+                      className='font-medium'
+                      data-testid='wishlist-edit-market-price'
+                    >
+                      {formatDisplayMoney(currentRow.marketPrice)}
+                    </p>
+                  </div>
+                  <div data-testid='wishlist-edit-price-graph'>
+                    <p className='text-muted-foreground'>Price Graph</p>
+                    <p className='font-medium'>
+                      {currentRow.priceSampleCount ?? 0} points
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      {currentRow.priceFirstDate && currentRow.priceLatestDate
+                        ? `${currentRow.priceFirstDate} - ${currentRow.priceLatestDate}`
+                        : 'No history'}
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      {(currentRow.priceSources ?? []).join(', ') ||
+                        'No source yet'}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <FormField
+                control={wishlistForm.control}
                 name='targetPrice'
                 render={({ field }) => (
                   <FormItem>
@@ -281,6 +410,104 @@ export function TasksMutateDrawer({
                         step='0.01'
                         placeholder='Optional target price'
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={wishlistForm.control}
+                  name='pricePaid'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Price Paid</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          step='0.01'
+                          placeholder='Optional price paid'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='purchaseDate'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Purchase Date</FormLabel>
+                      <FormControl>
+                        <Input {...field} type='date' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='quantity'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Qty</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          step='1'
+                          inputMode='numeric'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='neededQuantity'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Needs</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          step='1'
+                          inputMode='numeric'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={wishlistForm.control}
+                name='purchaseUrl'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Purchase URL</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='https://' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={wishlistForm.control}
+                name='purchaseCondition'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Purchase Condition</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='Boxed, loose, new...' />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

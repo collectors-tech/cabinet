@@ -165,6 +165,28 @@ function normalizeTargetPrice(raw: string) {
   return parsed
 }
 
+function normalizeOptionalMoney(raw: string) {
+  if (raw.trim() === '') {
+    return 0
+  }
+  const parsed = Number(raw)
+  if (Number.isNaN(parsed) || parsed < 0) {
+    throw new Error('invalid_money')
+  }
+  return parsed
+}
+
+function normalizeOptionalWholeNumber(raw: string, fallback: number) {
+  if (raw.trim() === '') {
+    return fallback
+  }
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error('invalid_quantity')
+  }
+  return parsed
+}
+
 function inferWishlistPriceTrend(
   points: Array<{ latest?: number }> | undefined
 ): WishlistPriceTrend {
@@ -546,6 +568,13 @@ export function Tasks({
           priority: normalizeWishlistPriority(draft.priority),
           notes: draft.notes,
           target_price: normalizeTargetPrice(draft.targetPrice),
+          owned: draft.owned,
+          price_paid: normalizeOptionalMoney(draft.pricePaid),
+          purchase_url: draft.purchaseUrl,
+          purchase_date: draft.purchaseDate,
+          purchase_condition: draft.purchaseCondition,
+          quantity: normalizeOptionalWholeNumber(draft.quantity, 0),
+          needed_quantity: normalizeOptionalWholeNumber(draft.neededQuantity, 1),
           highlight_hit: currentRow?.highlightHit ?? false,
         }),
       })
@@ -574,6 +603,16 @@ export function Tasks({
           error.message === 'invalid_target_price'
         ) {
           toast.error('Target price must be a positive number.')
+        } else if (
+          error instanceof Error &&
+          error.message === 'invalid_money'
+        ) {
+          toast.error('Money fields must be positive numbers.')
+        } else if (
+          error instanceof Error &&
+          error.message === 'invalid_quantity'
+        ) {
+          toast.error('Quantity fields must be whole numbers.')
         } else {
           toast.error('Wishlist save failed. Try again.')
         }

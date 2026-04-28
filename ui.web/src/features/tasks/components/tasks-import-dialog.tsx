@@ -102,6 +102,13 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
       priority: cells[columnIndex('priority')]?.trim() || 'medium',
       notes: cells[columnIndex('notes')]?.trim() ?? '',
       targetPrice: cells[columnIndex('target_price')]?.trim() ?? '',
+      owned: false,
+      pricePaid: '',
+      purchaseUrl: '',
+      purchaseDate: '',
+      purchaseCondition: '',
+      quantity: '0',
+      neededQuantity: '1',
     }
   })
 }
