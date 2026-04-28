@@ -190,6 +190,25 @@ describe("inventory item editor modal", () => {
         ],
       },
     }).as("alphaPhotos");
+    cy.intercept("POST", "/api/items/item-alpha/photos", (req) => {
+      expect(req.headers["content-type"]).to.contain("multipart/form-data");
+      req.reply({
+        statusCode: 201,
+        body: { id: "alpha-side", filename: "alpha-side.jpg", is_primary: false },
+      });
+    }).as("addAlphaPhoto");
+    cy.intercept("DELETE", "/api/items/item-alpha/photos/alpha-back", {
+      statusCode: 204,
+      body: {},
+    }).as("deleteAlphaBackPhoto");
+    cy.intercept("PUT", "/api/items/item-alpha/photos/alpha-back/rotate", (req) => {
+      expect(req.body).to.deep.equal({ direction: "left" });
+      req.reply({ statusCode: 200, body: {} });
+    }).as("rotateAlphaBackPhotoLeft");
+    cy.intercept("PUT", "/api/items/item-alpha/photos/alpha-front/rotate", (req) => {
+      expect(req.body).to.deep.equal({ direction: "right" });
+      req.reply({ statusCode: 200, body: {} });
+    }).as("rotateAlphaFrontPhotoRight");
     cy.intercept("GET", "/api/items/item-alpha/photos/*/file?*", {
       statusCode: 200,
       headers: { "content-type": "image/gif" },
@@ -261,6 +280,26 @@ describe("inventory item editor modal", () => {
       .should("be.visible")
       .and("have.attr", "alt", "alpha-front.jpg");
     cy.get('[data-testid="inventory-item-gallery-thumb"]').should("have.length", 2);
+    cy.get('[data-testid="inventory-item-gallery-add"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-gallery-add-input"]').selectFile(
+      {
+        contents: Cypress.Buffer.from("fake-image"),
+        fileName: "alpha-side.jpg",
+        mimeType: "image/jpeg",
+      },
+      { force: true }
+    );
+    cy.wait("@addAlphaPhoto");
+    cy.wait("@alphaPhotos");
+    cy.get('[data-testid="inventory-item-gallery-preview-rotate-left"]')
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Rotate alpha-front.jpg left");
+    cy.get('[data-testid="inventory-item-gallery-preview-rotate-right"]')
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Rotate alpha-front.jpg right")
+      .click();
+    cy.wait("@rotateAlphaFrontPhotoRight");
+    cy.wait("@alphaPhotos");
     cy.get('[data-testid="inventory-item-gallery-thumb"]').eq(1).click();
     cy.get('[data-testid="inventory-item-gallery-preview"]').should(
       "have.attr",
@@ -277,6 +316,17 @@ describe("inventory item editor modal", () => {
       "alpha-front.jpg"
     );
     cy.get('[data-testid="inventory-photo-fullscreen-close"]').click();
+
+    cy.get('[data-testid="inventory-item-gallery-preview-rotate-left"]').click();
+    cy.wait("@rotateAlphaBackPhotoLeft");
+    cy.wait("@alphaPhotos");
+    cy.get('[data-testid="inventory-item-gallery-thumb-delete"]')
+      .eq(1)
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Delete alpha-back.jpg")
+      .click();
+    cy.wait("@deleteAlphaBackPhoto");
+    cy.wait("@alphaPhotos");
 
     cy.get('[data-testid="inventory-item-tags"]').should(
       "have.value",

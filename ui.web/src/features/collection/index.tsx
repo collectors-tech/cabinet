@@ -1302,6 +1302,7 @@ export function Collection({
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const photoCaptureInputRef = useRef<HTMLInputElement | null>(null)
   const photoUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const itemGalleryPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const createPasteInputRef = useRef<HTMLInputElement | null>(null)
   const createBarcodeInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
@@ -4951,44 +4952,115 @@ export function Collection({
                                 Preview item photos and open the gallery viewer.
                               </p>
                             </div>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant='outline'
-                              data-testid='inventory-item-gallery-open'
-                              disabled={!galleryPhoto}
-                              onClick={() => {
-                                if (galleryPhoto) {
-                                  setSelectedPhotoIndex(galleryPhotoIndex)
+                            <div className='flex items-center gap-2'>
+                              <input
+                                ref={itemGalleryPhotoInputRef}
+                                type='file'
+                                accept='image/*'
+                                className='sr-only'
+                                data-testid='inventory-item-gallery-add-input'
+                                disabled={!selectedItemID || photosBusy}
+                                onChange={(event) => {
+                                  void handlePhotoInputChange(event, 'upload')
+                                }}
+                              />
+                              <Button
+                                type='button'
+                                size='icon'
+                                variant='outline'
+                                className='size-9'
+                                data-testid='inventory-item-gallery-add'
+                                aria-label='Add image'
+                                title='Add image'
+                                disabled={!selectedItemID || photosBusy}
+                                onClick={() =>
+                                  itemGalleryPhotoInputRef.current?.click()
                                 }
-                              }}
-                            >
-                              Open
-                            </Button>
+                              >
+                                <Plus className='size-4' aria-hidden />
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                data-testid='inventory-item-gallery-open'
+                                disabled={!galleryPhoto}
+                                onClick={() => {
+                                  if (galleryPhoto) {
+                                    setSelectedPhotoIndex(galleryPhotoIndex)
+                                  }
+                                }}
+                              >
+                                Open
+                              </Button>
+                            </div>
                           </div>
                           {photosLoading ? (
                             <div className='rounded-md border p-3 text-sm text-muted-foreground'>
                               Loading images...
                             </div>
                           ) : galleryPhoto ? (
-                            <button
-                              type='button'
-                              className='block w-full overflow-hidden rounded-lg border bg-muted/20 text-left'
-                              onClick={() =>
-                                setSelectedPhotoIndex(galleryPhotoIndex)
-                              }
-                            >
-                              <img
-                                data-testid='inventory-item-gallery-preview'
-                                src={`/api/items/${encodeURIComponent(
-                                  selectedItemID
-                                )}/photos/${encodeURIComponent(
-                                  galleryPhoto.id
-                                )}/file?variant=preview&v=${photoImageVersion}`}
-                                alt={galleryPhoto.filename}
-                                className='h-56 w-full object-contain'
-                              />
-                            </button>
+                            <div className='relative overflow-hidden rounded-lg border bg-muted/20'>
+                              <button
+                                type='button'
+                                className='block w-full text-left'
+                                onClick={() =>
+                                  setSelectedPhotoIndex(galleryPhotoIndex)
+                                }
+                              >
+                                <img
+                                  data-testid='inventory-item-gallery-preview'
+                                  src={`/api/items/${encodeURIComponent(
+                                    selectedItemID
+                                  )}/photos/${encodeURIComponent(
+                                    galleryPhoto.id
+                                  )}/file?variant=preview&v=${photoImageVersion}`}
+                                  alt={galleryPhoto.filename}
+                                  className='h-56 w-full object-contain'
+                                />
+                              </button>
+                              <div className='absolute right-2 bottom-2 flex gap-1.5'>
+                                <Button
+                                  type='button'
+                                  size='icon'
+                                  variant='secondary'
+                                  className='size-8 bg-background/85 shadow-sm backdrop-blur hover:bg-background'
+                                  data-testid='inventory-item-gallery-preview-rotate-left'
+                                  aria-label={`Rotate ${galleryPhoto.filename} left`}
+                                  title={`Rotate ${galleryPhoto.filename} left`}
+                                  disabled={photosBusy}
+                                  onClick={() =>
+                                    void handleRotatePhoto(
+                                      galleryPhoto.id,
+                                      'left'
+                                    )
+                                  }
+                                >
+                                  <RotateCcw
+                                    className='size-4'
+                                    aria-hidden
+                                  />
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='icon'
+                                  variant='secondary'
+                                  className='size-8 bg-background/85 shadow-sm backdrop-blur hover:bg-background'
+                                  data-testid='inventory-item-gallery-preview-rotate-right'
+                                  aria-label={`Rotate ${galleryPhoto.filename} right`}
+                                  title={`Rotate ${galleryPhoto.filename} right`}
+                                  disabled={photosBusy}
+                                  onClick={() =>
+                                    void handleRotatePhoto(
+                                      galleryPhoto.id,
+                                      'right'
+                                    )
+                                  }
+                                >
+                                  <RotateCw className='size-4' aria-hidden />
+                                </Button>
+                              </div>
+                            </div>
                           ) : (
                             <div
                               className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
@@ -5003,33 +5075,52 @@ export function Collection({
                               data-testid='inventory-item-gallery-filmstrip'
                             >
                               {inventoryPhotos.map((photo, index) => (
-                                <button
+                                <div
                                   key={photo.id}
-                                  type='button'
                                   className={cn(
-                                    'min-w-24 rounded-md border p-1 text-left text-xs',
+                                    'relative min-w-24 rounded-md border p-1 text-xs',
                                     index === galleryPhotoIndex
                                       ? 'border-primary bg-primary/10'
                                       : 'bg-background'
                                   )}
-                                  data-testid='inventory-item-gallery-thumb'
-                                  onClick={() =>
-                                    setGalleryPreviewPhotoIndex(index)
-                                  }
                                 >
-                                  <img
-                                    src={`/api/items/${encodeURIComponent(
-                                      selectedItemID
-                                    )}/photos/${encodeURIComponent(
-                                      photo.id
-                                    )}/file?variant=thumbnail&v=${photoImageVersion}`}
-                                    alt={photo.filename}
-                                    className='h-14 w-full rounded object-cover'
-                                  />
-                                  <span className='mt-1 block truncate'>
-                                    {photo.filename}
-                                  </span>
-                                </button>
+                                  <button
+                                    type='button'
+                                    className='block w-full text-left'
+                                    data-testid='inventory-item-gallery-thumb'
+                                    onClick={() =>
+                                      setGalleryPreviewPhotoIndex(index)
+                                    }
+                                  >
+                                    <img
+                                      src={`/api/items/${encodeURIComponent(
+                                        selectedItemID
+                                      )}/photos/${encodeURIComponent(
+                                        photo.id
+                                      )}/file?variant=thumbnail&v=${photoImageVersion}`}
+                                      alt={photo.filename}
+                                      className='h-14 w-full rounded object-cover'
+                                    />
+                                    <span className='mt-1 block truncate pr-7'>
+                                      {photo.filename}
+                                    </span>
+                                  </button>
+                                  <Button
+                                    type='button'
+                                    size='icon'
+                                    variant='secondary'
+                                    className='absolute top-1 right-1 size-7 bg-background/85 shadow-sm backdrop-blur hover:bg-background'
+                                    data-testid='inventory-item-gallery-thumb-delete'
+                                    aria-label={`Delete ${photo.filename}`}
+                                    title={`Delete ${photo.filename}`}
+                                    disabled={photosBusy}
+                                    onClick={() =>
+                                      void handleDeletePhoto(photo.id)
+                                    }
+                                  >
+                                    <Trash2 className='size-3.5' aria-hidden />
+                                  </Button>
+                                </div>
                               ))}
                             </div>
                           ) : null}
