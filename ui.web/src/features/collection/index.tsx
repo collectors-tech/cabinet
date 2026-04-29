@@ -839,22 +839,47 @@ function countFolderNodes(nodes: FolderNode[]): number {
   }, 0)
 }
 
+function applyInventoryFolderCounts(
+  nodes: FolderNode[],
+  rows: Task[],
+  assignments: Record<string, string>
+): FolderNode[] {
+  const countsByFolderName = new Map<string, number>()
+
+  for (const row of rows) {
+    const itemID = row.itemID ?? row.id
+    const folderName = resolveFolderAssignmentName(
+      nodes,
+      assignments[itemID] ?? ''
+    )
+    if (!folderName) {
+      continue
+    }
+    countsByFolderName.set(
+      folderName,
+      (countsByFolderName.get(folderName) ?? 0) + 1
+    )
+  }
+
+  const walk = (treeNodes: FolderNode[]): FolderNode[] =>
+    treeNodes.map((node) => ({
+      ...node,
+      itemCount:
+        node.name === 'All Items'
+          ? rows.length
+          : countsByFolderName.get(node.name) ?? 0,
+      children: node.children ? walk(node.children) : undefined,
+    }))
+
+  return walk(nodes)
+}
+
 function slugifyFolderName(value: string): string {
   return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-}
-
-function buildWorkspaceCollectionFilterOptions(
-  collections: string[]
-): Array<FolderNode & { level: number }> {
-  return collections.map((name) => ({
-    id: slugifyFolderName(name) || 'collection',
-    name,
-    level: 0,
-  }))
 }
 
 function buildUniqueFolderID(name: string, nodes: FolderNode[]): string {
@@ -1566,7 +1591,6 @@ export function Collection({
     string | null
   >(null)
   const [folderCreateName, setFolderCreateName] = useState('')
-  const [collectionBrowserOpen, setCollectionBrowserOpen] = useState(false)
   const [draggedFolderID, setDraggedFolderID] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<FolderDropTarget | null>(null)
   const [dragPreviewPosition, setDragPreviewPosition] = useState<{
@@ -1911,7 +1935,6 @@ export function Collection({
           ? nextFolder
           : 'All Items'
       setActiveFolder(safeFolder)
-      setCollectionBrowserOpen(false)
       if (workspaceCollections.includes(safeFolder)) {
         void setActiveWorkspaceCollection(safeFolder)
       }
@@ -2763,7 +2786,6 @@ export function Collection({
                       event.stopPropagation()
                       setFolderCreateParentID(node.id)
                       setFolderCreateName('')
-                      setCollectionBrowserOpen(false)
                       setFolderCreateOpen(true)
                     }}
                   >
@@ -2802,7 +2824,6 @@ export function Collection({
                         data-testid={`folder-tree-row-action-properties-${node.id}`}
                         onClick={(event) => {
                           event.stopPropagation()
-                          setCollectionBrowserOpen(false)
                           openFolderProperties(node)
                         }}
                       >
@@ -2814,7 +2835,6 @@ export function Collection({
                           event.stopPropagation()
                           setFolderCreateParentID(node.id)
                           setFolderCreateName('')
-                          setCollectionBrowserOpen(false)
                           setFolderCreateOpen(true)
                         }}
                       >
@@ -2925,16 +2945,24 @@ export function Collection({
     }),
     [activeFolder, folderTree, tableData.length]
   )
-  const folderFilterOptions = useMemo(() => {
-    return buildWorkspaceCollectionFilterOptions(workspaceCollections)
-  }, [workspaceCollections])
-  const activeFolderIsAvailable = folderFilterOptions.some(
-    (folder) => folder.name === activeFolder
-  ) || folderTreeContainsName(folderTree, activeFolder)
+  const isInventoryRoute = routePath === '/_authenticated/inventory/'
+  const displayFolderTree = useMemo(
+    () =>
+      isInventoryRoute
+        ? applyInventoryFolderCounts(
+            folderTree,
+            tableData,
+            itemFolderAssignments
+          )
+        : folderTree,
+    [folderTree, isInventoryRoute, itemFolderAssignments, tableData]
+  )
+  const activeFolderIsAvailable =
+    activeFolder === 'All Items' ||
+    folderTreeContainsName(folderTree, activeFolder)
   const activeFolderFilterValue = activeFolderIsAvailable
     ? activeFolder
     : 'All Items'
-  const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const selectedInventoryItem = useMemo(
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
     [inventoryItems, selectedItemID]
@@ -2984,10 +3012,6 @@ export function Collection({
     itemFolderAssignments,
     tableData,
   ])
-  const selectedFolderHasNoItems =
-    isInventoryRoute &&
-    activeFolderFilterValue !== 'All Items' &&
-    visibleTableData.length === 0
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedVisibleInventoryIndex = selectedItemID
     ? visibleTableData.findIndex(
@@ -4054,96 +4078,6 @@ export function Collection({
           document.body
         )
       : null
-  const inventoryCollectionFilter = isInventoryRoute ? (
-    <div
-      className='flex flex-wrap items-center gap-2'
-      data-testid='inventory-collection-filter'
-    >
-      <select
-        className='h-8 min-w-[11rem] rounded-md border bg-background px-2 text-sm'
-        data-testid='inventory-collection-filter-select'
-        value={activeFolderFilterValue}
-        onChange={(event) => selectInventoryFolder(event.target.value)}
-      >
-        {folderFilterOptions.map((folder) => (
-          <option key={folder.id} value={folder.name}>
-            {'\u00a0\u00a0'.repeat(folder.level)}
-            {folder.name}
-          </option>
-        ))}
-      </select>
-      <span
-        className='text-xs text-muted-foreground'
-        data-testid='inventory-collection-filter-selected'
-      >
-        {activeFolderFilterValue}
-      </span>
-      <DropdownMenu
-        modal={false}
-        open={collectionBrowserOpen}
-        onOpenChange={setCollectionBrowserOpen}
-      >
-        <DropdownMenuTrigger asChild>
-          <Button
-            type='button'
-            variant='outline'
-            className='h-8 px-2 text-xs'
-            data-testid='inventory-collection-browser-trigger'
-          >
-            Browse
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align='start' className='w-[min(32rem,92vw)] p-2'>
-          <div
-            role='tree'
-            aria-label='Inventory folder filter'
-            className='max-h-[22rem] overflow-auto rounded-md border p-2'
-            data-testid='inventory-folder-browser-menu'
-          >
-            <div className='w-max min-w-full space-y-2'>
-              {draggedFolderID ? (
-                <div
-                  role='presentation'
-                  data-testid='folder-tree-root-drop-zone'
-                  onDragEnter={(event) =>
-                    handleFolderHTMLDragOver({ kind: 'root' }, event)
-                  }
-                  onDragOver={(event) =>
-                    handleFolderHTMLDragOver({ kind: 'root' }, event)
-                  }
-                  onDrop={(event) =>
-                    handleFolderHTMLDrop({ kind: 'root' }, event)
-                  }
-                  className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
-                >
-                  Drop here to move folder to the root level
-                </div>
-              ) : null}
-              {renderFolderTree(folderTree)}
-            </div>
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Button
-        type='button'
-        variant='outline'
-        size='icon'
-        className='size-8'
-        data-testid='inventory-collection-add-root'
-        aria-label='Create collection'
-        title='Create collection'
-        onClick={() => {
-          setFolderCreateParentID(null)
-          setFolderCreateName('')
-          setFolderCreateOpen(true)
-        }}
-      >
-        <Plus className='size-4' aria-hidden='true' />
-      </Button>
-      {folderDragOverlay}
-    </div>
-  ) : undefined
-
   return (
     <TasksProvider>
       <Header
@@ -4345,7 +4279,7 @@ export function Collection({
                       Drop here to move folder to the root level
                     </div>
                   ) : null}
-                  {renderFolderTree(folderTree)}
+                  {renderFolderTree(displayFolderTree)}
                 </div>
               </div>
               {folderDragOverlay}
@@ -4623,20 +4557,10 @@ export function Collection({
                   </Button>
                 </div>
               ) : null}
-              {selectedFolderHasNoItems ? (
-                <div
-                  className='rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground'
-                  data-testid='inventory-selected-folder-empty'
-                >
-                  No items are assigned to {activeFolderFilterValue} yet. Use
-                  the row collection action to place inventory here.
-                </div>
-              ) : null}
               <TasksTable
                 data={visibleTableData}
                 routePath={routePath}
                 currentRecordID={selectedItemID}
-                customFilters={inventoryCollectionFilter}
                 onRecordFocus={(itemID, recordID) => {
                   const matchedItem =
                     inventoryItems.find((item) => item.id === itemID) ??
