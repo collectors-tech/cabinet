@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type ColumnDef,
   flexRender,
@@ -70,6 +70,49 @@ const collectionsHeaderDescription =
 
 type CollectionRow = WorkspaceCollectionSummary
 type CollectionMemberRow = WorkspaceCollectionItem
+
+type InventoryCatalogItem = {
+  id?: string
+  part_number?: string
+  title?: string
+  brand?: string
+  category?: string
+  description?: string
+  status?: string
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function collectionMemberFromInventoryItem(
+  item: InventoryCatalogItem
+): CollectionMemberRow | null {
+  const id = normalizeString(item.id) || normalizeString(item.part_number)
+  const name = normalizeString(item.title) || normalizeString(item.part_number)
+  if (!id || !name) {
+    return null
+  }
+
+  const detail =
+    [
+      normalizeString(item.part_number),
+      normalizeString(item.brand),
+      normalizeString(item.category),
+    ]
+      .filter(Boolean)
+      .join(' · ') ||
+    normalizeString(item.description) ||
+    normalizeString(item.status) ||
+    'Inventory item'
+
+  return {
+    id,
+    name,
+    detail,
+    collectionName: null,
+  }
+}
 
 function buildCollectionColumns({
   onEdit,
@@ -237,8 +280,72 @@ export function Collections() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [createValue, setCreateValue] = useState('')
   const [editValue, setEditValue] = useState('')
+  const [inventoryMembers, setInventoryMembers] = useState<CollectionMemberRow[]>(
+    []
+  )
 
-  const rows = useMemo(() => collectionSummaries, [collectionSummaries])
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadInventoryMembers() {
+      try {
+        const response = await fetch('/api/items', {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          return
+        }
+        const payload = (await response.json()) as { items?: unknown[] }
+        const nextMembers = (payload.items ?? [])
+          .map((item) =>
+            collectionMemberFromInventoryItem(item as InventoryCatalogItem)
+          )
+          .filter((item): item is CollectionMemberRow => item !== null)
+        setInventoryMembers(nextMembers)
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn('Failed to load collection inventory members', error)
+        }
+      }
+    }
+
+    void loadInventoryMembers()
+
+    return () => controller.abort()
+  }, [])
+
+  const collectionAssignmentByID = useMemo(() => {
+    const assignments = new Map<string, string | null>()
+    collectionItems.forEach((item) => {
+      assignments.set(item.id, item.collectionName)
+    })
+    return assignments
+  }, [collectionItems])
+
+  const memberRows = useMemo(() => {
+    if (inventoryMembers.length === 0) {
+      return collectionItems
+    }
+
+    return inventoryMembers.map((item) => ({
+      ...item,
+      collectionName: collectionAssignmentByID.get(item.id) ?? null,
+    }))
+  }, [collectionAssignmentByID, collectionItems, inventoryMembers])
+
+  const rows = useMemo(
+    () =>
+      collectionSummaries.map((summary) => ({
+        ...summary,
+        itemCount:
+          summary.name === 'All Items'
+            ? memberRows.length
+            : memberRows.filter(
+                (item) => item.collectionName === summary.name
+              ).length,
+      })),
+    [collectionSummaries, memberRows]
+  )
 
   const selectedRow = useMemo(
     () =>
@@ -254,11 +361,11 @@ export function Collections() {
   const selectedCollectionItems = useMemo(
     () =>
       selectedCollectionName === 'All Items'
-        ? collectionItems
-        : collectionItems.filter(
+        ? memberRows
+        : memberRows.filter(
             (item) => item.collectionName === selectedCollectionName
           ),
-    [collectionItems, selectedCollectionName]
+    [memberRows, selectedCollectionName]
   )
 
   const openEditPanel = useCallback((row: CollectionRow) => {
