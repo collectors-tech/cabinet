@@ -233,6 +233,23 @@ describe('ui-screen-collections', () => {
     )
   })
 
+  it('UI-SCREEN-COLLECTIONS-019 exposes active collection Browse control', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSelection')
+
+    cy.get('[data-testid="collections-row-watch-list"]').click()
+    cy.wait('@saveCollectionSelection')
+    cy.get('[data-testid="collections-active-browse-control"]')
+      .should('be.visible')
+      .and('contain.text', 'Watch List')
+    cy.get('[data-testid="collections-active-browse"]').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="collection-active-context"]').should(
+      'contain.text',
+      'Watch List'
+    )
+  })
+
   it('UI-SCREEN-COLLECTIONS-003 creates a collection from the table workflow and persists after refresh', () => {
     signInToCollections()
 
