@@ -1,24 +1,88 @@
 describe('ui-screen-collections', () => {
   const collectionsSettingsKey = 'collections.workspace.v1'
 
-  function signInToCollections() {
+  const defaultCollectionInventoryItems = [
+    {
+      id: 'inventory-item-kobe-rookie',
+      part_number: 'KOBE-1996',
+      title: '1996 Topps Kobe Bryant rookie',
+      status: 'active',
+      category: 'Trading Card',
+      brand: 'Topps',
+      description: 'PSA candidate, Lakers lot',
+    },
+    {
+      id: 'inventory-item-jordan-beam-team',
+      part_number: 'JORDAN-1992',
+      title: '1992 Beam Team Michael Jordan',
+      status: 'active',
+      category: 'Trading Card',
+      brand: 'Stadium Club',
+      description: 'Premium slab review queue',
+    },
+    {
+      id: 'inventory-item-pikachu-shadowless',
+      part_number: 'PKMN-SHADOWLESS',
+      title: 'Shadowless Pikachu',
+      status: 'active',
+      category: 'Trading Card',
+      brand: 'Pokemon',
+      description: 'Binder copy ready for retail',
+    },
+    {
+      id: 'inventory-item-charizard-base',
+      part_number: 'PKMN-CHARIZARD',
+      title: 'Base Set Charizard',
+      status: 'active',
+      category: 'Trading Card',
+      brand: 'Pokemon',
+      description: 'High-value vault candidate',
+    },
+    {
+      id: 'inventory-item-metal-raiders-pack',
+      part_number: 'YGO-METAL-RAIDERS',
+      title: 'Yu-Gi-Oh Metal Raiders blister',
+      status: 'active',
+      category: 'Trading Card',
+      brand: 'Konami',
+      description: 'Sealed product awaiting assignment',
+    },
+  ]
+
+  function mockDefaultCollectionInventoryItems() {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: { items: defaultCollectionInventoryItems },
+    }).as('collectionsInventoryItems')
+  }
+
+  function signInToCollections(options: { mockInventory?: boolean } = {}) {
+    const { mockInventory = true } = options
     cy.e2eReset()
     cy.e2eSetSetupState('present')
+    if (mockInventory) {
+      mockDefaultCollectionInventoryItems()
+    }
     cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.useBootstrappedProfile(profile_id, profile_name, { path: '/collections/' })
     })
     cy.wait('@loadCollectionSettings')
+    if (mockInventory) {
+      cy.wait('@collectionsInventoryItems')
+    }
   }
 
   function bootstrapCollectionsProfile(path = '/collections/') {
     cy.e2eReset()
     cy.e2eSetSetupState('present')
+    mockDefaultCollectionInventoryItems()
     cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.useBootstrappedProfile(profile_id, profile_name, { path })
     })
     cy.wait('@loadCollectionSettings')
+    cy.wait('@collectionsInventoryItems')
   }
 
   function collectionFilterOptionKey(value: string) {
@@ -109,6 +173,41 @@ describe('ui-screen-collections', () => {
       'contain.text',
       'No items are currently assigned to Overflow.'
     )
+  })
+
+  it('UI-SCREEN-COLLECTIONS-018 keeps All Items count aligned with inventory members', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: {
+        items: Array.from({ length: 12 }, (_, index) => ({
+          id: `collection-live-item-${index + 1}`,
+          part_number: `COL-LIVE-${String(index + 1).padStart(3, '0')}`,
+          title: `Collection Live Item ${index + 1}`,
+          status: 'active',
+          category: index % 2 === 0 ? 'Slot Car' : 'Trading Card',
+          brand: index % 2 === 0 ? 'AFX' : 'Topps',
+          description: `Live inventory item ${index + 1}`,
+        })),
+      },
+    }).as('collectionsInventoryItems')
+
+    signInToCollections({ mockInventory: false })
+    cy.wait('@collectionsInventoryItems')
+
+    cy.get('[data-testid="collections-row-count-all-items"]').should(
+      'have.text',
+      '12'
+    )
+    cy.get('[data-testid="collections-members-summary"]').should(
+      'contain.text',
+      'Showing 12 of 12 items.'
+    )
+    cy.get('[data-testid="collections-member-row-collection-live-item-1"]')
+      .should('be.visible')
+      .and('contain.text', 'Collection Live Item 1')
+    cy.get('[data-testid="collections-member-row-collection-live-item-10"]')
+      .should('be.visible')
+      .and('contain.text', 'Collection Live Item 10')
   })
 
   it('UI-SCREEN-COLLECTIONS-002 selects a row and persists active context across refresh', () => {
@@ -312,7 +411,7 @@ describe('ui-screen-collections', () => {
     })
   })
 
-  it('UI-SCREEN-COLLECTIONS-012 keeps inventory collection create in the compact folder filter', () => {
+  it('UI-SCREEN-COLLECTIONS-012 keeps inventory collection create in the folder tree', () => {
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
@@ -322,18 +421,18 @@ describe('ui-screen-collections', () => {
     })
     cy.wait('@loadCollectionSettings')
 
-    cy.get('[data-testid="inventory-collection-add-root"]').click()
+    cy.get('[data-testid="folder-tree-add-root"]').click()
     cy.get('[data-testid="folder-tree-name-input"]').type('Inventory Sync Shelf')
     cy.get('[data-testid="folder-tree-create-submit"]').click()
     cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+    cy.get('[data-testid="collection-active-context"]').should(
       'contain.text',
       'Inventory Sync Shelf'
     )
 
     cy.reload()
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+    cy.get('[data-testid="collection-active-context"]').should(
       'contain.text',
       'Inventory Sync Shelf'
     )
@@ -429,17 +528,6 @@ describe('ui-screen-collections', () => {
         persisted.collections ?? [],
         `persisted collections: ${JSON.stringify(persisted.collections ?? [])}`
       ).not.to.include('Store 1')
-    })
-
-    cy.visit('/inventory/')
-    cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
-      'contain.text',
-      'All Items'
-    )
-    cy.get('[data-testid="inventory-collection-filter-select"] option').then(($options) => {
-      const optionLabels = [...$options].map((option) => option.textContent?.trim())
-      expect(optionLabels).not.to.include('Store 1')
     })
 
     cy.visit('/wishlist/')
