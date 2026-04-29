@@ -107,14 +107,6 @@ function inventoryItemRowTestID(task: Task): string | undefined {
 
 const inventorySavedViewsSettingsKey = 'inventory.saved-views.v1'
 
-function titleCaseWords(value: string) {
-  return value
-    .split(/[\s_-]+/)
-    .filter((part) => part.trim() !== '')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
 function parseInventorySavedViews(
   value: string | undefined
 ): InventorySavedView[] {
@@ -672,38 +664,6 @@ export function TasksTable({
         ]
       : statuses
 
-  const inventoryConditionFilterOptions = useMemo(() => {
-    if (!isInventoryRoute) {
-      return []
-    }
-    return Array.from(
-      new Set(
-        data.map((task) => task.status.trim()).filter((status) => status !== '')
-      )
-    )
-      .sort((left, right) => left.localeCompare(right))
-      .map((value) => ({
-        label: titleCaseWords(value),
-        value,
-      }))
-  }, [data, isInventoryRoute])
-
-  const inventoryCategoryFilterOptions = useMemo(() => {
-    if (!isInventoryRoute) {
-      return []
-    }
-    return Array.from(
-      new Set(
-        data.map((task) => task.label.trim()).filter((label) => label !== '')
-      )
-    )
-      .sort((left, right) => left.localeCompare(right))
-      .map((value) => ({
-        label: value,
-        value,
-      }))
-  }, [data, isInventoryRoute])
-
   const savePurchaseDetails = useCallback(async () => {
     if (!purchaseTask) {
       return
@@ -752,27 +712,30 @@ export function TasksTable({
     >
       <DataTableToolbar
         table={table}
+        toolbarTestId={
+          isInventoryRoute ? 'inventory-table-toolbar' : 'wishlist-table-toolbar'
+        }
         searchPlaceholder={
           isInventoryRoute
             ? 'Filter by title or part number...'
             : 'Filter by title or part number...'
         }
-        filters={[
-          {
-            columnId: 'status',
-            title: isInventoryRoute ? 'Condition' : 'Status',
-            options: isInventoryRoute
-              ? inventoryConditionFilterOptions
-              : statusFilterOptions,
-          },
-          {
-            columnId: 'priority',
-            title: isInventoryRoute ? 'Category' : 'Priority',
-            options: isInventoryRoute
-              ? inventoryCategoryFilterOptions
-              : priorities,
-          },
-        ]}
+        filters={
+          isInventoryRoute
+            ? []
+            : [
+                {
+                  columnId: 'status',
+                  title: 'Status',
+                  options: statusFilterOptions,
+                },
+                {
+                  columnId: 'priority',
+                  title: 'Priority',
+                  options: priorities,
+                },
+              ]
+        }
         customFilters={customFilters}
       />
 

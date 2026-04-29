@@ -10,6 +10,7 @@ type DataTableToolbarProps<TData> = {
   searchPlaceholder?: string
   searchKey?: string
   searchInputTestId?: string
+  toolbarTestId?: string
   customFilters?: React.ReactNode
   filters?: {
     columnId: string
@@ -27,6 +28,7 @@ export function DataTableToolbar<TData>({
   searchPlaceholder = 'Filter...',
   searchKey,
   searchInputTestId,
+  toolbarTestId,
   customFilters,
   filters = [],
 }: DataTableToolbarProps<TData>) {
@@ -34,7 +36,10 @@ export function DataTableToolbar<TData>({
     table.getState().columnFilters.length > 0 || table.getState().globalFilter
 
   return (
-    <div className='flex flex-wrap items-center justify-between gap-2'>
+    <div
+      className='flex flex-wrap items-center justify-between gap-2'
+      data-testid={toolbarTestId}
+    >
       <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2'>
         {searchKey ? (
           <Input
