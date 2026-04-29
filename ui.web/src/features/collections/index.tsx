@@ -579,8 +579,23 @@ export function Collections() {
                   data-testid='collections-management-summary'
                 >
                   <span>Showing {filteredCount} of {rows.length} collections.</span>
-                  <span data-testid='collections-active-context'>
-                    Active: {selectedCollectionName}
+                  <span
+                    className='inline-flex items-center gap-2'
+                    data-testid='collections-active-browse-control'
+                  >
+                    <span data-testid='collections-active-context'>
+                      {selectedCollectionName}
+                    </span>
+                    <Button
+                      asChild
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid='collections-active-browse'
+                      aria-label={`Browse ${selectedCollectionName} in inventory`}
+                    >
+                      <a href='/inventory/'>Browse</a>
+                    </Button>
                   </span>
                 </div>
               </div>
