@@ -698,7 +698,11 @@ export function getTasksColumns({
       },
       filterFn: (row, id, value) => {
         if (isInventoryRoute) {
-          return value.includes(row.original.label)
+          const categories = String(row.original.label || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+          return categories.some((category) => value.includes(category))
         }
         return value.includes(row.getValue(id))
       },

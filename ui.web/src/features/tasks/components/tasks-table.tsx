@@ -657,12 +657,30 @@ export function TasksTable({
   }, [activeSavedViewID, inventorySavedViews])
 
   const statusFilterOptions =
-    routePath === '/_authenticated/wishlist/'
+    isInventoryRoute
+      ? Array.from(
+          new Set(
+            data
+              .map((task) => task.status)
+              .filter((value): value is string => Boolean(value?.trim()))
+          )
+        ).map((value) => ({ label: value, value }))
+      : routePath === '/_authenticated/wishlist/'
       ? [
           { label: 'Watching', value: 'wishlist' },
           { label: 'Below target', value: 'discovered' },
         ]
       : statuses
+  const categoryFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .flatMap((task) => String(task.label || '').split(','))
+            .map((value) => value.trim())
+            .filter((value) => value !== '')
+        )
+      ).map((value) => ({ label: value, value }))
+    : priorities
 
   const savePurchaseDetails = useCallback(async () => {
     if (!purchaseTask) {
@@ -722,7 +740,18 @@ export function TasksTable({
         }
         filters={
           isInventoryRoute
-            ? []
+            ? [
+                {
+                  columnId: 'status',
+                  title: 'Condition',
+                  options: statusFilterOptions,
+                },
+                {
+                  columnId: 'priority',
+                  title: 'Category',
+                  options: categoryFilterOptions,
+                },
+              ]
             : [
                 {
                   columnId: 'status',
@@ -732,7 +761,7 @@ export function TasksTable({
                 {
                   columnId: 'priority',
                   title: 'Priority',
-                  options: priorities,
+                  options: categoryFilterOptions,
                 },
               ]
         }

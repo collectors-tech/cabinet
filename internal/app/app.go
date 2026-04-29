@@ -879,33 +879,41 @@ func New(cfg config.Config) (*App, error) {
 			}
 			condition := parseStringArraySetting(settings["grading.enums.condition"], defaultConditionGrades())
 			packaging := parseStringArraySetting(settings["grading.enums.packaging"], defaultPackagingGrades())
+			itemTypeConditionScales := parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"])
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"condition_grades": condition,
-				"packaging_grades": packaging,
+				"condition_grades":           condition,
+				"packaging_grades":           packaging,
+				"item_type_condition_scales": itemTypeConditionScales,
 			})
 		case http.MethodPut:
 			var req struct {
-				ConditionGrades []string `json:"condition_grades"`
-				PackagingGrades []string `json:"packaging_grades"`
+				ConditionGrades         []string                 `json:"condition_grades"`
+				PackagingGrades         []string                 `json:"packaging_grades"`
+				ItemTypeConditionScales []itemTypeConditionScale `json:"item_type_condition_scales"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
+			settings, _ := profiles.GetSettings(r.Context(), active.ID)
 			condition := normalizeStringList(req.ConditionGrades, defaultConditionGrades())
 			packaging := normalizeStringList(req.PackagingGrades, defaultPackagingGrades())
+			itemTypeConditionScales := normalizeItemTypeConditionScales(req.ItemTypeConditionScales, parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"]))
 			conditionRaw, _ := json.Marshal(condition)
 			packagingRaw, _ := json.Marshal(packaging)
+			itemTypeConditionScalesRaw, _ := json.Marshal(itemTypeConditionScales)
 			if putErr := profiles.PutSettings(r.Context(), active.ID, map[string]string{
-				"grading.enums.condition": string(conditionRaw),
-				"grading.enums.packaging": string(packagingRaw),
+				"grading.enums.condition":                  string(conditionRaw),
+				"grading.enums.packaging":                  string(packagingRaw),
+				"grading.enums.item_type_condition_scales": string(itemTypeConditionScalesRaw),
 			}); putErr != nil {
 				http.Error(w, `{"error":"failed_to_save_grading_enums"}`, http.StatusBadRequest)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"condition_grades": condition,
-				"packaging_grades": packaging,
+				"condition_grades":           condition,
+				"packaging_grades":           packaging,
+				"item_type_condition_scales": itemTypeConditionScales,
 			})
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -5783,6 +5791,102 @@ func defaultConditionGrades() []string {
 
 func defaultPackagingGrades() []string {
 	return []string{"sealed_mint", "sealed_good", "opened_complete", "loose"}
+}
+
+type itemTypeConditionScale struct {
+	ItemType   string   `json:"item_type"`
+	Conditions []string `json:"conditions"`
+}
+
+func defaultItemTypeConditionScales() []itemTypeConditionScale {
+	return []itemTypeConditionScale{
+		{
+			ItemType: "Slot Cars",
+			Conditions: []string{
+				"10+ - New, in packaging",
+				"10 - New, with packaging separate",
+				"9 - New, no packaging",
+				"8 - Like new",
+				"7 - Minor track-wear",
+				"6 - Bumper-wear & scratches",
+				"5 - Worn, with scratches & nicks",
+				"4 - Cut wheel wells, but nice",
+				"3 - Cut badly, but good runner",
+				"2 - Good for parts only",
+				"1 - Good for nothing",
+			},
+		},
+		{
+			ItemType: "Trading Cards",
+			Conditions: []string{
+				"Mint (M)",
+				"Near Mint (NM)",
+				"Excellent (EX)",
+				"Good (GD)",
+				"Light Played (LP)",
+				"Played (PL)",
+				"Poor (PO)",
+			},
+		},
+	}
+}
+
+func parseItemTypeConditionScalesSetting(raw string) []itemTypeConditionScale {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return defaultItemTypeConditionScales()
+	}
+	var values []itemTypeConditionScale
+	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
+		return defaultItemTypeConditionScales()
+	}
+	return normalizeItemTypeConditionScales(values, defaultItemTypeConditionScales())
+}
+
+func normalizeItemTypeConditionScales(input []itemTypeConditionScale, fallback []itemTypeConditionScale) []itemTypeConditionScale {
+	out := make([]itemTypeConditionScale, 0, len(input))
+	seenTypes := map[string]struct{}{}
+	for _, scale := range input {
+		itemType := strings.TrimSpace(scale.ItemType)
+		if itemType == "" {
+			continue
+		}
+		typeKey := strings.ToLower(itemType)
+		if _, ok := seenTypes[typeKey]; ok {
+			continue
+		}
+		conditions := normalizeDisplayStringList(scale.Conditions)
+		if len(conditions) == 0 {
+			continue
+		}
+		seenTypes[typeKey] = struct{}{}
+		out = append(out, itemTypeConditionScale{
+			ItemType:   itemType,
+			Conditions: conditions,
+		})
+	}
+	if len(out) == 0 {
+		return append([]itemTypeConditionScale(nil), fallback...)
+	}
+	return out
+}
+
+func normalizeDisplayStringList(input []string) []string {
+	out := make([]string, 0, len(input))
+	seen := map[string]struct{}{}
+	for _, item := range input {
+		clean := strings.TrimSpace(item)
+		if clean == "" {
+			continue
+		}
+		key := strings.ToLower(clean)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, clean)
+	}
+	return out
 }
 
 func parseStringArraySetting(raw string, fallback []string) []string {
