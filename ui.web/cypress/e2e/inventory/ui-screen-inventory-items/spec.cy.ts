@@ -371,7 +371,7 @@ describe("inventory-management", () => {
     cy.contains("Barcode Created Item").should("be.visible");
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection from the compact filter and auto-selects it", () => {
+  it("UI-SCREEN-INVENTORY-ITEMS-006 creates collection from the folder tree and auto-selects it", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
       body: {
@@ -390,16 +390,16 @@ describe("inventory-management", () => {
     signIn();
     cy.wait("@itemsInline");
 
-    cy.get('[data-testid="inventory-collection-add-root"]')
-      .should("have.attr", "aria-label", "Create collection")
+    cy.get('[data-testid="folder-tree-add-root"]')
+      .should("have.attr", "aria-label", "Add root folder")
       .and("not.contain", "New Collection");
-    cy.get('[data-testid="inventory-collection-add-root"]').click();
+    cy.get('[data-testid="folder-tree-add-root"]').click();
     cy.get('[data-testid="folder-tree-name-input"]').type("Inline Alpha");
     cy.get('[data-testid="folder-tree-create-submit"]').click();
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
-      "contain",
-      "Inline Alpha"
-    );
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Inline Alpha");
+    cy.get('[data-testid="folder-tree-item-inline-alpha"]')
+      .scrollIntoView()
+      .should("be.visible");
   });
 
   it("UI-SCREEN-INVENTORY-ITEMS-009 persists create-edit save flow and keeps media attach usable", () => {
@@ -512,14 +512,14 @@ describe("inventory-management", () => {
 
     cy.get('[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
-    cy.get('[data-testid="inventory-item-editor-panel"]').should("be.visible");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("be.visible");
     cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item Updated");
     cy.get('[data-testid="inventory-item-brand"]').clear().type("Aurora");
     cy.get('[data-testid="inventory-item-save"]').click();
 
     cy.wait("@updateItem");
     cy.wait("@itemsList");
-    cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
     cy.get(
@@ -531,7 +531,7 @@ describe("inventory-management", () => {
     );
   });
 
-  it("UI-SCREEN-INVENTORY-ITEMS-010 saves and reapplies inventory views with real condition/category filters", () => {
+  it("UI-SCREEN-INVENTORY-ITEMS-010 saves and reapplies inventory views with search, sorting, and row mode", () => {
     const items = [
       {
         id: "item-view-1",
@@ -600,24 +600,20 @@ describe("inventory-management", () => {
     cy.get('button[aria-label="Switch to rows view"]')
       .click({ force: true })
       .should("have.attr", "aria-pressed", "true");
-    cy.contains("button", "Condition").click();
-    cy.contains('[cmdk-item]', "Used").click();
-    cy.contains("button", "Category").click();
-    cy.contains('[cmdk-item]', "Cars").click();
     cy.get('input[placeholder="Filter by title or part number..."]').type("Road");
 
     cy.contains("th", "Title").find("button").click();
     cy.contains('[role="menuitem"]', "Desc").click();
 
     cy.get('[data-testid="inventory-saved-view-save"]').click();
-    cy.get('[data-testid="inventory-saved-view-name"]').type("Used Road Cars");
+    cy.get('[data-testid="inventory-saved-view-name"]').type("Road Items");
     cy.get('[data-testid="inventory-saved-view-submit"]').click();
     cy.wait("@saveInventorySettings")
       .then(() => {
-        expect(profileSettings["inventory.saved-views.v1"]).to.contain("Used Road Cars");
+        expect(profileSettings["inventory.saved-views.v1"]).to.contain("Road Items");
         const views = JSON.parse(profileSettings["inventory.saved-views.v1"]);
         const savedView = views.find(
-          (view: { name?: string }) => view.name === "Used Road Cars"
+          (view: { name?: string }) => view.name === "Road Items"
         );
         expect(savedView?.viewMode).to.equal("rows");
         savedViewID = savedView?.id ?? "";
@@ -645,7 +641,7 @@ describe("inventory-management", () => {
     );
     cy.contains("Road Zeta").should("be.visible");
     cy.contains("Road Alpha").should("be.visible");
-    cy.contains("Road Bravo").should("not.exist");
+    cy.contains("Road Bravo").should("be.visible");
     cy.contains("Plane Delta").should("not.exist");
     cy.get("table tbody tr").eq(0).should("contain", "PN-VIEW-002");
   });

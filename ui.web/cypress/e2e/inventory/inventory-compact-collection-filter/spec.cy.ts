@@ -166,6 +166,7 @@ describe("inventory-compact-collection-filter", () => {
     cy.reload();
     cy.wait("@itemsFolderCountFilter");
 
+    cy.contains("p", /Folders:\s*29\s+Items:\s*3/).should("be.visible");
     cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
     cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
       cy.contains("button", "Condition").should("not.exist");
@@ -175,6 +176,10 @@ describe("inventory-compact-collection-filter", () => {
     cy.get('[data-testid="folder-tree-item-watch-list"]').click();
     cy.get('[data-testid="folder-tree-count-watch-list"]').should("have.text", "2");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Watch List");
+    cy.contains(
+      "p",
+      /Folders:\s*1\s+Items:\s*2\s+Active Brand:\s*All\s+Active Category:\s*All\s+Active Context:\s*Watch List/
+    ).should("be.visible");
     cy.get('[data-testid^="inventory-item-row-"]').should("have.length", 2);
     cy.contains("Watch Count One").should("be.visible");
     cy.contains("Watch Count Two").should("be.visible");
