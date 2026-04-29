@@ -448,14 +448,12 @@ describe('ui-screen-collections', () => {
     })
     cy.wait('@loadCollectionSettings')
 
-    cy.get('[data-testid="wishlist-table-add-collection"]').click()
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').type('Wishlist Sync Shelf')
-    cy.get('[data-testid="wishlist-table-new-collection-save"]').click()
+    cy.get('[data-testid="wishlist-create-collection-action"]').click()
+    cy.get('[data-testid="wishlist-create-collection-name"]').type('Wishlist Sync Shelf')
+    cy.get('[data-testid="wishlist-create-collection-save"]').click()
     cy.wait('@saveCollectionSettings')
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      'contain.text',
-      'Wishlist Sync Shelf'
-    )
+    cy.get('[data-testid="wishlist-table-add-collection"]').should('not.exist')
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should('not.exist')
 
     cy.visit('/collections/')
     cy.wait('@loadCollectionSettings')
@@ -477,7 +475,7 @@ describe('ui-screen-collections', () => {
 
     cy.visit('/wishlist/')
     selectWishlistCollection('Store 2 Routed')
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').should(
       'contain.text',
       'Store 2 Routed'
     )
@@ -532,10 +530,7 @@ describe('ui-screen-collections', () => {
 
     cy.visit('/wishlist/')
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      'contain.text',
-      'All Items'
-    )
+    cy.get('[data-testid="wishlist-table-collection-selected"]').should('not.exist')
     openWishlistCollectionFilter()
     cy.get('[data-testid="wishlist-table-collection-option-store-1"]').should(
       'not.exist'

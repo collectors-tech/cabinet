@@ -32,13 +32,31 @@ describe('wishlist-visible-data', () => {
     cy.wait('@wishlistItems')
     cy.wait('@profileSettings')
 
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      'contain',
-      'All Items'
-    )
+    cy.get('[data-testid="wishlist-table-toolbar"]').within(() => {
+      cy.get('[data-testid="wishlist-table-collection-trigger"]')
+        .should('be.visible')
+        .and('contain.text', 'Collection')
+      cy.get('[data-testid="wishlist-table-add-collection"]').should('not.exist')
+      cy.get('[data-testid="wishlist-table-collection-selected"]').should('not.exist')
+    })
+    cy.contains('All planned').should('not.exist')
+    cy.contains('High priority').should('not.exist')
+    cy.contains('Steady watch').should('not.exist')
     cy.contains('Wishlist Sample Grail Chase').should('be.visible')
     cy.contains('Wishlist Sample Price Drop Watch').should('be.visible')
     cy.contains('Wishlist Sample Steady Watch').should('be.visible')
+    cy.get('[data-testid="wishlist-market-price-e2e-wishlist-item-grail"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('contain.text', '$164.00')
+    cy.get('[data-testid="wishlist-price-sparkline-e2e-wishlist-item-grail"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('have.attr', 'aria-label')
+      .and('contain', '4 price points')
+    cy.get('[data-testid="wishlist-price-graph-meta-e2e-wishlist-item-price-drop"]')
+      .should('contain.text', '2026-04-01')
+      .and('contain.text', '2026-04-22')
     cy.contains('No results.').should('not.exist')
   })
 

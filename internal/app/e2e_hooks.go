@@ -387,6 +387,36 @@ func bootstrapE2EFixtures(ctx context.Context, conn *sql.DB, cfg config.Config, 
 	}
 
 	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO tracked_items(item_id, profile_id, created_at)
+		VALUES
+		 ('e2e-wishlist-item-grail', ?, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-item-price-drop', ?, CURRENT_TIMESTAMP),
+		 ('e2e-wishlist-item-steady', ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(item_id) DO UPDATE SET profile_id=excluded.profile_id
+	`, profileID, profileID, profileID); err != nil {
+		return e2eBootstrapResponse{}, fmt.Errorf("insert wishlist sample tracked items: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, stock_count, created_at)
+		VALUES
+		 ('e2e-price-grail-001', 'e2e-wishlist-item-grail', '2026-04-01', 'showcase-market', 130.00, 142.00, 145.00, 4, CURRENT_TIMESTAMP),
+		 ('e2e-price-grail-002', 'e2e-wishlist-item-grail', '2026-04-08', 'showcase-market', 134.00, 146.00, 149.00, 5, CURRENT_TIMESTAMP),
+		 ('e2e-price-grail-003', 'e2e-wishlist-item-grail', '2026-04-15', 'showcase-market', 138.00, 151.00, 156.00, 3, CURRENT_TIMESTAMP),
+		 ('e2e-price-grail-004', 'e2e-wishlist-item-grail', '2026-04-22', 'showcase-market', 142.00, 158.00, 164.00, 2, CURRENT_TIMESTAMP),
+		 ('e2e-price-drop-001', 'e2e-wishlist-item-price-drop', '2026-04-01', 'showcase-market', 42.00, 45.00, 48.00, 8, CURRENT_TIMESTAMP),
+		 ('e2e-price-drop-002', 'e2e-wishlist-item-price-drop', '2026-04-08', 'showcase-market', 39.00, 42.00, 43.00, 7, CURRENT_TIMESTAMP),
+		 ('e2e-price-drop-003', 'e2e-wishlist-item-price-drop', '2026-04-15', 'showcase-market', 34.00, 37.00, 36.00, 6, CURRENT_TIMESTAMP),
+		 ('e2e-price-drop-004', 'e2e-wishlist-item-price-drop', '2026-04-22', 'showcase-market', 30.00, 33.00, 31.00, 5, CURRENT_TIMESTAMP),
+		 ('e2e-price-steady-001', 'e2e-wishlist-item-steady', '2026-04-01', 'showcase-market', 10.00, 12.00, 12.00, 10, CURRENT_TIMESTAMP),
+		 ('e2e-price-steady-002', 'e2e-wishlist-item-steady', '2026-04-08', 'showcase-market', 10.00, 12.00, 12.00, 11, CURRENT_TIMESTAMP),
+		 ('e2e-price-steady-003', 'e2e-wishlist-item-steady', '2026-04-15', 'showcase-market', 10.00, 12.00, 12.00, 10, CURRENT_TIMESTAMP),
+		 ('e2e-price-steady-004', 'e2e-wishlist-item-steady', '2026-04-22', 'showcase-market', 10.00, 12.00, 12.00, 12, CURRENT_TIMESTAMP)
+	`); err != nil {
+		return e2eBootstrapResponse{}, fmt.Errorf("insert wishlist sample pricing: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes, created_at, updated_at)
 		VALUES
 		 ('e2e-instance-001', ?, 'mint', 'sealed', 1, 'Shelf A', 29.99, '2025-01-10', 'seed instance 1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),

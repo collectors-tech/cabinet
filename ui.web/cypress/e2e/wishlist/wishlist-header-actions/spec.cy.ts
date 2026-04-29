@@ -74,9 +74,9 @@ describe("wishlist-header-actions", () => {
     cy.contains("button", "Close").click();
 
     cy.get('[data-testid="wishlist-create-collection-action"]').click();
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').should(
-      "be.visible"
-    );
+    cy.get('[data-testid="wishlist-create-collection-dialog"]').should("be.visible");
+    cy.get('[data-testid="wishlist-create-collection-name"]').should("be.visible");
+    cy.contains("button", "Cancel").click();
 
     cy.get('[data-testid="wishlist-import-action"]').click();
     cy.contains("Import Wishlist Entries").should("be.visible");
