@@ -10,6 +10,7 @@ export const taskSchema = z.object({
   partNumber: z.string().optional(),
   status: z.string(),
   label: z.string(),
+  collectionName: z.string().optional(),
   priority: z.string(),
   notes: z.string().optional(),
   belowTargetNow: z.boolean().optional(),

@@ -2,10 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FolderPlus, Heart, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { DataTableFacetedFilter } from '@/components/data-table'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -23,72 +30,6 @@ type TasksProps = {
   title?: string
   description?: string
   routePath?: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
-}
-
-const WISHLIST_PLANNING_FOCUS_STORAGE_KEY = 'cabinet.wishlistPlanningFocus'
-
-type WishlistPlanningFocus =
-  | 'all'
-  | 'high-priority'
-  | 'below-target'
-  | 'watchlist'
-
-const wishlistPlanningFocusConfig: Array<{
-  id: WishlistPlanningFocus
-  label: string
-  description: string
-}> = [
-  {
-    id: 'all',
-    label: 'All planned',
-    description: 'Everything currently being tracked.',
-  },
-  {
-    id: 'high-priority',
-    label: 'High priority',
-    description: 'High and critical items that need active attention.',
-  },
-  {
-    id: 'below-target',
-    label: 'Below target',
-    description: 'Items currently priced at or below target.',
-  },
-  {
-    id: 'watchlist',
-    label: 'Steady watch',
-    description: 'Items to monitor without immediate urgency.',
-  },
-]
-
-function normalizeWishlistPlanningFocus(
-  value: string | null | undefined
-): WishlistPlanningFocus {
-  switch (value) {
-    case 'high-priority':
-    case 'below-target':
-    case 'watchlist':
-      return value
-    default:
-      return 'all'
-  }
-}
-
-function matchesWishlistPlanningFocus(
-  task: Task,
-  focus: WishlistPlanningFocus
-): boolean {
-  const priority = task.priority.trim().toLowerCase()
-  const isBelowTarget = Boolean(task.belowTargetNow)
-  switch (focus) {
-    case 'high-priority':
-      return priority === 'high' || priority === 'critical'
-    case 'below-target':
-      return isBelowTarget
-    case 'watchlist':
-      return !isBelowTarget && priority !== 'high' && priority !== 'critical'
-    default:
-      return true
-  }
 }
 
 type WishlistItemPayload = {
@@ -386,16 +327,13 @@ export function Tasks({
 }: TasksProps) {
   const { workspaceCollections, collectionItems, addCollection } =
     useWorkspaceCollections()
-  const [inlineCollectionInputOpen, setInlineCollectionInputOpen] =
-    useState(false)
-  const [inlineCollectionName, setInlineCollectionName] = useState('')
+  const [collectionCreateOpen, setCollectionCreateOpen] = useState(false)
+  const [collectionCreateName, setCollectionCreateName] = useState('')
   const [
-    inlineCollectionValidationMessage,
-    setInlineCollectionValidationMessage,
+    collectionCreateValidationMessage,
+    setCollectionCreateValidationMessage,
   ] = useState('')
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
-  const [wishlistActiveCollection, setWishlistActiveCollection] =
-    useState('All Items')
   const [tableData, setTableData] = useState<Task[]>(() =>
     isWishlistRoute ? [] : tasks
   )
@@ -404,15 +342,6 @@ export function Tasks({
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
   const [isWishlistMutating, setIsWishlistMutating] = useState(false)
-  const [wishlistPlanningFocus, setWishlistPlanningFocus] =
-    useState<WishlistPlanningFocus>(() => {
-      if (typeof window === 'undefined') {
-        return 'all'
-      }
-      return normalizeWishlistPlanningFocus(
-        window.localStorage.getItem(WISHLIST_PLANNING_FOCUS_STORAGE_KEY)
-      )
-    })
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -574,7 +503,10 @@ export function Tasks({
           purchase_date: draft.purchaseDate,
           purchase_condition: draft.purchaseCondition,
           quantity: normalizeOptionalWholeNumber(draft.quantity, 0),
-          needed_quantity: normalizeOptionalWholeNumber(draft.neededQuantity, 1),
+          needed_quantity: normalizeOptionalWholeNumber(
+            draft.neededQuantity,
+            1
+          ),
           highlight_hit: currentRow?.highlightHit ?? false,
         }),
       })
@@ -946,151 +878,34 @@ export function Tasks({
     if (!isWishlistRoute || typeof window === 'undefined') {
       return
     }
-    window.localStorage.setItem(
-      WISHLIST_PLANNING_FOCUS_STORAGE_KEY,
-      wishlistPlanningFocus
-    )
-  }, [isWishlistRoute, wishlistPlanningFocus])
-
-  const wishlistPlanningSummary = useMemo(() => {
-    if (!isWishlistRoute) {
-      return []
-    }
-    return wishlistPlanningFocusConfig.map((focus) => ({
-      ...focus,
-      count: tableData.filter((task) =>
-        matchesWishlistPlanningFocus(task, focus.id)
-      ).length,
-    }))
-  }, [isWishlistRoute, tableData])
+    window.localStorage.removeItem('cabinet.wishlistPlanningFocus')
+  }, [isWishlistRoute])
 
   const displayedData = useMemo(() => {
     if (!isWishlistRoute) {
       return tableData
     }
 
-    const focusedData = tableData.filter((task) =>
-      matchesWishlistPlanningFocus(task, wishlistPlanningFocus)
+    const collectionByItemID = new Map(
+      collectionItems.map((item) => [item.id, item.collectionName])
     )
-    if (wishlistActiveCollection === 'All Items') {
-      return focusedData
-    }
+    return tableData.map((task) => ({
+      ...task,
+      collectionName:
+        collectionByItemID.get(task.itemID ?? task.id) ?? 'Unassigned',
+    }))
+  }, [collectionItems, isWishlistRoute, tableData])
 
-    const selectedCollectionItemIDs = new Set(
-      collectionItems
-        .filter((item) => item.collectionName === wishlistActiveCollection)
-        .map((item) => item.id)
-    )
-
-    return focusedData.filter((task) =>
-      selectedCollectionItemIDs.has(task.itemID ?? task.id)
-    )
-  }, [
-    collectionItems,
-    isWishlistRoute,
-    tableData,
-    wishlistActiveCollection,
-    wishlistPlanningFocus,
-  ])
-
-  useEffect(() => {
-    if (
-      !isWishlistRoute ||
-      workspaceCollections.includes(wishlistActiveCollection)
-    ) {
+  const handleCreateWishlistCollection = useCallback(async () => {
+    const created = await addCollection(collectionCreateName)
+    if (!created) {
+      setCollectionCreateValidationMessage('Collection name is required.')
       return
     }
-
-    setWishlistActiveCollection('All Items')
-  }, [isWishlistRoute, wishlistActiveCollection, workspaceCollections])
-
-  const wishlistCollectionFilter = isWishlistRoute ? (
-    <div
-      className='flex flex-wrap items-center gap-2'
-      data-testid='wishlist-table-collection-filter'
-    >
-      <DataTableFacetedFilter<Task, string>
-        title='Collection'
-        options={workspaceCollections.map((collection) => ({
-          label: collection,
-          value: collection,
-        }))}
-        selectedValues={new Set([wishlistActiveCollection])}
-        onSelectedValuesChange={(values) => {
-          setWishlistActiveCollection(values[0] ?? 'All Items')
-        }}
-        singleSelect
-        testIdPrefix='wishlist-table-collection'
-      />
-      <span
-        className='text-xs text-muted-foreground'
-        data-testid='wishlist-table-collection-selected'
-      >
-        {wishlistActiveCollection}
-      </span>
-      <Button
-        type='button'
-        variant='outline'
-        className='h-8 px-2 text-xs'
-        data-testid='wishlist-table-add-collection'
-        onClick={() => {
-          setInlineCollectionValidationMessage('')
-          setInlineCollectionInputOpen((open) => !open)
-        }}
-      >
-        + New Collection
-      </Button>
-      {inlineCollectionInputOpen ? (
-        <div
-          className='flex flex-wrap items-center gap-2'
-          data-testid='wishlist-table-new-collection-form'
-        >
-          <Input
-            className='h-8 w-[12rem]'
-            data-testid='wishlist-table-new-collection-name'
-            placeholder='Collection name'
-            aria-invalid={inlineCollectionValidationMessage ? 'true' : 'false'}
-            value={inlineCollectionName}
-            onChange={(event) => {
-              setInlineCollectionName(event.target.value)
-              if (inlineCollectionValidationMessage) {
-                setInlineCollectionValidationMessage('')
-              }
-            }}
-          />
-          <Button
-            type='button'
-            className='h-8 px-3'
-            data-testid='wishlist-table-new-collection-save'
-            onClick={async () => {
-              const created = await addCollection(inlineCollectionName)
-              if (!created) {
-                setInlineCollectionValidationMessage(
-                  'Collection name is required.'
-                )
-                return
-              }
-              setInlineCollectionValidationMessage('')
-              setInlineCollectionName('')
-              setInlineCollectionInputOpen(false)
-              setWishlistActiveCollection(created)
-            }}
-          >
-            Save
-          </Button>
-          {inlineCollectionValidationMessage ? (
-            <span
-              className='text-sm text-destructive'
-              data-testid='wishlist-table-new-collection-validation'
-              role='alert'
-            >
-              {inlineCollectionValidationMessage}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  ) : undefined
+    setCollectionCreateValidationMessage('')
+    setCollectionCreateName('')
+    setCollectionCreateOpen(false)
+  }, [addCollection, collectionCreateName])
 
   return (
     <>
@@ -1120,8 +935,8 @@ export function Tasks({
               >
                 <TasksHeaderActions
                   onOpenCollectionCreate={() => {
-                    setInlineCollectionValidationMessage('')
-                    setInlineCollectionInputOpen(true)
+                    setCollectionCreateValidationMessage('')
+                    setCollectionCreateOpen(true)
                   }}
                   onCreate={() => {
                     setCurrentDialogRow(null)
@@ -1154,43 +969,9 @@ export function Tasks({
           className='flex flex-1 flex-col gap-4 sm:gap-6'
           data-testid={isWishlistRoute ? 'wishlist-workspace' : undefined}
         >
-          {isWishlistRoute ? (
-            <div
-              className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'
-              data-testid='wishlist-planning-summary'
-            >
-              {wishlistPlanningSummary.map((focus) => (
-                <button
-                  key={focus.id}
-                  type='button'
-                  data-testid={`wishlist-planning-focus-${focus.id}`}
-                  className={`rounded-lg border p-4 text-left transition-colors ${
-                    wishlistPlanningFocus === focus.id
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:bg-accent/40'
-                  }`}
-                  aria-pressed={wishlistPlanningFocus === focus.id}
-                  onClick={() => setWishlistPlanningFocus(focus.id)}
-                >
-                  <div className='flex items-start justify-between gap-3'>
-                    <div>
-                      <p className='text-sm font-medium'>{focus.label}</p>
-                      <p className='mt-1 text-xs text-muted-foreground'>
-                        {focus.description}
-                      </p>
-                    </div>
-                    <span className='text-2xl font-semibold'>
-                      {focus.count}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
           <TasksTable
             data={displayedData}
             routePath={routePath}
-            customFilters={wishlistCollectionFilter}
             onEditRow={(task, navigationRows) => {
               setDialogNavigationRows(navigationRows ?? displayedData)
               setCurrentDialogRow(task)
@@ -1217,9 +998,82 @@ export function Tasks({
               isWishlistRoute ? handleWishlistInlineUpdate : undefined
             }
             isWishlistMutating={isWishlistMutating}
+            wishlistCollectionOptions={
+              isWishlistRoute ? workspaceCollections : undefined
+            }
           />
         </div>
       </Main>
+
+      {isWishlistRoute ? (
+        <Dialog
+          open={collectionCreateOpen}
+          onOpenChange={(open) => {
+            setCollectionCreateOpen(open)
+            if (!open) {
+              setCollectionCreateName('')
+              setCollectionCreateValidationMessage('')
+            }
+          }}
+        >
+          <DialogContent data-testid='wishlist-create-collection-dialog'>
+            <DialogHeader>
+              <DialogTitle>Create collection</DialogTitle>
+              <DialogDescription>
+                Add a reusable collection filter option for Wishlist and
+                Collections.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='space-y-2'>
+              <Input
+                data-testid='wishlist-create-collection-name'
+                placeholder='Collection name'
+                aria-invalid={
+                  collectionCreateValidationMessage ? 'true' : 'false'
+                }
+                value={collectionCreateName}
+                onChange={(event) => {
+                  setCollectionCreateName(event.target.value)
+                  if (collectionCreateValidationMessage) {
+                    setCollectionCreateValidationMessage('')
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void handleCreateWishlistCollection()
+                  }
+                }}
+              />
+              {collectionCreateValidationMessage ? (
+                <p
+                  className='text-sm text-destructive'
+                  data-testid='wishlist-create-collection-validation'
+                  role='alert'
+                >
+                  {collectionCreateValidationMessage}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setCollectionCreateOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                data-testid='wishlist-create-collection-save'
+                onClick={() => void handleCreateWishlistCollection()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <TasksDialogs
         routePath={routePath}

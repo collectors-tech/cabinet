@@ -85,6 +85,7 @@ type DataTableProps = {
   ) => Promise<void>
   isWishlistMutating?: boolean
   customFilters?: ReactNode
+  wishlistCollectionOptions?: string[]
 }
 
 type ViewMode = 'rows' | 'cards'
@@ -243,8 +244,10 @@ export function TasksTable({
   onWishlistInlineUpdate,
   isWishlistMutating,
   customFilters,
+  wishlistCollectionOptions = [],
 }: DataTableProps) {
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
   const [purchaseTask, setPurchaseTask] = useState<Task | null>(null)
   const [purchasePricePaid, setPurchasePricePaid] = useState('')
   const [purchaseUrl, setPurchaseUrl] = useState('')
@@ -290,10 +293,9 @@ export function TasksTable({
       ? getRouteApi('/_authenticated/inventory/')
       : getRouteApi('/_authenticated/wishlist/')
 
-  const storageKey =
-    routePath === '/_authenticated/wishlist/'
-      ? 'cabinet.viewMode.wishlist'
-      : 'cabinet.viewMode.inventory'
+  const storageKey = isWishlistRoute
+    ? 'cabinet.viewMode.wishlist'
+    : 'cabinet.viewMode.inventory'
   const {
     activeProfileId: activeInventoryProfileId,
     settings: inventoryProfileSettings,
@@ -304,7 +306,14 @@ export function TasksTable({
 
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    (): VisibilityState => {
+      if (isWishlistRoute) {
+        return { collectionName: false, status: false }
+      }
+      return {}
+    }
+  )
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') {
       return 'rows'
@@ -324,6 +333,9 @@ export function TasksTable({
   const [activeSavedViewID, setActiveSavedViewID] = useState('')
   const clickTimerRef = useRef<number | null>(null)
 
+  const routeSearch = route.useSearch()
+  const routeNavigate = route.useNavigate()
+
   const {
     globalFilter,
     onGlobalFilterChange,
@@ -333,18 +345,110 @@ export function TasksTable({
     onPaginationChange,
     ensurePageInRange,
   } = useTableUrlState({
-    search: route.useSearch(),
-    navigate: route.useNavigate(),
+    search: routeSearch,
+    navigate: routeNavigate,
     pagination: { defaultPage: 1, defaultPageSize: 10 },
     globalFilter: { enabled: true, key: 'filter' },
     columnFilters: [
-      { columnId: 'status', searchKey: 'status', type: 'array' },
-      { columnId: 'priority', searchKey: 'priority', type: 'array' },
+      ...(isWishlistRoute
+        ? []
+        : [
+            {
+              columnId: 'status',
+              searchKey: 'status',
+              type: 'array' as const,
+            },
+          ]),
+      { columnId: 'priority', searchKey: 'priority', type: 'array' as const },
+      {
+        columnId: 'collectionName',
+        searchKey: 'collection',
+        type: 'array' as const,
+      },
     ],
   })
+  const [wishlistStatusFilters, setWishlistStatusFilters] = useState<string[]>(
+    () => {
+      if (!isWishlistRoute || typeof window === 'undefined') {
+        return []
+      }
+      const stored = window.localStorage.getItem(
+        'cabinet.wishlist.statusFilters'
+      )
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as unknown
+          if (Array.isArray(parsed)) {
+            return parsed.filter(
+              (value): value is string =>
+                typeof value === 'string' && value.trim() !== ''
+            )
+          }
+        } catch {
+          // Fall through to route search values below.
+        }
+      }
+      const rawStatus = (routeSearch as Record<string, unknown>).status
+      return Array.isArray(rawStatus)
+        ? rawStatus.filter(
+            (value): value is string =>
+              typeof value === 'string' && value.trim() !== ''
+          )
+        : []
+    }
+  )
+
+  const getArrayColumnFilterValue = useCallback(
+    (id: string) => {
+      const found = columnFilters.find((filter) => filter.id === id)
+      return Array.isArray(found?.value)
+        ? found.value
+            .filter((value): value is string => typeof value === 'string')
+            .map((value) => value.trim())
+            .filter((value) => value !== '')
+        : []
+    },
+    [columnFilters]
+  )
+
+  const setArrayColumnFilterValue = useCallback(
+    (id: string, values: string[]) => {
+      const normalizedValues = values
+        .map((value) => value.trim())
+        .filter((value) => value !== '')
+      onColumnFiltersChange((current) => [
+        ...current.filter((filter) => filter.id !== id),
+        ...(normalizedValues.length > 0
+          ? [{ id, value: normalizedValues }]
+          : []),
+      ])
+    },
+    [onColumnFiltersChange]
+  )
+
+  useEffect(() => {
+    if (!isWishlistRoute || typeof window === 'undefined') {
+      return
+    }
+    if (wishlistStatusFilters.length === 0) {
+      window.localStorage.removeItem('cabinet.wishlist.statusFilters')
+      return
+    }
+    window.localStorage.setItem(
+      'cabinet.wishlist.statusFilters',
+      JSON.stringify(wishlistStatusFilters)
+    )
+  }, [isWishlistRoute, wishlistStatusFilters])
+
+  const filteredData = useMemo(() => {
+    if (!isWishlistRoute || wishlistStatusFilters.length === 0) {
+      return data
+    }
+    return data.filter((task) => wishlistStatusFilters.includes(task.status))
+  }, [data, isWishlistRoute, wishlistStatusFilters])
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: {
       sorting,
@@ -528,27 +632,17 @@ export function TasksTable({
   }
 
   const currentInventoryViewSnapshot = useMemo(() => {
-    const findArrayFilter = (id: string) => {
-      const found = columnFilters.find((filter) => filter.id === id)
-      return Array.isArray(found?.value)
-        ? found.value
-            .filter((value): value is string => typeof value === 'string')
-            .map((value) => value.trim())
-            .filter((value) => value !== '')
-        : []
-    }
-
     return {
       globalFilter: (globalFilter ?? '').trim(),
-      statusFilters: findArrayFilter('status'),
-      categoryFilters: findArrayFilter('priority'),
+      statusFilters: getArrayColumnFilterValue('status'),
+      categoryFilters: getArrayColumnFilterValue('priority'),
       sorting: sorting.map((entry) => ({
         id: entry.id,
         desc: Boolean(entry.desc),
       })),
       viewMode,
     }
-  }, [columnFilters, globalFilter, sorting, viewMode])
+  }, [getArrayColumnFilterValue, globalFilter, sorting, viewMode])
 
   const persistInventorySavedViews = useCallback(
     async (nextViews: InventorySavedView[]) => {
@@ -656,16 +750,15 @@ export function TasksTable({
     }
   }, [activeSavedViewID, inventorySavedViews])
 
-  const statusFilterOptions =
-    isInventoryRoute
-      ? Array.from(
-          new Set(
-            data
-              .map((task) => task.status)
-              .filter((value): value is string => Boolean(value?.trim()))
-          )
-        ).map((value) => ({ label: value, value }))
-      : routePath === '/_authenticated/wishlist/'
+  const statusFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .map((task) => task.status)
+            .filter((value): value is string => Boolean(value?.trim()))
+        )
+      ).map((value) => ({ label: value, value }))
+    : routePath === '/_authenticated/wishlist/'
       ? [
           { label: 'Watching', value: 'wishlist' },
           { label: 'Below target', value: 'discovered' },
@@ -681,6 +774,24 @@ export function TasksTable({
         )
       ).map((value) => ({ label: value, value }))
     : priorities
+  const wishlistCollectionFilterOptions =
+    routePath === '/_authenticated/wishlist/'
+      ? [
+          { label: 'All Items', value: 'All Items' },
+          ...Array.from(
+            new Set(
+              [
+                ...wishlistCollectionOptions,
+                ...data
+                  .map((task) => task.collectionName?.trim())
+                  .filter((value): value is string => Boolean(value)),
+              ].map((value) => value.trim())
+            )
+          )
+            .filter((value) => value !== 'All Items')
+            .map((value) => ({ label: value, value })),
+        ]
+      : []
 
   const savePurchaseDetails = useCallback(async () => {
     if (!purchaseTask) {
@@ -731,7 +842,9 @@ export function TasksTable({
       <DataTableToolbar
         table={table}
         toolbarTestId={
-          isInventoryRoute ? 'inventory-table-toolbar' : 'wishlist-table-toolbar'
+          isInventoryRoute
+            ? 'inventory-table-toolbar'
+            : 'wishlist-table-toolbar'
         }
         searchPlaceholder={
           isInventoryRoute
@@ -757,11 +870,27 @@ export function TasksTable({
                   columnId: 'status',
                   title: 'Status',
                   options: statusFilterOptions,
+                  singleSelect: true,
+                  testIdPrefix: 'wishlist-table-status',
+                  selectedValues: new Set(wishlistStatusFilters),
+                  onSelectedValuesChange: setWishlistStatusFilters,
                 },
                 {
                   columnId: 'priority',
                   title: 'Priority',
                   options: categoryFilterOptions,
+                },
+                {
+                  columnId: 'collectionName',
+                  title: 'Collection',
+                  options: wishlistCollectionFilterOptions,
+                  singleSelect: true,
+                  testIdPrefix: 'wishlist-table-collection',
+                  selectedValues: new Set(
+                    getArrayColumnFilterValue('collectionName')
+                  ),
+                  onSelectedValuesChange: (values) =>
+                    setArrayColumnFilterValue('collectionName', values),
                 },
               ]
         }

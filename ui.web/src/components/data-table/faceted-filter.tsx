@@ -9,7 +9,6 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
@@ -52,6 +51,7 @@ export function DataTableFacetedFilter<TData, TValue>({
   testIdPrefix,
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const facets = column?.getFacetedUniqueValues()
+  const lastSelectionAtRef = React.useRef(0)
   const selectedValues =
     controlledSelectedValues ?? new Set(column?.getFilterValue() as string[])
 
@@ -62,6 +62,15 @@ export function DataTableFacetedFilter<TData, TValue>({
       return
     }
     column?.setFilterValue(filterValues.length ? filterValues : undefined)
+  }
+
+  const guardDuplicateSelection = () => {
+    const now = performance.now()
+    if (now - lastSelectionAtRef.current < 50) {
+      return false
+    }
+    lastSelectionAtRef.current = now
+    return true
   }
 
   return (
@@ -110,7 +119,11 @@ export function DataTableFacetedFilter<TData, TValue>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='w-[200px] p-0' align='start'>
+      <PopoverContent
+        className='w-[200px] p-0'
+        align='start'
+        data-testid={testIdPrefix ? `${testIdPrefix}-content` : undefined}
+      >
         <Command>
           <CommandInput placeholder={title} />
           <CommandList>
@@ -118,26 +131,34 @@ export function DataTableFacetedFilter<TData, TValue>({
             <CommandGroup>
               {options.map((option) => {
                 const isSelected = selectedValues.has(option.value)
+                const selectOption = () => {
+                  if (!guardDuplicateSelection()) {
+                    return
+                  }
+                  const nextSelectedValues = new Set(selectedValues)
+                  if (singleSelect) {
+                    nextSelectedValues.clear()
+                    nextSelectedValues.add(option.value)
+                  } else if (isSelected) {
+                    nextSelectedValues.delete(option.value)
+                  } else {
+                    nextSelectedValues.add(option.value)
+                  }
+                  commitSelectedValues(nextSelectedValues)
+                }
                 return (
-                  <CommandItem
+                  <button
                     key={option.value}
+                    type='button'
+                    role='option'
+                    aria-selected={isSelected}
+                    className='relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
                     data-testid={
                       testIdPrefix
                         ? `${testIdPrefix}-option-${filterOptionTestID(option.value)}`
                         : undefined
                     }
-                    onSelect={() => {
-                      const nextSelectedValues = new Set(selectedValues)
-                      if (singleSelect) {
-                        nextSelectedValues.clear()
-                        nextSelectedValues.add(option.value)
-                      } else if (isSelected) {
-                        nextSelectedValues.delete(option.value)
-                      } else {
-                        nextSelectedValues.add(option.value)
-                      }
-                      commitSelectedValues(nextSelectedValues)
-                    }}
+                    onClick={selectOption}
                   >
                     <div
                       className={cn(
@@ -158,7 +179,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                         {facets.get(option.value)}
                       </span>
                     )}
-                  </CommandItem>
+                  </button>
                 )
               })}
             </CommandGroup>
@@ -166,15 +187,16 @@ export function DataTableFacetedFilter<TData, TValue>({
               <>
                 <CommandSeparator />
                 <CommandGroup>
-                  <CommandItem
+                  <button
+                    type='button'
                     data-testid={
                       testIdPrefix ? `${testIdPrefix}-clear` : undefined
                     }
-                    onSelect={() => commitSelectedValues(new Set())}
-                    className='justify-center text-center'
+                    onClick={() => commitSelectedValues(new Set())}
+                    className='relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-center text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
                   >
                     Clear filters
-                  </CommandItem>
+                  </button>
                 </CommandGroup>
               </>
             )}

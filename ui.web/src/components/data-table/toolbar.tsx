@@ -15,6 +15,10 @@ type DataTableToolbarProps<TData> = {
   filters?: {
     columnId: string
     title: string
+    singleSelect?: boolean
+    testIdPrefix?: string
+    selectedValues?: Set<string>
+    onSelectedValuesChange?: (values: string[]) => void
     options: {
       label: string
       value: string
@@ -72,6 +76,10 @@ export function DataTableToolbar<TData>({
                 column={column}
                 title={filter.title}
                 options={filter.options}
+                singleSelect={filter.singleSelect}
+                testIdPrefix={filter.testIdPrefix}
+                selectedValues={filter.selectedValues}
+                onSelectedValuesChange={filter.onSelectedValuesChange}
               />
             )
           })}

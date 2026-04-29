@@ -516,7 +516,17 @@ export function getTasksColumns({
       },
     },
     ...(isWishlistRoute
-      ? []
+      ? [
+          {
+            accessorKey: 'status',
+            header: 'Status',
+            cell: ({ row }) => <span>{row.original.status}</span>,
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
+            enableHiding: true,
+          } satisfies ColumnDef<Task>,
+        ]
       : [
           {
             accessorKey: 'status',
@@ -560,6 +570,24 @@ export function getTasksColumns({
             },
           } satisfies ColumnDef<Task>,
         ]),
+    ...(isWishlistRoute
+      ? [
+          {
+            accessorKey: 'collectionName',
+            header: 'Collection',
+            cell: ({ row }) => (
+              <span>{row.original.collectionName ?? 'Unassigned'}</span>
+            ),
+            filterFn: (row, id, value) => {
+              if (Array.isArray(value) && value.includes('All Items')) {
+                return true
+              }
+              return value.includes(row.getValue(id))
+            },
+            enableHiding: true,
+          } satisfies ColumnDef<Task>,
+        ]
+      : []),
     ...(isWishlistRoute
       ? [
           {
