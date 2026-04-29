@@ -109,6 +109,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			profile_id TEXT NOT NULL DEFAULT '',
 			brand TEXT NOT NULL,
 			category TEXT NOT NULL,
+			item_type TEXT NOT NULL DEFAULT '',
 			part_number TEXT NOT NULL,
 			title TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
@@ -505,6 +506,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "canonical_items", "priority", "TEXT NOT NULL DEFAULT 'medium'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.priority: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "item_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.item_type: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "canonical_items", "grading_status", "TEXT NOT NULL DEFAULT 'ungraded'"); err != nil {
 		conn.Close()

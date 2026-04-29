@@ -49,8 +49,8 @@ describe("inventory-compact-collection-filter", () => {
     cy.get('[data-testid="inventory-collection-filter"]').should("not.exist");
     cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
     cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
-      cy.contains("button", "Condition").should("not.exist");
-      cy.contains("button", "Category").should("not.exist");
+      cy.contains("button", "Condition").should("be.visible");
+      cy.contains("button", "Category").should("be.visible");
     });
     cy.contains("Store One Filtered Item").should("be.visible");
     cy.contains("Watch List Item").should("be.visible");
@@ -169,8 +169,8 @@ describe("inventory-compact-collection-filter", () => {
     cy.contains("p", /Folders:\s*29\s+Items:\s*3/).should("be.visible");
     cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
     cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
-      cy.contains("button", "Condition").should("not.exist");
-      cy.contains("button", "Category").should("not.exist");
+      cy.contains("button", "Condition").should("be.visible");
+      cy.contains("button", "Category").should("be.visible");
     });
 
     cy.get('[data-testid="folder-tree-item-watch-list"]').click();

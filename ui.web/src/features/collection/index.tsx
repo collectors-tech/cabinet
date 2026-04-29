@@ -92,6 +92,14 @@ import {
   serializeCategoryOptions,
   splitCategoryValue,
 } from '@/features/inventory/category-options'
+import {
+  conditionsForItemType,
+  defaultInventoryItemTypeConditionScales,
+  inferItemTypeFromCategory,
+  itemTypeOptions,
+  parseItemTypeConditionScales,
+  type InventoryItemTypeConditionScale,
+} from '@/features/inventory/item-type-condition-scales'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -142,7 +150,9 @@ type InventoryItem = {
   part_number: string
   title: string
   status: string
+  condition: string
   category: string
+  item_type: string
   brand: string
   priority: string
   description: string
@@ -156,6 +166,7 @@ type InventoryItemDraft = {
   title: string
   brand: string
   category: string
+  item_type: string
   description: string
   notes: string
   tags: string
@@ -476,6 +487,7 @@ function emptyInventoryItemDraft(): InventoryItemDraft {
     title: '',
     brand: '',
     category: '',
+    item_type: '',
     description: '',
     notes: '',
     tags: '',
@@ -489,6 +501,7 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     title: item.title,
     brand: item.brand,
     category: item.category,
+    item_type: item.item_type,
     description: item.description,
     notes: item.notes,
     tags: item.tags.join(', '),
@@ -539,7 +552,16 @@ function hasInventoryInstanceDraftValue(
 }
 
 function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
-  return Object.values(draft).some((value) => value.trim() !== '')
+  return [
+    draft.part_number,
+    draft.title,
+    draft.brand,
+    draft.category,
+    draft.description,
+    draft.notes,
+    draft.tags,
+    draft.source_urls,
+  ].some((value) => value.trim() !== '')
 }
 
 function buildDraftItemPartNumber(): string {
@@ -555,6 +577,7 @@ function normalizeInventoryCreatePayload(
     title: draft.title.trim(),
     brand: draft.brand.trim(),
     category: draft.category.trim(),
+    item_type: draft.item_type.trim(),
     description: draft.description.trim(),
     notes: draft.notes.trim(),
     tags: draft.tags.trim(),
@@ -574,6 +597,9 @@ function normalizeInventoryCreatePayload(
     title: titleSeed || 'Draft item',
     brand: trimmed.brand || 'Unknown',
     category: trimmed.category || 'General',
+    item_type:
+      trimmed.item_type ||
+      inferItemTypeFromCategory(trimmed.category || 'General'),
     description: trimmed.description,
     notes: trimmed.notes,
     tags: trimmed.tags,
@@ -786,6 +812,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         title,
         brand: 'Unknown',
         category: 'General',
+        item_type: inferItemTypeFromCategory('General'),
         description: buildPasteCreateDescription(
           [{ kind: 'url', value: source }],
           source
@@ -805,6 +832,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     title,
     brand: 'Unknown',
     category: 'General',
+    item_type: inferItemTypeFromCategory('General'),
     description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
     notes: '',
     tags: '',
@@ -826,7 +854,7 @@ function inventoryItemToTask(item: InventoryItem): Task {
     id: item.part_number || item.id,
     itemID: item.id,
     title: item.title || 'Untitled item',
-    status: item.status || 'todo',
+    status: item.condition || item.status || 'todo',
     label: item.category || 'feature',
     priority: item.priority || 'medium',
   }
@@ -1336,6 +1364,21 @@ async function loadProfileInventoryCategoryOptions(
   )
 }
 
+async function loadInventoryItemTypeConditionScales(): Promise<
+  InventoryItemTypeConditionScale[]
+> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryItemTypeConditionScales
+  }
+  const payload = (await response.json()) as {
+    item_type_condition_scales?: InventoryItemTypeConditionScale[]
+  }
+  return parseItemTypeConditionScales(
+    JSON.stringify(payload.item_type_condition_scales ?? [])
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1586,6 +1629,9 @@ export function Collection({
   const [categoryOptions, setCategoryOptions] = useState<string[]>(
     defaultInventoryCategoryOptions
   )
+  const [itemTypeConditionScales, setItemTypeConditionScales] = useState<
+    InventoryItemTypeConditionScale[]
+  >(defaultInventoryItemTypeConditionScales)
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<
     string | null
@@ -1983,7 +2029,9 @@ export function Collection({
             part_number?: string
             title?: string
             status?: string
+            condition?: string
             category?: string
+            item_type?: string
             brand?: string
             priority?: string
             description?: string
@@ -1998,7 +2046,11 @@ export function Collection({
             part_number: item.part_number?.trim() ?? '',
             title: item.title?.trim() || 'Untitled item',
             status: item.status?.trim() || 'active',
+            condition: item.condition?.trim() ?? '',
             category: item.category?.trim() || 'General',
+            item_type:
+              item.item_type?.trim() ||
+              inferItemTypeFromCategory(item.category?.trim() || 'General'),
             brand: item.brand?.trim() || 'Unknown',
             priority: item.priority?.trim() || 'medium',
             description: item.description?.trim() ?? '',
@@ -2965,6 +3017,28 @@ export function Collection({
       ]),
     [categoryOptions, inventoryItems]
   )
+  const inventoryItemTypeOptions = useMemo(
+    () =>
+      itemTypeOptions([
+        ...itemTypeConditionScales,
+        ...inventoryItems
+          .map((item) => item.item_type)
+          .filter((itemType) => itemType.trim() !== '')
+          .map((itemType) => ({ item_type: itemType, conditions: ['New'] })),
+      ]),
+    [inventoryItems, itemTypeConditionScales]
+  )
+  const selectedItemTypeForCondition =
+    itemDraft.item_type.trim() ||
+    inferItemTypeFromCategory(itemDraft.category || selectedInventoryItem?.category || '')
+  const inventoryConditionOptions = useMemo(
+    () =>
+      conditionsForItemType(
+        itemTypeConditionScales,
+        selectedItemTypeForCondition
+      ),
+    [itemTypeConditionScales, selectedItemTypeForCondition]
+  )
   const addInventoryCategoryOption = useCallback(
     (category: string) => {
       const normalized = normalizeCategoryName(category)
@@ -3301,6 +3375,8 @@ export function Collection({
           await loadProfileInventoryItemFolderAssignments(activeProfileID)
         const remoteCategories =
           await loadProfileInventoryCategoryOptions(activeProfileID)
+        const remoteItemTypeConditionScales =
+          await loadInventoryItemTypeConditionScales()
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
@@ -3320,6 +3396,7 @@ export function Collection({
         setFolderTree(nextTree)
         setItemFolderAssignments(nextAssignments)
         setCategoryOptions(nextCategories)
+        setItemTypeConditionScales(remoteItemTypeConditionScales)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3335,6 +3412,7 @@ export function Collection({
         setFolderTree(nextTree)
         setItemFolderAssignments(localAssignments)
         setCategoryOptions(defaultInventoryCategoryOptions)
+        setItemTypeConditionScales(defaultInventoryItemTypeConditionScales)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3377,6 +3455,7 @@ export function Collection({
       title: itemDraft.title.trim(),
       brand: itemDraft.brand.trim(),
       category: itemDraft.category.trim(),
+      item_type: itemDraft.item_type.trim(),
       description: itemDraft.description.trim(),
       notes: itemDraft.notes.trim(),
       tags: itemDraft.tags.trim(),
@@ -3437,9 +3516,7 @@ export function Collection({
     try {
       let instancePayload: InventoryInstance | null = null
       const shouldSaveInstance =
-        !wasCreateMode &&
-        (primaryInstance !== null ||
-          hasInventoryInstanceDraftValue(itemInstanceDraft))
+        primaryInstance !== null || hasInventoryInstanceDraftValue(itemInstanceDraft)
       if (shouldSaveInstance) {
         const priceText = itemInstanceDraft.acquisition_price.trim()
         const quantityText = itemInstanceDraft.quantity.trim()
@@ -3463,7 +3540,7 @@ export function Collection({
         }
         instancePayload = {
           id: primaryInstance?.id ?? '',
-          item_id: selectedItemID,
+          item_id: wasCreateMode ? '' : selectedItemID,
           condition: itemInstanceDraft.condition.trim(),
           status:
             itemInstanceDraft.status.trim().toLowerCase() ||
@@ -3491,6 +3568,12 @@ export function Collection({
       }
       const saved = (await response.json()) as { id?: string }
       const savedID = saved.id?.trim() ?? selectedItemID
+      if (instancePayload) {
+        instancePayload = {
+          ...instancePayload,
+          item_id: savedID,
+        }
+      }
       if (wasCreateMode && targetCreateCollection) {
         setFolderTree((previous) =>
           folderTreeContainsName(previous, targetCreateCollection)
@@ -3989,6 +4072,9 @@ export function Collection({
             category: shouldHydrateIdentity
               ? generatedDraft.category
               : current.category,
+            item_type: shouldHydrateIdentity
+              ? generatedDraft.item_type
+              : current.item_type,
             description: buildPasteCreateDescription(nextHistory, sourceURL),
             notes: current.notes,
             tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
@@ -5039,6 +5125,46 @@ export function Collection({
                               }
                             />
                           </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-item-type'
+                            >
+                              Item Type
+                            </label>
+                            <select
+                              id='inventory-item-type'
+                              data-testid='inventory-item-type'
+                              className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                              value={itemDraft.item_type}
+                              onChange={(event) => {
+                                const itemType = event.target.value
+                                const nextConditions = conditionsForItemType(
+                                  itemTypeConditionScales,
+                                  itemType
+                                )
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  item_type: itemType,
+                                }))
+                                setItemInstanceDraft((current) => ({
+                                  ...current,
+                                  condition: nextConditions.includes(
+                                    current.condition
+                                  )
+                                    ? current.condition
+                                    : '',
+                                }))
+                              }}
+                            >
+                              <option value=''>Choose item type</option>
+                              {inventoryItemTypeOptions.map((itemType) => (
+                                <option key={itemType} value={itemType}>
+                                  {itemType}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                         <div className='space-y-2'>
                           <label
@@ -5058,6 +5184,33 @@ export function Collection({
                               }))
                             }
                           />
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-instance-condition'
+                          >
+                            Condition
+                          </label>
+                          <select
+                            id='inventory-instance-condition'
+                            data-testid='inventory-instance-condition'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemInstanceDraft.condition}
+                            onChange={(event) =>
+                              setItemInstanceDraft((current) => ({
+                                ...current,
+                                condition: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose condition</option>
+                            {inventoryConditionOptions.map((condition) => (
+                              <option key={condition} value={condition}>
+                                {condition}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         {itemEditorMode === 'edit' ? (
                           <>
@@ -5491,6 +5644,46 @@ export function Collection({
                               }
                             />
                           </div>
+                          <div className='space-y-2'>
+                            <label
+                              className='text-sm font-medium'
+                              htmlFor='inventory-panel-item-type'
+                            >
+                              Item Type
+                            </label>
+                            <select
+                              id='inventory-panel-item-type'
+                              data-testid='inventory-item-type'
+                              className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                              value={itemDraft.item_type}
+                              onChange={(event) => {
+                                const itemType = event.target.value
+                                const nextConditions = conditionsForItemType(
+                                  itemTypeConditionScales,
+                                  itemType
+                                )
+                                setItemDraft((current) => ({
+                                  ...current,
+                                  item_type: itemType,
+                                }))
+                                setItemInstanceDraft((current) => ({
+                                  ...current,
+                                  condition: nextConditions.includes(
+                                    current.condition
+                                  )
+                                    ? current.condition
+                                    : '',
+                                }))
+                              }}
+                            >
+                              <option value=''>Choose item type</option>
+                              {inventoryItemTypeOptions.map((itemType) => (
+                                <option key={itemType} value={itemType}>
+                                  {itemType}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                         <div className='space-y-2'>
                           <label
@@ -5775,10 +5968,10 @@ export function Collection({
                               >
                                 Condition
                               </label>
-                              <Input
+                              <select
                                 id='inventory-instance-condition'
                                 data-testid='inventory-instance-condition'
-                                placeholder='sealed, graded, used'
+                                className='h-9 w-full rounded-md border bg-background px-2 text-sm'
                                 value={itemInstanceDraft.condition}
                                 onChange={(event) =>
                                   setItemInstanceDraft((current) => ({
@@ -5786,7 +5979,14 @@ export function Collection({
                                     condition: event.target.value,
                                   }))
                                 }
-                              />
+                              >
+                                <option value=''>Choose condition</option>
+                                {inventoryConditionOptions.map((condition) => (
+                                  <option key={condition} value={condition}>
+                                    {condition}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                             <div className='space-y-2'>
                               <label

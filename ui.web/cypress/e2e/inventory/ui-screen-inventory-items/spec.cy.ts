@@ -646,4 +646,74 @@ describe("inventory-management", () => {
     cy.get("table tbody tr").eq(0).should("contain", "PN-VIEW-002");
   });
 
+  it("UI-SCREEN-INVENTORY-ITEMS-011 scopes condition choices by item type and restores compact filters", () => {
+    cy.intercept("GET", "/api/inventory/grading/enums", {
+      statusCode: 200,
+      body: {
+        condition_grades: ["M", "NM"],
+        packaging_grades: ["sealed"],
+        item_type_condition_scales: [
+          {
+            item_type: "Slot Cars",
+            conditions: ["10+ - New, in packaging", "8 - Like new"],
+          },
+          {
+            item_type: "Trading Cards",
+            conditions: ["Mint (M)", "Near Mint (NM)", "Played (PL)"],
+          },
+        ],
+      },
+    }).as("gradingEnums");
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-slot-1",
+            part_number: "PN-SLOT-1",
+            title: "Slot Car Item",
+            status: "10+ - New, in packaging",
+            category: "Slot Car",
+            item_type: "Slot Cars",
+          },
+          {
+            id: "item-card-1",
+            part_number: "PN-CARD-1",
+            title: "Trading Card Item",
+            status: "Near Mint (NM)",
+            category: "Trading Card",
+            item_type: "Trading Cards",
+          },
+        ],
+      },
+    }).as("itemsScopedConditions");
+
+    signIn();
+    cy.wait("@gradingEnums");
+    cy.wait("@itemsScopedConditions");
+
+    cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
+      cy.contains("button", "Condition").should("be.visible");
+      cy.contains("button", "Category").should("be.visible");
+    });
+    cy.contains("button", "Category").click();
+    cy.contains('[role="option"]', "Trading Card").click();
+    cy.contains("Trading Card Item").should("be.visible");
+    cy.contains("Slot Car Item").should("not.exist");
+    cy.contains("button", "Reset").click();
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-type"]').scrollIntoView().should("be.visible");
+    cy.get('[data-testid="inventory-item-type"]').select("Trading Cards");
+    cy.get('[data-testid="inventory-instance-condition"]').select("Near Mint (NM)");
+    cy.get('[data-testid="inventory-instance-condition"]').should(
+      "have.value",
+      "Near Mint (NM)"
+    );
+    cy.get('[data-testid="inventory-instance-condition"]')
+      .find("option")
+      .should("contain", "Played (PL)")
+      .and("not.contain", "10+ - New, in packaging");
+  });
+
 });

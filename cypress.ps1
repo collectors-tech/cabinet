@@ -79,6 +79,11 @@ $uiRoot = Join-Path $repoRoot "ui.web"
 $defaultRuntimeExecutable = Join-Path $repoRoot "bin/cabinet.exe"
 $configPath = Join-Path $uiRoot "cypress.config.runtime.cjs"
 $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $uiRoot $Spec }
+$baseUri = [Uri]$BaseUrl
+$runtimePort = $baseUri.Port
+$e2eDataDir = Join-Path $repoRoot ".tmp\cypress-runtime-$runtimePort"
+$e2eProfile = "e2e-cypress-$runtimePort"
+$e2eInstanceName = "cypress-$runtimePort"
 
 $resolvedRuntimeExecutablePath = ""
 if ([string]::IsNullOrWhiteSpace($RuntimeExecutablePath)) {
@@ -130,14 +135,24 @@ try {
       if (-not [string]::IsNullOrWhiteSpace($resolvedRuntimeExecutablePath)) {
         Write-Step "Runtime executable resolved: $resolvedRuntimeExecutablePath"
         $serverProc = Start-Process -FilePath $resolvedRuntimeExecutablePath -ArgumentList @(
-          "--no-open-browser"
+          "--no-open-browser",
+          "--port", "$runtimePort",
+          "--data-dir", "$e2eDataDir",
+          "--profile", "$e2eProfile",
+          "--instance-name", "$e2eInstanceName",
+          "--allow-parallel"
         ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
       } else {
         Write-Step "Runtime executable resolved: go run ./cmd/cabinet (project-local bin executable missing)"
         $serverProc = Start-Process -FilePath "go" -ArgumentList @(
           "run",
           "./cmd/cabinet",
-          "--no-open-browser"
+          "--no-open-browser",
+          "--port", "$runtimePort",
+          "--data-dir", "$e2eDataDir",
+          "--profile", "$e2eProfile",
+          "--instance-name", "$e2eInstanceName",
+          "--allow-parallel"
         ) -WorkingDirectory $repoRoot -Environment @{ CABINET_E2E_MODE = "1" } -PassThru
       }
       $startedServer = $true
