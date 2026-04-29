@@ -2935,16 +2935,6 @@ export function Collection({
     ]
   )
 
-  const summary = useMemo(
-    () => ({
-      folders: countFolderNodes(folderTree),
-      items: tableData.length,
-      activeBrand: 'All',
-      activeCategory: 'All',
-      activeContext: activeFolder,
-    }),
-    [activeFolder, folderTree, tableData.length]
-  )
   const isInventoryRoute = routePath === '/_authenticated/inventory/'
   const displayFolderTree = useMemo(
     () =>
@@ -3012,6 +3002,25 @@ export function Collection({
     itemFolderAssignments,
     tableData,
   ])
+  const summary = useMemo(
+    () => ({
+      folders:
+        isInventoryRoute && activeFolderFilterValue !== 'All Items'
+          ? 1
+          : countFolderNodes(folderTree),
+      items: isInventoryRoute ? visibleTableData.length : tableData.length,
+      activeBrand: 'All',
+      activeCategory: 'All',
+      activeContext: activeFolderFilterValue,
+    }),
+    [
+      activeFolderFilterValue,
+      folderTree,
+      isInventoryRoute,
+      tableData.length,
+      visibleTableData.length,
+    ]
+  )
   const selectedItemContext = selectedItemLabel || selectedItemID || 'None'
   const selectedVisibleInventoryIndex = selectedItemID
     ? visibleTableData.findIndex(
@@ -4510,21 +4519,24 @@ export function Collection({
 
           <Card>
             <CardContent className='space-y-4 pt-6'>
-              <p className='text-sm text-muted-foreground'>
+              <p
+                className='text-sm text-muted-foreground'
+                data-testid='collection-summary-line'
+              >
                 Folders: <strong>{summary.folders}</strong>{' '}
                 <span className='mx-2'>
                   Items: <strong>{summary.items}</strong>
-                </span>
+                </span>{' '}
                 Active Brand: <strong>{summary.activeBrand}</strong>{' '}
                 <span className='mx-2'>
                   Active Category: <strong>{summary.activeCategory}</strong>
-                </span>
+                </span>{' '}
                 <span className='mx-2'>
                   Active Context:{' '}
                   <strong data-testid='collection-active-context'>
                     {summary.activeContext}
                   </strong>
-                </span>
+                </span>{' '}
                 <span className='mx-2'>
                   Selected Item:{' '}
                   <strong data-testid='collection-selected-item'>
