@@ -34,30 +34,31 @@ Wishlist table rows view SHALL expose sortable `Title` column with deterministic
 - **WHEN** user selects multiple entries
 - **THEN** bulk action controls MUST appear and selected state MUST remain consistent through pagination changes
 
-### Requirement UI-SCREEN-WISHLIST-004: Wishlist screen SHALL expose dedicated New action and adjacent Create menu
-Wishlist SHALL provide a dedicated `New` button for primary wishlist entry creation and an adjacent `Create` menu for quick create actions.
+### Requirement UI-SCREEN-WISHLIST-004: Wishlist screen SHALL expose compact icon header actions
+Wishlist SHALL provide compact icon-only header actions for creating a wishlist entry, creating a collection, and importing wishlist entries.
 
-#### Scenario: Wishlist New + Create menu
+#### Scenario: Wishlist compact header actions
 - **GIVEN** user is on `/wishlist`
-- **WHEN** user clicks `New`
+- **WHEN** user clicks the new-entry icon action
 - **THEN** primary create-wishlist-entry flow MUST open
-- **WHEN** user clicks adjacent `Create` menu
-- **THEN** menu MUST show quick-create actions relevant to wishlist context
+- **AND** header actions MUST expose accessible labels without visible text labels
+- **AND** Wishlist MUST NOT render an adjacent `Create` menu
 
-### Requirement UI-SCREEN-WISHLIST-005: Wishlist detail collection picker SHALL support inline quick-create
-Wishlist detail collection picker MUST support `+ New Collection` inline create.
+### Requirement UI-SCREEN-WISHLIST-005: Wishlist collection creation SHALL use the header modal
+Wishlist SHALL support collection creation from the header collection icon and MUST NOT render inline collection creation controls inside the table toolbar.
 
-#### Scenario: Quick-create collection while assigning wishlist entry
-- **GIVEN** user edits wishlist entry and opens collection picker
-- **WHEN** user creates a new collection from picker
-- **THEN** collection MUST be created and selected without leaving wishlist edit flow
+#### Scenario: Create collection from Wishlist header
+- **GIVEN** user is on `/wishlist`
+- **WHEN** user clicks the create-collection icon action
+- **THEN** a collection creation modal MUST open
+- **AND** saving a valid collection MUST persist it for shared collection filters
 
-#### Scenario: Blank inline collection submission shows validation
-- **GIVEN** wishlist inline collection create state is open
-- **WHEN** user clicks `Save` with an empty `Collection name`
-- **THEN** the inline create state MUST remain open
+#### Scenario: Blank collection modal submission shows validation
+- **GIVEN** Wishlist collection creation modal is open
+- **WHEN** user clicks `Save` with an empty collection name
+- **THEN** the modal MUST remain open
 - **AND** the screen MUST show visible required-field guidance
-- **AND** only an explicit cancel/dismiss action MAY close the inline create state without a create result
+- **AND** only an explicit cancel/dismiss action MAY close the modal without a create result
 
 ### Requirement UI-SCREEN-WISHLIST-007: Wishlist rows SHALL use collection semantics and MUST NOT leak task seed labels
 Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` records with `/api/wishlist` metadata overlays and MUST NOT render generic task IDs or task taxonomy labels.
@@ -70,24 +71,24 @@ Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` 
 - **AND** rows header semantics MUST render `Item ID`, `Title`, `Watch Status`, and `Target Priority`
 - **AND** UI MUST NOT render generic task-template headers such as `Task` or task workflow labels such as `Backlog`
 
-### Requirement UI-SCREEN-WISHLIST-008: Wishlist screen SHALL support planning focus controls
-Wishlist screen SHALL show planning metadata and persist the selected planning focus for the wishlist route.
+### Requirement UI-SCREEN-WISHLIST-008: Wishlist screen SHALL avoid stale planning summary controls
+Wishlist screen SHALL remain table-first and MUST NOT render the old planning summary cards or persisted planning-focus controls.
 
-#### Scenario: Persist wishlist planning focus
+#### Scenario: Stale planning controls are absent
 - **GIVEN** wishlist route is loaded with wishlist metadata overlays
-- **WHEN** user selects a planning focus
-- **THEN** the selected focus MUST be visually active
-- **AND** the selected focus MUST persist across refresh and route return
+- **WHEN** the screen renders
+- **THEN** the old `All planned`, `High priority`, `Below target`, and `Steady watch` summary cards MUST NOT appear
+- **AND** `cabinet.wishlistPlanningFocus` MUST NOT be retained in local storage
 
-### Requirement UI-SCREEN-WISHLIST-009: Wishlist screen SHALL explicitly move acquired items to Inventory
-Wishlist row actions SHALL expose a deliberate `Mark owned` action that calls the explicit wishlist conversion API.
+### Requirement UI-SCREEN-WISHLIST-009: Wishlist rows SHALL capture purchase details without row-menu ownership hacks
+Wishlist rows SHALL expose owned state and purchase details through dedicated row fields and purchase dialog controls, not through a `Mark owned` row action.
 
-#### Scenario: Mark wishlist row owned
+#### Scenario: Add purchase details
 - **GIVEN** wishlist route shows a wanted item with wishlist entry metadata
-- **WHEN** user selects `Mark owned` from the row action menu
-- **THEN** UI MUST submit `POST /api/wishlist/convert-owned` with the wishlist entry `id`
-- **AND** the item MUST disappear from Wishlist after refresh
-- **AND** the item MUST be visible in Inventory
+- **WHEN** user clicks the row purchase action
+- **THEN** the purchase dialog MUST open with sensible defaults
+- **AND** saving MUST persist owned state, price paid, quantity, condition, purchase date, and URL
+- **AND** Wishlist row actions MUST NOT include `Mark owned`
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
