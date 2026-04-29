@@ -39,14 +39,7 @@ export function DataTableRowActions<TData>({
           className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
           data-testid='task-row-actions-trigger'
           onPointerDown={(event) => {
-            event.preventDefault()
             event.stopPropagation()
-            setOpen(true)
-          }}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            setOpen(true)
           }}
           onClick={(event) => {
             event.stopPropagation()

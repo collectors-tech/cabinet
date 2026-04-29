@@ -94,15 +94,21 @@ describe("ui-screen-wishlist", () => {
     }).as("priceHistoryCollector2");
   }
 
-  function signInToWishlist(options?: { skipStub?: boolean }) {
+  function signInToWishlist(options?: {
+    skipStub?: boolean;
+    useExistingIntercepts?: boolean;
+  }) {
     if (!options?.skipStub) {
       stubWishlistData();
-    } else {
+    } else if (!options.useExistingIntercepts) {
       cy.intercept("GET", "/api/wishlist").as("wishlistItems");
       cy.intercept("GET", "/api/items?status=wishlist").as("catalogItems");
     }
     cy.intercept("GET", "/api/profiles/*/settings").as("profileSettings");
     cy.e2eReset();
+    cy.window().then((win) => {
+      win.localStorage.removeItem("cabinet.wishlist.statusFilters");
+    });
     cy.e2eSetSetupState("present");
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.useBootstrappedProfile(profile_id, profile_name, {
@@ -120,30 +126,7 @@ describe("ui-screen-wishlist", () => {
       .find('[data-testid="task-row-actions-trigger"]')
       .scrollIntoView()
       .should("be.visible")
-      .then(($trigger) => {
-        const button = $trigger[0];
-        const view = button.ownerDocument.defaultView;
-        button.dispatchEvent(
-          new view!.PointerEvent("pointerdown", {
-            bubbles: true,
-            button: 0,
-            pointerType: "mouse",
-          })
-        );
-        button.dispatchEvent(
-          new view!.PointerEvent("pointerup", {
-            bubbles: true,
-            button: 0,
-            pointerType: "mouse",
-          })
-        );
-        button.dispatchEvent(
-          new view!.MouseEvent("click", {
-            bubbles: true,
-            button: 0,
-          })
-        );
-      });
+      .click({ force: true });
     cy.get('[role="menu"]').should("be.visible");
   }
 
@@ -160,6 +143,11 @@ describe("ui-screen-wishlist", () => {
     cy.get(
       `[data-testid="wishlist-table-collection-option-${collectionFilterOptionKey(collectionName)}"]`
     ).click();
+  }
+
+  function clearWishlistCollectionFilter() {
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').click();
+    cy.get('[data-testid="wishlist-table-collection-clear"]').click();
   }
 
   it("UI-SCREEN-WISHLIST-001 filters list and persists row/card view mode", () => {
@@ -185,6 +173,7 @@ describe("ui-screen-wishlist", () => {
       "Track wanted items, target prices, and planning decisions before they become owned inventory."
     ).should("not.exist");
     cy.contains("wishlist.description").should("not.exist");
+    cy.get('[data-testid="wishlist-planning-summary"]').should("not.exist");
     cy.get("table").should("be.visible");
     cy.contains("button", "Cards").click();
     cy.window().its("localStorage").invoke("getItem", "cabinet.viewMode.wishlist").should("eq", "cards");
@@ -204,10 +193,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Wishlist Sample Grail Chase").should("be.visible");
     cy.contains("Wishlist Sample Price Drop Watch").should("be.visible");
     cy.contains("Wishlist Sample Steady Watch").should("be.visible");
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
-      "contain",
-      "1"
-    );
+    cy.get('[data-testid="wishlist-planning-summary"]').should("not.exist");
     cy.get('select[data-testid^="wishlist-priority-select-"]').then(
       ($selects) => {
         const values = [...$selects].map(
@@ -263,32 +249,43 @@ describe("ui-screen-wishlist", () => {
       .and("not.contain", "Import");
   });
 
-  it("UI-SCREEN-WISHLIST-005 supports inline collection create and auto-select", () => {
+  it("UI-SCREEN-WISHLIST-005 creates collections from the header action", () => {
     signInToWishlist();
 
-    cy.get('[data-testid="wishlist-table-add-collection"]').click();
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').type("Wishlist Inline Alpha");
-    cy.get('[data-testid="wishlist-table-new-collection-save"]').click();
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      "contain",
+    cy.get('[data-testid="wishlist-create-collection-action"]').click();
+    cy.get('[data-testid="wishlist-create-collection-dialog"]').should(
+      "be.visible"
+    );
+    cy.get('[data-testid="wishlist-create-collection-name"]').type(
       "Wishlist Inline Alpha"
     );
+    cy.get('[data-testid="wishlist-create-collection-save"]').click();
+    cy.get('[data-testid="wishlist-create-collection-dialog"]').should(
+      "not.exist"
+    );
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').click();
+    cy.get(
+      `[data-testid="wishlist-table-collection-option-${collectionFilterOptionKey(
+        "Wishlist Inline Alpha"
+      )}"]`
+    ).should("be.visible");
+    cy.get("body").type("{esc}");
   });
 
-  it("UI-SCREEN-WISHLIST-005 keeps inline create open and shows validation on blank save", () => {
+  it("UI-SCREEN-WISHLIST-005 keeps collection create dialog open on blank save", () => {
     signInToWishlist();
 
-    cy.get('[data-testid="wishlist-table-add-collection"]').click();
-    cy.get('[data-testid="wishlist-table-new-collection-save"]').click();
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').should(
+    cy.get('[data-testid="wishlist-create-collection-action"]').click();
+    cy.get('[data-testid="wishlist-create-collection-save"]').click();
+    cy.get('[data-testid="wishlist-create-collection-name"]').should(
       "have.attr",
       "aria-invalid",
       "true"
     );
-    cy.get('[data-testid="wishlist-table-new-collection-validation"]')
+    cy.get('[data-testid="wishlist-create-collection-validation"]')
       .should("be.visible")
       .and("contain", "Collection name is required.");
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').should("be.visible");
+    cy.get('[data-testid="wishlist-create-collection-name"]').should("be.visible");
   });
 
   it("UI-SCREEN-WISHLIST-011 filters table rows by selected wishlist collection", () => {
@@ -298,8 +295,8 @@ describe("ui-screen-wishlist", () => {
     cy.contains("F1 Silverline").should("be.visible");
 
     selectWishlistCollection("Overflow");
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      "contain",
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').should(
+      "contain.text",
       "Overflow"
     );
 
@@ -307,7 +304,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains("F1 Silverline").should("not.exist");
     cy.contains("No results.").should("be.visible");
 
-    selectWishlistCollection("All Items");
+    clearWishlistCollectionFilter();
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
   });
@@ -338,36 +335,34 @@ describe("ui-screen-wishlist", () => {
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
     cy.wait("@profileSettings");
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').should(
       "contain.text",
-      "All Items"
+      "Collection"
     );
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
     cy.contains("F1 Silverline").should("be.visible");
     cy.contains("No results.").should("not.exist");
   });
 
-  it("UI-SCREEN-WISHLIST-012 uses compact table collection filter instead of separate picker section", () => {
+  it("UI-SCREEN-WISHLIST-012 uses shared table collection filter instead of old planning and picker sections", () => {
     signInToWishlist();
 
     cy.get('[data-testid="wishlist-inline-picker"]').should("not.exist");
-    cy.get('[data-testid="wishlist-table-collection-filter"]').should(
-      "be.visible"
-    );
-    cy.get('[data-testid="wishlist-table-add-collection"]').should(
-      "be.visible"
+    cy.get('[data-testid="wishlist-planning-summary"]').should("not.exist");
+    cy.get('[data-testid="wishlist-table-add-collection"]').should("not.exist");
+    cy.get('[data-testid="wishlist-table-new-collection-form"]').should(
+      "not.exist"
     );
     cy.get('[data-testid="wishlist-table-collection-select"]').should(
       "not.exist"
     );
     cy.get('[data-testid="wishlist-table-collection-trigger"]')
       .should("be.visible")
-      .and("contain.text", "Collection")
-      .and("contain.text", "All Items");
+      .and("contain.text", "Collection");
 
     selectWishlistCollection("Overflow");
-    cy.get('[data-testid="wishlist-table-collection-selected"]').should(
-      "contain",
+    cy.get('[data-testid="wishlist-table-collection-trigger"]').should(
+      "contain.text",
       "Overflow"
     );
     cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
@@ -458,7 +453,7 @@ describe("ui-screen-wishlist", () => {
       req.reply({ statusCode: 200, body: { items: wishlistItems } });
     }).as("catalogItems");
 
-    signInToWishlist({ skipStub: true });
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
 
     openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
     cy.get('[data-testid="wishlist-mark-owned-action"]').should("not.exist");
@@ -466,7 +461,7 @@ describe("ui-screen-wishlist", () => {
     cy.contains('[role="menuitem"]', "Delete").should("be.visible");
   });
 
-  it("UI-SCREEN-WISHLIST-008 surfaces planning summary and persists selected focus across refresh and route return", () => {
+  it("UI-SCREEN-WISHLIST-008 keeps planning filters in the shared table toolbar", () => {
     cy.intercept("GET", "/api/wishlist", {
       statusCode: 200,
       body: {
@@ -527,63 +522,20 @@ describe("ui-screen-wishlist", () => {
       },
     }).as("catalogItems");
 
-    signInToWishlist({ skipStub: true });
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
 
-    cy.get('[data-testid="wishlist-planning-summary"]').should("be.visible");
-    cy.get('[data-testid="wishlist-planning-focus-all"]').should(
-      "contain",
-      "3"
-    );
-    cy.get('[data-testid="wishlist-planning-focus-high-priority"]').should(
-      "contain",
-      "2"
-    );
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
-      "contain",
-      "1"
-    );
-    cy.get('[data-testid="wishlist-planning-focus-watchlist"]').should(
-      "contain",
-      "1"
-    );
-
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').click();
+    cy.get('[data-testid="wishlist-planning-summary"]').should("not.exist");
     cy.window()
       .its("localStorage")
       .invoke("getItem", "cabinet.wishlistPlanningFocus")
-      .should("eq", "below-target");
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
-      "have.attr",
-      "aria-pressed",
-      "true"
-    );
-    cy.contains("F1 Silverline").should("be.visible");
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
-    cy.contains("Team Transport Hauler").should("not.exist");
-
-    cy.reload();
-    cy.wait("@wishlistItems");
-    cy.wait("@catalogItems");
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
-      "have.attr",
-      "aria-pressed",
-      "true"
-    );
-    cy.contains("F1 Silverline").should("be.visible");
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
-
-    cy.visit("/inventory/");
-    cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/);
-    cy.visit("/wishlist/");
-    cy.wait("@wishlistItems");
-    cy.wait("@catalogItems");
-    cy.get('[data-testid="wishlist-planning-focus-below-target"]').should(
-      "have.attr",
-      "aria-pressed",
-      "true"
-    );
-    cy.contains("F1 Silverline").should("be.visible");
-    cy.contains("AFX Mega-G+ Camaro Wildfire").should("not.exist");
+      .should("not.exist");
+    cy.get('[data-testid="wishlist-table-toolbar"]').within(() => {
+      cy.contains("button", "Status").should("be.visible");
+      cy.contains("button", "Priority").should("be.visible");
+      cy.get('[data-testid="wishlist-table-collection-trigger"]').should(
+        "be.visible"
+      );
+    });
   });
 
   it("UI-SCREEN-WISHLIST-009 wires direct header actions into real wishlist dialogs", () => {
@@ -595,9 +547,10 @@ describe("ui-screen-wishlist", () => {
     cy.contains("button", "Close").click();
 
     cy.get('[data-testid="wishlist-create-collection-action"]').click();
-    cy.get('[data-testid="wishlist-table-new-collection-name"]').should(
+    cy.get('[data-testid="wishlist-create-collection-name"]').should(
       "be.visible"
     );
+    cy.contains("button", "Cancel").click();
 
     cy.get('[data-testid="wishlist-import-action"]').click();
     cy.contains("Import Wishlist Entries").should("be.visible");
