@@ -318,10 +318,10 @@ function WishlistOwnedCell({
         data-testid={`wishlist-owned-checkbox-${task.id}`}
         aria-label={`Owned status for ${task.title}`}
         className={cn(
-          'relative flex h-7 w-12 items-center justify-center rounded-md border transition-colors',
+          'relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           owned
-            ? 'border-slate-700 bg-slate-950 shadow-inner'
-            : 'border-border bg-background hover:bg-accent/40'
+            ? 'border-blue-400/80 bg-blue-500/15 text-blue-200 shadow-inner shadow-blue-950/40'
+            : 'border-slate-600/80 bg-slate-950/30 text-slate-500 hover:border-blue-300/70 hover:bg-blue-500/10'
         )}
         onClick={() => {
           void onWishlistInlineUpdate?.(task, { owned: !owned })

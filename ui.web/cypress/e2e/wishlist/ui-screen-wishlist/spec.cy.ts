@@ -424,6 +424,22 @@ describe("ui-screen-wishlist", () => {
         .and("contain.text", "2026-04-22")
         .and("contain.text", "ebay");
     });
+
+    cy.contains("tr", "F1 Silverline").within(() => {
+      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-2"]')
+        .should("be.visible")
+        .and("have.attr", "role", "checkbox")
+        .and("have.attr", "aria-checked", "false")
+        .then(($toggle) => {
+          const bounds = $toggle[0].getBoundingClientRect();
+
+          expect(bounds.width, "owned toggle width").to.be.lessThan(40);
+          expect(
+            Math.abs(bounds.width - bounds.height),
+            "owned toggle should be square"
+          ).to.be.lessThan(6);
+        });
+    });
   });
 
   it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {
