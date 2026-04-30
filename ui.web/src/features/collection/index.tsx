@@ -4230,8 +4230,8 @@ export function Collection({
     setPasteCreateError(null)
     setPasteCreateSuccess(null)
     if (!navigator.clipboard?.readText) {
-      setPasteCreateError(
-        'Clipboard paste is not available here. Paste into the field manually.'
+      setPasteCreateSuccess(
+        'Clipboard could not be read automatically. Paste into the field manually, then press send.'
       )
       return
     }
@@ -4242,8 +4242,8 @@ export function Collection({
         processPasteCreateInput(text, [])
       }
     } catch {
-      setPasteCreateError(
-        'Clipboard paste was blocked. Paste into the field manually.'
+      setPasteCreateSuccess(
+        'Clipboard access was blocked. Paste into the field manually, then press send.'
       )
     }
   }, [processPasteCreateInput, startCreateItem])
