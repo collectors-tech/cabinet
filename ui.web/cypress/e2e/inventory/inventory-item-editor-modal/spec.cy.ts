@@ -934,6 +934,32 @@ describe("inventory item editor modal", () => {
     cy.contains("Photo draft item").should("be.visible");
   });
 
+  it("opens the image picker when creating an item from the header image action", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsList");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.window().then((win) => {
+      cy.spy(win.HTMLElement.prototype, "click").as("elementClick");
+    });
+
+    cy.get('[data-testid="inventory-photos-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and("contain", "Create Item");
+    cy.get('[data-testid="inventory-create-media-panel"]').should(
+      "have.attr",
+      "data-active-mode",
+      "photo"
+    );
+    cy.get('[data-testid="inventory-create-photo-input"]').should("exist");
+    cy.get("@elementClick").should("have.been.called");
+  });
+
   it("keeps an empty draft item blocked until a field or image is provided", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
