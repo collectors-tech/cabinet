@@ -7,6 +7,14 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function openCreateDialog() {
+    return cy
+      .get('[data-testid="inventory-item-editor-dialog"]')
+      .should('be.visible')
+      .find('[data-testid="inventory-item-create-dialog"]')
+      .should('exist')
+  }
+
   beforeEach(() => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -127,7 +135,7 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
     })
 
     cy.get('[data-testid="inventory-paste-action"]').click()
-    cy.get('[data-testid="inventory-item-create-dialog"]').should('be.visible')
+    openCreateDialog()
     cy.get('[data-testid="inventory-create-paste-input"]').should(
       'have.value',
       'https://example.test/listings/afx-22073.jpg'
@@ -145,6 +153,35 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
     cy.wait('@items')
     cy.wait('@urlPhotos')
     cy.contains('example.test afx-22073').should('be.visible')
+  })
+
+  it('UI-SCREEN-INVENTORY-PASTE-CREATE-004 opens paste modal when clipboard is unavailable', () => {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('items')
+
+    signIn()
+    cy.wait('@items')
+    cy.wait('@activeProfile')
+
+    cy.window().then((win) => {
+      Object.defineProperty(win.navigator, 'clipboard', {
+        value: undefined,
+        configurable: true,
+      })
+    })
+
+    cy.get('[data-testid="inventory-paste-action"]').click()
+    openCreateDialog()
+    cy.get('[data-testid="inventory-create-paste-input"]')
+      .should('be.visible')
+      .and('be.focused')
+      .and('have.value', '')
+    cy.get('[data-testid="inventory-create-paste-error"]').should('not.exist')
+    cy.get('[data-testid="inventory-create-paste-success"]')
+      .should('be.visible')
+      .and('contain', 'Paste into the field manually')
   })
 
   it('UI-SCREEN-INVENTORY-PASTE-CREATE-003 processes additional prompts into creation history before save', () => {
