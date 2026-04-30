@@ -65,7 +65,7 @@ function formatCostDraft(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
-function buildSparklinePoints(values: number[]) {
+function buildSparklinePointCoordinates(values: number[]) {
   const width = 88
   const height = 28
   const padding = 3
@@ -75,14 +75,28 @@ function buildSparklinePoints(values: number[]) {
   const step =
     values.length > 1 ? (width - padding * 2) / (values.length - 1) : 0
 
-  return values
-    .map((value, index) => {
-      const x = padding + index * step
-      const y =
-        height - padding - ((value - min) / range) * (height - padding * 2)
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
+  return values.map((value, index) => {
+    const x = padding + index * step
+    const y =
+      height - padding - ((value - min) / range) * (height - padding * 2)
+    return { x, y, value }
+  })
+}
+
+function buildSparklinePoints(values: number[]) {
+  return buildSparklinePointCoordinates(values)
+    .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
     .join(' ')
+}
+
+function buildWishlistPricePointRows(task: Task, values: number[]) {
+  const dates = task.priceHistoryDates ?? []
+  return values
+    .map((price, index) => ({
+      date: dates[index] ?? `Point ${index + 1}`,
+      price,
+    }))
+    .slice(-10)
 }
 
 function WishlistPriceSparkline({
@@ -99,6 +113,8 @@ function WishlistPriceSparkline({
   if (values.length < 2) {
     return null
   }
+  const coordinates = buildSparklinePointCoordinates(values)
+  const latestPointRows = buildWishlistPricePointRows(task, values)
   const sampleCount = task.priceSampleCount ?? values.length
   const dateRange =
     task.priceFirstDate && task.priceLatestDate
@@ -107,23 +123,56 @@ function WishlistPriceSparkline({
   const accessibleLabel = `${label}: ${sampleCount} price points, ${dateRange}, latest ${formatMoney(task.marketPrice)}`
 
   return (
-    <svg
-      viewBox='0 0 88 28'
-      role='img'
-      aria-label={accessibleLabel}
-      className='h-7 w-[88px] rounded bg-slate-950/60'
-      data-testid={`wishlist-price-sparkline-${task.id}`}
-      preserveAspectRatio='none'
-    >
-      <polyline
-        points={buildSparklinePoints(values)}
-        fill='none'
-        stroke='rgb(73 103 255)'
-        strokeWidth='2.5'
-        strokeLinecap='round'
-        strokeLinejoin='round'
-      />
-    </svg>
+    <div className='group relative'>
+      <svg
+        viewBox='0 0 88 28'
+        role='img'
+        tabIndex={0}
+        focusable='true'
+        aria-label={accessibleLabel}
+        className='h-7 w-[88px] rounded bg-slate-950/60 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        data-testid={`wishlist-price-sparkline-${task.id}`}
+        preserveAspectRatio='none'
+      >
+        <polyline
+          points={buildSparklinePoints(values)}
+          fill='none'
+          stroke='rgb(73 103 255)'
+          strokeWidth='2.5'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+        {coordinates.map(({ x, y, value }, index) => (
+          <circle
+            key={`${task.id}-${index}-${value}`}
+            cx={x.toFixed(1)}
+            cy={y.toFixed(1)}
+            r='2.3'
+            fill='rgb(129 146 255)'
+            stroke='rgb(15 23 42)'
+            strokeWidth='0.7'
+          >
+            <title>
+              {`${task.priceHistoryDates?.[index] ?? `Point ${index + 1}`} ${formatMoney(value)}`}
+            </title>
+          </circle>
+        ))}
+      </svg>
+      <div
+        className='pointer-events-none absolute left-0 top-9 z-30 hidden w-56 rounded-md border bg-popover p-2 text-xs text-popover-foreground shadow-lg group-hover:block group-focus-within:block'
+        data-testid={`wishlist-price-points-${task.id}`}
+      >
+        <p className='mb-1 font-semibold'>Latest 10 price points</p>
+        <ul className='space-y-1'>
+          {latestPointRows.map((point) => (
+            <li key={`${point.date}-${point.price}`}>
+              <span className='text-muted-foreground'>{point.date}</span>{' '}
+              <span className='font-medium'>{formatMoney(point.price)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }
 

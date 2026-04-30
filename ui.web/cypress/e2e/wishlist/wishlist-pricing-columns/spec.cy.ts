@@ -51,6 +51,16 @@ describe("wishlist-pricing-columns", () => {
       statusCode: 200,
       body: {
         points: [
+          { date: "2026-04-15", latest: 32 },
+          { date: "2026-04-16", latest: 31 },
+          { date: "2026-04-17", latest: 30 },
+          { date: "2026-04-18", latest: 29 },
+          { date: "2026-04-19", latest: 28 },
+          { date: "2026-04-20", latest: 27 },
+          { date: "2026-04-21", latest: 26 },
+          { date: "2026-04-22", latest: 25.5 },
+          { date: "2026-04-23", latest: 25 },
+          { date: "2026-04-24", latest: 24.5 },
           { date: "2026-04-25", latest: 24 },
           { date: "2026-04-26", latest: 22.5 },
         ],
@@ -122,6 +132,13 @@ describe("wishlist-pricing-columns", () => {
       .find("polyline")
       .should("have.attr", "points")
       .and("not.be.empty");
+    cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]').focus();
+    cy.get('[data-testid="wishlist-price-points-item-price-1"]')
+      .should("be.visible")
+      .and("contain", "Latest 10")
+      .and("contain", "2026-04-17 $30.00")
+      .and("contain", "2026-04-26 $22.50")
+      .and("not.contain", "2026-04-16");
 
     cy.get('[data-testid="wishlist-cost-input-item-price-1"]')
       .scrollIntoView()
