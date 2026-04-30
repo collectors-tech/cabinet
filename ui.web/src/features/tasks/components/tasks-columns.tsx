@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
-  CheckIcon,
   ImageIcon,
   MinusIcon,
   PlusIcon,
@@ -10,7 +9,6 @@ import {
   TrendingDownIcon,
   TrendingUpIcon,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -292,50 +290,17 @@ function WishlistPriorityCell({
 
 function WishlistOwnedCell({
   task,
-  onWishlistInlineUpdate,
   onWishlistPurchaseRow,
 }: {
   task: Task
-  onWishlistInlineUpdate?: (
-    task: Task,
-    changes: WishlistInlineChanges
-  ) => Promise<void>
   onWishlistPurchaseRow?: (task: Task) => void
 }) {
-  const owned = Boolean(task.owned)
-
   return (
     <div
-      className='flex min-w-[5rem] items-center gap-1'
+      className='flex min-w-[2.5rem] items-center'
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <button
-        type='button'
-        role='checkbox'
-        aria-checked={owned}
-        data-state={owned ? 'checked' : 'unchecked'}
-        data-testid={`wishlist-owned-checkbox-${task.id}`}
-        aria-label={`Owned status for ${task.title}`}
-        className={cn(
-          'relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          owned
-            ? 'border-blue-400/80 bg-blue-500/15 text-blue-200 shadow-inner shadow-blue-950/40'
-            : 'border-slate-600/80 bg-slate-950/30 text-slate-500 hover:border-blue-300/70 hover:bg-blue-500/10'
-        )}
-        onClick={() => {
-          void onWishlistInlineUpdate?.(task, { owned: !owned })
-        }}
-      >
-        <CheckIcon
-          aria-hidden='true'
-          className={cn(
-            'h-4 w-4 transition-opacity',
-            owned ? 'opacity-100' : 'opacity-0'
-          )}
-          data-testid={`wishlist-owned-tick-${task.id}`}
-        />
-      </button>
       <Button
         type='button'
         variant='outline'
@@ -595,11 +560,13 @@ export function getTasksColumns({
             header: ({ column }) => (
               <DataTableColumnHeader column={column} title='Owned' />
             ),
-            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            meta: {
+              className: 'w-16 min-w-16 ps-1',
+              tdClassName: 'ps-4 pe-3',
+            },
             cell: ({ row }) => (
               <WishlistOwnedCell
                 task={row.original}
-                onWishlistInlineUpdate={onWishlistInlineUpdate}
                 onWishlistPurchaseRow={onWishlistPurchaseRow}
               />
             ),

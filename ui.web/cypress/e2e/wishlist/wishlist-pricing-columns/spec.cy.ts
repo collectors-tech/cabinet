@@ -232,25 +232,15 @@ describe("wishlist-pricing-columns", () => {
     expectHeaderVisible("Qty");
     expectHeaderVisible("Needs");
 
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
-      .should("have.attr", "role", "checkbox")
-      .and("have.attr", "aria-checked", "false")
-      .and("have.attr", "data-state", "unchecked");
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').click({
-      force: true,
-    });
-    cy.wait("@updateWishlistEntry")
-      .its("request.body")
-      .should("include", { id: "wish-price-1", owned: true });
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
-      .should("have.attr", "aria-checked", "true")
-      .and("have.attr", "data-state", "checked");
-    cy.get('[data-testid="wishlist-owned-tick-item-price-1"]')
-      .should("have.class", "opacity-100")
-      .and("have.attr", "aria-hidden", "true");
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
-      .find("polyline")
-      .should("not.exist");
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').should(
+      "not.exist"
+    );
+    cy.get('[data-testid="wishlist-owned-tick-item-price-1"]').should(
+      "not.exist"
+    );
+    cy.get('[data-testid="wishlist-purchase-open-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible");
 
     cy.get('[data-testid="wishlist-purchase-open-item-price-1"]')
       .click({ force: true });
@@ -317,9 +307,12 @@ describe("wishlist-pricing-columns", () => {
     cy.reload();
     cy.wait("@wishlistItems");
     cy.wait("@catalogItems");
-    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]')
-      .should("have.attr", "aria-checked", "true")
-      .and("have.attr", "data-state", "checked");
+    cy.get('[data-testid="wishlist-owned-checkbox-item-price-1"]').should(
+      "not.exist"
+    );
+    cy.get('[data-testid="wishlist-purchase-open-item-price-1"]')
+      .scrollIntoView()
+      .should("be.visible");
     cy.get('[data-testid="wishlist-price-paid-value-item-price-1"]').should(
       "contain.text",
       "$18.25"
