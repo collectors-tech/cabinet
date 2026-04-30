@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FolderPlus, Heart, Plus, Upload } from 'lucide-react'
+import { ClipboardPaste, FolderPlus, Heart, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -270,11 +271,40 @@ function buildWishlistCsv(tasksToExport: Task[]) {
   ].join('\n')
 }
 
+function extractFirstUrl(text: string) {
+  return text.match(/https?:\/\/\S+/i)?.[0] ?? ''
+}
+
+function inferWishlistTitleFromPaste(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const descriptiveLine = lines.find((line) => !/^https?:\/\//i.test(line))
+  if (descriptiveLine) {
+    return descriptiveLine
+  }
+
+  const firstUrl = extractFirstUrl(text)
+  if (firstUrl) {
+    try {
+      const url = new URL(firstUrl)
+      return url.hostname.replace(/^www\./i, '')
+    } catch {
+      return firstUrl
+    }
+  }
+
+  return text.trim().slice(0, 80)
+}
+
 function TasksHeaderActions({
+  onPaste,
   onOpenCollectionCreate,
   onCreate,
   onImport,
 }: {
+  onPaste: () => void
   onOpenCollectionCreate: () => void
   onCreate: () => void
   onImport: () => void
@@ -284,6 +314,17 @@ function TasksHeaderActions({
       className='flex flex-wrap items-center justify-end gap-2'
       data-testid='wishlist-header-actions'
     >
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        data-testid='wishlist-paste-action'
+        aria-label='Paste wishlist item'
+        title='Paste wishlist item'
+        onClick={onPaste}
+      >
+        <ClipboardPaste className='h-4 w-4' aria-hidden='true' />
+      </Button>
       <Button
         type='button'
         size='icon'
@@ -342,6 +383,9 @@ export function Tasks({
   const [currentDialogRow, setCurrentDialogRow] = useState<Task | null>(null)
   const [dialogNavigationRows, setDialogNavigationRows] = useState<Task[]>([])
   const [isWishlistMutating, setIsWishlistMutating] = useState(false)
+  const [wishlistPasteOpen, setWishlistPasteOpen] = useState(false)
+  const [wishlistPasteContent, setWishlistPasteContent] = useState('')
+  const [wishlistPasteTitle, setWishlistPasteTitle] = useState('')
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -874,6 +918,62 @@ export function Tasks({
     )
   }, [])
 
+  const openWishlistPasteDialog = useCallback(async () => {
+    let clipboardText = ''
+    try {
+      clipboardText = (await navigator.clipboard?.readText?.()) ?? ''
+    } catch {
+      clipboardText = ''
+    }
+    setWishlistPasteContent(clipboardText)
+    setWishlistPasteTitle(inferWishlistTitleFromPaste(clipboardText))
+    setWishlistPasteOpen(true)
+  }, [])
+
+  const handleWishlistPasteContentChange = useCallback((value: string) => {
+    setWishlistPasteContent(value)
+    setWishlistPasteTitle(inferWishlistTitleFromPaste(value))
+  }, [])
+
+  const handleWishlistPasteOpenChange = useCallback((open: boolean) => {
+    setWishlistPasteOpen(open)
+    if (!open) {
+      setWishlistPasteContent('')
+      setWishlistPasteTitle('')
+    }
+  }, [])
+
+  const handleWishlistPasteSave = useCallback(async () => {
+    const content = wishlistPasteContent.trim()
+    const title = wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
+    if (!content || !title) {
+      toast.error('Paste text or a URL before adding to wishlist.')
+      return
+    }
+
+    await handleWishlistSubmit({
+      title,
+      partNumber: '',
+      category: '',
+      priority: 'medium',
+      notes: content,
+      targetPrice: '',
+      owned: false,
+      pricePaid: '',
+      purchaseUrl: extractFirstUrl(content),
+      purchaseDate: '',
+      purchaseCondition: '',
+      quantity: '0',
+      neededQuantity: '1',
+    })
+    handleWishlistPasteOpenChange(false)
+  }, [
+    handleWishlistPasteOpenChange,
+    handleWishlistSubmit,
+    wishlistPasteContent,
+    wishlistPasteTitle,
+  ])
+
   useEffect(() => {
     if (!isWishlistRoute || typeof window === 'undefined') {
       return
@@ -934,6 +1034,9 @@ export function Tasks({
                 data-testid='wishlist-global-header-actions'
               >
                 <TasksHeaderActions
+                  onPaste={() => {
+                    void openWishlistPasteDialog()
+                  }}
                   onOpenCollectionCreate={() => {
                     setCollectionCreateValidationMessage('')
                     setCollectionCreateOpen(true)
@@ -963,6 +1066,75 @@ export function Tasks({
           </div>
         </div>
       </Header>
+
+      {isWishlistRoute ? (
+        <Dialog
+          open={wishlistPasteOpen}
+          onOpenChange={handleWishlistPasteOpenChange}
+        >
+          <DialogContent
+            className='sm:max-w-2xl'
+            data-testid='wishlist-paste-dialog'
+          >
+            <DialogHeader>
+              <DialogTitle>Add from Paste</DialogTitle>
+              <DialogDescription>
+                Paste a listing URL or notes and Cabinet will create a wishlist
+                entry while keeping the original text on the record.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-4'>
+              <label className='grid gap-2 text-sm font-medium'>
+                Paste URL or text
+                <Textarea
+                  data-testid='wishlist-paste-content'
+                  className='min-h-36'
+                  value={wishlistPasteContent}
+                  placeholder='Paste a marketplace link, listing title, or notes...'
+                  onChange={(event) =>
+                    handleWishlistPasteContentChange(event.target.value)
+                  }
+                />
+              </label>
+              <label className='grid gap-2 text-sm font-medium'>
+                Wishlist title
+                <Input
+                  data-testid='wishlist-paste-title'
+                  value={wishlistPasteTitle}
+                  placeholder='Title inferred from pasted content'
+                  onChange={(event) =>
+                    setWishlistPasteTitle(event.target.value)
+                  }
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={isWishlistMutating}
+                onClick={() => handleWishlistPasteOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                data-testid='wishlist-paste-save'
+                disabled={
+                  isWishlistMutating ||
+                  !wishlistPasteContent.trim() ||
+                  !wishlistPasteTitle.trim()
+                }
+                onClick={() => {
+                  void handleWishlistPasteSave()
+                }}
+              >
+                {isWishlistMutating ? 'Adding...' : 'Add to wishlist'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
         <div
