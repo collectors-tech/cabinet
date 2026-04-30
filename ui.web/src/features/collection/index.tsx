@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { flushSync } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -1792,6 +1793,7 @@ export function Collection({
   const photoCaptureInputRef = useRef<HTMLInputElement | null>(null)
   const photoUploadInputRef = useRef<HTMLInputElement | null>(null)
   const itemGalleryPhotoInputRef = useRef<HTMLInputElement | null>(null)
+  const createPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const createPasteInputRef = useRef<HTMLInputElement | null>(null)
   const createBarcodeInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1966,7 +1968,10 @@ export function Collection({
   )
 
   const startCreateItemFromPhoto = useCallback(() => {
-    startCreateItem('photo')
+    flushSync(() => {
+      startCreateItem('photo')
+    })
+    createPhotoInputRef.current?.click()
   }, [startCreateItem])
 
   const startCreateItemFromBarcode = useCallback(() => {
@@ -5148,6 +5153,7 @@ export function Collection({
                                   </label>
                                 </Button>
                                 <input
+                                  ref={createPhotoInputRef}
                                   id='inventory-create-photo-input'
                                   type='file'
                                   accept='image/*'
