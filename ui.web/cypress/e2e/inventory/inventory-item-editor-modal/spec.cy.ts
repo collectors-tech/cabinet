@@ -1043,6 +1043,83 @@ describe("inventory item editor modal", () => {
     cy.get("@elementClick").should("have.been.called");
   });
 
+  it("creates a draft item with photo when an image is dropped onto inventory", () => {
+    const items: Array<{
+      id: string;
+      part_number: string;
+      title: string;
+      status: string;
+      category: string;
+      brand: string;
+      priority: string;
+      description: string;
+    }> = [];
+
+    cy.intercept("GET", "/api/items", (req) => {
+      req.reply({ statusCode: 200, body: { items } });
+    }).as("itemsList");
+
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body).to.include({
+        title: "dropped-inventory",
+        brand: "Unknown",
+        category: "General",
+      });
+      expect(req.body.description).to.contain("Created from dropped image");
+      const created = {
+        id: "dropped-inventory-item",
+        part_number: req.body.part_number,
+        title: req.body.title,
+        status: "active",
+        category: req.body.category,
+        brand: req.body.brand,
+        priority: "medium",
+        description: req.body.description,
+      };
+      items.unshift(created);
+      req.reply({ statusCode: 201, body: created });
+    }).as("createDroppedInventoryItem");
+
+    cy.intercept("POST", "/api/items/dropped-inventory-item/photos", (req) => {
+      expect(req.headers["content-type"]).to.contain("multipart/form-data");
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: "dropped-inventory-photo",
+          item_id: "dropped-inventory-item",
+          filename: "dropped-inventory.png",
+        },
+      });
+    }).as("uploadDroppedInventoryPhoto");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.window().then((win) => {
+      const dataTransfer = new win.DataTransfer();
+      dataTransfer.items.add(
+        new win.File(["fake-image"], "dropped-inventory.png", {
+          type: "image/png",
+        })
+      );
+
+      cy.get('[data-testid="inventory-image-drop-zone"]')
+        .trigger("dragenter", { dataTransfer, force: true })
+        .trigger("dragover", { dataTransfer, force: true })
+        .trigger("drop", { dataTransfer, force: true });
+    });
+
+    cy.wait("@createDroppedInventoryItem");
+    cy.wait("@uploadDroppedInventoryPhoto");
+    cy.wait("@itemsList");
+    cy.contains("dropped-inventory").should("be.visible");
+    cy.get('[data-testid="inventory-image-drop-status"]').should(
+      "contain",
+      "dropped-inventory"
+    );
+  });
+
   it("keeps an empty draft item blocked until a field or image is provided", () => {
     cy.intercept("GET", "/api/items", {
       statusCode: 200,
