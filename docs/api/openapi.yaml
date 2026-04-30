@@ -913,6 +913,8 @@ paths:
                     type: integer
                   created_instances:
                     type: integer
+                  created_photos:
+                    type: integer
                   created_wishlist_entries:
                     type: integer
                   total_items:

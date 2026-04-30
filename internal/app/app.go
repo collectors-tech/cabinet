@@ -139,13 +139,14 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	if startupSampleDataSeedEnabled() {
-		result, seedErr := seedOnboardingSampleData(ctx, profiles, collectionRepo, wishlistSvc, conn)
+		result, seedErr := seedOnboardingSampleData(ctx, profiles, collectionRepo, wishlistSvc, mediaService, conn)
 		if seedErr != nil {
 			log.Printf("sample data startup seed skipped: %v", seedErr)
 		} else {
 			log.Printf(
-				"sample data startup seed complete: created_items=%d created_wishlist_entries=%d total_wishlist_entries=%d",
+				"sample data startup seed complete: created_items=%d created_photos=%d created_wishlist_entries=%d total_wishlist_entries=%d",
 				result.CreatedItems,
+				result.CreatedPhotos,
 				result.CreatedWishlistEntries,
 				result.TotalWishlistEntries,
 			)
@@ -4333,7 +4334,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		result, err := seedOnboardingSampleData(r.Context(), profiles, collectionRepo, wishlistSvc, conn)
+		result, err := seedOnboardingSampleData(r.Context(), profiles, collectionRepo, wishlistSvc, mediaService, conn)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_seed_onboarding_sample_data"}`, http.StatusBadRequest)
 			return

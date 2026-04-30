@@ -1,12 +1,19 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 
 	"github.com/collectors-tech/cabinet/internal/collection"
+	"github.com/collectors-tech/cabinet/internal/media"
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
 )
@@ -16,6 +23,7 @@ const inventoryFolderItemAssignmentsSettingsKey = "inventory.folder-item-assignm
 type onboardingSampleSeedResult struct {
 	CreatedItems            int  `json:"created_items"`
 	CreatedInstances        int  `json:"created_instances"`
+	CreatedPhotos           int  `json:"created_photos"`
 	CreatedWishlistEntries  int  `json:"created_wishlist_entries"`
 	TotalItems              int  `json:"total_items"`
 	TotalWishlistEntries    int  `json:"total_wishlist_entries"`
@@ -189,11 +197,102 @@ func generatedShowcaseInventorySpecs() []onboardingSampleSpec {
 	return specs
 }
 
+func showcasePhotoTargetCount(item collection.Item) int {
+	seed := sha256.Sum256([]byte(item.PartNumber + "|" + item.Title))
+	switch {
+	case seed[0]%17 == 0:
+		return 3
+	case seed[0]%4 == 0:
+		return 2
+	default:
+		return 1
+	}
+}
+
+func generateShowcaseIdenticonPNG(item collection.Item, variant int) ([]byte, error) {
+	seed := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", item.PartNumber, item.Title, variant)))
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+
+	bg := color.RGBA{
+		R: 16 + seed[1]%28,
+		G: 22 + seed[2]%34,
+		B: 38 + seed[3]%46,
+		A: 255,
+	}
+	accent := color.RGBA{
+		R: 72 + seed[4]%150,
+		G: 88 + seed[5]%150,
+		B: 118 + seed[6]%130,
+		A: 255,
+	}
+	highlight := color.RGBA{
+		R: 186 + seed[7]%58,
+		G: 200 + seed[8]%42,
+		B: 220 + seed[9]%34,
+		A: 255,
+	}
+
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: bg}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(28, 28, 484, 484), &image.Uniform{C: color.RGBA{R: bg.R + 6, G: bg.G + 8, B: bg.B + 10, A: 255}}, image.Point{}, draw.Src)
+
+	const cell = 72
+	const gap = 8
+	const origin = 76
+	for y := 0; y < 5; y++ {
+		for x := 0; x < 3; x++ {
+			if seed[10+y*3+x]%2 == 0 {
+				continue
+			}
+			for _, mirroredX := range []int{x, 4 - x} {
+				left := origin + mirroredX*(cell+gap)
+				top := origin + y*(cell+gap)
+				fill := accent
+				if (x+y+variant)%3 == 0 {
+					fill = highlight
+				}
+				draw.Draw(img, image.Rect(left, top, left+cell, top+cell), &image.Uniform{C: fill}, image.Point{}, draw.Src)
+			}
+		}
+	}
+
+	var out bytes.Buffer
+	if err := png.Encode(&out, img); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func seedShowcaseItemPhotos(ctx context.Context, mediaSvc *media.Service, item collection.Item) (int, error) {
+	if mediaSvc == nil {
+		return 0, nil
+	}
+	existing, err := mediaSvc.ListByItem(ctx, item.ID)
+	if err != nil {
+		return 0, fmt.Errorf("list photos for %s: %w", item.ID, err)
+	}
+
+	target := showcasePhotoTargetCount(item)
+	created := 0
+	for variant := len(existing) + 1; variant <= target; variant++ {
+		data, err := generateShowcaseIdenticonPNG(item, variant)
+		if err != nil {
+			return created, fmt.Errorf("generate showcase photo for %s: %w", item.PartNumber, err)
+		}
+		filename := fmt.Sprintf("%s-identicon-%02d.png", item.PartNumber, variant)
+		if _, err := mediaSvc.Upload(ctx, item.ID, filename, bytes.NewReader(data)); err != nil {
+			return created, fmt.Errorf("upload showcase photo for %s: %w", item.PartNumber, err)
+		}
+		created++
+	}
+	return created, nil
+}
+
 func seedOnboardingSampleData(
 	ctx context.Context,
 	profiles *profile.Repository,
 	collectionRepo *collection.Repository,
 	wishlistSvc *wishlist.Service,
+	mediaSvc *media.Service,
 	dbConn *sql.DB,
 ) (onboardingSampleSeedResult, error) {
 	active, err := profiles.GetActiveProfile(ctx)
@@ -451,6 +550,12 @@ func seedOnboardingSampleData(
 			folderAssignments[item.ID] = spec.FolderName
 		}
 
+		createdPhotos, photoErr := seedShowcaseItemPhotos(ctx, mediaSvc, item)
+		if photoErr != nil {
+			return onboardingSampleSeedResult{}, photoErr
+		}
+		result.CreatedPhotos += createdPhotos
+
 		priceHistory := spec.PriceHistory
 		if len(priceHistory) == 0 {
 			priceHistory = generatedShowcasePriceHistory(result.CreatedItems+result.CreatedInstances+1, spec.Instance.AcquisitionPrice)
@@ -537,7 +642,7 @@ func seedOnboardingSampleData(
 	if _, err := dbConn.ExecContext(ctx, `
 		INSERT INTO activity_logs(id, level, action, details)
 		VALUES (lower(hex(randomblob(16))), 'info', 'onboarding_sample_seeded', ?)
-	`, fmt.Sprintf("profile_id=%s created_items=%d created_wishlist_entries=%d", active.ID, result.CreatedItems, result.CreatedWishlistEntries)); err != nil {
+	`, fmt.Sprintf("profile_id=%s created_items=%d created_photos=%d created_wishlist_entries=%d", active.ID, result.CreatedItems, result.CreatedPhotos, result.CreatedWishlistEntries)); err != nil {
 		return onboardingSampleSeedResult{}, fmt.Errorf("log onboarding seed activity: %w", err)
 	}
 
