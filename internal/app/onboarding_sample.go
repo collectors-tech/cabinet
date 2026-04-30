@@ -25,6 +25,7 @@ type onboardingSampleSeedResult struct {
 type onboardingSampleSpec struct {
 	Item                   collection.Item
 	Instance               collection.Instance
+	PriceHistory           []onboardingPriceSnapshot
 	Wishlist               bool
 	TargetPrice            float64
 	WishlistPriority       string
@@ -32,6 +33,62 @@ type onboardingSampleSpec struct {
 	WishlistHighlightHit   bool
 	WishlistBelowTargetNow bool
 	FolderName             string
+}
+
+type onboardingPriceSnapshot struct {
+	SnapshotDate string
+	Source       string
+	MinPrice     float64
+	MedianPrice  float64
+	LatestPrice  float64
+	StockCount   int
+}
+
+func generatedShowcasePriceHistory(sequence int, anchorPrice float64) []onboardingPriceSnapshot {
+	if anchorPrice <= 0 {
+		anchorPrice = float64(10 + sequence%50)
+	}
+	base := anchorPrice + float64(sequence%7)
+	month := 1 + (sequence % 3)
+	day := 2 + (sequence % 20)
+	source := "showcase-market"
+	if sequence%2 == 0 {
+		source = "ebay"
+	}
+	return []onboardingPriceSnapshot{
+		{
+			SnapshotDate: fmt.Sprintf("2026-%02d-%02d", month, day),
+			Source:       source,
+			MinPrice:     base - 3.5,
+			MedianPrice:  base,
+			LatestPrice:  base - 1.25,
+			StockCount:   8 + (sequence % 5),
+		},
+		{
+			SnapshotDate: fmt.Sprintf("2026-%02d-%02d", month, day+2),
+			Source:       source,
+			MinPrice:     base - 2.5,
+			MedianPrice:  base + 1.75,
+			LatestPrice:  base + 2.25,
+			StockCount:   6 + (sequence % 6),
+		},
+		{
+			SnapshotDate: fmt.Sprintf("2026-%02d-%02d", month, day+4),
+			Source:       "collector-index",
+			MinPrice:     base - 1,
+			MedianPrice:  base + 2.5,
+			LatestPrice:  base + 1.5,
+			StockCount:   10 + (sequence % 4),
+		},
+		{
+			SnapshotDate: fmt.Sprintf("2026-%02d-%02d", month, day+6),
+			Source:       source,
+			MinPrice:     base,
+			MedianPrice:  base + 3,
+			LatestPrice:  base + 4.75,
+			StockCount:   5 + (sequence % 7),
+		},
+	}
 }
 
 func generatedShowcaseInventorySpecs() []onboardingSampleSpec {
@@ -122,7 +179,8 @@ func generatedShowcaseInventorySpecs() []onboardingSampleSpec {
 					AcquisitionDate:  fmt.Sprintf("2026-02-%02d", 1+(sequence%27)),
 					Notes:            "Generated showcase inventory row with exclusive folder membership.",
 				},
-				FolderName: plan.Name,
+				PriceHistory: generatedShowcasePriceHistory(sequence, float64(5+(sequence%60))),
+				FolderName:   plan.Name,
 			})
 			sequence++
 		}
@@ -173,6 +231,7 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-15",
 				Notes:            "Included as sample onboarding data.",
 			},
+			PriceHistory:         generatedShowcasePriceHistory(1, 8.99),
 			Wishlist:             true,
 			TargetPrice:          10,
 			WishlistPriority:     "high",
@@ -203,6 +262,7 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-20",
 				Notes:            "Included as sample onboarding data.",
 			},
+			PriceHistory:         generatedShowcasePriceHistory(2, 11.49),
 			Wishlist:             true,
 			TargetPrice:          9,
 			WishlistPriority:     "low",
@@ -233,6 +293,7 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-22",
 				Notes:            "Included as sample onboarding data.",
 			},
+			PriceHistory:           generatedShowcasePriceHistory(3, 15.25),
 			Wishlist:               true,
 			TargetPrice:            18,
 			WishlistPriority:       "high",
@@ -264,6 +325,7 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-24",
 				Notes:            "Included as sample onboarding data.",
 			},
+			PriceHistory:         generatedShowcasePriceHistory(4, 24.99),
 			Wishlist:             true,
 			TargetPrice:          22,
 			WishlistPriority:     "medium",
@@ -294,6 +356,7 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-26",
 				Notes:            "Included as sample onboarding data.",
 			},
+			PriceHistory:         generatedShowcasePriceHistory(5, 12.75),
 			Wishlist:             true,
 			TargetPrice:          20,
 			WishlistPriority:     "medium",
@@ -324,9 +387,10 @@ func seedOnboardingSampleData(
 				AcquisitionDate:  "2026-01-28",
 				Notes:            "Included as sample onboarding data.",
 			},
-			Wishlist:    false,
-			TargetPrice: 0,
-			FolderName:  "Warehouse 2",
+			PriceHistory: generatedShowcasePriceHistory(6, 19.95),
+			Wishlist:     false,
+			TargetPrice:  0,
+			FolderName:   "Warehouse 2",
 		},
 	}
 	specs = append(specs, generatedShowcaseInventorySpecs()...)
@@ -385,6 +449,40 @@ func seedOnboardingSampleData(
 
 		if spec.FolderName != "" {
 			folderAssignments[item.ID] = spec.FolderName
+		}
+
+		priceHistory := spec.PriceHistory
+		if len(priceHistory) == 0 {
+			priceHistory = generatedShowcasePriceHistory(result.CreatedItems+result.CreatedInstances+1, spec.Instance.AcquisitionPrice)
+		}
+		for index, snapshot := range priceHistory {
+			var existingSnapshotID string
+			if err := dbConn.QueryRowContext(ctx, `
+				SELECT id
+				FROM price_snapshots
+				WHERE item_id = ? AND snapshot_date = ? AND source = ?
+				LIMIT 1
+			`, item.ID, snapshot.SnapshotDate, snapshot.Source).Scan(&existingSnapshotID); err != nil && err != sql.ErrNoRows {
+				return onboardingSampleSeedResult{}, fmt.Errorf("check price history for %s: %w", item.ID, err)
+			} else if err == nil {
+				continue
+			}
+
+			if _, insertErr := dbConn.ExecContext(ctx, `
+				INSERT INTO price_snapshots(id, item_id, snapshot_date, source, min_price, median_price, latest_price, stock_count, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			`,
+				fmt.Sprintf("sample-price-%s-%02d", item.ID, index+1),
+				item.ID,
+				snapshot.SnapshotDate,
+				snapshot.Source,
+				snapshot.MinPrice,
+				snapshot.MedianPrice,
+				snapshot.LatestPrice,
+				snapshot.StockCount,
+			); insertErr != nil {
+				return onboardingSampleSeedResult{}, fmt.Errorf("insert price history for %s: %w", item.ID, insertErr)
+			}
 		}
 
 		if spec.Wishlist {

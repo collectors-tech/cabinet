@@ -734,6 +734,111 @@ function formatMoney(value: number): string {
   }).format(value)
 }
 
+function InventoryItemPriceHistoryChart({
+  history,
+}: {
+  history: InventoryPriceSnapshot[]
+}) {
+  const points = history
+    .filter((snapshot) => Number.isFinite(snapshot.latest_price))
+    .map((snapshot) => ({
+      date: snapshot.snapshot_date,
+      source: snapshot.source,
+      price: Number(snapshot.latest_price),
+    }))
+
+  if (points.length === 0) {
+    return (
+      <div
+        className='rounded-lg border border-dashed p-3 text-sm text-muted-foreground'
+        data-testid='inventory-item-price-history-empty'
+      >
+        No price history captured yet.
+      </div>
+    )
+  }
+
+  const prices = points.map((point) => point.price)
+  const minPrice = Math.min(...prices)
+  const maxPrice = Math.max(...prices)
+  const priceRange = Math.max(1, maxPrice - minPrice)
+  const chartWidth = 320
+  const chartHeight = 120
+  const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0
+  const polylinePoints = points
+    .map((point, index) => {
+      const x = points.length > 1 ? index * xStep : chartWidth / 2
+      const y =
+        chartHeight - ((point.price - minPrice) / priceRange) * chartHeight
+      return `${x.toFixed(2)},${Math.max(0, Math.min(chartHeight, y)).toFixed(
+        2
+      )}`
+    })
+    .join(' ')
+  const firstPoint = points[0]
+  const lastPoint = points[points.length - 1]
+
+  return (
+    <div
+      className='space-y-3 rounded-lg border bg-background/40 p-3'
+      data-testid='inventory-item-price-history-chart'
+    >
+      <div className='flex flex-wrap items-start justify-between gap-2'>
+        <div>
+          <h4 className='text-sm font-semibold'>Price history</h4>
+          <p className='text-xs text-muted-foreground'>
+            {points.length} price {points.length === 1 ? 'point' : 'points'} from{' '}
+            {firstPoint.date} to {lastPoint.date}
+          </p>
+        </div>
+        <div className='text-right text-xs text-muted-foreground'>
+          <p>Low {formatMoney(minPrice)}</p>
+          <p>High {formatMoney(maxPrice)}</p>
+        </div>
+      </div>
+      <svg
+        role='img'
+        aria-label={`Price history from ${formatMoney(
+          firstPoint.price
+        )} to ${formatMoney(lastPoint.price)}`}
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        className='h-40 w-full overflow-visible rounded-md bg-muted/20 p-2'
+        preserveAspectRatio='none'
+      >
+        <polyline
+          points={polylinePoints}
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='4'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+          className='text-primary'
+        />
+        {polylinePoints.split(' ').map((point, index) => {
+          const [cx, cy] = point.split(',')
+          return (
+            <circle
+              key={`${points[index]?.date ?? index}-${points[index]?.source}`}
+              cx={cx}
+              cy={cy}
+              r='4'
+              className='fill-primary'
+            />
+          )
+        })}
+      </svg>
+      <div className='grid grid-cols-2 gap-2 text-xs text-muted-foreground'>
+        <span>
+          First {formatMoney(firstPoint.price)} on {firstPoint.date}
+        </span>
+        <span className='text-right'>
+          Latest {formatMoney(lastPoint.price)} via {lastPoint.source}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function normalizeCollectionInput(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
@@ -5915,6 +6020,9 @@ export function Collection({
                               {latestPriceSnapshot.snapshot_date}
                             </p>
                           ) : null}
+                          <InventoryItemPriceHistoryChart
+                            history={inventoryPricing}
+                          />
                           {primaryInstance?.acquisition_price ? (
                             <p className='text-xs text-muted-foreground'>
                               Current paid / unit:{' '}

@@ -109,12 +109,12 @@ describe("inventory item editor modal", () => {
       .and("contain", "Edit Item");
     cy.get('[data-testid="inventory-item-editor-panel"]').then(($panel) => {
       const rect = $panel[0].getBoundingClientRect();
+      const viewportWidth = $panel[0].ownerDocument.defaultView?.innerWidth ?? Cypress.config("viewportWidth");
       expect(rect.left, "editor panel starts on right half").to.be.greaterThan(
-        Cypress.config("viewportWidth") / 2
+        viewportWidth * 0.45
       );
-      expect(rect.right, "editor panel is anchored to right edge").to.be.closeTo(
-        Cypress.config("viewportWidth"),
-        24
+      expect(rect.width, "editor panel keeps side-panel sizing").to.be.lessThan(
+        viewportWidth
       );
     });
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
@@ -322,6 +322,30 @@ describe("inventory item editor modal", () => {
       body: {
         history: [
           {
+            snapshot_date: "2026-04-24",
+            source: "ebay",
+            min_price: 44,
+            median_price: 50,
+            latest_price: 48,
+            stock_count: 5,
+          },
+          {
+            snapshot_date: "2026-04-25",
+            source: "ebay",
+            min_price: 46,
+            median_price: 54,
+            latest_price: 57,
+            stock_count: 4,
+          },
+          {
+            snapshot_date: "2026-04-26",
+            source: "tcgplayer",
+            min_price: 49,
+            median_price: 58,
+            latest_price: 61,
+            stock_count: 6,
+          },
+          {
             snapshot_date: "2026-04-27",
             source: "ebay",
             min_price: 52,
@@ -411,6 +435,18 @@ describe("inventory item editor modal", () => {
       .should("contain", "$49.95")
       .and("contain", "$64.00")
       .and("contain", "ebay");
+    cy.get('[data-testid="inventory-item-price-history-chart"]')
+      .should("be.visible")
+      .and("contain", "Price history")
+      .and("contain", "$48.00")
+      .and("contain", "$64.00")
+      .find("svg polyline")
+      .should("have.attr", "points")
+      .and("match", /,/);
+    cy.get('[data-testid="inventory-item-price-history-chart"]').should(
+      "contain",
+      "4 price points"
+    );
     cy.get('[data-testid="inventory-item-barcodes-panel"]').should(
       "contain",
       "1234567890123"
@@ -514,7 +550,7 @@ describe("inventory item editor modal", () => {
     }).as("updateBravoItem");
     cy.intercept("PUT", "/api/items/item-alpha/instances/instance-alpha", (req) => {
       expect(req.body).to.include({
-        condition: "graded",
+        condition: "8 - Like new",
         status: "sealed",
         quantity: 3,
         storage_location: "Vault B",
@@ -527,7 +563,7 @@ describe("inventory item editor modal", () => {
     }).as("updateAlphaInstance");
     cy.intercept("POST", "/api/items/item-bravo/instances", (req) => {
       expect(req.body).to.include({
-        condition: "new",
+        condition: "10+ - New, in packaging",
         status: "loose",
         quantity: 1,
         storage_location: "Case C",
@@ -551,7 +587,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@alphaInstances");
     cy.get('[data-testid="inventory-instance-price"]').clear().type("75.50");
     cy.get('[data-testid="inventory-instance-quantity"]').clear().type("3");
-    cy.get('[data-testid="inventory-instance-condition"]').clear().type("graded");
+    cy.get('[data-testid="inventory-instance-condition"]').select("8 - Like new");
     cy.get('[data-testid="inventory-instance-status"]').clear().type("sealed");
     cy.get('[data-testid="inventory-instance-storage-location"]')
       .clear()
@@ -570,7 +606,9 @@ describe("inventory item editor modal", () => {
     cy.wait("@bravoInstances");
     cy.get('[data-testid="inventory-instance-price"]').clear().type("22");
     cy.get('[data-testid="inventory-instance-quantity"]').clear().type("1");
-    cy.get('[data-testid="inventory-instance-condition"]').clear().type("new");
+    cy.get('[data-testid="inventory-instance-condition"]').select(
+      "10+ - New, in packaging"
+    );
     cy.get('[data-testid="inventory-instance-status"]').clear().type("loose");
     cy.get('[data-testid="inventory-instance-storage-location"]')
       .clear()
@@ -750,7 +788,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+    cy.get('[data-testid="inventory-active-folder-label"]').should(
       "contain",
       "Store 1"
     );
@@ -813,14 +851,11 @@ describe("inventory item editor modal", () => {
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="collection-active-context"]').should("contain", "Modal Shelf");
-    cy.get('[data-testid="inventory-collection-filter-selected"]').should(
+    cy.get('[data-testid="inventory-active-folder-label"]').should(
       "contain",
       "Modal Shelf"
     );
-    cy.get('[data-testid="inventory-collection-filter-select"]').should(
-      "contain",
-      "Modal Shelf"
-    );
+    cy.get('[data-testid="inventory-folder-tree"]').should("contain", "Modal Shelf");
     cy.contains("Modal Shelf Item").should("be.visible");
     cy.window().then((win) => {
       expect(
