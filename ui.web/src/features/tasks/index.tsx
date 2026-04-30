@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Barcode,
   Camera,
   ClipboardPaste,
   FolderPlus,
@@ -358,15 +359,69 @@ function dataUrlToFile(dataUrl: string, filename: string) {
   return new File([bytes], filename, { type: mimeType })
 }
 
+async function scanWishlistBarcodeValue() {
+  const testBarcode = (
+    window as unknown as { cabinetWishlistBarcodeTestValue?: string }
+  ).cabinetWishlistBarcodeTestValue?.trim()
+  if (testBarcode) {
+    return testBarcode
+  }
+
+  const barcodeDetectorConstructor = (
+    window as unknown as {
+      BarcodeDetector?: new (options?: {
+        formats?: string[]
+      }) => {
+        detect: (
+          source: HTMLVideoElement | HTMLCanvasElement
+        ) => Promise<Array<{ rawValue?: string }>>
+      }
+    }
+  ).BarcodeDetector
+  if (
+    typeof barcodeDetectorConstructor !== 'function' ||
+    typeof navigator.mediaDevices?.getUserMedia !== 'function'
+  ) {
+    throw new Error('barcode_scan_unavailable')
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment' },
+  })
+  try {
+    const video = document.createElement('video')
+    video.srcObject = stream
+    video.muted = true
+    video.playsInline = true
+    await video.play()
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+
+    const detector = new barcodeDetectorConstructor({
+      formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'],
+    })
+    const results = await detector.detect(video)
+    const barcode = results.find((result) => result.rawValue?.trim())
+      ?.rawValue
+    if (!barcode) {
+      throw new Error('barcode_not_found')
+    }
+    return barcode.trim()
+  } finally {
+    stream.getTracks().forEach((track) => track.stop())
+  }
+}
+
 function TasksHeaderActions({
   onPaste,
   onScreenshot,
+  onBarcode,
   onOpenCollectionCreate,
   onCreate,
   onImport,
 }: {
   onPaste: () => void
   onScreenshot: () => void
+  onBarcode: () => void
   onOpenCollectionCreate: () => void
   onCreate: () => void
   onImport: () => void
@@ -397,6 +452,17 @@ function TasksHeaderActions({
         onClick={onScreenshot}
       >
         <Camera className='h-4 w-4' aria-hidden='true' />
+      </Button>
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        data-testid='wishlist-barcode-action'
+        aria-label='Add wishlist barcode'
+        title='Add wishlist barcode'
+        onClick={onBarcode}
+      >
+        <Barcode className='h-4 w-4' aria-hidden='true' />
       </Button>
       <Button
         type='button'
@@ -465,6 +531,10 @@ export function Tasks({
     'Wishlist screenshot'
   )
   const [wishlistScreenshotError, setWishlistScreenshotError] = useState('')
+  const [wishlistBarcodeOpen, setWishlistBarcodeOpen] = useState(false)
+  const [wishlistBarcodeValue, setWishlistBarcodeValue] = useState('')
+  const [wishlistBarcodeTitle, setWishlistBarcodeTitle] = useState('')
+  const [wishlistBarcodeError, setWishlistBarcodeError] = useState('')
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -1136,6 +1206,88 @@ export function Tasks({
     wishlistScreenshotTitle,
   ])
 
+  const handleWishlistBarcodeOpenChange = useCallback((open: boolean) => {
+    setWishlistBarcodeOpen(open)
+    if (!open) {
+      setWishlistBarcodeValue('')
+      setWishlistBarcodeTitle('')
+      setWishlistBarcodeError('')
+    }
+  }, [])
+
+  const handleWishlistBarcodeValueChange = useCallback((value: string) => {
+    const normalized = value.trim()
+    setWishlistBarcodeValue(value)
+    setWishlistBarcodeTitle(normalized ? `Barcode ${normalized}` : '')
+  }, [])
+
+  const handleWishlistBarcodeScan = useCallback(async () => {
+    setWishlistBarcodeError('')
+    try {
+      const barcode = await scanWishlistBarcodeValue()
+      handleWishlistBarcodeValueChange(barcode)
+    } catch {
+      setWishlistBarcodeError(
+        'Barcode scan is unavailable or no barcode was detected. Enter the code manually and save.'
+      )
+    }
+  }, [handleWishlistBarcodeValueChange])
+
+  const handleWishlistBarcodeSave = useCallback(async () => {
+    const barcode = wishlistBarcodeValue.trim()
+    const title = wishlistBarcodeTitle.trim() || `Barcode ${barcode}`
+    if (!barcode) {
+      setWishlistBarcodeError('Enter or scan a barcode before saving.')
+      return
+    }
+
+    setIsWishlistMutating(true)
+    try {
+      const itemID = await saveWishlistDraft({
+        title,
+        partNumber: barcode,
+        category: 'Barcode',
+        priority: 'medium',
+        notes: `Created from barcode ${barcode}.`,
+        targetPrice: '',
+        owned: false,
+        pricePaid: '',
+        purchaseUrl: '',
+        purchaseDate: '',
+        purchaseCondition: '',
+        quantity: '0',
+        neededQuantity: '1',
+      })
+
+      const barcodeResponse = await fetch(
+        `/api/items/${encodeURIComponent(itemID)}/barcodes`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode }),
+        }
+      )
+      if (!barcodeResponse.ok) {
+        throw new Error('wishlist_barcode_attach_failed')
+      }
+
+      await refreshWishlistTable()
+      toast.success(`${title} added to wishlist with barcode.`)
+      handleWishlistBarcodeOpenChange(false)
+    } catch {
+      setWishlistBarcodeError('Barcode wishlist save failed. Try again.')
+      toast.error('Barcode wishlist save failed. Try again.')
+    } finally {
+      setIsWishlistMutating(false)
+    }
+  }, [
+    handleWishlistBarcodeOpenChange,
+    refreshWishlistTable,
+    saveWishlistDraft,
+    wishlistBarcodeTitle,
+    wishlistBarcodeValue,
+  ])
+
   useEffect(() => {
     if (!isWishlistRoute || typeof window === 'undefined') {
       return
@@ -1201,6 +1353,9 @@ export function Tasks({
                   }}
                   onScreenshot={() => {
                     setWishlistScreenshotOpen(true)
+                  }}
+                  onBarcode={() => {
+                    setWishlistBarcodeOpen(true)
                   }}
                   onOpenCollectionCreate={() => {
                     setCollectionCreateValidationMessage('')
@@ -1384,6 +1539,95 @@ export function Tasks({
                 }
                 onClick={() => {
                   void handleWishlistScreenshotSave()
+                }}
+              >
+                {isWishlistMutating ? 'Adding...' : 'Add to wishlist'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {isWishlistRoute ? (
+        <Dialog
+          open={wishlistBarcodeOpen}
+          onOpenChange={handleWishlistBarcodeOpenChange}
+        >
+          <DialogContent
+            className='sm:max-w-2xl'
+            data-testid='wishlist-barcode-dialog'
+          >
+            <DialogHeader>
+              <DialogTitle>Add Barcode</DialogTitle>
+              <DialogDescription>
+                Scan or enter a barcode and save it as a new wishlist item.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-4'>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='wishlist-barcode-scan'
+                  disabled={isWishlistMutating}
+                  onClick={() => {
+                    void handleWishlistBarcodeScan()
+                  }}
+                >
+                  Scan barcode
+                </Button>
+              </div>
+              <label className='grid gap-2 text-sm font-medium'>
+                Barcode
+                <Input
+                  data-testid='wishlist-barcode-input'
+                  inputMode='numeric'
+                  value={wishlistBarcodeValue}
+                  placeholder='Enter barcode'
+                  onChange={(event) =>
+                    handleWishlistBarcodeValueChange(event.target.value)
+                  }
+                />
+              </label>
+              <label className='grid gap-2 text-sm font-medium'>
+                Wishlist title
+                <Input
+                  data-testid='wishlist-barcode-title'
+                  value={wishlistBarcodeTitle}
+                  placeholder='Barcode item title'
+                  onChange={(event) =>
+                    setWishlistBarcodeTitle(event.target.value)
+                  }
+                />
+              </label>
+              {wishlistBarcodeError ? (
+                <p
+                  className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+                  data-testid='wishlist-barcode-error'
+                >
+                  {wishlistBarcodeError}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={isWishlistMutating}
+                onClick={() => handleWishlistBarcodeOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                data-testid='wishlist-barcode-save'
+                disabled={
+                  isWishlistMutating ||
+                  !wishlistBarcodeValue.trim() ||
+                  !wishlistBarcodeTitle.trim()
+                }
+                onClick={() => {
+                  void handleWishlistBarcodeSave()
                 }}
               >
                 {isWishlistMutating ? 'Adding...' : 'Add to wishlist'}
