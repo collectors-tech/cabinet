@@ -4349,6 +4349,8 @@ export function Collection({
               <div
                 role='tree'
                 aria-label='Inventory folders'
+                id='inventory-folder-tree'
+                tabIndex={-1}
                 data-testid='inventory-folder-tree'
                 className='max-h-[42rem] min-h-[26rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
@@ -4659,6 +4661,42 @@ export function Collection({
                 data={visibleTableData}
                 routePath={routePath}
                 currentRecordID={selectedItemID}
+                customFilters={
+                  isInventoryRoute ? (
+                    <div
+                      className='flex items-center gap-2'
+                      data-testid='inventory-active-folder-control'
+                    >
+                      <span
+                        className='max-w-[12rem] truncate text-sm font-medium text-muted-foreground'
+                        data-testid='inventory-active-folder-label'
+                        title={activeFolderFilterValue}
+                      >
+                        {activeFolderFilterValue}
+                      </span>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        className='h-8'
+                        data-testid='inventory-active-folder-browse'
+                        aria-controls='inventory-folder-tree'
+                        onClick={() => {
+                          const tree = document.querySelector<HTMLElement>(
+                            '[data-testid="inventory-folder-tree"]'
+                          )
+                          tree?.scrollIntoView({
+                            block: 'nearest',
+                            inline: 'nearest',
+                          })
+                          tree?.focus()
+                        }}
+                      >
+                        Browse
+                      </Button>
+                    </div>
+                  ) : undefined
+                }
                 onRecordFocus={(itemID, recordID) => {
                   const matchedItem =
                     inventoryItems.find((item) => item.id === itemID) ??

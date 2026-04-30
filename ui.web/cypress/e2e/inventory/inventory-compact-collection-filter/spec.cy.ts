@@ -57,6 +57,17 @@ describe("inventory-compact-collection-filter", () => {
 
     cy.get('[data-testid="folder-tree-item-store-1"]').click();
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
+    cy.get('[data-testid="inventory-active-folder-control"]').within(() => {
+      cy.get('[data-testid="inventory-active-folder-label"]').should(
+        "contain.text",
+        "Store 1"
+      );
+      cy.contains("button", "Browse")
+        .should("be.visible")
+        .and("have.attr", "aria-controls", "inventory-folder-tree");
+    });
+    cy.get('[data-testid="inventory-active-folder-browse"]').click();
+    cy.get('[data-testid="inventory-folder-tree"]').should("be.focused");
     cy.contains("Store One Filtered Item").should("be.visible");
     cy.contains("Watch List Item").should("not.exist");
 
