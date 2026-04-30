@@ -699,6 +699,10 @@ describe("inventory item editor modal", () => {
       .should("be.visible")
       .and("contain", "Create Item")
       .and("not.contain", "Create Item From");
+    cy.get('[data-testid="inventory-create-mode-actions"]').should("not.exist");
+    cy.get('[data-testid="inventory-create-text-mode"]').should("not.exist");
+    cy.get('[data-testid="inventory-create-photo-mode"]').should("not.exist");
+    cy.get('[data-testid="inventory-create-barcode-mode"]').should("not.exist");
     cy.get('[data-testid="inventory-create-paste-input"]').should("be.visible");
     cy.get('[data-testid="inventory-create-take-image"]')
       .scrollIntoView()

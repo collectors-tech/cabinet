@@ -5075,67 +5075,6 @@ export function Collection({
                             className='space-y-3 rounded-md border bg-muted/20 p-3'
                             data-testid='inventory-create-paste-panel'
                           >
-                            <div
-                              className='flex flex-wrap gap-2'
-                              data-testid='inventory-create-mode-actions'
-                            >
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant={
-                                  itemCreateIntent === 'text'
-                                    ? 'default'
-                                    : 'outline'
-                                }
-                                data-testid='inventory-create-text-mode'
-                                onClick={() => {
-                                  setItemCreateIntent('text')
-                                  createPasteInputRef.current?.focus()
-                                }}
-                              >
-                                <ClipboardPaste
-                                  className='size-4'
-                                  aria-hidden='true'
-                                />
-                                Text
-                              </Button>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant={
-                                  itemCreateIntent === 'photo'
-                                    ? 'default'
-                                    : 'outline'
-                                }
-                                data-testid='inventory-create-photo-mode'
-                                onClick={() => {
-                                  setItemCreateIntent('photo')
-                                }}
-                              >
-                                <Images className='size-4' aria-hidden='true' />
-                                Image
-                              </Button>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant={
-                                  itemCreateIntent === 'barcode'
-                                    ? 'default'
-                                    : 'outline'
-                                }
-                                data-testid='inventory-create-barcode-mode'
-                                onClick={() => {
-                                  setItemCreateIntent('barcode')
-                                  createBarcodeInputRef.current?.focus()
-                                }}
-                              >
-                                <Barcode
-                                  className='size-4'
-                                  aria-hidden='true'
-                                />
-                                Barcode
-                              </Button>
-                            </div>
                             <div className='flex gap-2'>
                               <Input
                                 ref={createPasteInputRef}
@@ -5143,8 +5082,8 @@ export function Collection({
                                 aria-label='Paste URL or text to process into item fields'
                                 data-testid='inventory-create-paste-input'
                                 value={pasteCreateInput}
-                                onFocus={() => setItemCreateIntent('text')}
                                 onChange={(event) => {
+                                  setItemCreateIntent('text')
                                   setPasteCreateInput(event.target.value)
                                   setPasteCreateError(null)
                                   setPasteCreateSuccess(null)
