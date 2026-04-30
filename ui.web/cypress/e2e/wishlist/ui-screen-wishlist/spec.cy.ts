@@ -398,15 +398,15 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Switch to rows view"]').click();
 
     cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
-      cy.get('[data-testid="wishlist-owned-tick-item-collector-1"]').should(
-        "exist"
+      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]').should(
+        "not.exist"
       );
-      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]')
-        .find("polyline")
-        .should("not.exist");
-      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]')
-        .find('[data-testid="wishlist-price-sparkline-item-collector-1"]')
-        .should("not.exist");
+      cy.get('[data-testid="wishlist-owned-tick-item-collector-1"]').should(
+        "not.exist"
+      );
+      cy.get('[data-testid="wishlist-purchase-open-item-collector-1"]').should(
+        "be.visible"
+      );
       cy.get('[data-testid="wishlist-price-trend-item-collector-1"]')
         .find('[data-testid="wishlist-price-sparkline-item-collector-1"]')
         .should("be.visible");
@@ -426,19 +426,15 @@ describe("ui-screen-wishlist", () => {
     });
 
     cy.contains("tr", "F1 Silverline").within(() => {
-      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-2"]')
-        .should("be.visible")
-        .and("have.attr", "role", "checkbox")
-        .and("have.attr", "aria-checked", "false")
-        .then(($toggle) => {
-          const bounds = $toggle[0].getBoundingClientRect();
-
-          expect(bounds.width, "owned toggle width").to.be.lessThan(40);
-          expect(
-            Math.abs(bounds.width - bounds.height),
-            "owned toggle should be square"
-          ).to.be.lessThan(6);
-        });
+      cy.get('[data-testid="wishlist-owned-checkbox-item-collector-2"]').should(
+        "not.exist"
+      );
+      cy.get('[data-testid="wishlist-owned-tick-item-collector-2"]').should(
+        "not.exist"
+      );
+      cy.get('[data-testid="wishlist-purchase-open-item-collector-2"]').should(
+        "be.visible"
+      );
     });
   });
 
