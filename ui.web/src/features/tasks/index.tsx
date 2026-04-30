@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardPaste, FolderPlus, Heart, Plus, Upload } from 'lucide-react'
+import {
+  Camera,
+  ClipboardPaste,
+  FolderPlus,
+  Heart,
+  Plus,
+  Upload,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -298,13 +305,68 @@ function inferWishlistTitleFromPaste(text: string) {
   return text.trim().slice(0, 80)
 }
 
+async function captureWishlistScreenshotDataUrl() {
+  const testDataUrl = (
+    window as unknown as { cabinetWishlistScreenshotTestDataUrl?: string }
+  ).cabinetWishlistScreenshotTestDataUrl
+  if (testDataUrl) {
+    return testDataUrl
+  }
+
+  const mediaDevices = navigator.mediaDevices as
+    | (MediaDevices & {
+        getDisplayMedia?: (constraints?: MediaStreamConstraints) => Promise<MediaStream>
+      })
+    | undefined
+  if (typeof mediaDevices?.getDisplayMedia !== 'function') {
+    throw new Error('screenshot_capture_unavailable')
+  }
+
+  const stream = await mediaDevices.getDisplayMedia({ video: true })
+  try {
+    const video = document.createElement('video')
+    video.srcObject = stream
+    video.muted = true
+    video.playsInline = true
+    await video.play()
+    await new Promise((resolve) => window.setTimeout(resolve, 100))
+
+    const width = video.videoWidth || 1280
+    const height = video.videoHeight || 720
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('screenshot_canvas_unavailable')
+    }
+    context.drawImage(video, 0, 0, width, height)
+    return canvas.toDataURL('image/png')
+  } finally {
+    stream.getTracks().forEach((track) => track.stop())
+  }
+}
+
+function dataUrlToFile(dataUrl: string, filename: string) {
+  const [metadata = '', data = ''] = dataUrl.split(',')
+  const mimeType = metadata.match(/data:(.*?);base64/)?.[1] ?? 'image/png'
+  const binary = window.atob(data)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new File([bytes], filename, { type: mimeType })
+}
+
 function TasksHeaderActions({
   onPaste,
+  onScreenshot,
   onOpenCollectionCreate,
   onCreate,
   onImport,
 }: {
   onPaste: () => void
+  onScreenshot: () => void
   onOpenCollectionCreate: () => void
   onCreate: () => void
   onImport: () => void
@@ -324,6 +386,17 @@ function TasksHeaderActions({
         onClick={onPaste}
       >
         <ClipboardPaste className='h-4 w-4' aria-hidden='true' />
+      </Button>
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        data-testid='wishlist-screenshot-action'
+        aria-label='Add wishlist screenshot'
+        title='Add wishlist screenshot'
+        onClick={onScreenshot}
+      >
+        <Camera className='h-4 w-4' aria-hidden='true' />
       </Button>
       <Button
         type='button'
@@ -386,6 +459,12 @@ export function Tasks({
   const [wishlistPasteOpen, setWishlistPasteOpen] = useState(false)
   const [wishlistPasteContent, setWishlistPasteContent] = useState('')
   const [wishlistPasteTitle, setWishlistPasteTitle] = useState('')
+  const [wishlistScreenshotOpen, setWishlistScreenshotOpen] = useState(false)
+  const [wishlistScreenshotDataUrl, setWishlistScreenshotDataUrl] = useState('')
+  const [wishlistScreenshotTitle, setWishlistScreenshotTitle] = useState(
+    'Wishlist screenshot'
+  )
+  const [wishlistScreenshotError, setWishlistScreenshotError] = useState('')
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -558,6 +637,8 @@ export function Tasks({
       if (!wishlistResponse.ok) {
         throw new Error('wishlist_entry_save_failed')
       }
+
+      return itemID
     },
     []
   )
@@ -974,6 +1055,87 @@ export function Tasks({
     wishlistPasteTitle,
   ])
 
+  const handleWishlistScreenshotOpenChange = useCallback((open: boolean) => {
+    setWishlistScreenshotOpen(open)
+    if (!open) {
+      setWishlistScreenshotDataUrl('')
+      setWishlistScreenshotTitle('Wishlist screenshot')
+      setWishlistScreenshotError('')
+    }
+  }, [])
+
+  const handleWishlistScreenshotCapture = useCallback(async () => {
+    setWishlistScreenshotError('')
+    try {
+      const dataUrl = await captureWishlistScreenshotDataUrl()
+      setWishlistScreenshotDataUrl(dataUrl)
+    } catch {
+      setWishlistScreenshotError(
+        'Screenshot capture is unavailable or was cancelled. Try again from a supported browser.'
+      )
+    }
+  }, [])
+
+  const handleWishlistScreenshotSave = useCallback(async () => {
+    const title = wishlistScreenshotTitle.trim() || 'Wishlist screenshot'
+    if (!wishlistScreenshotDataUrl) {
+      setWishlistScreenshotError('Capture a screenshot before saving.')
+      return
+    }
+
+    setIsWishlistMutating(true)
+    try {
+      const itemID = await saveWishlistDraft({
+        title,
+        partNumber: '',
+        category: 'Screenshot',
+        priority: 'medium',
+        notes: 'Created from screenshot.',
+        targetPrice: '',
+        owned: false,
+        pricePaid: '',
+        purchaseUrl: '',
+        purchaseDate: '',
+        purchaseCondition: '',
+        quantity: '0',
+        neededQuantity: '1',
+      })
+
+      const photoBody = new FormData()
+      photoBody.append(
+        'file',
+        dataUrlToFile(wishlistScreenshotDataUrl, 'wishlist-screenshot.png')
+      )
+      const photoResponse = await fetch(
+        `/api/items/${encodeURIComponent(itemID)}/photos`,
+        {
+          method: 'POST',
+          body: photoBody,
+        }
+      )
+      if (!photoResponse.ok) {
+        throw new Error('wishlist_screenshot_photo_failed')
+      }
+
+      await refreshWishlistTable()
+      toast.success(`${title} added to wishlist with screenshot.`)
+      handleWishlistScreenshotOpenChange(false)
+    } catch {
+      setWishlistScreenshotError(
+        'Screenshot wishlist save failed. Try again.'
+      )
+      toast.error('Screenshot wishlist save failed. Try again.')
+    } finally {
+      setIsWishlistMutating(false)
+    }
+  }, [
+    handleWishlistScreenshotOpenChange,
+    refreshWishlistTable,
+    saveWishlistDraft,
+    wishlistScreenshotDataUrl,
+    wishlistScreenshotTitle,
+  ])
+
   useEffect(() => {
     if (!isWishlistRoute || typeof window === 'undefined') {
       return
@@ -1036,6 +1198,9 @@ export function Tasks({
                 <TasksHeaderActions
                   onPaste={() => {
                     void openWishlistPasteDialog()
+                  }}
+                  onScreenshot={() => {
+                    setWishlistScreenshotOpen(true)
                   }}
                   onOpenCollectionCreate={() => {
                     setCollectionCreateValidationMessage('')
@@ -1127,6 +1292,98 @@ export function Tasks({
                 }
                 onClick={() => {
                   void handleWishlistPasteSave()
+                }}
+              >
+                {isWishlistMutating ? 'Adding...' : 'Add to wishlist'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {isWishlistRoute ? (
+        <Dialog
+          open={wishlistScreenshotOpen}
+          onOpenChange={handleWishlistScreenshotOpenChange}
+        >
+          <DialogContent
+            className='sm:max-w-2xl'
+            data-testid='wishlist-screenshot-dialog'
+          >
+            <DialogHeader>
+              <DialogTitle>Add Screenshot</DialogTitle>
+              <DialogDescription>
+                Capture a screen or window and save it as a new wishlist item
+                with the image attached.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-4'>
+              <div className='rounded-lg border border-dashed p-3'>
+                {wishlistScreenshotDataUrl ? (
+                  <img
+                    src={wishlistScreenshotDataUrl}
+                    alt='Captured wishlist screenshot preview'
+                    data-testid='wishlist-screenshot-preview'
+                    className='max-h-72 w-full rounded-md object-contain'
+                  />
+                ) : (
+                  <div className='flex min-h-44 items-center justify-center rounded-md bg-muted/30 text-sm text-muted-foreground'>
+                    No screenshot captured yet.
+                  </div>
+                )}
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  data-testid='wishlist-screenshot-capture'
+                  disabled={isWishlistMutating}
+                  onClick={() => {
+                    void handleWishlistScreenshotCapture()
+                  }}
+                >
+                  Capture screenshot
+                </Button>
+              </div>
+              <label className='grid gap-2 text-sm font-medium'>
+                Wishlist title
+                <Input
+                  data-testid='wishlist-screenshot-title'
+                  value={wishlistScreenshotTitle}
+                  placeholder='Wishlist screenshot'
+                  onChange={(event) =>
+                    setWishlistScreenshotTitle(event.target.value)
+                  }
+                />
+              </label>
+              {wishlistScreenshotError ? (
+                <p
+                  className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+                  data-testid='wishlist-screenshot-error'
+                >
+                  {wishlistScreenshotError}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={isWishlistMutating}
+                onClick={() => handleWishlistScreenshotOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                data-testid='wishlist-screenshot-save'
+                disabled={
+                  isWishlistMutating ||
+                  !wishlistScreenshotDataUrl ||
+                  !wishlistScreenshotTitle.trim()
+                }
+                onClick={() => {
+                  void handleWishlistScreenshotSave()
                 }}
               >
                 {isWishlistMutating ? 'Adding...' : 'Add to wishlist'}
