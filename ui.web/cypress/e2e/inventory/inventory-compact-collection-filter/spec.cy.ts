@@ -62,14 +62,24 @@ describe("inventory-compact-collection-filter", () => {
         "contain.text",
         "Store 1"
       );
+      cy.get('[data-testid="inventory-active-folder-select"]')
+        .should("be.visible")
+        .select("Watch List");
       cy.contains("button", "Browse")
         .should("be.visible")
         .and("have.attr", "aria-controls", "inventory-folder-tree");
     });
     cy.get('[data-testid="inventory-active-folder-browse"]').click();
-    cy.get('[data-testid="inventory-folder-tree"]').should("be.focused");
-    cy.contains("Store One Filtered Item").should("be.visible");
-    cy.contains("Watch List Item").should("not.exist");
+    cy.get('[data-testid="collection-active-context"]').should(
+      "contain",
+      "Watch List"
+    );
+    cy.get('[data-testid="inventory-active-folder-label"]').should(
+      "contain.text",
+      "Watch List"
+    );
+    cy.contains("Store One Filtered Item").should("not.exist");
+    cy.contains("Watch List Item").should("be.visible");
 
     cy.get('[data-testid="folder-tree-add-root"]').click();
     cy.get('[data-testid="folder-tree-name-input"]').type("Empty Filter Bucket");

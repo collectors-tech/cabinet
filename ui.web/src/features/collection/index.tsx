@@ -972,6 +972,25 @@ function countFolderNodes(nodes: FolderNode[]): number {
   }, 0)
 }
 
+function collectFolderBrowseOptions(nodes: FolderNode[]): string[] {
+  const seen = new Set<string>()
+  const options: string[] = []
+  const walk = (treeNodes: FolderNode[]) => {
+    treeNodes.forEach((node) => {
+      const name = node.name.trim()
+      if (name !== '' && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase())
+        options.push(name)
+      }
+      if (node.children?.length) {
+        walk(node.children)
+      }
+    })
+  }
+  walk(nodes)
+  return options
+}
+
 function applyInventoryFolderCounts(
   nodes: FolderNode[],
   rows: Task[],
@@ -1723,6 +1742,9 @@ export function Collection({
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [folderTree, setFolderTree] = useState<FolderNode[]>(initialFolderTree)
   const [activeFolder, setActiveFolder] = useState(
+    () => loadInventoryTreeState().activeFolder
+  )
+  const [browseFolderSelection, setBrowseFolderSelection] = useState(
     () => loadInventoryTreeState().activeFolder
   )
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
@@ -3110,6 +3132,13 @@ export function Collection({
   const activeFolderFilterValue = activeFolderIsAvailable
     ? activeFolder
     : 'All Items'
+  const inventoryFolderBrowseOptions = useMemo(
+    () => collectFolderBrowseOptions(folderTree),
+    [folderTree]
+  )
+  useEffect(() => {
+    setBrowseFolderSelection(activeFolderFilterValue)
+  }, [activeFolderFilterValue])
   const selectedInventoryItem = useMemo(
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
     [inventoryItems, selectedItemID]
@@ -4779,6 +4808,21 @@ export function Collection({
                       >
                         {activeFolderFilterValue}
                       </span>
+                      <select
+                        className='h-8 max-w-[12rem] rounded-md border bg-background px-2 text-sm'
+                        data-testid='inventory-active-folder-select'
+                        aria-label='Choose inventory folder to browse'
+                        value={browseFolderSelection}
+                        onChange={(event) =>
+                          setBrowseFolderSelection(event.target.value)
+                        }
+                      >
+                        {inventoryFolderBrowseOptions.map((folderName) => (
+                          <option key={folderName} value={folderName}>
+                            {folderName}
+                          </option>
+                        ))}
+                      </select>
                       <Button
                         type='button'
                         variant='outline'
@@ -4786,16 +4830,9 @@ export function Collection({
                         className='h-8'
                         data-testid='inventory-active-folder-browse'
                         aria-controls='inventory-folder-tree'
-                        onClick={() => {
-                          const tree = document.querySelector<HTMLElement>(
-                            '[data-testid="inventory-folder-tree"]'
-                          )
-                          tree?.scrollIntoView({
-                            block: 'nearest',
-                            inline: 'nearest',
-                          })
-                          tree?.focus()
-                        }}
+                        onClick={() =>
+                          selectInventoryFolder(browseFolderSelection)
+                        }
                       >
                         Browse
                       </Button>
