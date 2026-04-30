@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type DragEvent as ReactDragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   Barcode,
   Camera,
@@ -28,6 +35,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { cn } from '@/lib/utils'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
@@ -135,6 +143,36 @@ function normalizeOptionalWholeNumber(raw: string, fallback: number) {
     throw new Error('invalid_quantity')
   }
   return parsed
+}
+
+function firstImageFileFromDataTransfer(
+  dataTransfer: DataTransfer | null
+): File | null {
+  if (!dataTransfer) {
+    return null
+  }
+
+  const itemFile = Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .find((file): file is File => Boolean(file?.type.startsWith('image/')))
+  if (itemFile) {
+    return itemFile
+  }
+
+  return (
+    Array.from(dataTransfer.files ?? []).find((file) =>
+      file.type.startsWith('image/')
+    ) ?? null
+  )
+}
+
+function dataTransferHasImage(dataTransfer: DataTransfer | null): boolean {
+  return firstImageFileFromDataTransfer(dataTransfer) !== null
+}
+
+function titleFromImageFile(file: File): string {
+  return file.name.replace(/\.[^.]+$/, '').trim() || 'Dropped image'
 }
 
 function inferWishlistPriceTrend(
@@ -535,6 +573,8 @@ export function Tasks({
   const [wishlistBarcodeValue, setWishlistBarcodeValue] = useState('')
   const [wishlistBarcodeTitle, setWishlistBarcodeTitle] = useState('')
   const [wishlistBarcodeError, setWishlistBarcodeError] = useState('')
+  const [wishlistImageDropActive, setWishlistImageDropActive] = useState(false)
+  const [wishlistImageDropMessage, setWishlistImageDropMessage] = useState('')
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -1206,6 +1246,95 @@ export function Tasks({
     wishlistScreenshotTitle,
   ])
 
+  const saveDroppedWishlistImage = useCallback(
+    async (file: File) => {
+      const title = titleFromImageFile(file)
+      setIsWishlistMutating(true)
+      setWishlistImageDropMessage(`Adding ${title}...`)
+      try {
+        const itemID = await saveWishlistDraft({
+          title,
+          partNumber: '',
+          category: 'Image',
+          priority: 'medium',
+          notes: `Created from dropped image: ${file.name}`,
+          targetPrice: '',
+          owned: false,
+          pricePaid: '',
+          purchaseUrl: '',
+          purchaseDate: '',
+          purchaseCondition: '',
+          quantity: '0',
+          neededQuantity: '1',
+        })
+
+        const photoBody = new FormData()
+        photoBody.append('file', file)
+        const photoResponse = await fetch(
+          `/api/items/${encodeURIComponent(itemID)}/photos`,
+          {
+            method: 'POST',
+            body: photoBody,
+          }
+        )
+        if (!photoResponse.ok) {
+          throw new Error('wishlist_drop_photo_failed')
+        }
+
+        await refreshWishlistTable()
+        setWishlistImageDropMessage(`${title} added from dropped image.`)
+        toast.success(`${title} added to wishlist from image.`)
+      } catch {
+        setWishlistImageDropMessage(
+          'Image drop failed. Try dropping the file again.'
+        )
+        toast.error('Image drop failed. Try dropping the file again.')
+      } finally {
+        setIsWishlistMutating(false)
+      }
+    },
+    [refreshWishlistTable, saveWishlistDraft]
+  )
+
+  const handleWishlistImageDrag = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (!isWishlistRoute || !dataTransferHasImage(event.dataTransfer)) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'copy'
+      setWishlistImageDropActive(true)
+    },
+    [isWishlistRoute]
+  )
+
+  const handleWishlistImageDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setWishlistImageDropActive(false)
+      }
+    },
+    []
+  )
+
+  const handleWishlistImageDrop = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (!isWishlistRoute) {
+        return
+      }
+      const imageFile = firstImageFileFromDataTransfer(event.dataTransfer)
+      if (!imageFile) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      setWishlistImageDropActive(false)
+      void saveDroppedWishlistImage(imageFile)
+    },
+    [isWishlistRoute, saveDroppedWishlistImage]
+  )
+
   const handleWishlistBarcodeOpenChange = useCallback((open: boolean) => {
     setWishlistBarcodeOpen(open)
     if (!open) {
@@ -1637,7 +1766,36 @@ export function Tasks({
         </Dialog>
       ) : null}
 
-      <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
+      <Main
+        className={cn(
+          'flex flex-1 flex-col gap-3 rounded-xl transition-colors sm:gap-4',
+          wishlistImageDropActive ? 'bg-primary/5 ring-2 ring-primary/40' : ''
+        )}
+        data-testid={isWishlistRoute ? 'wishlist-image-drop-zone' : undefined}
+        onDragEnter={handleWishlistImageDrag}
+        onDragOver={handleWishlistImageDrag}
+        onDragLeave={handleWishlistImageDragLeave}
+        onDrop={handleWishlistImageDrop}
+      >
+        {isWishlistRoute &&
+        (wishlistImageDropActive || isWishlistMutating || wishlistImageDropMessage) ? (
+          <div
+            className={cn(
+              'rounded-lg border border-dashed px-4 py-3 text-sm',
+              wishlistImageDropActive
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-muted/30 text-muted-foreground'
+            )}
+            data-testid='wishlist-image-drop-status'
+            role='status'
+            aria-live='polite'
+          >
+            {wishlistImageDropActive
+              ? 'Drop image to create a new wishlist item.'
+              : wishlistImageDropMessage ||
+                'Drop an image to create a new wishlist item.'}
+          </div>
+        ) : null}
         <div
           className='flex flex-1 flex-col gap-4 sm:gap-6'
           data-testid={isWishlistRoute ? 'wishlist-workspace' : undefined}

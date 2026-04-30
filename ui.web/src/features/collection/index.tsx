@@ -569,6 +569,36 @@ function buildDraftItemPartNumber(): string {
   return `DRAFT-${Date.now().toString(36).toUpperCase()}`
 }
 
+function firstImageFileFromDataTransfer(
+  dataTransfer: DataTransfer | null
+): File | null {
+  if (!dataTransfer) {
+    return null
+  }
+
+  const itemFile = Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .find((file): file is File => Boolean(file?.type.startsWith('image/')))
+  if (itemFile) {
+    return itemFile
+  }
+
+  return (
+    Array.from(dataTransfer.files ?? []).find((file) =>
+      file.type.startsWith('image/')
+    ) ?? null
+  )
+}
+
+function dataTransferHasImage(dataTransfer: DataTransfer | null): boolean {
+  return firstImageFileFromDataTransfer(dataTransfer) !== null
+}
+
+function titleFromImageFile(file: File): string {
+  return file.name.replace(/\.[^.]+$/, '').trim() || 'Dropped image'
+}
+
 function normalizeInventoryCreatePayload(
   draft: InventoryItemDraft,
   options: { barcode: string; hasPhoto: boolean }
@@ -1915,6 +1945,9 @@ export function Collection({
   const [itemSaveBusy, setItemSaveBusy] = useState(false)
   const [itemSaveError, setItemSaveError] = useState<string | null>(null)
   const [itemSaveSuccess, setItemSaveSuccess] = useState<string | null>(null)
+  const [imageDropActive, setImageDropActive] = useState(false)
+  const [imageDropBusy, setImageDropBusy] = useState(false)
+  const [imageDropMessage, setImageDropMessage] = useState('')
   const [assignCollectionOpen, setAssignCollectionOpen] = useState(false)
   const [assignCollectionItem, setAssignCollectionItem] =
     useState<InventoryItem | null>(null)
@@ -2300,6 +2333,120 @@ export function Collection({
   useEffect(() => {
     void loadInventoryItems()
   }, [loadInventoryItems])
+
+  const saveDroppedInventoryImage = useCallback(
+    async (file: File) => {
+      const title = titleFromImageFile(file)
+      setImageDropBusy(true)
+      setImageDropMessage(`Adding ${title}...`)
+      try {
+        const draft = normalizeInventoryCreatePayload(
+          {
+            ...emptyInventoryItemDraft(),
+            title,
+            description: `Created from dropped image: ${file.name}`,
+          },
+          { barcode: '', hasPhoto: true }
+        )
+        const payload = {
+          ...draft,
+          tags: splitInventoryListField(draft.tags),
+          source_urls: splitInventoryListField(draft.source_urls),
+        }
+        const response = await fetch('/api/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (!response.ok) {
+          throw new Error(`drop_item_${response.status}`)
+        }
+        const saved = (await response.json()) as { id?: string }
+        const savedID = saved.id?.trim()
+        if (!savedID) {
+          throw new Error('drop_item_missing_id')
+        }
+
+        if (activeFolder !== 'All Items') {
+          const workspaceItem: WorkspaceCollectionItem = {
+            id: savedID,
+            name: payload.title || payload.part_number,
+            detail:
+              [payload.brand, payload.category].filter(Boolean).join(' - ') ||
+              'Inventory item',
+            collectionName: activeFolder,
+          }
+          const assigned = await ensureWorkspaceCollectionAndAssignItem(
+            workspaceItem,
+            activeFolder
+          )
+          if (assigned) {
+            setItemFolderAssignments((current) => ({
+              ...current,
+              [savedID]: activeFolder,
+            }))
+          }
+        }
+
+        const photoBody = new FormData()
+        photoBody.append('file', file)
+        const photoResponse = await fetch(
+          `/api/items/${encodeURIComponent(savedID)}/photos`,
+          {
+            method: 'POST',
+            body: photoBody,
+          }
+        )
+        if (!photoResponse.ok) {
+          throw new Error(`drop_photo_${photoResponse.status}`)
+        }
+
+        await loadInventoryItems(savedID)
+        setImageDropMessage(`${title} added from dropped image.`)
+      } catch {
+        setImageDropMessage('Image drop failed. Try dropping the file again.')
+      } finally {
+        setImageDropBusy(false)
+      }
+    },
+    [activeFolder, ensureWorkspaceCollectionAndAssignItem, loadInventoryItems]
+  )
+
+  const handleInventoryImageDrag = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (!dataTransferHasImage(event.dataTransfer)) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'copy'
+      setImageDropActive(true)
+    },
+    []
+  )
+
+  const handleInventoryImageDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setImageDropActive(false)
+      }
+    },
+    []
+  )
+
+  const handleInventoryImageDrop = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      const imageFile = firstImageFileFromDataTransfer(event.dataTransfer)
+      if (!imageFile) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      setImageDropActive(false)
+      void saveDroppedInventoryImage(imageFile)
+    },
+    [saveDroppedInventoryImage]
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -4500,7 +4647,34 @@ export function Collection({
         </div>
       </Header>
 
-      <Main className='space-y-3'>
+      <Main
+        className={cn(
+          'relative space-y-3 rounded-xl transition-colors',
+          imageDropActive ? 'bg-primary/5 ring-2 ring-primary/40' : ''
+        )}
+        data-testid='inventory-image-drop-zone'
+        onDragEnter={handleInventoryImageDrag}
+        onDragOver={handleInventoryImageDrag}
+        onDragLeave={handleInventoryImageDragLeave}
+        onDrop={handleInventoryImageDrop}
+      >
+        {(imageDropActive || imageDropBusy || imageDropMessage) ? (
+          <div
+            className={cn(
+              'rounded-lg border border-dashed px-4 py-3 text-sm',
+              imageDropActive
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-muted/30 text-muted-foreground'
+            )}
+            data-testid='inventory-image-drop-status'
+            role='status'
+            aria-live='polite'
+          >
+            {imageDropActive
+              ? 'Drop image to create a new inventory item.'
+              : imageDropMessage || 'Drop an image to create a new item.'}
+          </div>
+        ) : null}
         <div
           className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'

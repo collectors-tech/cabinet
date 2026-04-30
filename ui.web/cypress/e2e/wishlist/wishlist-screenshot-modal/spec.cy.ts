@@ -103,4 +103,101 @@ describe('wishlist-screenshot-modal', () => {
 
     cy.contains('Wishlist screenshot').should('be.visible')
   })
+
+  it('creates a wishlist item with photo when an image is dropped onto wishlist', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/pricing/stats?item_id=*', {
+      statusCode: 200,
+      body: {},
+    }).as('priceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=*', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('priceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=*', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('priceHistory')
+    cy.intercept('POST', '/api/items', (req) => {
+      expect(req.body.title).to.eq('wishlist-drop')
+      expect(req.body).to.include({
+        category: 'Image',
+        priority: 'medium',
+      })
+      wishlistItems = [
+        ...wishlistItems,
+        {
+          id: 'wishlist-drop-item-1',
+          title: req.body.title,
+          part_number: '',
+          category: 'Image',
+          priority: 'medium',
+          status: 'wishlist',
+        },
+      ]
+      req.reply({ statusCode: 201, body: { id: 'wishlist-drop-item-1' } })
+    }).as('createDroppedWishlistItem')
+    cy.intercept('POST', '/api/wishlist', (req) => {
+      expect(req.body.item_id).to.eq('wishlist-drop-item-1')
+      expect(req.body.notes).to.contain('Created from dropped image')
+      wishlistEntries = [
+        ...wishlistEntries,
+        {
+          id: 'wishlist-drop-entry-1',
+          item_id: 'wishlist-drop-item-1',
+          priority: req.body.priority,
+          notes: req.body.notes,
+        },
+      ]
+      req.reply({ statusCode: 201, body: { id: 'wishlist-drop-entry-1' } })
+    }).as('createDroppedWishlistEntry')
+    cy.intercept('POST', '/api/items/wishlist-drop-item-1/photos', (req) => {
+      expect(req.headers['content-type']).to.contain('multipart/form-data')
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: 'wishlist-drop-photo-1',
+          item_id: 'wishlist-drop-item-1',
+          filename: 'wishlist-drop.png',
+        },
+      })
+    }).as('uploadDroppedWishlistPhoto')
+
+    openWishlist()
+    cy.wait('@wishlistEntries')
+    cy.wait('@wishlistItems')
+
+    cy.window().then((win) => {
+      const dataTransfer = new win.DataTransfer()
+      dataTransfer.items.add(
+        new win.File(['fake-image'], 'wishlist-drop.png', {
+          type: 'image/png',
+        })
+      )
+
+      cy.get('[data-testid="wishlist-image-drop-zone"]')
+        .trigger('dragenter', { dataTransfer, force: true })
+        .trigger('dragover', { dataTransfer, force: true })
+        .trigger('drop', { dataTransfer, force: true })
+    })
+
+    cy.wait('@createDroppedWishlistItem')
+    cy.wait('@createDroppedWishlistEntry')
+    cy.wait('@uploadDroppedWishlistPhoto')
+    cy.wait('@wishlistEntries')
+    cy.wait('@wishlistItems')
+    cy.contains('wishlist-drop').should('be.visible')
+    cy.get('[data-testid="wishlist-image-drop-status"]').should(
+      'contain',
+      'wishlist-drop'
+    )
+  })
 })
