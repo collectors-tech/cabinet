@@ -635,13 +635,25 @@ function InventoryCategoryPicker({
   onChange,
   onAddOption,
 }: InventoryCategoryPickerProps) {
-  const [newCategory, setNewCategory] = useState('')
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const selectedCategories = splitCategoryValue(value)
   const normalizedOptions = normalizeCategoryOptions([
     ...defaultInventoryCategoryOptions,
     ...options,
     ...selectedCategories,
   ])
+  const normalizedSearch = normalizeCategoryName(search)
+  const visibleOptions =
+    normalizedSearch === ''
+      ? normalizedOptions
+      : normalizedOptions.filter((category) =>
+          category.toLowerCase().includes(normalizedSearch.toLowerCase())
+        )
+  const hasExactSearchMatch = normalizedOptions.some(
+    (category) => category.toLowerCase() === normalizedSearch.toLowerCase()
+  )
+  const canAddSearch = normalizedSearch !== '' && !hasExactSearchMatch
 
   const toggleCategory = (category: string) => {
     const selected = selectedCategories.some(
@@ -655,75 +667,128 @@ function InventoryCategoryPicker({
     onChange(joinCategoryValue(next))
   }
 
-  const addCategory = () => {
-    const normalized = normalizeCategoryName(newCategory)
+  const addCategory = (valueToAdd = search) => {
+    const normalized = normalizeCategoryName(valueToAdd)
     if (normalized === '') {
       return
     }
     onAddOption(normalized)
     onChange(joinCategoryValue([...selectedCategories, normalized]))
-    setNewCategory('')
+    setSearch('')
   }
 
   return (
-    <div className='space-y-2'>
+    <div className='relative'>
       <Input
+        type='hidden'
         id={id}
         data-testid={testId}
         value={value}
-        placeholder='Choose or type categories'
-        onChange={(event) => onChange(event.target.value)}
+        readOnly
       />
-      <div
-        className='rounded-md border bg-background p-2'
-        data-testid={`${testId}-dropdown`}
+      <Button
+        type='button'
+        variant='outline'
+        role='combobox'
+        aria-expanded={open}
+        className='h-auto min-h-10 w-full justify-between gap-2 px-3 py-2 text-left font-normal'
+        data-testid={`${testId}-trigger`}
+        onClick={() => setOpen((current) => !current)}
       >
-        <div className='mb-2 flex flex-wrap gap-2'>
-          {normalizedOptions.map((category) => {
-            const selected = selectedCategories.some(
-              (value) => value.toLowerCase() === category.toLowerCase()
-            )
-            return (
-              <Button
+        <span className='flex min-w-0 flex-wrap gap-1'>
+          {selectedCategories.length > 0 ? (
+            selectedCategories.map((category) => (
+              <Badge
                 key={category}
-                type='button'
-                size='sm'
-                variant={selected ? 'default' : 'outline'}
-                className='h-8 gap-1'
-                data-testid={`${testId}-option-${category}`}
-                aria-pressed={selected}
-                onClick={() => toggleCategory(category)}
+                variant='secondary'
+                className='max-w-36 truncate rounded-sm'
               >
-                {selected ? <Check className='size-3.5' aria-hidden /> : null}
                 {category}
-              </Button>
-            )
-          })}
+              </Badge>
+            ))
+          ) : (
+            <span className='text-muted-foreground'>
+              Search or add categories
+            </span>
+          )}
+        </span>
+        <ChevronRight
+          className={cn(
+            'size-4 shrink-0 text-muted-foreground transition-transform',
+            open ? 'rotate-90' : ''
+          )}
+          aria-hidden
+        />
+      </Button>
+      {open ? (
+        <div
+          className='relative z-50 mt-2 w-full rounded-md border bg-popover text-popover-foreground shadow-md'
+          data-testid={`${testId}-dropdown`}
+        >
+          <div className='border-b p-2'>
+            <Input
+              data-testid={`${testId}-search`}
+              value={search}
+              placeholder='Search categories...'
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && canAddSearch) {
+                  event.preventDefault()
+                  addCategory()
+                }
+              }}
+            />
+          </div>
+          <div className='max-h-64 overflow-y-auto p-1' role='listbox'>
+            {visibleOptions.map((category) => {
+              const selected = selectedCategories.some(
+                (value) => value.toLowerCase() === category.toLowerCase()
+              )
+              return (
+                <button
+                  key={category}
+                  type='button'
+                  role='option'
+                  aria-selected={selected}
+                  className='flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
+                  data-testid={`${testId}-option-${category}`}
+                  onClick={() => toggleCategory(category)}
+                >
+                  <span
+                    className={cn(
+                      'flex size-4 items-center justify-center rounded-sm border border-primary',
+                      selected
+                        ? 'bg-primary text-primary-foreground'
+                        : 'opacity-50 [&_svg]:invisible'
+                    )}
+                  >
+                    <Check className='size-3.5' aria-hidden />
+                  </span>
+                  <span>{category}</span>
+                </button>
+              )
+            })}
+            {visibleOptions.length === 0 ? (
+              <p
+                className='px-2 py-3 text-sm text-muted-foreground'
+                data-testid={`${testId}-empty`}
+              >
+                No matching categories.
+              </p>
+            ) : null}
+            {canAddSearch ? (
+              <button
+                type='button'
+                className='mt-1 w-full rounded-sm border border-dashed px-2 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
+                data-testid={`${testId}-add-hint`}
+                onClick={() => addCategory()}
+              >
+                Press Enter to add "{normalizedSearch}"
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className='flex gap-2'>
-          <Input
-            data-testid={`${testId}-new`}
-            value={newCategory}
-            placeholder='New category'
-            onChange={(event) => setNewCategory(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                addCategory()
-              }
-            }}
-          />
-          <Button
-            type='button'
-            variant='outline'
-            data-testid={`${testId}-add`}
-            disabled={normalizeCategoryName(newCategory) === ''}
-            onClick={addCategory}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </div>
   )
 }
