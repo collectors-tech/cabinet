@@ -4970,7 +4970,12 @@ export function Collection({
                     }}
                   >
                     <DialogContent
-                      className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'
+                      className={cn(
+                        'max-h-[90vh] overflow-y-auto',
+                        itemEditorMode === 'create'
+                          ? 'sm:max-w-6xl'
+                          : 'sm:max-w-2xl'
+                      )}
                       data-testid='inventory-item-editor-dialog'
                     >
                       <div

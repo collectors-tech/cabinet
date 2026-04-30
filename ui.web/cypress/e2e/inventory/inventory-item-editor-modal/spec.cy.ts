@@ -687,6 +687,24 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-create-barcode-input"]').should("be.visible");
   });
 
+  it("opens the create item modal at a wide desktop size", () => {
+    cy.viewport(1440, 900);
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsList");
+
+    signIn();
+    cy.wait("@itemsList");
+
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .should("be.visible")
+      .and(($dialog) => {
+        expect($dialog[0].getBoundingClientRect().width).to.be.greaterThan(1000);
+      });
+  });
+
   it("creates a draft item when any single field is provided", () => {
     const items: Array<{
       id: string;
