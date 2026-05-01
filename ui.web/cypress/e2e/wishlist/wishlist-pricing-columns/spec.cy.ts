@@ -129,8 +129,9 @@ describe("wishlist-pricing-columns", () => {
       .and("be.visible");
     cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]')
       .should("be.visible")
-      .find("polyline")
-      .should("have.attr", "points")
+      .should("have.attr", "data-slot", "chart")
+      .find(".recharts-line-curve")
+      .should("have.attr", "d")
       .and("not.be.empty");
     cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]').focus();
     cy.get('[data-testid="wishlist-price-points-item-price-1"]')

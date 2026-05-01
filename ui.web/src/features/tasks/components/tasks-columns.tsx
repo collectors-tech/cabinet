@@ -9,8 +9,15 @@ import {
   TrendingDownIcon,
   TrendingUpIcon,
 } from 'lucide-react'
+import { Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { DataTableColumnHeader } from '@/components/data-table'
@@ -65,30 +72,6 @@ function formatCostDraft(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
-function buildSparklinePointCoordinates(values: number[]) {
-  const width = 88
-  const height = 28
-  const padding = 3
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || 1
-  const step =
-    values.length > 1 ? (width - padding * 2) / (values.length - 1) : 0
-
-  return values.map((value, index) => {
-    const x = padding + index * step
-    const y =
-      height - padding - ((value - min) / range) * (height - padding * 2)
-    return { x, y, value }
-  })
-}
-
-function buildSparklinePoints(values: number[]) {
-  return buildSparklinePointCoordinates(values)
-    .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
-    .join(' ')
-}
-
 function buildWishlistPricePointRows(task: Task, values: number[]) {
   const dates = task.priceHistoryDates ?? []
   return values
@@ -98,6 +81,13 @@ function buildWishlistPricePointRows(task: Task, values: number[]) {
     }))
     .slice(-10)
 }
+
+const wishlistPriceChartConfig = {
+  price: {
+    label: 'Price',
+    color: 'rgb(73 103 255)',
+  },
+} satisfies ChartConfig
 
 function WishlistPriceSparkline({
   task,
@@ -113,8 +103,11 @@ function WishlistPriceSparkline({
   if (values.length < 2) {
     return null
   }
-  const coordinates = buildSparklinePointCoordinates(values)
   const latestPointRows = buildWishlistPricePointRows(task, values)
+  const chartRows = values.map((price, index) => ({
+    date: task.priceHistoryDates?.[index] ?? `Point ${index + 1}`,
+    price,
+  }))
   const sampleCount = task.priceSampleCount ?? values.length
   const dateRange =
     task.priceFirstDate && task.priceLatestDate
@@ -124,40 +117,42 @@ function WishlistPriceSparkline({
 
   return (
     <div className='group relative'>
-      <svg
-        viewBox='0 0 88 28'
+      <ChartContainer
+        config={wishlistPriceChartConfig}
+        data-testid={`wishlist-price-sparkline-${task.id}`}
         role='img'
         tabIndex={0}
-        focusable='true'
         aria-label={accessibleLabel}
         className='h-7 w-[88px] rounded bg-slate-950/60 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-        data-testid={`wishlist-price-sparkline-${task.id}`}
-        preserveAspectRatio='none'
       >
-        <polyline
-          points={buildSparklinePoints(values)}
-          fill='none'
-          stroke='rgb(73 103 255)'
-          strokeWidth='2.5'
-          strokeLinecap='round'
-          strokeLinejoin='round'
-        />
-        {coordinates.map(({ x, y, value }, index) => (
-          <circle
-            key={`${task.id}-${index}-${value}`}
-            cx={x.toFixed(1)}
-            cy={y.toFixed(1)}
-            r='2.3'
-            fill='rgb(129 146 255)'
-            stroke='rgb(15 23 42)'
-            strokeWidth='0.7'
-          >
-            <title>
-              {`${task.priceHistoryDates?.[index] ?? `Point ${index + 1}`} ${formatMoney(value)}`}
-            </title>
-          </circle>
-        ))}
-      </svg>
+        <LineChart
+          accessibilityLayer
+          data={chartRows}
+          margin={{ top: 3, right: 3, bottom: 3, left: 3 }}
+        >
+          <XAxis dataKey='date' hide />
+          <YAxis dataKey='price' hide domain={['dataMin', 'dataMax']} />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                indicator='line'
+                labelFormatter={(value) => String(value)}
+                formatter={(value) => formatMoney(value)}
+              />
+            }
+          />
+          <Line
+            type='monotone'
+            dataKey='price'
+            stroke='var(--color-price)'
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 3, fill: 'rgb(129 146 255)' }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ChartContainer>
       <div
         className='pointer-events-none absolute left-0 top-9 z-30 hidden w-56 rounded-md border bg-popover p-2 text-xs text-popover-foreground shadow-lg group-hover:block group-focus-within:block'
         data-testid={`wishlist-price-points-${task.id}`}
