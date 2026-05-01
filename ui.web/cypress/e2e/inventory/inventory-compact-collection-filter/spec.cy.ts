@@ -62,14 +62,14 @@ describe("inventory-compact-collection-filter", () => {
         "contain.text",
         "Store 1"
       );
-      cy.get('[data-testid="inventory-active-folder-select"]')
-        .should("be.visible")
-        .select("Watch List");
       cy.contains("button", "Browse")
         .should("be.visible")
-        .and("have.attr", "aria-controls", "inventory-folder-tree");
+        .and("have.attr", "aria-controls", "inventory-folder-browser-menu");
     });
-    cy.get('[data-testid="inventory-active-folder-browse"]').click();
+    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-watch-list"]')
+      .click();
     cy.get('[data-testid="collection-active-context"]').should(
       "contain",
       "Watch List"

@@ -1068,25 +1068,6 @@ function countFolderNodes(nodes: FolderNode[]): number {
   }, 0)
 }
 
-function collectFolderBrowseOptions(nodes: FolderNode[]): string[] {
-  const seen = new Set<string>()
-  const options: string[] = []
-  const walk = (treeNodes: FolderNode[]) => {
-    treeNodes.forEach((node) => {
-      const name = node.name.trim()
-      if (name !== '' && !seen.has(name.toLowerCase())) {
-        seen.add(name.toLowerCase())
-        options.push(name)
-      }
-      if (node.children?.length) {
-        walk(node.children)
-      }
-    })
-  }
-  walk(nodes)
-  return options
-}
-
 function applyInventoryFolderCounts(
   nodes: FolderNode[],
   rows: Task[],
@@ -1840,9 +1821,8 @@ export function Collection({
   const [activeFolder, setActiveFolder] = useState(
     () => loadInventoryTreeState().activeFolder
   )
-  const [browseFolderSelection, setBrowseFolderSelection] = useState(
-    () => loadInventoryTreeState().activeFolder
-  )
+  const [inventoryFolderBrowserOpen, setInventoryFolderBrowserOpen] =
+    useState(false)
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
@@ -2211,6 +2191,7 @@ export function Collection({
           ? nextFolder
           : 'All Items'
       setActiveFolder(safeFolder)
+      setInventoryFolderBrowserOpen(false)
       if (workspaceCollections.includes(safeFolder)) {
         void setActiveWorkspaceCollection(safeFolder)
       }
@@ -3349,13 +3330,6 @@ export function Collection({
   const activeFolderFilterValue = activeFolderIsAvailable
     ? activeFolder
     : 'All Items'
-  const inventoryFolderBrowseOptions = useMemo(
-    () => collectFolderBrowseOptions(folderTree),
-    [folderTree]
-  )
-  useEffect(() => {
-    setBrowseFolderSelection(activeFolderFilterValue)
-  }, [activeFolderFilterValue])
   const selectedInventoryItem = useMemo(
     () => inventoryItems.find((item) => item.id === selectedItemID) ?? null,
     [inventoryItems, selectedItemID]
@@ -5050,36 +5024,71 @@ export function Collection({
                         data-testid='inventory-active-folder-label'
                         title={activeFolderFilterValue}
                       >
-                        {activeFolderFilterValue}
+                        <span data-testid='inventory-collection-filter-selected'>
+                          {activeFolderFilterValue}
+                        </span>
                       </span>
-                      <select
-                        className='h-8 max-w-[12rem] rounded-md border bg-background px-2 text-sm'
-                        data-testid='inventory-active-folder-select'
-                        aria-label='Choose inventory folder to browse'
-                        value={browseFolderSelection}
-                        onChange={(event) =>
-                          setBrowseFolderSelection(event.target.value)
-                        }
+                      <DropdownMenu
+                        modal={false}
+                        open={inventoryFolderBrowserOpen}
+                        onOpenChange={setInventoryFolderBrowserOpen}
                       >
-                        {inventoryFolderBrowseOptions.map((folderName) => (
-                          <option key={folderName} value={folderName}>
-                            {folderName}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        type='button'
-                        variant='outline'
-                        size='sm'
-                        className='h-8'
-                        data-testid='inventory-active-folder-browse'
-                        aria-controls='inventory-folder-tree'
-                        onClick={() =>
-                          selectInventoryFolder(browseFolderSelection)
-                        }
-                      >
-                        Browse
-                      </Button>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            className='h-8'
+                            data-testid='inventory-collection-browser-trigger'
+                            aria-controls='inventory-folder-browser-menu'
+                          >
+                            Browse
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align='start'
+                          className='w-[min(32rem,92vw)] p-2'
+                        >
+                          <div
+                            role='tree'
+                            aria-label='Inventory folder filter'
+                            className='max-h-[22rem] overflow-auto rounded-md border p-2'
+                            data-testid='inventory-folder-browser-menu'
+                            id='inventory-folder-browser-menu'
+                          >
+                            <div className='w-max min-w-full space-y-2'>
+                              {draggedFolderID ? (
+                                <div
+                                  role='presentation'
+                                  data-testid='folder-tree-root-drop-zone'
+                                  onDragEnter={(event) =>
+                                    handleFolderHTMLDragOver(
+                                      { kind: 'root' },
+                                      event
+                                    )
+                                  }
+                                  onDragOver={(event) =>
+                                    handleFolderHTMLDragOver(
+                                      { kind: 'root' },
+                                      event
+                                    )
+                                  }
+                                  onDrop={(event) =>
+                                    handleFolderHTMLDrop(
+                                      { kind: 'root' },
+                                      event
+                                    )
+                                  }
+                                  className='rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary'
+                                >
+                                  Drop here to move folder to the root level
+                                </div>
+                              ) : null}
+                              {renderFolderTree(folderTree)}
+                            </div>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   ) : undefined
                 }

@@ -35,9 +35,7 @@ describe("inventory collection browser context menu actions", () => {
       "Store 1"
     );
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
-    cy.get('[data-testid="inventory-selected-folder-empty"]')
-      .should("be.visible")
-      .and("contain", "No items are assigned to Store 1 yet");
+    cy.contains("No results.").should("be.visible");
     cy.contains("Context Alpha").should("not.exist");
     cy.get("body").type("{esc}");
 
