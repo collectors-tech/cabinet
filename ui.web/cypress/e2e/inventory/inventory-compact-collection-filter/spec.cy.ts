@@ -68,6 +68,19 @@ describe("inventory-compact-collection-filter", () => {
     });
     cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
     cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid="folder-tree-inline-actions-watch-list"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-row-actions-watch-list"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-add-child-watch-list"]').should(
+          "not.exist"
+        );
+      });
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
       .find('[data-testid="folder-tree-item-watch-list"]')
       .click();
     cy.get('[data-testid="collection-active-context"]').should(
@@ -80,6 +93,13 @@ describe("inventory-compact-collection-filter", () => {
     );
     cy.contains("Store One Filtered Item").should("not.exist");
     cy.contains("Watch List Item").should("be.visible");
+
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-inline-actions-watch-list"]')
+      .should("exist");
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-row-actions-watch-list"]')
+      .should("exist");
 
     cy.get('[data-testid="folder-tree-add-root"]').click();
     cy.get('[data-testid="folder-tree-name-input"]').type("Empty Filter Bucket");

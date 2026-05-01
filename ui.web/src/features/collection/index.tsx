@@ -211,6 +211,10 @@ type FolderDropTarget =
   | { kind: 'after'; nodeID: string }
   | { kind: 'root' }
 
+type FolderTreeRenderOptions = {
+  showActions?: boolean
+}
+
 function folderDropTargetsEqual(
   left: FolderDropTarget | null,
   right: FolderDropTarget | null
@@ -2919,7 +2923,13 @@ export function Collection({
   )
 
   const renderFolderTree = useCallback(
-    (nodes: FolderNode[], level = 1) =>
+    (
+      nodes: FolderNode[],
+      level = 1,
+      options: FolderTreeRenderOptions = {}
+    ) => {
+      const showActions = options.showActions ?? true
+      return (
       nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
         const expanded = hasChildren && expandedNodeIDs.has(node.id)
@@ -3142,84 +3152,86 @@ export function Collection({
                     </Badge>
                   ) : null}
                 </span>
-                <div
-                  data-testid={`folder-tree-inline-actions-${node.id}`}
-                  data-drag-disabled='true'
-                  className={cn(
-                    'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity',
-                    'pointer-events-auto opacity-100'
-                  )}
-                >
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon'
-                    tabIndex={-1}
-                    className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
-                    data-testid={`folder-tree-add-child-${node.id}`}
+                {showActions ? (
+                  <div
+                    data-testid={`folder-tree-inline-actions-${node.id}`}
                     data-drag-disabled='true'
-                    aria-label={`Add child folder under ${node.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setFolderCreateParentID(node.id)
-                      setFolderCreateName('')
-                      setFolderCreateOpen(true)
-                    }}
+                    className={cn(
+                      'flex w-14 shrink-0 items-center justify-end gap-1 transition-opacity',
+                      'pointer-events-auto opacity-100'
+                    )}
                   >
-                    <Plus className='size-4' />
-                  </Button>
-                  <DropdownMenu modal={false}>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type='button'
-                        variant='ghost'
-                        size='icon'
-                        tabIndex={-1}
-                        className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
-                        data-testid={`folder-tree-row-actions-${node.id}`}
-                        data-drag-disabled='true'
-                        aria-label={`Open folder actions for ${node.name}`}
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      tabIndex={-1}
+                      className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                      data-testid={`folder-tree-add-child-${node.id}`}
+                      data-drag-disabled='true'
+                      aria-label={`Add child folder under ${node.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setFolderCreateParentID(node.id)
+                        setFolderCreateName('')
+                        setFolderCreateOpen(true)
+                      }}
+                    >
+                      <Plus className='size-4' />
+                    </Button>
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type='button'
+                          variant='ghost'
+                          size='icon'
+                          tabIndex={-1}
+                          className='h-6 w-6 rounded-sm text-muted-foreground/70 hover:bg-transparent hover:text-foreground'
+                          data-testid={`folder-tree-row-actions-${node.id}`}
+                          data-drag-disabled='true'
+                          aria-label={`Open folder actions for ${node.name}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Ellipsis className='size-4' />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='end'
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <Ellipsis className='size-4' />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align='end'
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <DropdownMenuItem
-                        data-testid={`folder-tree-row-action-select-${node.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          selectInventoryFolder(node.name)
-                        }}
-                      >
-                        Select folder
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        data-testid={`folder-tree-row-action-properties-${node.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openFolderProperties(node)
-                        }}
-                      >
-                        Properties
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        data-testid={`folder-tree-row-action-add-child-${node.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setFolderCreateParentID(node.id)
-                          setFolderCreateName('')
-                          setFolderCreateOpen(true)
-                        }}
-                      >
-                        Add child folder
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                        <DropdownMenuItem
+                          data-testid={`folder-tree-row-action-select-${node.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            selectInventoryFolder(node.name)
+                          }}
+                        >
+                          Select folder
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          data-testid={`folder-tree-row-action-properties-${node.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openFolderProperties(node)
+                          }}
+                        >
+                          Properties
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          data-testid={`folder-tree-row-action-add-child-${node.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setFolderCreateParentID(node.id)
+                            setFolderCreateName('')
+                            setFolderCreateOpen(true)
+                          }}
+                        >
+                          Add child folder
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ) : null}
                 <button
                   type='button'
                   tabIndex={-1}
@@ -3286,12 +3298,14 @@ export function Collection({
                 data-testid={`folder-tree-group-${node.id}`}
                 className='ml-4 border-l pl-1'
               >
-                {renderFolderTree(node.children ?? [], level + 1)}
+                {renderFolderTree(node.children ?? [], level + 1, options)}
               </div>
             ) : null}
           </div>
         )
-      }),
+      })
+      )
+    },
     [
       activeFolder,
       clearFolderHTMLDrag,
@@ -5084,7 +5098,9 @@ export function Collection({
                                   Drop here to move folder to the root level
                                 </div>
                               ) : null}
-                              {renderFolderTree(folderTree)}
+                              {renderFolderTree(folderTree, 1, {
+                                showActions: false,
+                              })}
                             </div>
                           </div>
                         </DropdownMenuContent>
