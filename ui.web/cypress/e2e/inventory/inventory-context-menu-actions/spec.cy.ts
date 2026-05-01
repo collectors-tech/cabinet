@@ -1,4 +1,4 @@
-describe("inventory collection browser context menu actions", () => {
+describe("inventory collection browser picker actions", () => {
   function signIn() {
     cy.e2eReset();
     cy.e2eSetSetupState("present");
@@ -22,14 +22,26 @@ describe("inventory collection browser context menu actions", () => {
     cy.wait("@items");
   }
 
-  it("shows visible results for compact collection browser menu actions", () => {
+  it("keeps Browse as a picker without management row actions", () => {
     signIn();
 
     cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
     cy.get('[data-testid="inventory-folder-browser-menu"]')
-      .find('[data-testid="folder-tree-row-actions-store-1"]')
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid="folder-tree-row-actions-store-1"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-add-child-store-1"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').should(
+          "not.exist"
+        );
+      });
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-store-1"]')
       .click();
-    cy.get('[data-testid="folder-tree-row-action-select-store-1"]').click();
     cy.get('[data-testid="inventory-collection-filter-selected"]').should(
       "contain",
       "Store 1"
@@ -37,19 +49,8 @@ describe("inventory collection browser context menu actions", () => {
     cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
     cy.contains("No results.").should("be.visible");
     cy.contains("Context Alpha").should("not.exist");
-    cy.get("body").type("{esc}");
 
-    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
-    cy.get('[data-testid="inventory-folder-browser-menu"]')
-      .find('[data-testid="folder-tree-row-actions-store-1"]')
-      .click();
-    cy.get('[data-testid="folder-tree-row-action-add-child-store-1"]').click();
-    cy.contains('[role="dialog"]', "Add Child Folder").should("be.visible");
-    cy.get('[data-testid="folder-tree-create-cancel"]').click();
-    cy.get("body").type("{esc}");
-
-    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
-    cy.get('[data-testid="inventory-folder-browser-menu"]')
+    cy.get('[data-testid="inventory-folder-tree"]')
       .find('[data-testid="folder-tree-row-actions-store-1"]')
       .click();
     cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click();
