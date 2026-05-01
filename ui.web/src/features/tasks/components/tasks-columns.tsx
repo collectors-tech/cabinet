@@ -3,11 +3,8 @@ import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
   ImageIcon,
-  MinusIcon,
   PlusIcon,
   TagsIcon,
-  TrendingDownIcon,
-  TrendingUpIcon,
 } from 'lucide-react'
 import { Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +16,14 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { labels, priorities, statuses } from '../data/data'
@@ -96,6 +101,7 @@ function WishlistPriceSparkline({
   task: Task
   label: string
 }) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const values = (task.priceHistory ?? []).filter(
     (value) => typeof value === 'number' && Number.isFinite(value)
   )
@@ -116,86 +122,165 @@ function WishlistPriceSparkline({
   const accessibleLabel = `${label}: ${sampleCount} price points, ${dateRange}, latest ${formatMoney(task.marketPrice)}`
 
   return (
-    <div className='group relative'>
-      <ChartContainer
-        config={wishlistPriceChartConfig}
-        data-testid={`wishlist-price-sparkline-${task.id}`}
-        role='img'
-        tabIndex={0}
-        aria-label={accessibleLabel}
-        className='h-7 w-[88px] rounded bg-slate-950/60 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+    <>
+      <button
+        type='button'
+        data-testid={`wishlist-price-chart-open-${task.id}`}
+        className='rounded bg-slate-950/60 p-0 outline-none ring-offset-background transition-colors hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        aria-label={`Open ${task.title} price graph`}
+        title={accessibleLabel}
+        onClick={(event) => {
+          event.stopPropagation()
+          setIsDialogOpen(true)
+        }}
+        onDoubleClick={(event) => event.stopPropagation()}
       >
-        <LineChart
-          accessibilityLayer
-          data={chartRows}
-          margin={{ top: 3, right: 3, bottom: 3, left: 3 }}
+        <ChartContainer
+          config={wishlistPriceChartConfig}
+          data-testid={`wishlist-price-sparkline-${task.id}`}
+          role='img'
+          aria-label={accessibleLabel}
+          className='h-7 w-[88px]'
         >
-          <XAxis dataKey='date' hide />
-          <YAxis dataKey='price' hide domain={['dataMin', 'dataMax']} />
-          <ChartTooltip
-            cursor={false}
-            content={
-              <ChartTooltipContent
-                indicator='line'
-                labelFormatter={(value) => String(value)}
-                formatter={(value) => formatMoney(value)}
+          <LineChart
+            accessibilityLayer
+            data={chartRows}
+            margin={{ top: 3, right: 3, bottom: 3, left: 3 }}
+          >
+            <XAxis dataKey='date' hide />
+            <YAxis dataKey='price' hide domain={['dataMin', 'dataMax']} />
+            <Line
+              type='monotone'
+              dataKey='price'
+              stroke='var(--color-price)'
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ChartContainer>
+      </button>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent
+          className='sm:max-w-3xl'
+          data-testid='wishlist-price-chart-dialog'
+          closeButtonTestId='wishlist-price-chart-dialog-close'
+        >
+          <DialogHeader>
+            <DialogTitle>{task.title} price history</DialogTitle>
+            <DialogDescription>
+              Latest {latestPointRows.length} of {sampleCount} price points.
+              {dateRange !== 'date range unavailable' ? ` ${dateRange}.` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <ChartContainer
+            config={wishlistPriceChartConfig}
+            data-testid='wishlist-price-chart-large'
+            className='h-72 w-full rounded-md border bg-slate-950/40 p-3'
+          >
+            <LineChart
+              accessibilityLayer
+              data={chartRows}
+              margin={{ top: 16, right: 20, bottom: 8, left: 8 }}
+            >
+              <XAxis
+                dataKey='date'
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={24}
               />
-            }
-          />
-          <Line
-            type='monotone'
-            dataKey='price'
-            stroke='var(--color-price)'
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 3, fill: 'rgb(129 146 255)' }}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ChartContainer>
-      <div
-        className='pointer-events-none absolute left-0 top-9 z-30 hidden w-56 rounded-md border bg-popover p-2 text-xs text-popover-foreground shadow-lg group-hover:block group-focus-within:block'
-        data-testid={`wishlist-price-points-${task.id}`}
-      >
-        <p className='mb-1 font-semibold'>Latest 10 price points</p>
-        <ul className='space-y-1'>
-          {latestPointRows.map((point) => (
-            <li key={`${point.date}-${point.price}`}>
-              <span className='text-muted-foreground'>{point.date}</span>{' '}
-              <span className='font-medium'>{formatMoney(point.price)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+              <YAxis
+                dataKey='price'
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                width={56}
+                domain={['dataMin', 'dataMax']}
+                tickFormatter={(value) => formatMoney(Number(value))}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    indicator='line'
+                    labelFormatter={(value) => String(value)}
+                    formatter={(value) => formatMoney(Number(value))}
+                  />
+                }
+              />
+              <Line
+                type='monotone'
+                dataKey='price'
+                stroke='var(--color-price)'
+                strokeWidth={3}
+                dot={{ r: 3, fill: 'rgb(129 146 255)' }}
+                activeDot={{ r: 5, fill: 'rgb(129 146 255)' }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ChartContainer>
+          <div
+            className='rounded-md border bg-card/40 p-3'
+            data-testid={`wishlist-price-chart-points-${task.id}`}
+          >
+            <p className='mb-2 text-sm font-semibold'>
+              Latest 10 price points
+            </p>
+            <ul className='grid gap-1 text-sm sm:grid-cols-2'>
+              {latestPointRows.map((point) => (
+                <li key={`${point.date}-${point.price}`}>
+                  <span className='text-muted-foreground'>{point.date}</span>{' '}
+                  <span className='font-medium'>
+                    {formatMoney(point.price)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setIsDialogOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
-function WishlistPriceTrendCell({ task }: { task: Task }) {
-  const trend = task.priceTrend ?? 'unknown'
-  const trendConfig = {
+function getWishlistTrendConfig(trend: Task['priceTrend']) {
+  return {
     up: {
       label: 'Price trending up',
-      icon: TrendingUpIcon,
+      marker: '↑',
       className: 'text-red-300',
     },
     steady: {
       label: 'Price steady',
-      icon: MinusIcon,
+      marker: '-',
       className: 'text-muted-foreground',
     },
     down: {
       label: 'Price trending down',
-      icon: TrendingDownIcon,
+      marker: '↓',
       className: 'text-emerald-300',
     },
     unknown: {
       label: 'Price trend unknown',
-      icon: MinusIcon,
+      marker: '-',
       className: 'text-muted-foreground',
     },
-  }[trend]
-  const Icon = trendConfig.icon
+  }[trend ?? 'unknown']
+}
+
+function WishlistPriceTrendCell({ task }: { task: Task }) {
+  const trendConfig = getWishlistTrendConfig(task.priceTrend)
   const hasHistory = (task.priceHistory ?? []).length >= 2
   const sampleCount = task.priceSampleCount ?? task.priceHistory?.length ?? 0
   const sourceText =
@@ -213,12 +298,18 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
 
   return (
     <div
-      className='flex min-w-[11rem] items-center gap-2'
+      className='flex min-w-[8rem] items-center gap-2'
       data-testid={`wishlist-price-trend-${task.id}`}
       aria-label={trendConfig.label}
       title={`${trendConfig.label}. ${sampleCount} points. ${dateText}. Sources: ${sourceText}. ${stockText}.`}
     >
-      <Icon className={`size-4 ${trendConfig.className}`} />
+      <span
+        className={`inline-flex w-4 justify-center text-sm font-semibold leading-none ${trendConfig.className}`}
+        data-testid={`wishlist-price-trend-marker-${task.id}`}
+        aria-hidden='true'
+      >
+        {trendConfig.marker}
+      </span>
       {hasHistory ? (
         <WishlistPriceSparkline task={task} label={trendConfig.label} />
       ) : (
