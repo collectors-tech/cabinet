@@ -127,19 +127,33 @@ describe("wishlist-pricing-columns", () => {
       .scrollIntoView()
       .should("have.attr", "aria-label", "Price trending down")
       .and("be.visible");
+    cy.get('[data-testid="wishlist-price-trend-marker-item-price-1"]')
+      .should("be.visible")
+      .and("have.text", "↓");
     cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]')
       .should("be.visible")
       .should("have.attr", "data-slot", "chart")
       .find(".recharts-line-curve")
       .should("have.attr", "d")
       .and("not.be.empty");
-    cy.get('[data-testid="wishlist-price-sparkline-item-price-1"]').focus();
-    cy.get('[data-testid="wishlist-price-points-item-price-1"]')
+    cy.get('[data-testid="wishlist-price-points-item-price-1"]').should(
+      "not.exist"
+    );
+    cy.get('[data-testid="wishlist-price-chart-open-item-price-1"]').click();
+    cy.get('[data-testid="wishlist-price-chart-dialog"]')
       .should("be.visible")
+      .and("contain", "Wishlist Pricing Candidate")
       .and("contain", "Latest 10")
       .and("contain", "2026-04-17 $30.00")
       .and("contain", "2026-04-26 $22.50")
       .and("not.contain", "2026-04-16");
+    cy.get('[data-testid="wishlist-price-chart-large"]')
+      .should("be.visible")
+      .find(".recharts-line-curve")
+      .should("have.attr", "d")
+      .and("not.be.empty");
+    cy.get('[data-testid="wishlist-price-chart-dialog-close"]').click();
+    cy.get('[data-testid="wishlist-price-chart-dialog"]').should("not.exist");
 
     cy.get('[data-testid="wishlist-cost-input-item-price-1"]')
       .scrollIntoView()
