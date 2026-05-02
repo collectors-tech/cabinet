@@ -213,6 +213,7 @@ type FolderDropTarget =
 
 type FolderTreeRenderOptions = {
   showActions?: boolean
+  showDragHandles?: boolean
 }
 
 function folderDropTargetsEqual(
@@ -2929,6 +2930,7 @@ export function Collection({
       options: FolderTreeRenderOptions = {}
     ) => {
       const showActions = options.showActions ?? true
+      const showDragHandles = options.showDragHandles ?? true
       return (
       nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
@@ -2945,7 +2947,7 @@ export function Collection({
           : false
         return (
           <div key={node.id} role='none' className='relative'>
-            {draggedFolderID ? (
+            {showDragHandles && draggedFolderID ? (
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-before-${node.id}`}
@@ -3036,7 +3038,9 @@ export function Collection({
                 data-node-expanded={
                   hasChildren ? (expanded ? 'true' : 'false') : undefined
                 }
-                data-draggable-row={node.id !== 'all-items' ? 'true' : 'false'}
+                data-draggable-row={
+                  showDragHandles && node.id !== 'all-items' ? 'true' : 'false'
+                }
                 data-invalid-drop-target={
                   hasInvalidFolderDropTarget ? 'true' : 'false'
                 }
@@ -3048,6 +3052,7 @@ export function Collection({
                 onKeyDown={(event) => handleTreeItemKeyDown(node, event)}
                 onDragEnter={(event) => {
                   if (
+                    showDragHandles &&
                     handleFolderHTMLDragOver(
                       { kind: 'child', nodeID: node.id },
                       event
@@ -3055,10 +3060,13 @@ export function Collection({
                   ) {
                     return
                   }
-                  handleInventoryItemFolderDragOver(node, event)
+                  if (showDragHandles) {
+                    handleInventoryItemFolderDragOver(node, event)
+                  }
                 }}
                 onDragOver={(event) => {
                   if (
+                    showDragHandles &&
                     handleFolderHTMLDragOver(
                       { kind: 'child', nodeID: node.id },
                       event
@@ -3066,10 +3074,13 @@ export function Collection({
                   ) {
                     return
                   }
-                  handleInventoryItemFolderDragOver(node, event)
+                  if (showDragHandles) {
+                    handleInventoryItemFolderDragOver(node, event)
+                  }
                 }}
                 onDrop={(event) => {
                   if (
+                    showDragHandles &&
                     handleFolderHTMLDrop(
                       { kind: 'child', nodeID: node.id },
                       event
@@ -3077,7 +3088,9 @@ export function Collection({
                   ) {
                     return
                   }
-                  handleInventoryItemFolderDrop(node, event)
+                  if (showDragHandles) {
+                    handleInventoryItemFolderDrop(node, event)
+                  }
                 }}
               >
                 <span
@@ -3232,30 +3245,32 @@ export function Collection({
                     </DropdownMenu>
                   </div>
                 ) : null}
-                <button
-                  type='button'
-                  tabIndex={-1}
-                  draggable={node.id !== 'all-items'}
-                  data-testid={`folder-tree-drag-handle-${node.id}`}
-                  aria-label={`Drag ${node.name}`}
-                  title={`Drag ${node.name}`}
-                  className={cn(
-                    'inline-flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground active:cursor-grabbing',
-                    draggedFolderID === node.id && 'text-foreground'
-                  )}
-                  onPointerDown={(event) =>
-                    startFolderPointerDrag(node.id, event)
-                  }
-                  onDragStart={(event) => startFolderHTMLDrag(node, event)}
-                  onDragEnd={clearFolderHTMLDrag}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.preventDefault()}
-                >
-                  <GripVertical className='size-4' />
-                </button>
+                {showDragHandles ? (
+                  <button
+                    type='button'
+                    tabIndex={-1}
+                    draggable={node.id !== 'all-items'}
+                    data-testid={`folder-tree-drag-handle-${node.id}`}
+                    aria-label={`Drag ${node.name}`}
+                    title={`Drag ${node.name}`}
+                    className={cn(
+                      'inline-flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/70 transition-colors group-hover:text-foreground active:cursor-grabbing',
+                      draggedFolderID === node.id && 'text-foreground'
+                    )}
+                    onPointerDown={(event) =>
+                      startFolderPointerDrag(node.id, event)
+                    }
+                    onDragStart={(event) => startFolderHTMLDrag(node, event)}
+                    onDragEnd={clearFolderHTMLDrag}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.preventDefault()}
+                  >
+                    <GripVertical className='size-4' />
+                  </button>
+                ) : null}
               </div>
             </div>
-            {draggedFolderID ? (
+            {showDragHandles && draggedFolderID ? (
               <div
                 role='presentation'
                 data-testid={`folder-tree-drop-after-${node.id}`}
@@ -5100,6 +5115,7 @@ export function Collection({
                               ) : null}
                               {renderFolderTree(folderTree, 1, {
                                 showActions: false,
+                                showDragHandles: false,
                               })}
                             </div>
                           </div>

@@ -79,6 +79,9 @@ describe("inventory-compact-collection-filter", () => {
         cy.get('[data-testid="folder-tree-add-child-watch-list"]').should(
           "not.exist"
         );
+        cy.get('[data-testid="folder-tree-drag-handle-watch-list"]').should(
+          "not.exist"
+        );
       });
     cy.get('[data-testid="inventory-folder-browser-menu"]')
       .find('[data-testid="folder-tree-item-watch-list"]')
@@ -99,6 +102,9 @@ describe("inventory-compact-collection-filter", () => {
       .should("exist");
     cy.get('[data-testid="inventory-folder-tree"]')
       .find('[data-testid="folder-tree-row-actions-watch-list"]')
+      .should("exist");
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-drag-handle-watch-list"]')
       .should("exist");
 
     cy.get('[data-testid="folder-tree-add-root"]').click();

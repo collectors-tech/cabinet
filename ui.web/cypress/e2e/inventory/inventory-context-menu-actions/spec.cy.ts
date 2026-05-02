@@ -38,6 +38,9 @@ describe("inventory collection browser picker actions", () => {
         cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').should(
           "not.exist"
         );
+        cy.get('[data-testid="folder-tree-drag-handle-store-1"]').should(
+          "not.exist"
+        );
       });
     cy.get('[data-testid="inventory-folder-browser-menu"]')
       .find('[data-testid="folder-tree-item-store-1"]')
@@ -55,5 +58,9 @@ describe("inventory collection browser picker actions", () => {
       .click();
     cy.get('[data-testid="folder-tree-row-action-properties-store-1"]').click();
     cy.get('[data-testid="folder-properties-name-input"]').should("have.value", "Store 1");
+    cy.get('[data-testid="folder-properties-cancel"]').click();
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-drag-handle-store-1"]')
+      .should("exist");
   });
 });
