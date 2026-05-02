@@ -570,8 +570,25 @@ function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
   ].some((value) => value.trim() !== '')
 }
 
+function generateCompactPartNumber(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const values = new Uint8Array(12)
+
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(values)
+  } else {
+    for (let index = 0; index < values.length; index += 1) {
+      values[index] = Math.floor(Math.random() * 256)
+    }
+  }
+
+  return Array.from(values, (value) => alphabet[value % alphabet.length]).join(
+    ''
+  )
+}
+
 function buildDraftItemPartNumber(): string {
-  return `DRAFT-${Date.now().toString(36).toUpperCase()}`
+  return generateCompactPartNumber()
 }
 
 function firstImageFileFromDataTransfer(
@@ -948,18 +965,8 @@ function compactQuickCreateText(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function quickCreateSlug(value: string): string {
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function buildQuickCreatePartNumber(prefix: 'TXT' | 'URL', value: string) {
-  const slug = quickCreateSlug(value) || 'ITEM'
-  const suffix = Date.now().toString(36).toUpperCase()
-  return `${prefix}-${slug.slice(0, 42)}-${suffix}`.slice(0, 64)
+function buildQuickCreatePartNumber() {
+  return generateCompactPartNumber()
 }
 
 function humanizeQuickCreatePathSegment(value: string): string {
@@ -1011,10 +1018,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         pathTitle ? `${hostname} ${pathTitle}` : hostname
       )
       return {
-        part_number: buildQuickCreatePartNumber(
-          'URL',
-          `${hostname} ${url.pathname}`
-        ),
+        part_number: buildQuickCreatePartNumber(),
         title,
         brand: 'Unknown',
         category: 'General',
@@ -1034,7 +1038,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
 
   const title = compactQuickCreateText(source).slice(0, 120)
   return {
-    part_number: buildQuickCreatePartNumber('TXT', title),
+    part_number: buildQuickCreatePartNumber(),
     title,
     brand: 'Unknown',
     category: 'General',
