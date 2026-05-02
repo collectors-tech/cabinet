@@ -559,10 +559,16 @@ export function Collections() {
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-3 sm:gap-4'>
-        <div className='grid gap-4' data-testid='collections-workspace'>
-          <Card data-testid='collections-section'>
-            <CardContent className='space-y-4'>
+      <Main fixed className='min-h-0 gap-3 sm:gap-4'>
+        <div
+          className='grid min-h-0 flex-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-4'
+          data-testid='collections-workspace'
+        >
+          <Card
+            className='flex min-h-0 flex-col overflow-hidden'
+            data-testid='collections-section'
+          >
+            <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
               <div
                 className='space-y-3'
                 data-testid='collections-management-tools'
@@ -601,7 +607,7 @@ export function Collections() {
               </div>
 
               <div
-                className='overflow-x-auto rounded-md border'
+                className='min-h-0 flex-1 overflow-auto rounded-md border'
                 data-table-surface='true'
                 data-testid='collections-shared-table'
               >
@@ -663,21 +669,24 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
-              <div data-testid='collections-table-pagination'>
+              <div className='mt-auto' data-testid='collections-table-pagination'>
                 <DataTablePagination table={table} />
               </div>
             </CardContent>
           </Card>
 
-          <Card data-testid='collections-members-panel'>
-            <CardHeader>
+          <Card
+            className='flex min-h-0 flex-col overflow-hidden'
+            data-testid='collections-members-panel'
+          >
+            <CardHeader className='shrink-0 py-3'>
               <CardTitle>Collection members</CardTitle>
               <CardDescription>
                 Review inventory items assigned to the selected collection.
                 Assign or move items from Inventory row actions.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
               <div className='space-y-3'>
                 <div data-testid='collections-members-table-toolbar'>
                   <DataTableToolbar
@@ -695,7 +704,7 @@ export function Collections() {
                 </p>
               </div>
               <div
-                className='overflow-x-auto rounded-md border'
+                className='min-h-0 flex-1 overflow-auto rounded-md border'
                 data-table-surface='true'
                 data-testid='collections-members-table'
               >
@@ -748,7 +757,7 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
-              <div data-testid='collections-members-table-pagination'>
+              <div className='mt-auto' data-testid='collections-members-table-pagination'>
                 <DataTablePagination table={membersTable} />
               </div>
             </CardContent>
