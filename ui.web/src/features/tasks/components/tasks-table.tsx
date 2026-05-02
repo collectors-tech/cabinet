@@ -834,9 +834,12 @@ export function TasksTable({
 
   return (
     <div
+      data-testid={
+        isInventoryRoute ? 'inventory-table-stack' : 'wishlist-table-stack'
+      }
       className={cn(
         'max-sm:has-[div[role="toolbar"]]:mb-16',
-        'flex flex-1 flex-col gap-4'
+        'flex min-h-0 flex-1 flex-col gap-4'
       )}
     >
       <DataTableToolbar
@@ -1014,7 +1017,12 @@ export function TasksTable({
       </div>
 
       {viewMode === 'rows' ? (
-        <div className='overflow-x-auto rounded-md border'>
+        <div
+          className='min-h-0 flex-1 overflow-auto rounded-md border'
+          data-testid={
+            isInventoryRoute ? 'inventory-table-surface' : 'wishlist-table-surface'
+          }
+        >
           <Table
             className={cn(
               'min-w-[42rem]',
@@ -1111,7 +1119,7 @@ export function TasksTable({
           </Table>
         </div>
       ) : (
-        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+        <div className='grid min-h-0 flex-1 gap-3 overflow-auto sm:grid-cols-2 xl:grid-cols-3'>
           {table.getRowModel().rows?.length ? (
             table.getRowModel().rows.map((row) => (
               <div

@@ -4651,8 +4651,9 @@ export function Collection({
       </Header>
 
       <Main
+        fixed
         className={cn(
-          'relative space-y-3 rounded-xl transition-colors',
+          'relative min-h-0 gap-3 rounded-xl transition-colors',
           imageDropActive ? 'bg-primary/5 ring-2 ring-primary/40' : ''
         )}
         data-testid='inventory-image-drop-zone'
@@ -4679,10 +4680,10 @@ export function Collection({
           </div>
         ) : null}
         <div
-          className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
+          className='grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]'
           data-testid='inventory-workspace'
         >
-          <Card className='flex min-h-[32rem] flex-col overflow-hidden'>
+          <Card className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'>
             <CardHeader>
               <CardTitle>Folders</CardTitle>
               <CardDescription>
@@ -4733,7 +4734,7 @@ export function Collection({
                 id='inventory-folder-tree'
                 tabIndex={-1}
                 data-testid='inventory-folder-tree'
-                className='max-h-[42rem] min-h-[26rem] flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
+                className='min-h-0 flex-1 overflow-x-auto overflow-y-auto rounded-md border p-2'
               >
                 <div
                   className='w-max min-w-full space-y-2'
@@ -4986,8 +4987,11 @@ export function Collection({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className='space-y-4 pt-6'>
+          <Card
+            className='flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0'
+            data-testid='inventory-table-card'
+          >
+            <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-6'>
               <p
                 className='text-sm text-muted-foreground'
                 data-testid='collection-summary-line'
