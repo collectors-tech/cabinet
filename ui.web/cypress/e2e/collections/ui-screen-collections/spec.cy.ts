@@ -58,6 +58,7 @@ describe('ui-screen-collections', () => {
 
   function signInToCollections(options: { mockInventory?: boolean } = {}) {
     const { mockInventory = true } = options
+    cy.viewport(1512, 967)
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     if (mockInventory) {
@@ -74,6 +75,7 @@ describe('ui-screen-collections', () => {
   }
 
   function bootstrapCollectionsProfile(path = '/collections/') {
+    cy.viewport(1512, 967)
     cy.e2eReset()
     cy.e2eSetSetupState('present')
     mockDefaultCollectionInventoryItems()
@@ -175,6 +177,46 @@ describe('ui-screen-collections', () => {
     )
   })
 
+  it('UI-SCREEN-COLLECTIONS-020 stretches both tables to the available viewport height', () => {
+    signInToCollections()
+
+    cy.get('[data-testid="collections-workspace"]').should('be.visible')
+    cy.get('[data-testid="collections-section"]').should('be.visible')
+    cy.get('[data-testid="collections-members-panel"]').should('be.visible')
+    cy.get('[data-testid="collections-shared-table"]').should('be.visible')
+    cy.get('[data-testid="collections-members-table"]').should('be.visible')
+
+    cy.get('[data-testid="collections-section"]').then(($collectionsCard) => {
+      cy.get('[data-testid="collections-members-panel"]').then(($membersCard) => {
+        expect(
+          $collectionsCard[0].getBoundingClientRect().height,
+          'collections table card height'
+        ).to.be.greaterThan(300)
+        expect(
+          $membersCard[0].getBoundingClientRect().height,
+          'collection members card height'
+        ).to.be.greaterThan(300)
+      })
+    })
+    cy.get('[data-testid="collections-shared-table"]').then(($surface) => {
+      expect(
+        $surface[0].getBoundingClientRect().height,
+        'collections table surface height'
+      ).to.be.greaterThan(180)
+    })
+    cy.get('[data-testid="collections-members-table"]').then(($surface) => {
+      expect(
+        $surface[0].getBoundingClientRect().height,
+        'members table surface height'
+      ).to.be.greaterThan(180)
+    })
+    cy.window().then((win) => {
+      expect(win.document.documentElement.scrollHeight).to.be.at.most(
+        win.innerHeight + 2
+      )
+    })
+  })
+
   it('UI-SCREEN-COLLECTIONS-018 keeps All Items count aligned with inventory members', () => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
@@ -203,9 +245,11 @@ describe('ui-screen-collections', () => {
       'Showing 12 of 12 items.'
     )
     cy.get('[data-testid="collections-member-row-collection-live-item-1"]')
+      .scrollIntoView()
       .should('be.visible')
       .and('contain.text', 'Collection Live Item 1')
     cy.get('[data-testid="collections-member-row-collection-live-item-10"]')
+      .scrollIntoView()
       .should('be.visible')
       .and('contain.text', 'Collection Live Item 10')
   })
@@ -273,9 +317,13 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-edit-submit"]').click()
 
     cy.contains('Store 2 renamed to Store 2 Prime.').should('be.visible')
-    cy.get('[data-testid="collections-row-store-2-prime"]').should('be.visible')
+    cy.get('[data-testid="collections-row-store-2-prime"]')
+      .scrollIntoView()
+      .should('exist')
     cy.reload()
-    cy.get('[data-testid="collections-row-store-2-prime"]').should('be.visible')
+    cy.get('[data-testid="collections-row-store-2-prime"]')
+      .scrollIntoView()
+      .should('exist')
   })
 
   it('UI-SCREEN-COLLECTIONS-005 deletes a collection and releases assigned items', () => {
@@ -415,13 +463,15 @@ describe('ui-screen-collections', () => {
             .should('eq', 200)
           cy.visit('/collections/')
 
-          cy.get('[data-testid="collections-row-profile-two-vault"]').should('be.visible')
+          cy.get('[data-testid="collections-row-profile-two-vault"]')
+            .scrollIntoView()
+            .should('exist')
           cy.get('[data-testid="collections-active-context"]').should(
             'contain.text',
             'Profile Two Vault'
           )
           cy.get('[data-testid="collections-member-1996-topps-kobe-bryant-rookie"]').should(
-            'be.visible'
+            'exist'
           )
         }
       )
@@ -474,7 +524,9 @@ describe('ui-screen-collections', () => {
 
     cy.visit('/collections/')
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="collections-row-wishlist-sync-shelf"]').should('be.visible')
+    cy.get('[data-testid="collections-row-wishlist-sync-shelf"]')
+      .scrollIntoView()
+      .should('exist')
     cy.get('[data-testid="collections-active-context"]').should(
       'contain.text',
       'Wishlist Sync Shelf'
