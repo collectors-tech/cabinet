@@ -56,6 +56,15 @@ describe('ui-screen-collections', () => {
     }).as('collectionsInventoryItems')
   }
 
+  function mockCollectionInventoryItems(
+    items: typeof defaultCollectionInventoryItems
+  ) {
+    cy.intercept('GET', '/api/items', {
+      statusCode: 200,
+      body: { items },
+    }).as('collectionsInventoryItems')
+  }
+
   function signInToCollections(options: { mockInventory?: boolean } = {}) {
     const { mockInventory = true } = options
     cy.viewport(1512, 967)
@@ -175,6 +184,56 @@ describe('ui-screen-collections', () => {
       'contain.text',
       'No items are currently assigned to Overflow.'
     )
+  })
+
+  it('UI-SCREEN-COLLECTIONS-021 truncates long member table values instead of overflowing columns', () => {
+    const longMemberName =
+      'URL-BONZASLOTCARS-2026-MATCHBOX-HOT-WHEELS-TOMICA-AFX-AURORA-LONG-LONG-LONG'
+
+    cy.viewport(1512, 967)
+    cy.e2eReset()
+    cy.e2eSetSetupState('present')
+    mockCollectionInventoryItems([
+      {
+        id: 'inventory-item-long-member-overflow',
+        part_number:
+          'PART-BONZASLOTCARS-002-MATCHBOX-HOT-WHEELS-MOOISYRQ-EXTRA-LONG',
+        title: longMemberName,
+        status: 'active',
+        category: 'Slot Cars',
+        brand: 'Bonza Slot Cars',
+        description:
+          'This deliberately long record verifies the members table clips text safely.',
+      },
+      ...defaultCollectionInventoryItems,
+    ])
+    cy.intercept('GET', '/api/profiles/*/settings').as('loadCollectionSettings')
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: '/collections/' })
+    })
+    cy.wait('@loadCollectionSettings')
+    cy.wait('@collectionsInventoryItems')
+
+    cy.get('[data-testid="collections-members-table"]').then(($surface) => {
+      const surface = $surface[0]
+      expect(surface.scrollWidth, 'members table horizontal overflow').to.be.at.most(
+        surface.clientWidth + 1
+      )
+    })
+    cy.get('[data-testid="collections-member-row-inventory-item-long-member-overflow"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .within(() => {
+        cy.get('td').each(($cell) => {
+          expect($cell[0].scrollWidth, 'cell text overflow').to.be.at.most(
+            $cell[0].clientWidth + 1
+          )
+        })
+        cy.get('td')
+          .first()
+          .find('[data-testid^="collections-member-name-"]')
+          .should('have.css', 'text-overflow', 'ellipsis')
+      })
   })
 
   it('UI-SCREEN-COLLECTIONS-020 stretches both tables to the available viewport height', () => {
