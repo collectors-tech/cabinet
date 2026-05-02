@@ -29,6 +29,21 @@ describe('ui-global-search-command', () => {
     cy.get(commandInputSelector).should('be.visible').and('be.focused')
   })
 
+  it('UI-GLOBAL-SEARCH-COMMAND-006 renders a platform-aware search shortcut hint', () => {
+    cy.window().then((win) => {
+      const isMac = /Mac|iPhone|iPad|iPod/i.test(win.navigator.platform)
+      const expectedShortcut = isMac ? '⌘K' : 'CtrlK'
+
+      cy.contains('button', /search/i)
+        .first()
+        .find('kbd')
+        .should(($kbd) => {
+          const normalizedText = $kbd.text().replace(/\s+/g, '')
+          expect(normalizedText).to.eq(expectedShortcut)
+        })
+    })
+  })
+
   it('UI-GLOBAL-SEARCH-COMMAND-002 executes navigation command and closes palette', () => {
     openCommandPaletteFromSearchButton()
     cy.get(commandInputSelector).type('Inventory')
