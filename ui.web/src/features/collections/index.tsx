@@ -71,6 +71,10 @@ const collectionsHeaderDescription =
 type CollectionRow = WorkspaceCollectionSummary
 type CollectionMemberRow = WorkspaceCollectionItem
 
+const tableClassName = 'w-full table-fixed'
+const tableCellClassName = 'max-w-0 truncate'
+const tableHeaderClassName = 'max-w-0 truncate'
+
 type InventoryCatalogItem = {
   id?: string
   part_number?: string
@@ -128,14 +132,14 @@ function buildCollectionColumns({
         <DataTableColumnHeader column={column} title='Collection' />
       ),
       cell: ({ row }) => (
-        <div className='space-y-1'>
+        <div className='min-w-0 space-y-1'>
           <div
-            className='font-medium'
+            className='truncate font-medium'
             data-testid={`collections-row-name-${row.original.key}`}
           >
             {row.original.name}
           </div>
-          <div className='text-xs text-muted-foreground'>
+          <div className='truncate text-xs text-muted-foreground'>
             {row.original.description}
           </div>
         </div>
@@ -147,7 +151,10 @@ function buildCollectionColumns({
         <DataTableColumnHeader column={column} title='Items' />
       ),
       cell: ({ row }) => (
-        <span data-testid={`collections-row-count-${row.original.key}`}>
+        <span
+          className='block truncate'
+          data-testid={`collections-row-count-${row.original.key}`}
+        >
           {row.original.itemCount}
         </span>
       ),
@@ -216,10 +223,11 @@ function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
       ),
       cell: ({ row }) => (
         <span
-          className='font-medium'
+          className='block truncate font-medium'
           data-testid={`collections-member-${collectionKey(row.original.name)}`}
         >
           <span
+            className='block truncate'
             data-testid={`collections-member-name-${collectionKey(row.original.name)}`}
           >
             {row.original.name}
@@ -233,7 +241,9 @@ function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
         <DataTableColumnHeader column={column} title='Details' />
       ),
       cell: ({ row }) => (
-        <span className='text-muted-foreground'>{row.original.detail}</span>
+        <span className='block truncate text-muted-foreground'>
+          {row.original.detail}
+        </span>
       ),
     },
     {
@@ -243,7 +253,7 @@ function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
       ),
       cell: ({ row }) => (
         <span
-          className='text-muted-foreground'
+          className='block truncate text-muted-foreground'
           data-testid={`collections-member-current-${collectionKey(row.original.name)}`}
         >
           Currently in {row.original.collectionName ?? 'Unassigned'}.
@@ -611,12 +621,15 @@ export function Collections() {
                 data-table-surface='true'
                 data-testid='collections-shared-table'
               >
-                <Table>
+                <Table className={tableClassName}>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
                       <TableRow key={headerGroup.id}>
                         {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
+                          <TableHead
+                            key={header.id}
+                            className={tableHeaderClassName}
+                          >
                             {header.isPlaceholder
                               ? null
                               : flexRender(
@@ -646,7 +659,10 @@ export function Collections() {
                             }}
                           >
                             {row.getVisibleCells().map((cell) => (
-                              <TableCell key={cell.id}>
+                              <TableCell
+                                key={cell.id}
+                                className={tableCellClassName}
+                              >
                                 {flexRender(
                                   cell.column.columnDef.cell,
                                   cell.getContext()
@@ -708,12 +724,15 @@ export function Collections() {
                 data-table-surface='true'
                 data-testid='collections-members-table'
               >
-                <Table>
+                <Table className={tableClassName}>
                   <TableHeader>
                     {membersTable.getHeaderGroups().map((headerGroup) => (
                       <TableRow key={headerGroup.id}>
                         {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
+                          <TableHead
+                            key={header.id}
+                            className={tableHeaderClassName}
+                          >
                             {header.isPlaceholder
                               ? null
                               : flexRender(
@@ -733,7 +752,10 @@ export function Collections() {
                           data-testid={`collections-member-row-${row.original.id}`}
                         >
                           {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
+                            <TableCell
+                              key={cell.id}
+                              className={tableCellClassName}
+                            >
                               {flexRender(
                                 cell.column.columnDef.cell,
                                 cell.getContext()
