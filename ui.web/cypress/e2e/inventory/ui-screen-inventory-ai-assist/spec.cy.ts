@@ -99,7 +99,7 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
         brand: 'Unknown',
         category: 'General',
       })
-      expect(req.body.part_number).to.match(/^URL-EXAMPLE-TEST-LISTINGS-AFX-22073/)
+      expect(req.body.part_number).to.match(/^[A-Z0-9]{12}$/)
       expect(req.body.description).to.contain(
         'Source link: https://example.test/listings/afx-22073.jpg'
       )
@@ -152,7 +152,9 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
     cy.wait('@createPastedItem')
     cy.wait('@items')
     cy.wait('@urlPhotos')
-    cy.contains('example.test afx-22073').should('be.visible')
+    cy.contains('example.test afx-22073')
+      .scrollIntoView()
+      .should('be.visible')
   })
 
   it('UI-SCREEN-INVENTORY-PASTE-CREATE-004 opens paste modal when clipboard is unavailable', () => {
@@ -255,6 +257,8 @@ describe('UI-SCREEN-INVENTORY-PASTE-CREATE', () => {
     cy.wait('@createTextItem')
     cy.wait('@items')
     cy.wait('@textPhotos')
-    cy.contains('Rare Aurora slot car rescue lot').should('be.visible')
+    cy.contains('Rare Aurora slot car rescue lot')
+      .scrollIntoView()
+      .should('be.visible')
   })
 })

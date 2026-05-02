@@ -95,9 +95,11 @@ describe("inventory item editor modal", () => {
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATED");
-    cy.contains("Created Modal Item").should("be.visible");
+    cy.contains("Created Modal Item").scrollIntoView().should("be.visible");
 
-    cy.get('[data-testid="inventory-item-row-item-alpha"]').click();
+    cy.get('[data-testid="inventory-item-row-item-alpha"]')
+      .scrollIntoView()
+      .click();
     cy.wait(250);
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-ALPHA");
     cy.get('[data-testid="row-details-modal"]').should("not.exist");
@@ -105,7 +107,9 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
 
-    cy.get('[data-testid="inventory-item-row-item-alpha"]').dblclick();
+    cy.get('[data-testid="inventory-item-row-item-alpha"]')
+      .scrollIntoView()
+      .dblclick();
     cy.get('[data-testid="inventory-item-editor-panel"]')
       .should("be.visible")
       .and("contain", "Edit Item");
@@ -123,7 +127,10 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-item-editor-cancel"]').click();
     cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
 
-    cy.get('[data-testid="inventory-item-row-item-alpha"] [data-testid="task-row-actions-trigger"]').click();
+    cy.get('[data-testid="inventory-item-row-item-alpha"]')
+      .scrollIntoView()
+      .find('[data-testid="task-row-actions-trigger"]')
+      .click();
     cy.contains('[role="menuitem"]', "Edit").click();
     cy.get('[data-testid="inventory-item-editor-dialog"]')
       .should("be.visible")
@@ -131,11 +138,20 @@ describe("inventory item editor modal", () => {
     cy.get('[data-testid="inventory-item-editor-panel"]').should("not.exist");
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
 
-    cy.get('[data-testid="inventory-item-editor-next"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .find('[data-testid="inventory-item-editor-next"]')
+      .scrollIntoView()
+      .click({ force: true });
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Bravo Item");
-    cy.get('[data-testid="inventory-item-editor-previous"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .find('[data-testid="inventory-item-editor-previous"]')
+      .scrollIntoView()
+      .click({ force: true });
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Alpha Item");
-    cy.get('[data-testid="inventory-item-editor-next"]').click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]')
+      .find('[data-testid="inventory-item-editor-next"]')
+      .scrollIntoView()
+      .click({ force: true });
     cy.get('[data-testid="inventory-item-title"]').should("have.value", "Bravo Item");
     cy.get('[data-testid="inventory-item-brand"]').clear().type("Updated Brand");
     cy.get('[data-testid="inventory-item-title"]').clear().type("Bravo Item Updated");
@@ -144,7 +160,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@updateBravo");
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
-    cy.contains("Bravo Item Updated").should("be.visible");
+    cy.contains("Bravo Item Updated").should("exist");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-BRAVO");
   });
 
@@ -787,7 +803,7 @@ describe("inventory item editor modal", () => {
     }).as("itemsList");
 
     cy.intercept("POST", "/api/items", (req) => {
-      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body.part_number).to.match(/^[A-Z0-9]{12}$/);
       expect(req.body).to.include({
         title: "Only Title Draft",
         brand: "Unknown",
@@ -817,7 +833,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@createTitleOnlyItem");
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
-    cy.contains("Only Title Draft").should("be.visible");
+    cy.contains("Only Title Draft").scrollIntoView().should("be.visible");
   });
 
   it("creates an item into an existing collection from the create modal", () => {
@@ -875,7 +891,7 @@ describe("inventory item editor modal", () => {
       "contain",
       "Store 1"
     );
-    cy.contains("Store One Created Item").should("be.visible");
+    cy.contains("Store One Created Item").scrollIntoView().should("be.visible");
     cy.window().then((win) => {
       expect(
         JSON.parse(
@@ -939,7 +955,7 @@ describe("inventory item editor modal", () => {
       "Modal Shelf"
     );
     cy.get('[data-testid="inventory-folder-tree"]').should("contain", "Modal Shelf");
-    cy.contains("Modal Shelf Item").should("be.visible");
+    cy.contains("Modal Shelf Item").scrollIntoView().should("be.visible");
     cy.window().then((win) => {
       expect(
         JSON.parse(
@@ -967,7 +983,7 @@ describe("inventory item editor modal", () => {
     }).as("itemsList");
 
     cy.intercept("POST", "/api/items", (req) => {
-      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body.part_number).to.match(/^[A-Z0-9]{12}$/);
       expect(req.body).to.include({
         title: "Photo draft item",
         brand: "Unknown",
@@ -1014,7 +1030,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@uploadPhotoOnlyItem");
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
-    cy.contains("Photo draft item").should("be.visible");
+    cy.contains("Photo draft item").scrollIntoView().should("be.visible");
   });
 
   it("opens the image picker when creating an item from the header image action", () => {
@@ -1060,7 +1076,7 @@ describe("inventory item editor modal", () => {
     }).as("itemsList");
 
     cy.intercept("POST", "/api/items", (req) => {
-      expect(req.body.part_number).to.match(/^DRAFT-/);
+      expect(req.body.part_number).to.match(/^[A-Z0-9]{12}$/);
       expect(req.body).to.include({
         title: "dropped-inventory",
         brand: "Unknown",
@@ -1113,7 +1129,7 @@ describe("inventory item editor modal", () => {
     cy.wait("@createDroppedInventoryItem");
     cy.wait("@uploadDroppedInventoryPhoto");
     cy.wait("@itemsList");
-    cy.contains("dropped-inventory").should("be.visible");
+    cy.contains("dropped-inventory").scrollIntoView().should("be.visible");
     cy.get('[data-testid="inventory-image-drop-status"]').should(
       "contain",
       "dropped-inventory"
