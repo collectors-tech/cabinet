@@ -1,5 +1,6 @@
 describe("inventory-compact-collection-filter", () => {
   function signIn() {
+    cy.viewport(1512, 967);
     cy.e2eReset();
     cy.e2eSetSetupState("present");
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
@@ -232,5 +233,74 @@ describe("inventory-compact-collection-filter", () => {
     cy.contains("Watch Count Two").should("be.visible");
     cy.contains("Store Count One").should("not.exist");
     cy.get('[data-testid="inventory-selected-folder-empty"]').should("not.exist");
+  });
+
+  it("stretches the inventory table section to the available viewport height", () => {
+    cy.viewport(1512, 967);
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-layout-1",
+            part_number: "PN-LAYOUT-1",
+            title: "Layout Fill One",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-layout-2",
+            part_number: "PN-LAYOUT-2",
+            title: "Layout Fill Two",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-layout-3",
+            part_number: "PN-LAYOUT-3",
+            title: "Layout Fill Three",
+            status: "active",
+            category: "Cars",
+          },
+        ],
+      },
+    }).as("itemsLayoutFill");
+
+    signIn();
+    cy.wait("@itemsLayoutFill");
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        "cabinet.inventory.item-folder-assignments.v1",
+        JSON.stringify({
+          "item-layout-1": "Store 2",
+          "item-layout-2": "Store 2",
+          "item-layout-3": "Store 2",
+        })
+      );
+    });
+    cy.reload();
+    cy.wait("@itemsLayoutFill");
+
+    cy.get('[data-testid="folder-tree-item-store-2"]').click();
+    cy.get('[data-testid="inventory-workspace"]').should("be.visible");
+    cy.get('[data-testid="inventory-table-card"]').should("be.visible");
+    cy.get('[data-testid="inventory-table-surface"]').should("be.visible");
+
+    cy.get('[data-testid="inventory-table-card"]').then(($card) => {
+      cy.get('[data-testid="inventory-workspace"]').then(($workspace) => {
+        expect($card[0].getBoundingClientRect().height).to.be.closeTo(
+          $workspace[0].getBoundingClientRect().height,
+          2
+        );
+      });
+    });
+    cy.get('[data-testid="inventory-table-surface"]').then(($surface) => {
+      expect($surface[0].getBoundingClientRect().height).to.be.greaterThan(450);
+    });
+    cy.window().then((win) => {
+      expect(win.document.documentElement.scrollHeight).to.be.at.most(
+        win.innerHeight + 2
+      );
+    });
   });
 });
