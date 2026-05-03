@@ -58,16 +58,37 @@ func TestNFRGates(t *testing.T) {
 		t.Fatalf("OpenAndMigrate() error = %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
+	tx, err := conn.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin seed transaction: %v", err)
+	}
+	itemStmt, err := tx.PrepareContext(context.Background(), `INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES (?, 'AFX', 'Slot', ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("prepare canonical seed: %v", err)
+	}
+	defer itemStmt.Close()
+	instanceStmt, err := tx.PrepareContext(context.Background(), `INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes) VALUES (?, ?, 'used', 'loose', 1, '', 1, '', '')`)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("prepare instance seed: %v", err)
+	}
+	defer instanceStmt.Close()
 	for i := 0; i < 5000; i++ {
 		id := fmt.Sprintf("i-%d", i)
 		part := fmt.Sprintf("P-%d", i)
 		title := fmt.Sprintf("Car %d", i)
-		if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES (?, 'AFX', 'Slot', ?, ?)`, id, part, title); err != nil {
+		if _, err := itemStmt.ExecContext(context.Background(), id, part, title); err != nil {
+			_ = tx.Rollback()
 			t.Fatalf("seed canonical %d: %v", i, err)
 		}
-		if _, err := conn.Exec(`INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes) VALUES (?, ?, 'used', 'loose', 1, '', 1, '', '')`, "in-"+id, id); err != nil {
+		if _, err := instanceStmt.ExecContext(context.Background(), "in-"+id, id); err != nil {
+			_ = tx.Rollback()
 			t.Fatalf("seed instance %d: %v", i, err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit seed transaction: %v", err)
 	}
 	searchRepo := search.NewRepository(conn)
 	searchStart := time.Now()
