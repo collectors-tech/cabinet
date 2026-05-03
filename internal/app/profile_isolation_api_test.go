@@ -156,6 +156,9 @@ func TestWishlistDataIsIsolatedByActiveProfile(t *testing.T) {
 	if err := json.NewDecoder(listP2.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode wishlist payload: %v", err)
 	}
+	if payload.Items == nil {
+		t.Fatal("expected empty wishlist items array for isolated profile, got null")
+	}
 	if len(payload.Items) != 0 {
 		t.Fatalf("expected no wishlist items for p2 profile, got %d", len(payload.Items))
 	}

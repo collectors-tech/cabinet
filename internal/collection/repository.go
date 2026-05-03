@@ -15,6 +15,8 @@ type Item struct {
 	ID                      string   `json:"id"`
 	Brand                   string   `json:"brand"`
 	Category                string   `json:"category"`
+	ItemType                string   `json:"item_type"`
+	Condition               string   `json:"condition"`
 	PartNumber              string   `json:"part_number"`
 	Title                   string   `json:"title"`
 	Status                  string   `json:"status"`
@@ -32,7 +34,9 @@ type Item struct {
 	Scale                   string   `json:"scale"`
 	Series                  string   `json:"series"`
 	Description             string   `json:"description"`
+	Notes                   string   `json:"notes"`
 	Tags                    []string `json:"tags"`
+	SourceURLs              []string `json:"source_urls"`
 	CreatedAt               string   `json:"created_at"`
 	CreatedBy               string   `json:"created_by"`
 	UpdatedAt               string   `json:"updated_at"`
@@ -113,14 +117,18 @@ func (r *Repository) CreateItemForProfile(ctx context.Context, profileID string,
 	if err != nil {
 		return Item{}, fmt.Errorf("marshal tags: %w", err)
 	}
+	sourceURLsJSON, err := json.Marshal(in.SourceURLs)
+	if err != nil {
+		return Item{}, fmt.Errorf("marshal source urls: %w", err)
+	}
 
 	in.ID = uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO canonical_items (
-			id, profile_id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.PartNumber, in.Title, in.Status, in.Priority, in.GradingStatus, in.Grader, in.GradeNumeric, boolToInt(in.Slabbed), in.CollectorClassification, in.CarGradeType, in.PackagingGradeType, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, string(tagsJSON), now, defaultAuditActor, now, defaultAuditActor); err != nil {
+			id, profile_id, brand, category, item_type, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, notes, tags_json, source_urls_json, created_at, created_by, updated_at, updated_by
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, strings.TrimSpace(profileID), in.Brand, in.Category, in.ItemType, in.PartNumber, in.Title, in.Status, in.Priority, in.GradingStatus, in.Grader, in.GradeNumeric, boolToInt(in.Slabbed), in.CollectorClassification, in.CarGradeType, in.PackagingGradeType, in.Make, in.Model, in.Year, in.Scale, in.Series, in.Description, in.Notes, string(tagsJSON), string(sourceURLsJSON), now, defaultAuditActor, now, defaultAuditActor); err != nil {
 		return Item{}, fmt.Errorf("create item: %w", err)
 	}
 
@@ -150,6 +158,10 @@ func normalizeItemForCreate(in Item) Item {
 	if in.Category == "" {
 		in.Category = "General"
 	}
+	in.ItemType = strings.TrimSpace(in.ItemType)
+	if in.ItemType == "" {
+		in.ItemType = inferItemTypeFromCategory(in.Category)
+	}
 	in.PartNumber = strings.TrimSpace(in.PartNumber)
 	in.Title = strings.TrimSpace(in.Title)
 	in.Status = normalizeItemLifecycleStatus(in.Status)
@@ -165,7 +177,26 @@ func normalizeItemForCreate(in Item) Item {
 	in.Scale = strings.TrimSpace(in.Scale)
 	in.Series = strings.TrimSpace(in.Series)
 	in.Description = strings.TrimSpace(in.Description)
+	in.Notes = strings.TrimSpace(in.Notes)
+	in.SourceURLs = normalizeSourceURLs(in.SourceURLs)
 	return in
+}
+
+func normalizeSourceURLs(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func normalizeItemLifecycleStatus(raw string) string {
@@ -195,6 +226,18 @@ func normalizeItemGradingStatus(raw string) string {
 	return status
 }
 
+func inferItemTypeFromCategory(category string) string {
+	normalized := strings.ToLower(strings.TrimSpace(category))
+	switch {
+	case strings.Contains(normalized, "trading") || strings.Contains(normalized, "card"):
+		return "Trading Cards"
+	case strings.Contains(normalized, "slot") || strings.Contains(normalized, "car"):
+		return "Slot Cars"
+	default:
+		return "General"
+	}
+}
+
 func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (Item, error) {
 	current, err := r.GetItemByID(ctx, strings.TrimSpace(id))
 	if err != nil {
@@ -206,6 +249,9 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	}
 	if v := strings.TrimSpace(changes.Category); v != "" {
 		next.Category = v
+	}
+	if v := strings.TrimSpace(changes.ItemType); v != "" {
+		next.ItemType = v
 	}
 	if v := strings.TrimSpace(changes.PartNumber); v != "" {
 		next.PartNumber = v
@@ -259,8 +305,14 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	if v := strings.TrimSpace(changes.Description); v != "" {
 		next.Description = v
 	}
+	if v := strings.TrimSpace(changes.Notes); v != "" {
+		next.Notes = v
+	}
 	if len(changes.Tags) > 0 {
 		next.Tags = changes.Tags
+	}
+	if len(changes.SourceURLs) > 0 {
+		next.SourceURLs = normalizeSourceURLs(changes.SourceURLs)
 	}
 	if next.Brand == "" || next.Category == "" || next.PartNumber == "" || next.Title == "" {
 		return Item{}, fmt.Errorf("brand, category, part_number, and title are required")
@@ -270,11 +322,15 @@ func (r *Repository) UpdateItem(ctx context.Context, id string, changes Item) (I
 	if err != nil {
 		return Item{}, fmt.Errorf("marshal tags: %w", err)
 	}
+	sourceURLsJSON, err := json.Marshal(next.SourceURLs)
+	if err != nil {
+		return Item{}, fmt.Errorf("marshal source urls: %w", err)
+	}
 	if _, err := r.db.ExecContext(ctx, `
 		UPDATE canonical_items
-		SET brand = ?, category = ?, part_number = ?, title = ?, status = ?, priority = ?, grading_status = ?, grader = ?, grade_numeric = ?, slabbed = ?, collector_classification = ?, car_grade_type = ?, packaging_grade_type = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, tags_json = ?, updated_at = ?, updated_by = ?
+		SET brand = ?, category = ?, item_type = ?, part_number = ?, title = ?, status = ?, priority = ?, grading_status = ?, grader = ?, grade_numeric = ?, slabbed = ?, collector_classification = ?, car_grade_type = ?, packaging_grade_type = ?, make = ?, model = ?, year = ?, scale = ?, series = ?, description = ?, notes = ?, tags_json = ?, source_urls_json = ?, updated_at = ?, updated_by = ?
 		WHERE id = ?
-	`, next.Brand, next.Category, next.PartNumber, next.Title, next.Status, next.Priority, next.GradingStatus, next.Grader, next.GradeNumeric, boolToInt(next.Slabbed), next.CollectorClassification, next.CarGradeType, next.PackagingGradeType, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, string(tagsJSON), time.Now().UTC().Format(time.RFC3339), defaultAuditActor, id); err != nil {
+	`, next.Brand, next.Category, next.ItemType, next.PartNumber, next.Title, next.Status, next.Priority, next.GradingStatus, next.Grader, next.GradeNumeric, boolToInt(next.Slabbed), next.CollectorClassification, next.CarGradeType, next.PackagingGradeType, next.Make, next.Model, next.Year, next.Scale, next.Series, next.Description, next.Notes, string(tagsJSON), string(sourceURLsJSON), time.Now().UTC().Format(time.RFC3339), defaultAuditActor, id); err != nil {
 		return Item{}, fmt.Errorf("update item: %w", err)
 	}
 	updated, err := r.GetItemByID(ctx, id)
@@ -316,13 +372,14 @@ func (r *Repository) BulkEditItems(ctx context.Context, ids []string, changes It
 func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 	var item Item
 	var tagsRaw string
+	var sourceURLsRaw string
 	var slabbed int
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
+		SELECT id, brand, category, COALESCE(item_type,''), COALESCE((SELECT condition FROM instances WHERE item_id = canonical_items.id ORDER BY created_at ASC LIMIT 1), ''), part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, COALESCE(notes,''), tags_json, COALESCE(source_urls_json,'[]'), created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
 		FROM canonical_items WHERE id = ?
 	`, id).Scan(
-		&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
-		&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.CreatedBy, &item.UpdatedAt, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy,
+		&item.ID, &item.Brand, &item.Category, &item.ItemType, &item.Condition, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
+		&item.Scale, &item.Series, &item.Description, &item.Notes, &tagsRaw, &sourceURLsRaw, &item.CreatedAt, &item.CreatedBy, &item.UpdatedAt, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -333,20 +390,23 @@ func (r *Repository) GetItemByID(ctx context.Context, id string) (Item, error) {
 	if err := json.Unmarshal([]byte(tagsRaw), &item.Tags); err != nil {
 		return Item{}, fmt.Errorf("unmarshal tags: %w", err)
 	}
+	if err := json.Unmarshal([]byte(sourceURLsRaw), &item.SourceURLs); err != nil {
+		return Item{}, fmt.Errorf("unmarshal source urls: %w", err)
+	}
 	item.Slabbed = slabbed == 1
 	return item, nil
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
+		SELECT id, brand, category, COALESCE(item_type,''), COALESCE((SELECT condition FROM instances WHERE item_id = canonical_items.id ORDER BY created_at ASC LIMIT 1), ''), part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, COALESCE(notes,''), tags_json, COALESCE(source_urls_json,'[]'), created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
 		FROM canonical_items ORDER BY created_at ASC
 	`)
 }
 
 func (r *Repository) ListItemsByProfile(ctx context.Context, profileID string) ([]Item, error) {
 	return r.listItemsByQuery(ctx, `
-		SELECT id, brand, category, part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, tags_json, created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
+		SELECT id, brand, category, COALESCE(item_type,''), COALESCE((SELECT condition FROM instances WHERE item_id = canonical_items.id ORDER BY created_at ASC LIMIT 1), ''), part_number, title, status, priority, grading_status, grader, grade_numeric, slabbed, collector_classification, car_grade_type, packaging_grade_type, make, model, year, scale, series, description, COALESCE(notes,''), tags_json, COALESCE(source_urls_json,'[]'), created_at, created_by, updated_at, updated_by, COALESCE(deleted_at,''), COALESCE(deleted_by,'')
 		FROM canonical_items WHERE profile_id = ? ORDER BY created_at ASC
 	`, strings.TrimSpace(profileID))
 }
@@ -363,15 +423,19 @@ func (r *Repository) listItemsByQuery(ctx context.Context, query string, args ..
 	for rows.Next() {
 		var item Item
 		var tagsRaw string
+		var sourceURLsRaw string
 		var slabbed int
 		if err := rows.Scan(
-			&item.ID, &item.Brand, &item.Category, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
-			&item.Scale, &item.Series, &item.Description, &tagsRaw, &item.CreatedAt, &item.CreatedBy, &item.UpdatedAt, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy,
+			&item.ID, &item.Brand, &item.Category, &item.ItemType, &item.Condition, &item.PartNumber, &item.Title, &item.Status, &item.Priority, &item.GradingStatus, &item.Grader, &item.GradeNumeric, &slabbed, &item.CollectorClassification, &item.CarGradeType, &item.PackagingGradeType, &item.Make, &item.Model, &item.Year,
+			&item.Scale, &item.Series, &item.Description, &item.Notes, &tagsRaw, &sourceURLsRaw, &item.CreatedAt, &item.CreatedBy, &item.UpdatedAt, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy,
 		); err != nil {
 			return nil, fmt.Errorf("scan item: %w", err)
 		}
 		if err := json.Unmarshal([]byte(tagsRaw), &item.Tags); err != nil {
 			return nil, fmt.Errorf("unmarshal item tags: %w", err)
+		}
+		if err := json.Unmarshal([]byte(sourceURLsRaw), &item.SourceURLs); err != nil {
+			return nil, fmt.Errorf("unmarshal item source urls: %w", err)
 		}
 		item.Slabbed = slabbed == 1
 		out = append(out, item)
@@ -518,11 +582,15 @@ func itemAuditMap(item Item) map[string]any {
 		"id":             item.ID,
 		"brand":          item.Brand,
 		"category":       item.Category,
+		"item_type":      item.ItemType,
+		"condition":      item.Condition,
 		"part_number":    item.PartNumber,
 		"title":          item.Title,
 		"status":         item.Status,
 		"priority":       item.Priority,
 		"grading_status": item.GradingStatus,
+		"notes":          item.Notes,
+		"source_urls":    item.SourceURLs,
 		"created_at":     item.CreatedAt,
 		"created_by":     item.CreatedBy,
 		"updated_at":     item.UpdatedAt,

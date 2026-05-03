@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 
@@ -44,6 +45,7 @@ export function ShellWorkspaceProvider({
   const [activeProfileId, setActiveProfileId] = useState('local')
   const [activeWorkspace, setActiveWorkspaceState] =
     useState<ShellWorkspace>('navigation')
+  const userSelectedWorkspaceRef = useRef<ShellWorkspace | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -68,7 +70,20 @@ export function ShellWorkspaceProvider({
             return 'navigation'
           }
         })()
+        const userSelectedWorkspace = userSelectedWorkspaceRef.current
         setActiveProfileId(nextProfileId)
+        if (userSelectedWorkspace) {
+          setActiveWorkspaceState(userSelectedWorkspace)
+          try {
+            window.localStorage.setItem(
+              storageKey(nextProfileId),
+              userSelectedWorkspace
+            )
+          } catch {
+            // Ignore storage failures and keep the user's in-memory selection.
+          }
+          return
+        }
         setActiveWorkspaceState(savedWorkspace)
       } catch {
         if (!cancelled) {
@@ -86,6 +101,7 @@ export function ShellWorkspaceProvider({
 
   const setActiveWorkspace = useCallback(
     (workspace: ShellWorkspace) => {
+      userSelectedWorkspaceRef.current = workspace
       setActiveWorkspaceState(workspace)
       try {
         window.localStorage.setItem(storageKey(activeProfileId), workspace)

@@ -8,11 +8,13 @@ import {
   Cog,
   CreditCard,
   HardDrive,
+  Settings as SettingsIcon,
+  Tags,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
-import { Header } from '@/components/layout/header'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -51,6 +53,11 @@ const sidebarNavItems = [
     icon: <HardDrive size={18} />,
   },
   {
+    title: 'Categories',
+    href: '/settings/categories',
+    icon: <Tags size={18} />,
+  },
+  {
     title: 'Operations',
     href: '/settings/operations',
     icon: <Cog size={18} />,
@@ -68,7 +75,17 @@ export function Settings() {
       {/* ===== Top Heading ===== */}
       <Header>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title='Settings'
+          description='Manage account, appearance, storage, and operations preferences.'
+          icon={SettingsIcon}
+          testId='settings-header-title'
+          iconTestId='settings-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />

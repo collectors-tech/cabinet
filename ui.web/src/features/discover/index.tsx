@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { Search } from '@/components/search'
+import { Telescope } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { LanguageSwitch } from '@/components/language-switch'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 
 type DiscoveryItem = {
   candidate_id: string
@@ -19,7 +20,11 @@ type DiscoveryItem = {
   stock_count: number
 }
 
-type DiscoveryActionType = 'ignore' | 'add_to_wishlist' | 'track_price' | 'create_item'
+type DiscoveryActionType =
+  | 'ignore'
+  | 'add_to_wishlist'
+  | 'track_price'
+  | 'create_item'
 
 export function Discover() {
   const [query, setQuery] = useState('')
@@ -52,7 +57,8 @@ export function Discover() {
       const payload = (await response.json()) as { items?: DiscoveryItem[] }
       setItems(payload.items ?? [])
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'discover_list_failed'
+      const message =
+        err instanceof Error ? err.message : 'discover_list_failed'
       setError(message)
       setItems([])
     } finally {
@@ -64,7 +70,10 @@ export function Discover() {
     void loadItems()
   }, [loadItems])
 
-  const applyAction = async (candidateID: string, type: DiscoveryActionType) => {
+  const applyAction = async (
+    candidateID: string,
+    type: DiscoveryActionType
+  ) => {
     setActionStatus(null)
     const response = await fetch('/api/discovery/action', {
       method: 'POST',
@@ -87,7 +96,17 @@ export function Discover() {
     <>
       <Header fixed>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title='Discoveries'
+          description='Not-in-collection candidates with triage actions.'
+          icon={Telescope}
+          testId='discoveries-header-title'
+          iconTestId='discoveries-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -145,7 +164,10 @@ export function Discover() {
             onChange={(event) => setDateFrom(event.target.value)}
             placeholder='Date from (YYYY-MM-DD)'
           />
-          <Button data-testid='discover-apply-filters' onClick={() => void loadItems()}>
+          <Button
+            data-testid='discover-apply-filters'
+            onClick={() => void loadItems()}
+          >
             Apply Filters
           </Button>
         </section>
@@ -176,7 +198,9 @@ export function Discover() {
 
         <div data-testid='discover-list' className='rounded-md border'>
           {loading ? (
-            <p className='p-4 text-sm text-muted-foreground'>Loading discoveries...</p>
+            <p className='p-4 text-sm text-muted-foreground'>
+              Loading discoveries...
+            </p>
           ) : items.length === 0 ? (
             <p className='p-4 text-sm text-muted-foreground'>
               No discovery candidates match current filters.
@@ -189,10 +213,16 @@ export function Discover() {
                     <div>
                       <p className='font-medium'>{item.title}</p>
                       <p className='text-xs text-muted-foreground'>
-                        {item.candidate_id} | ${item.price.toFixed(2)} | Stock {item.stock_count}
+                        {item.candidate_id} | ${item.price.toFixed(2)} | Stock{' '}
+                        {item.stock_count}
                       </p>
                     </div>
-                    <a href={item.url} className='text-sm underline' target='_blank' rel='noreferrer'>
+                    <a
+                      href={item.url}
+                      className='text-sm underline'
+                      target='_blank'
+                      rel='noreferrer'
+                    >
                       Open Listing
                     </a>
                   </div>
@@ -201,7 +231,9 @@ export function Discover() {
                       size='sm'
                       variant='outline'
                       data-testid={`discover-action-ignore-${item.candidate_id}`}
-                      onClick={() => void applyAction(item.candidate_id, 'ignore')}
+                      onClick={() =>
+                        void applyAction(item.candidate_id, 'ignore')
+                      }
                     >
                       Ignore
                     </Button>
@@ -209,7 +241,9 @@ export function Discover() {
                       size='sm'
                       variant='outline'
                       data-testid={`discover-action-wishlist-${item.candidate_id}`}
-                      onClick={() => void applyAction(item.candidate_id, 'add_to_wishlist')}
+                      onClick={() =>
+                        void applyAction(item.candidate_id, 'add_to_wishlist')
+                      }
                     >
                       Add to Wishlist
                     </Button>
@@ -217,14 +251,18 @@ export function Discover() {
                       size='sm'
                       variant='outline'
                       data-testid={`discover-action-track-${item.candidate_id}`}
-                      onClick={() => void applyAction(item.candidate_id, 'track_price')}
+                      onClick={() =>
+                        void applyAction(item.candidate_id, 'track_price')
+                      }
                     >
                       Track Price
                     </Button>
                     <Button
                       size='sm'
                       data-testid={`discover-action-create-${item.candidate_id}`}
-                      onClick={() => void applyAction(item.candidate_id, 'create_item')}
+                      onClick={() =>
+                        void applyAction(item.candidate_id, 'create_item')
+                      }
                     >
                       Create Item
                     </Button>

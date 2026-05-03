@@ -686,6 +686,29 @@ paths:
       responses:
         "204":
           description: Deleted
+  /api/wishlist/convert-owned:
+    post:
+      tags: [Wishlist]
+      summary: Convert wishlist entry to owned inventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        "200":
+          description: Wishlist entry converted to owned inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Invalid or cross-profile wishlist entry
   /api/pricing/track:
     post:
       tags: [Pricing]
@@ -889,6 +912,8 @@ paths:
                   created_items:
                     type: integer
                   created_instances:
+                    type: integer
+                  created_photos:
                     type: integer
                   created_wishlist_entries:
                     type: integer
@@ -1669,6 +1694,36 @@ paths:
       responses:
         "204":
           description: Primary set
+  /api/items/{itemID}/photos/{photoID}/rotate:
+    parameters:
+      - $ref: "#/components/parameters/ItemID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Collection]
+      summary: Rotate photo orientation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction:
+                  type: string
+                  enum: [left, right]
+      responses:
+        "200":
+          description: Rotated photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Photo"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/{photoID}/file:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1857,6 +1912,18 @@ components:
             item_id: { type: string }
             created_at: { type: string }
             updated_at: { type: string }
+    Photo:
+      type: object
+      properties:
+        id: { type: string }
+        item_id: { type: string }
+        filename: { type: string }
+        original_path: { type: string }
+        preview_path: { type: string }
+        thumbnail_path: { type: string }
+        is_primary: { type: boolean }
+        display_order: { type: integer }
+        created_at: { type: string }
     ScannerQuerySetInput:
       type: object
       required: [name, keywords]
@@ -1928,6 +1995,13 @@ components:
         priority: { type: string }
         notes: { type: string }
         highlight_hit: { type: boolean }
+        owned: { type: boolean }
+        price_paid: { type: number }
+        purchase_url: { type: string }
+        purchase_date: { type: string, format: date }
+        purchase_condition: { type: string }
+        quantity: { type: integer }
+        needed_quantity: { type: integer }
     WishlistEntry:
       allOf:
         - $ref: "#/components/schemas/WishlistEntryInput"

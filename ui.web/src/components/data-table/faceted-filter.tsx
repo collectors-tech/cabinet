@@ -9,7 +9,6 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
@@ -28,20 +27,61 @@ type DataTableFacetedFilterProps<TData, TValue> = {
     value: string
     icon?: React.ComponentType<{ className?: string }>
   }[]
+  selectedValues?: Set<string>
+  onSelectedValuesChange?: (values: string[]) => void
+  singleSelect?: boolean
+  testIdPrefix?: string
+}
+
+function filterOptionTestID(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 export function DataTableFacetedFilter<TData, TValue>({
   column,
   title,
   options,
+  selectedValues: controlledSelectedValues,
+  onSelectedValuesChange,
+  singleSelect = false,
+  testIdPrefix,
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const facets = column?.getFacetedUniqueValues()
-  const selectedValues = new Set(column?.getFilterValue() as string[])
+  const lastSelectionAtRef = React.useRef(0)
+  const selectedValues =
+    controlledSelectedValues ?? new Set(column?.getFilterValue() as string[])
+
+  const commitSelectedValues = (nextSelectedValues: Set<string>) => {
+    const filterValues = Array.from(nextSelectedValues)
+    if (onSelectedValuesChange) {
+      onSelectedValuesChange(filterValues)
+      return
+    }
+    column?.setFilterValue(filterValues.length ? filterValues : undefined)
+  }
+
+  const guardDuplicateSelection = () => {
+    const now = performance.now()
+    if (now - lastSelectionAtRef.current < 50) {
+      return false
+    }
+    lastSelectionAtRef.current = now
+    return true
+  }
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant='outline' size='sm' className='h-8 border-dashed'>
+        <Button
+          variant='outline'
+          size='sm'
+          className='h-8 border-dashed'
+          data-testid={testIdPrefix ? `${testIdPrefix}-trigger` : undefined}
+        >
           <PlusCircledIcon className='size-4' />
           {title}
           {selectedValues?.size > 0 && (
@@ -79,7 +119,11 @@ export function DataTableFacetedFilter<TData, TValue>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='w-[200px] p-0' align='start'>
+      <PopoverContent
+        className='w-[200px] p-0'
+        align='start'
+        data-testid={testIdPrefix ? `${testIdPrefix}-content` : undefined}
+      >
         <Command>
           <CommandInput placeholder={title} />
           <CommandList>
@@ -87,20 +131,34 @@ export function DataTableFacetedFilter<TData, TValue>({
             <CommandGroup>
               {options.map((option) => {
                 const isSelected = selectedValues.has(option.value)
+                const selectOption = () => {
+                  if (!guardDuplicateSelection()) {
+                    return
+                  }
+                  const nextSelectedValues = new Set(selectedValues)
+                  if (singleSelect) {
+                    nextSelectedValues.clear()
+                    nextSelectedValues.add(option.value)
+                  } else if (isSelected) {
+                    nextSelectedValues.delete(option.value)
+                  } else {
+                    nextSelectedValues.add(option.value)
+                  }
+                  commitSelectedValues(nextSelectedValues)
+                }
                 return (
-                  <CommandItem
+                  <button
                     key={option.value}
-                    onSelect={() => {
-                      if (isSelected) {
-                        selectedValues.delete(option.value)
-                      } else {
-                        selectedValues.add(option.value)
-                      }
-                      const filterValues = Array.from(selectedValues)
-                      column?.setFilterValue(
-                        filterValues.length ? filterValues : undefined
-                      )
-                    }}
+                    type='button'
+                    role='option'
+                    aria-selected={isSelected}
+                    className='relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
+                    data-testid={
+                      testIdPrefix
+                        ? `${testIdPrefix}-option-${filterOptionTestID(option.value)}`
+                        : undefined
+                    }
+                    onClick={selectOption}
                   >
                     <div
                       className={cn(
@@ -121,7 +179,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                         {facets.get(option.value)}
                       </span>
                     )}
-                  </CommandItem>
+                  </button>
                 )
               })}
             </CommandGroup>
@@ -129,12 +187,16 @@ export function DataTableFacetedFilter<TData, TValue>({
               <>
                 <CommandSeparator />
                 <CommandGroup>
-                  <CommandItem
-                    onSelect={() => column?.setFilterValue(undefined)}
-                    className='justify-center text-center'
+                  <button
+                    type='button'
+                    data-testid={
+                      testIdPrefix ? `${testIdPrefix}-clear` : undefined
+                    }
+                    onClick={() => commitSelectedValues(new Set())}
+                    className='relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-center text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground'
                   >
                     Clear filters
-                  </CommandItem>
+                  </button>
                 </CommandGroup>
               </>
             )}

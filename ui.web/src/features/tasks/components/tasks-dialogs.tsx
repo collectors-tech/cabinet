@@ -1,23 +1,117 @@
+import { useEffect, useRef } from 'react'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { TasksImportDialog } from './tasks-import-dialog'
-import { TasksMutateDrawer } from './tasks-mutate-drawer'
-import { useTasks } from './tasks-provider'
+import {
+  TasksMutateDrawer,
+  type WishlistEntryDraft,
+} from './tasks-mutate-drawer'
+import { type Task } from '../data/schema'
 
-export function TasksDialogs() {
-  const { open, setOpen, currentRow, setCurrentRow } = useTasks()
+export type TasksDialogType = 'create' | 'update' | 'delete' | 'import'
+
+type TasksDialogsProps = {
+  routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+  open: TasksDialogType | null
+  setOpen: (open: TasksDialogType | null) => void
+  currentRow: Task | null
+  setCurrentRow: (task: Task | null) => void
+  navigationRows?: Task[]
+  onWishlistSubmit?: (
+    draft: WishlistEntryDraft,
+    currentRow?: Task
+  ) => Promise<void>
+  onWishlistDelete?: (currentRow: Task) => Promise<void>
+  onWishlistImport?: (entries: WishlistEntryDraft[]) => Promise<void>
+  isWishlistMutating?: boolean
+}
+
+export function TasksDialogs({
+  routePath,
+  open,
+  setOpen,
+  currentRow,
+  setCurrentRow,
+  navigationRows = [],
+  onWishlistSubmit,
+  onWishlistDelete,
+  onWishlistImport,
+  isWishlistMutating = false,
+}: TasksDialogsProps) {
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+  const clearCurrentRowTimerRef = useRef<number | null>(null)
+
+  const cancelPendingClearCurrentRow = () => {
+    if (clearCurrentRowTimerRef.current !== null) {
+      window.clearTimeout(clearCurrentRowTimerRef.current)
+      clearCurrentRowTimerRef.current = null
+    }
+  }
+
+  const clearCurrentRow = () => {
+    cancelPendingClearCurrentRow()
+    clearCurrentRowTimerRef.current = window.setTimeout(() => {
+      setCurrentRow(null)
+      clearCurrentRowTimerRef.current = null
+    }, 500)
+  }
+
+  const currentRowIndex = currentRow
+    ? navigationRows.findIndex((task) => task.id === currentRow.id)
+    : -1
+  const canNavigatePrevious = currentRowIndex > 0
+  const canNavigateNext =
+    currentRowIndex >= 0 && currentRowIndex < navigationRows.length - 1
+
+  const navigateCurrentRow = (offset: number) => {
+    if (currentRowIndex < 0) {
+      return
+    }
+    const nextRow = navigationRows[currentRowIndex + offset]
+    if (!nextRow) {
+      return
+    }
+    cancelPendingClearCurrentRow()
+    setCurrentRow(nextRow)
+    setOpen('update')
+  }
+
+  useEffect(() => {
+    if (open !== null) {
+      cancelPendingClearCurrentRow()
+    }
+  }, [open])
+
+  useEffect(() => cancelPendingClearCurrentRow, [])
+
   return (
     <>
       <TasksMutateDrawer
         key='task-create'
         open={open === 'create'}
-        onOpenChange={() => setOpen('create')}
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            cancelPendingClearCurrentRow()
+          }
+          setOpen(isOpen ? 'create' : null)
+        }}
+        routePath={routePath}
+        onWishlistSubmit={onWishlistSubmit}
+        isLoading={isWishlistMutating}
       />
 
       <TasksImportDialog
         key='tasks-import'
         open={open === 'import'}
-        onOpenChange={() => setOpen('import')}
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            cancelPendingClearCurrentRow()
+          }
+          setOpen(isOpen ? 'import' : null)
+        }}
+        routePath={routePath}
+        onWishlistImport={onWishlistImport}
+        isLoading={isWishlistMutating}
       />
 
       {currentRow && (
@@ -25,43 +119,74 @@ export function TasksDialogs() {
           <TasksMutateDrawer
             key={`task-update-${currentRow.id}`}
             open={open === 'update'}
-            onOpenChange={() => {
-              setOpen('update')
-              setTimeout(() => {
-                setCurrentRow(null)
-              }, 500)
+            onOpenChange={(isOpen) => {
+              if (isOpen) {
+                cancelPendingClearCurrentRow()
+              }
+              setOpen(isOpen ? 'update' : null)
+              if (!isOpen) {
+                clearCurrentRow()
+              }
             }}
             currentRow={currentRow}
+            routePath={routePath}
+            onWishlistSubmit={onWishlistSubmit}
+            isLoading={isWishlistMutating}
+            canNavigatePrevious={canNavigatePrevious}
+            canNavigateNext={canNavigateNext}
+            onNavigatePrevious={() => navigateCurrentRow(-1)}
+            onNavigateNext={() => navigateCurrentRow(1)}
           />
 
           <ConfirmDialog
             key='task-delete'
             destructive
             open={open === 'delete'}
-            onOpenChange={() => {
-              setOpen('delete')
-              setTimeout(() => {
-                setCurrentRow(null)
-              }, 500)
+            onOpenChange={(isOpen) => {
+              if (isOpen) {
+                cancelPendingClearCurrentRow()
+              }
+              setOpen(isOpen ? 'delete' : null)
+              if (!isOpen) {
+                clearCurrentRow()
+              }
             }}
             handleConfirm={() => {
+              if (isWishlistRoute && onWishlistDelete) {
+                void onWishlistDelete(currentRow).then(() => {
+                  setOpen(null)
+                  clearCurrentRow()
+                })
+                return
+              }
               setOpen(null)
-              setTimeout(() => {
-                setCurrentRow(null)
-              }, 500)
+              clearCurrentRow()
               showSubmittedData(
                 currentRow,
                 'The following task has been deleted:'
               )
             }}
+            isLoading={isWishlistMutating}
             className='max-w-md'
-            title={`Delete this task: ${currentRow.id} ?`}
+            title={
+              isWishlistRoute
+                ? `Delete this wishlist entry: ${currentRow.title} ?`
+                : `Delete this task: ${currentRow.id} ?`
+            }
             desc={
-              <>
-                You are about to delete a task with the ID{' '}
-                <strong>{currentRow.id}</strong>. <br />
-                This action cannot be undone.
-              </>
+              isWishlistRoute ? (
+                <>
+                  You are about to delete the wishlist entry for{' '}
+                  <strong>{currentRow.title}</strong>. <br />
+                  This action cannot be undone.
+                </>
+              ) : (
+                <>
+                  You are about to delete a task with the ID{' '}
+                  <strong>{currentRow.id}</strong>. <br />
+                  This action cannot be undone.
+                </>
+              )
             }
             confirmText='Delete'
           />

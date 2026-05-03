@@ -140,6 +140,75 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	}
 }
 
+func TestChatInboxItemStatusLifecycle(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Inbox Status"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Inbox Thread","metadata":{"provider":"openai","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	msgResp := doRequest(t, a, http.MethodPost, "/api/chat/messages", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","role":"user","content":"follow up on this item","context":{"assistant":{"provider":"openai","model":"gpt-4o-mini"}}}`), map[string]string{"Content-Type": "application/json"})
+	if msgResp.Code != http.StatusCreated {
+		t.Fatalf("create message status=%d body=%s", msgResp.Code, msgResp.Body.String())
+	}
+	var msgPayload struct {
+		AssistantHandoff struct {
+			InboxItem struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+			} `json:"inbox_item"`
+		} `json:"assistant_handoff"`
+	}
+	if err := json.NewDecoder(msgResp.Body).Decode(&msgPayload); err != nil {
+		t.Fatalf("decode message payload: %v", err)
+	}
+	if msgPayload.AssistantHandoff.InboxItem.ID == "" {
+		t.Fatalf("expected assistant handoff inbox item id")
+	}
+
+	for _, status := range []string{"read", "unread", "archived"} {
+		statusResp := doRequest(t, a, http.MethodPatch, "/api/chat/inbox/"+msgPayload.AssistantHandoff.InboxItem.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"`+status+`"}`), map[string]string{"Content-Type": "application/json"})
+		if statusResp.Code != http.StatusOK {
+			t.Fatalf("update inbox status %q status=%d body=%s", status, statusResp.Code, statusResp.Body.String())
+		}
+		if !strings.Contains(statusResp.Body.String(), `"status":"`+status+`"`) {
+			t.Fatalf("expected status %q in response, body=%s", status, statusResp.Body.String())
+		}
+	}
+
+	badStatus := doRequest(t, a, http.MethodPatch, "/api/chat/inbox/"+msgPayload.AssistantHandoff.InboxItem.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"deleted"}`), map[string]string{"Content-Type": "application/json"})
+	if badStatus.Code != http.StatusBadRequest {
+		t.Fatalf("bad status status=%d body=%s", badStatus.Code, badStatus.Body.String())
+	}
+
+	inboxList := doRequest(t, a, http.MethodGet, "/api/chat/inbox?profile_id="+p.ID, nil, nil)
+	if inboxList.Code != http.StatusOK {
+		t.Fatalf("list inbox status=%d body=%s", inboxList.Code, inboxList.Body.String())
+	}
+	if !strings.Contains(inboxList.Body.String(), `"status":"archived"`) {
+		t.Fatalf("expected persisted archived status, body=%s", inboxList.Body.String())
+	}
+}
+
 func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
 	t.Parallel()
 

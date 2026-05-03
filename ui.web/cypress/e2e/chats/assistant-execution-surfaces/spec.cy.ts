@@ -1,5 +1,6 @@
 describe('chats/assistant-execution-surfaces', () => {
   function bootstrapInventory() {
+    cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
@@ -13,6 +14,10 @@ describe('chats/assistant-execution-surfaces', () => {
     cy.intercept('POST', '/api/chat/actions/apply').as('assistantApply')
 
     cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-id"]').should(($threadId) => {
+      expect($threadId.text().trim()).not.to.eq('')
+      expect($threadId.text().trim()).not.to.eq('bootstrapping')
+    })
     cy.get('[data-testid="shell-assistant-permission-boundary"]').should('contain', 'preview-first, confirm-required')
     cy.get('[data-testid="shell-assistant-execution-state"]').should('contain', 'idle')
 

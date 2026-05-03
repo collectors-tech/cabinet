@@ -145,4 +145,186 @@ describe('settings/storage', () => {
       'Thumbnail rebuild completed for 5 photos across 2 items.'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-007 creates, lists, and restores backups from Settings Storage', () => {
+    const backups = ['C:/cabinet/backups/cabinet-2026-04-21-120000.db']
+
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { backups: [...backups] },
+      })
+    }).as('backupList')
+    cy.intercept('POST', '/api/backup/run', (req) => {
+      backups.unshift('C:/cabinet/backups/cabinet-2026-04-21-130000.db')
+      req.reply({
+        statusCode: 200,
+        body: { backup_path: backups[0] },
+      })
+    }).as('backupRun')
+    cy.intercept('POST', '/api/backup/restore', (req) => {
+      expect(req.body).to.deep.equal({
+        backup_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+      })
+      req.reply({
+        statusCode: 200,
+        body: { ok: true },
+      })
+    }).as('backupRestore')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 1)
+    cy.get('[data-testid="settings-storage-backup-run"]').click()
+    cy.wait('@backupRun')
+    cy.wait('@backupList')
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Backup created successfully.'
+    )
+    cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 2)
+    cy.get('[data-testid="settings-storage-backup-row"]').first().should(
+      'contain',
+      'cabinet-2026-04-21-130000.db'
+    )
+
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .find('[data-testid="settings-storage-backup-restore"]')
+      .click()
+    cy.get('[data-testid="settings-storage-restore-confirm"]').should('be.visible')
+    cy.get('[data-testid="settings-storage-restore-submit"]').click()
+    cy.wait('@backupRestore')
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Backup restored successfully.'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-008 reports restore failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: ['C:/cabinet/backups/cabinet-2026-04-21-090000.db'] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/backup/restore', {
+      statusCode: 400,
+      body: { error: 'failed_to_restore_backup' },
+    }).as('backupRestore')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .find('[data-testid="settings-storage-backup-restore"]')
+      .click()
+    cy.get('[data-testid="settings-storage-restore-submit"]').click()
+    cy.wait('@backupRestore')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Backup restore failed.'
+    )
+    cy.get('[data-testid="settings-storage-restore-confirm"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-009 runs storage integrity check and shows healthy result', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/data/repair', {
+      statusCode: 200,
+      body: { integrity_check: 'ok' },
+    }).as('repairCheck')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-repair-run"]').click()
+    cy.wait('@repairCheck')
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'Database integrity check passed.'
+    )
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'ok'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-010 reports integrity-check failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+    cy.intercept('POST', '/api/data/repair', {
+      statusCode: 500,
+      body: { error: 'failed_to_repair_check' },
+    }).as('repairCheck')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.get('[data-testid="settings-storage-repair-run"]').click()
+    cy.wait('@repairCheck')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-repair-result"]').should(
+      'contain',
+      'Database integrity check failed.'
+    )
+  })
 })

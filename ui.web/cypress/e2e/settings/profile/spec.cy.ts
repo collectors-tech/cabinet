@@ -1,10 +1,10 @@
 describe('settings/profile', () => {
   function signInToSettings() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2F')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/profile',
+    })
   }
 
   beforeEach(() => {

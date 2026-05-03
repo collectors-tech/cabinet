@@ -65,6 +65,9 @@ Cabinet SHALL maintain a strict per-file migration audit at `openspec/migrations
 - `docs/auth/CLERK_BILLING_SETUP.md` -> `openspec/specs/general/cloud-auth-billing/spec.md`
 
 ## Allowed Published Markdown Exceptions
+- `docs/CONSOLE-OUTPUT-STANDARD.md`
+- `docs/PRODUCT-OVERVIEW.md`
+- `docs/PRODUCT_OVERVIEW_PLAN.md`
 - `docs/help-center/**/*.md`
 - `docs/auth/exploration-auth-setup.md`
 

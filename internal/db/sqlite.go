@@ -109,6 +109,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			profile_id TEXT NOT NULL DEFAULT '',
 			brand TEXT NOT NULL,
 			category TEXT NOT NULL,
+			item_type TEXT NOT NULL DEFAULT '',
 			part_number TEXT NOT NULL,
 			title TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
@@ -126,7 +127,9 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			scale TEXT NOT NULL DEFAULT '',
 			series TEXT NOT NULL DEFAULT '',
 			description TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
+			source_urls_json TEXT NOT NULL DEFAULT '[]',
 			for_sale INTEGER NOT NULL DEFAULT 0,
 			structured_offers_json TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -281,6 +284,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			priority TEXT NOT NULL DEFAULT 'normal',
 			notes TEXT NOT NULL DEFAULT '',
 			highlight_hit INTEGER NOT NULL DEFAULT 1,
+			below_target_now INTEGER NOT NULL DEFAULT 0,
+			owned INTEGER NOT NULL DEFAULT 0,
+			price_paid REAL NOT NULL DEFAULT 0,
+			purchase_url TEXT NOT NULL DEFAULT '',
+			purchase_date TEXT NOT NULL DEFAULT '',
+			purchase_condition TEXT NOT NULL DEFAULT '',
+			quantity INTEGER NOT NULL DEFAULT 0,
+			needed_quantity INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (item_id) REFERENCES canonical_items(id) ON DELETE CASCADE
@@ -496,6 +507,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.priority: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "item_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.item_type: %w", err)
+	}
 	if err := ensureColumn(ctx, tx, tx, "canonical_items", "grading_status", "TEXT NOT NULL DEFAULT 'ungraded'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.grading_status: %w", err)
@@ -540,6 +555,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items.deleted_by: %w", err)
 	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "notes", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.notes: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "canonical_items", "source_urls_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure canonical_items.source_urls_json: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_canonical_items_profile_id ON canonical_items(profile_id);`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure canonical_items profile index: %w", err)
@@ -547,6 +570,38 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure wishlist_entries.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "below_target_now", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.below_target_now: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "owned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.owned: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "price_paid", "REAL NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.price_paid: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_url: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_date", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_date: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "purchase_condition", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.purchase_condition: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "quantity", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.quantity: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "wishlist_entries", "needed_quantity", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure wishlist_entries.needed_quantity: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_wishlist_entries_profile_id ON wishlist_entries(profile_id);`); err != nil {
 		conn.Close()

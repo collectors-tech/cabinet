@@ -1,9 +1,15 @@
-import { useState } from 'react'
+import { type ComponentType, useState } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Trash2, CircleArrowUp, ArrowUpDown, Download } from 'lucide-react'
+import {
+  ArrowUpDown,
+  CircleArrowUp,
+  Download,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { sleep } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,23 +21,44 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { TasksMultiDeleteDialog } from './tasks-multi-delete-dialog'
 
-type DataTableBulkActionsProps<TData> = {
+interface DataTableBulkActionsProps<TData> {
   table: Table<TData>
+  routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
+  onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
+  onWishlistBulkPriorityChange?: (tasks: Task[], priority: string) => Promise<void>
+  onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
+  onWishlistExport?: (tasks: Task[]) => void
+  isWishlistMutating?: boolean
 }
 
 export function DataTableBulkActions<TData>({
   table,
+  routePath,
+  onWishlistBulkStatusChange,
+  onWishlistBulkPriorityChange,
+  onWishlistBulkDelete,
+  onWishlistExport,
+  isWishlistMutating = false,
 }: DataTableBulkActionsProps<TData>) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const selectedRows = table.getFilteredSelectedRowModel().rows
+  const selectedTasks = selectedRows.map((row) => row.original as Task)
+  const isWishlistRoute = routePath === '/_authenticated/wishlist/'
+  const wishlistStatusOptions = [
+    { label: 'Watching', value: 'wishlist' },
+    { label: 'Below target', value: 'discovered' },
+  ]
 
   const handleBulkStatusChange = (status: string) => {
-    const selectedTasks = selectedRows.map((row) => row.original as Task)
+    if (isWishlistRoute && onWishlistBulkStatusChange) {
+      void onWishlistBulkStatusChange(selectedTasks, status)
+      return
+    }
+
     toast.promise(sleep(2000), {
       loading: 'Updating status...',
       success: () => {
@@ -44,7 +71,11 @@ export function DataTableBulkActions<TData>({
   }
 
   const handleBulkPriorityChange = (priority: string) => {
-    const selectedTasks = selectedRows.map((row) => row.original as Task)
+    if (isWishlistRoute && onWishlistBulkPriorityChange) {
+      void onWishlistBulkPriorityChange(selectedTasks, priority)
+      return
+    }
+
     toast.promise(sleep(2000), {
       loading: 'Updating priority...',
       success: () => {
@@ -57,7 +88,12 @@ export function DataTableBulkActions<TData>({
   }
 
   const handleBulkExport = () => {
-    const selectedTasks = selectedRows.map((row) => row.original as Task)
+    if (isWishlistRoute && onWishlistExport) {
+      onWishlistExport(selectedTasks)
+      table.resetRowSelection()
+      return
+    }
+
     toast.promise(sleep(2000), {
       loading: 'Exporting tasks...',
       success: () => {
@@ -71,7 +107,10 @@ export function DataTableBulkActions<TData>({
 
   return (
     <>
-      <BulkActionsToolbar table={table} entityName='task'>
+      <BulkActionsToolbar
+        table={table}
+        entityName={isWishlistRoute ? 'wishlist entry' : 'task'}
+      >
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -82,6 +121,7 @@ export function DataTableBulkActions<TData>({
                   className='size-8'
                   aria-label='Update status'
                   title='Update status'
+                  disabled={isWishlistMutating}
                 >
                   <CircleArrowUp />
                   <span className='sr-only'>Update status</span>
@@ -93,18 +133,23 @@ export function DataTableBulkActions<TData>({
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent sideOffset={14}>
-            {statuses.map((status) => (
-              <DropdownMenuItem
-                key={status.value}
-                defaultValue={status.value}
-                onClick={() => handleBulkStatusChange(status.value)}
-              >
-                {status.icon && (
-                  <status.icon className='size-4 text-muted-foreground' />
-                )}
-                {status.label}
-              </DropdownMenuItem>
-            ))}
+            {(isWishlistRoute ? wishlistStatusOptions : statuses).map((status) => {
+              const StatusIcon =
+                'icon' in status ? (status.icon as ComponentType<{ className?: string }>) : null
+
+              return (
+                <DropdownMenuItem
+                  key={status.value}
+                  defaultValue={status.value}
+                  onClick={() => handleBulkStatusChange(status.value)}
+                >
+                  {StatusIcon ? (
+                    <StatusIcon className='size-4 text-muted-foreground' />
+                  ) : null}
+                  {status.label}
+                </DropdownMenuItem>
+              )
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -118,6 +163,7 @@ export function DataTableBulkActions<TData>({
                   className='size-8'
                   aria-label='Update priority'
                   title='Update priority'
+                  disabled={isWishlistMutating}
                 >
                   <ArrowUpDown />
                   <span className='sr-only'>Update priority</span>
@@ -151,15 +197,20 @@ export function DataTableBulkActions<TData>({
               size='icon'
               onClick={() => handleBulkExport()}
               className='size-8'
-              aria-label='Export tasks'
-              title='Export tasks'
+              aria-label={
+                isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'
+              }
+              title={isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}
+              disabled={isWishlistMutating}
             >
               <Download />
-              <span className='sr-only'>Export tasks</span>
+              <span className='sr-only'>
+                {isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}
+              </span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Export tasks</p>
+            <p>{isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -170,15 +221,32 @@ export function DataTableBulkActions<TData>({
               size='icon'
               onClick={() => setShowDeleteConfirm(true)}
               className='size-8'
-              aria-label='Delete selected tasks'
-              title='Delete selected tasks'
+              aria-label={
+                isWishlistRoute
+                  ? 'Delete selected wishlist entries'
+                  : 'Delete selected tasks'
+              }
+              title={
+                isWishlistRoute
+                  ? 'Delete selected wishlist entries'
+                  : 'Delete selected tasks'
+              }
+              disabled={isWishlistMutating}
             >
               <Trash2 />
-              <span className='sr-only'>Delete selected tasks</span>
+              <span className='sr-only'>
+                {isWishlistRoute
+                  ? 'Delete selected wishlist entries'
+                  : 'Delete selected tasks'}
+              </span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Delete selected tasks</p>
+            <p>
+              {isWishlistRoute
+                ? 'Delete selected wishlist entries'
+                : 'Delete selected tasks'}
+            </p>
           </TooltipContent>
         </Tooltip>
       </BulkActionsToolbar>
@@ -187,6 +255,9 @@ export function DataTableBulkActions<TData>({
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
         table={table}
+        routePath={routePath}
+        onWishlistBulkDelete={onWishlistBulkDelete}
+        isLoading={isWishlistMutating}
       />
     </>
   )

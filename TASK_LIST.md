@@ -1,67 +1,69 @@
 # TASK_LIST
 
-Last synced from GitHub issues: 2026-02-22 10:39:32 +11:00
+Last synced from GitHub issues: 2026-04-25 22:55 +10:00
 
 ## Status Legend
-- `IN_PROGRESS`: issue has `in-progress` label
-- `OPEN`: issue is open without `in-progress` label
-- `DONE`: issue is closed
+- `OPEN`: issue is open and not yet complete.
+- `DONE`: issue is closed and merged or otherwise resolved.
+- Work is executed one focused issue branch at a time, validated, merged into `develop`, then the demo is rebuilt and restarted.
 
-## Active UI Backlog (2026-02-23)
-- [ ] #64 [OPEN] [UI] Mobile drawer navigation for small screens
-  URL: https://github.com/collectors-tech/cabinet/issues/64
+## Current Execution Queue
+- [ ] #644 [OPEN] Collections: remove duplicate Selected collection section
+- [ ] #645 [OPEN] Collections: convert Collection members section into items table
+- [ ] #637 [OPEN] Epic: Redesign Inventory as a table-first collection browser
+- [x] #643 [DONE] Collections: implement two-table selected collection layout
+- [x] #665 [DONE] Workspace collection deletes should remove stale options from compact filters
+- [x] #640 [DONE] Move Inventory photos into item-scoped modal with row quick action
+- [x] #641 [DONE] Move Inventory barcodes into item-scoped modal with row quick action
+- [x] #642 [DONE] Add responsive Cypress coverage for Inventory table-first redesign
+- [x] #646 [DONE] Inventory: add assign-to-collection action on each item row
+- [x] #636 [DONE] Make inventory collection-browser context menu actions visibly effective
+- [x] #635 [DONE] Implement real mobile camera photo capture for inventory items
+- [x] #634 [DONE] Unify page header actions and reclaim workspace height
 
-## M1 - Foundation and Core Experience
-- [ ] #1 [IN_PROGRESS] [Backlog] Application Core and Runtime
-  URL: https://github.com/collectors-tech/cabinet/issues/1
-- [ ] #2 [IN_PROGRESS] [Backlog] WebAuthn Login, Locking, and Recovery
-  URL: https://github.com/collectors-tech/cabinet/issues/2
-- [ ] #3 [IN_PROGRESS] [Backlog] Multi-Profile Local User Support
-  URL: https://github.com/collectors-tech/cabinet/issues/3
-- [ ] #4 [IN_PROGRESS] [Backlog] Collection Core (Canonical Items + Instances)
-  URL: https://github.com/collectors-tech/cabinet/issues/4
-- [ ] #5 [IN_PROGRESS] [Backlog] Photo System (Upload, Derivatives, Primary, Fullscreen)
-  URL: https://github.com/collectors-tech/cabinet/issues/5
-- [ ] #6 [IN_PROGRESS] [Backlog] Barcode System and Variant Handling
-  URL: https://github.com/collectors-tech/cabinet/issues/6
-- [ ] #7 [IN_PROGRESS] [Backlog] Search, Filters, and Saved Views
-  URL: https://github.com/collectors-tech/cabinet/issues/7
-- [ ] #8 [IN_PROGRESS] [Backlog] Data Management (Import/Export, Reindex, Repair)
-  URL: https://github.com/collectors-tech/cabinet/issues/8
-- [ ] #9 [OPEN] [Backlog] Local Backup and Restore Reliability
-  URL: https://github.com/collectors-tech/cabinet/issues/9
+## CI, Runtime, And Repository Hygiene
+- [ ] #553 [OPEN] Consolidate duplicated main gate GitHub Actions workflows
+- [ ] #555 [OPEN] Stabilize main gate CI failures on release PR
+- [ ] #551 [OPEN] chore(repo): archive stale non-archive branches
+- [ ] #547 [OPEN] [Blocker] UI journeys regression runner path is stale
+- [ ] #546 [OPEN] [Blocker] Runtime pre-canceled Run fast-exit test flake
+- [ ] #545 [OPEN] [Blocker] Onboarding sample-data category coverage regression
+- [ ] #544 [OPEN] [Blocker] Commerce lifecycle tests red in app suite
+- [ ] #543 [OPEN] [Blocker] Chat thread schema mismatch: chat_threads missing metadata_json
+- [ ] #542 [OPEN] [Blocker] OpenAPI gate fails: missing required 4XX response contracts
+- [ ] #521 [OPEN] chore(ui): reduce lint and format baseline blocking focused PR validation
+- [ ] #518 [OPEN] bug(runtime): parallel app startup hits migration timeouts and canceled runs miss fast-exit path
+- [ ] #480 [OPEN] test(runtime): /api/test/reset fails on shared managed DB when schema table is missing
 
-## M2 - Discovery and Matching
-- [ ] #10 [OPEN] [Backlog] Scanner Engine (Query Sets, Scheduling, Rate Limits)
-  URL: https://github.com/collectors-tech/cabinet/issues/10
-- [ ] #11 [OPEN] [Backlog] eBay Provider v1 Integration
-  URL: https://github.com/collectors-tech/cabinet/issues/11
-- [ ] #12 [OPEN] [Backlog] Matching Engine and Confidence Rules
-  URL: https://github.com/collectors-tech/cabinet/issues/12
-- [ ] #13 [OPEN] [Backlog] Not In My Collection Panel and Actions
-  URL: https://github.com/collectors-tech/cabinet/issues/13
+## Product Follow-Up
+- [ ] #537 [OPEN] feat(collections): convert collections screen into shared-table management surface
+- [ ] #526 [OPEN] feat(shell): set document title to Cabinet - <Page Title>
+- [ ] #513 [OPEN] bug(inbox): inbox workspace empty state exposes no actionable affordances
+- [ ] #487 [OPEN] bug(inbox): top-level /inbox route resolves to 404
+- [ ] #484 [OPEN] bug(collections): page shows duplicate create affordances in same view
+- [ ] #479 [OPEN] OpenAI integration: browser-login/provider-runtime follow-up beyond stub UX
 
-## M3 - Intelligence and Commercial
-- [ ] #14 [OPEN] [Backlog] Wishlist and Target Price Signals
-  URL: https://github.com/collectors-tech/cabinet/issues/14
-- [ ] #15 [OPEN] [Backlog] Price Tracking and History Export
-  URL: https://github.com/collectors-tech/cabinet/issues/15
-- [ ] #16 [OPEN] [Backlog] Dashboard (Discoveries, Hits, Drops, Stats)
-  URL: https://github.com/collectors-tech/cabinet/issues/16
-- [ ] #17 [OPEN] [Backlog] AI Assist (OpenAI) with Confirmation Guardrails
-  URL: https://github.com/collectors-tech/cabinet/issues/17
-- [ ] #18 [OPEN] [Backlog] Licensing System and Feature Gating
-  URL: https://github.com/collectors-tech/cabinet/issues/18
-- [ ] #19 [IN_PROGRESS] [Backlog] Settings Surface and Secret Storage
-  URL: https://github.com/collectors-tech/cabinet/issues/19
+## Integrations Follow-Up
+- [ ] #512 [OPEN] bug(integrations): OpenAI validate reports success even when token is missing
+- [ ] #511 [OPEN] bug(integrations): empty-token save validation is not clearly bound to the token field
+- [ ] #510 [OPEN] bug(integrations): needs-config OpenAI connect dialog lacks a clear labeled save-first setup flow
+- [ ] #509 [OPEN] bug(integrations): needs-config connect dialog exposes Validate and Sync before setup is completed
+- [ ] #508 [OPEN] bug(integrations): provider dialog exposes inert Sync action without visible result
+- [ ] #507 [OPEN] bug(integrations): validate success feedback does not update visible provider health state
+- [ ] #506 [OPEN] bug(integrations): provider edit dialog inputs have no visible or programmatic labels
+- [ ] #505 [OPEN] bug(integrations): route leaks raw integrations.title and integrations.description keys
 
-## M4 - Hardening and Beta Launch
-- [ ] #20 [OPEN] [Backlog] Error Handling and Crash Recovery UX
-  URL: https://github.com/collectors-tech/cabinet/issues/20
-- [ ] #21 [OPEN] [Backlog] Logging, Diagnostics, and Redaction
-  URL: https://github.com/collectors-tech/cabinet/issues/21
-- [ ] #22 [OPEN] [Backlog] Beta Hardening and NFR Gate Validation
-  URL: https://github.com/collectors-tech/cabinet/issues/22
-- [ ] #23 [OPEN] [Backlog] Future Hooks Scaffold (Disabled by Default)
-  URL: https://github.com/collectors-tech/cabinet/issues/23
-
+## Exploration And Traceability
+- [ ] #502 [OPEN] [Exploration] Traceability / backlog closure pass
+- [ ] #501 [OPEN] [Exploration] Cross-cutting UX audit and traceability pass
+- [ ] #500 [OPEN] [Exploration] Runtime / operational states audit and traceability pass
+- [ ] #499 [OPEN] [Exploration] Settings / preferences audit and traceability pass
+- [ ] #498 [OPEN] [Exploration] Inbox / communications audit and traceability pass
+- [ ] #497 [OPEN] [Exploration] Assistant / AI surfaces audit and traceability pass
+- [ ] #496 [OPEN] [Exploration] Integrations audit and traceability pass
+- [ ] #495 [OPEN] [Exploration] Tasks / operational surfaces audit and traceability pass
+- [ ] #493 [OPEN] [Exploration] Collections audit and traceability pass
+- [ ] #492 [OPEN] [Exploration] Item detail / workflow audit and traceability pass
+- [ ] #489 [OPEN] [Exploration] App shell / navigation audit and traceability pass
+- [ ] #488 [OPEN] [Exploration] Public / entry audit and traceability pass
+- [ ] #189 [OPEN] Cabinet Continuous Implementation Program - Wave Execution

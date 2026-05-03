@@ -2,6 +2,8 @@ param(
   [switch]$Rebuild,
   [switch]$FreshData,
   [switch]$Background,
+  [switch]$Restart,
+  [switch]$AllowParallel,
   [int]$Port = 17880
 )
 
@@ -29,16 +31,13 @@ if ($FreshData -and (Test-Path $dataDir)) {
   Remove-Item -Recurse -Force $dataDir
 }
 
-New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-
-$existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-if ($existing) {
-  $pids = @($existing | Select-Object -ExpandProperty OwningProcess -Unique)
-  throw "Port $Port is already in use by PID(s): $($pids -join ', '). Stop the existing listener first."
+if ($Restart -and $AllowParallel) {
+  throw 'Restart cannot be combined with AllowParallel.'
 }
 
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+
 $args = @(
-  '--allow-parallel',
   '--no-open-browser',
   '--data-dir', $dataDir,
   '--profile', $profile,
@@ -46,10 +45,28 @@ $args = @(
   '--port', $Port
 )
 
+$mode = 'reuse-or-attach'
+$parallelNote = 'singleton endpoint guard enabled'
+if ($Restart) {
+  $mode = 'restart'
+}
+if ($AllowParallel) {
+  $mode = 'parallel'
+  $parallelNote = 'explicit parallel mode enabled'
+}
+if ($Restart) {
+  $args += '--restart'
+}
+if ($AllowParallel) {
+  $args += '--allow-parallel'
+}
+
 Write-Host "[start-exploration-local] Executable: $exePath"
 Write-Host "[start-exploration-local] Data dir:   $dataDir"
 Write-Host "[start-exploration-local] Port:       $Port"
 Write-Host "[start-exploration-local] URL:        $url"
+Write-Host "[start-exploration-local] Mode:       $mode"
+Write-Host "[start-exploration-local] Guard:      $parallelNote"
 Write-Host '[start-exploration-local] Expected first-run path:'
 Write-Host '  1. Complete setup wizard'
 Write-Host '  2. Choose Auth Mode = local'
