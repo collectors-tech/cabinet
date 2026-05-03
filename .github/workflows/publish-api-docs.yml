@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      CABINET_DOCS_PAT: ${{ secrets.CABINET_DOCS_PAT }}
     steps:
       - name: Checkout cabinet
         uses: actions/checkout@v4
@@ -26,21 +28,29 @@ jobs:
       - name: Build API docs
         run: npx --yes @redocly/cli@latest build-docs docs/api/openapi.yaml -o docs/api/index.html
 
+      - name: Skip external docs publish when token is not configured
+        if: env.CABINET_DOCS_PAT == ''
+        run: |
+          echo "::notice title=API docs publish skipped::CABINET_DOCS_PAT is not configured, so generated API docs were validated but not pushed to collectors-tech/cabinet-docs."
+
       - name: Checkout cabinet-docs docs branch
+        if: env.CABINET_DOCS_PAT != ''
         uses: actions/checkout@v4
         with:
           repository: collectors-tech/cabinet-docs
           ref: docs
-          token: ${{ secrets.CABINET_DOCS_PAT }}
+          token: ${{ env.CABINET_DOCS_PAT }}
           path: cabinet-docs
 
       - name: Sync generated docs
+        if: env.CABINET_DOCS_PAT != ''
         run: |
           mkdir -p cabinet-docs/cabinet/api
           cp docs/api/openapi.yaml cabinet-docs/cabinet/api/openapi.yaml
           cp docs/api/index.html cabinet-docs/cabinet/api/index.html
 
       - name: Commit and push if changed
+        if: env.CABINET_DOCS_PAT != ''
         run: |
           cd cabinet-docs
           git config user.name "github-actions[bot]"
