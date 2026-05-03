@@ -317,6 +317,36 @@ func (s *Service) ListInboxItems(ctx context.Context, profileID string) ([]Inbox
 	return out, rows.Err()
 }
 
+func (s *Service) UpdateInboxItemStatus(ctx context.Context, profileID, inboxID, status string) (InboxItem, error) {
+	profileID = strings.TrimSpace(profileID)
+	inboxID = strings.TrimSpace(inboxID)
+	status = strings.TrimSpace(strings.ToLower(status))
+	if profileID == "" || inboxID == "" {
+		return InboxItem{}, fmt.Errorf("profile_id and inbox_id are required")
+	}
+	switch status {
+	case "queued", "unread", "read", "archived":
+	default:
+		return InboxItem{}, fmt.Errorf("invalid inbox status")
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE chat_inbox_items
+		SET status = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND profile_id = ?
+	`, status, inboxID, profileID)
+	if err != nil {
+		return InboxItem{}, fmt.Errorf("update inbox item status: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return InboxItem{}, fmt.Errorf("update inbox item status: %w", err)
+	}
+	if count == 0 {
+		return InboxItem{}, fmt.Errorf("inbox item not found")
+	}
+	return s.getInboxItem(ctx, profileID, inboxID)
+}
+
 func (s *Service) getInboxItem(ctx context.Context, profileID, inboxID string) (InboxItem, error) {
 	var item InboxItem
 	var metadataJSON string

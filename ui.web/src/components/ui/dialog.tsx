@@ -48,9 +48,11 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  closeButtonTestId,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  closeButtonTestId?: string
   showCloseButton?: boolean
 }) {
   return (
@@ -67,6 +69,7 @@ function DialogContent({
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
+            data-testid={closeButtonTestId}
             data-slot='dialog-close'
             className="absolute end-4 top-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >

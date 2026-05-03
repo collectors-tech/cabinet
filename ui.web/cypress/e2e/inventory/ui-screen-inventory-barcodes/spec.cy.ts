@@ -7,6 +7,12 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function openBarcodesModal() {
+    cy.get('[data-testid="inventory-row-barcodes-action"]').first().click()
+    cy.get('[data-testid="inventory-barcodes-dialog"]').should('be.visible')
+    cy.get('[data-testid="inventory-barcodes-panel"]').should('be.visible')
+  }
+
   it('UI-SCREEN-INVENTORY-BARCODES-001 adds barcode and updates local lookup results', () => {
     cy.intercept('GET', '/api/items', {
       statusCode: 200,
@@ -45,7 +51,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
-    cy.get('[data-testid="inventory-barcodes-section"]').should('be.visible')
+    openBarcodesModal()
     cy.get('[data-testid="inventory-barcodes-add-input"]').type('9780201379624')
     cy.get('[data-testid="inventory-barcodes-add-button"]').click()
     cy.wait('@addBarcode')
@@ -80,6 +86,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
+    openBarcodesModal()
     cy.get('[data-testid="inventory-barcodes-lookup-input"]').clear().type('0000000000000')
     cy.get('[data-testid="inventory-barcodes-lookup-button"]').click()
     cy.wait('@lookupNoMatch')
@@ -132,6 +139,7 @@ describe('UI-SCREEN-INVENTORY-BARCODES', () => {
 
     signIn()
     cy.wait('@items')
+    openBarcodesModal()
     cy.get('[data-testid="inventory-barcodes-lookup-input"]').clear().type('9999999999999')
     cy.get('[data-testid="inventory-barcodes-lookup-button"]').click()
     cy.get('[data-testid="inventory-barcodes-lookup-loading"]').should('be.visible')

@@ -38,11 +38,35 @@ func main() {
 	openBrowserValue, openBrowserSet := os.LookupEnv("CABINET_OPEN_BROWSER")
 	log.Printf("%s", buildEffectiveStartupConfigLine(cfg))
 	browserLaunch := resolveBrowserLaunch(os.Args[1:], openBrowserValue, openBrowserSet)
+	allowParallel := startupAllowsParallel()
+	restartRequested := startupWantsRestart()
+	requestedProbe := resolveRequestedRuntimeProbe(cfg, fetchRuntimeEndpointProbe, isRuntimeAddrInUse)
+	log.Printf("%s", runtimeEndpointStatusLogLine(requestedProbe))
+	if restartRequested {
+		switch requestedProbe.Status {
+		case "occupied":
+			log.Fatalf("runtime restart failed: requested endpoint %s is occupied by a non-Cabinet listener", requestedProbe.URL)
+		case "cabinet":
+			restartResult, err := restartRequestedRuntime(
+				requestedProbe,
+				cfg.Addr,
+				requestRuntimeShutdown,
+				waitForRuntimeRestartReady,
+				isRuntimeProcessAlive,
+				terminateRuntimeProcess,
+			)
+			if err != nil {
+				log.Fatalf("runtime restart failed: %v", err)
+			}
+			log.Printf("%s", runtimeRestartLogLine(restartResult, cfg.DataDir))
+		}
+	}
 	attachDecision, attachErr := resolveRunningRuntimeAttach(cfg.DataDir, isRuntimeProcessAlive, isRuntimeEndpointHealthy)
 	if attachErr != nil {
 		log.Printf("runtime attach check skipped: %v", attachErr)
 	} else if attachDecision.Attach {
 		log.Printf("%s", runtimeAttachLogLine(attachDecision, cfg.DataDir))
+		log.Printf("%s", runtimeAttachUserMessage(attachDecision))
 		if !browserLaunch.Enabled {
 			if strings.TrimSpace(browserLaunch.DisableNote) != "" {
 				log.Printf("%s", browserLaunch.DisableNote)
@@ -50,6 +74,24 @@ func main() {
 			return
 		}
 		if err := launcher.OpenBrowser(attachDecision.URL); err != nil {
+			log.Printf("browser attach launch skipped: %v", err)
+		}
+		return
+	}
+	requestedAttachDecision := runtimeAttachDecision{}
+	if !restartRequested && requestedProbe.Status == "cabinet" {
+		requestedAttachDecision = resolveRequestedRuntimeAttach(cfg, allowParallel, isRuntimeEndpointHealthy)
+	}
+	if requestedAttachDecision.Attach {
+		log.Printf("%s", runtimeAttachLogLine(requestedAttachDecision, cfg.DataDir))
+		log.Printf("%s", runtimeAttachUserMessage(requestedAttachDecision))
+		if !browserLaunch.Enabled {
+			if strings.TrimSpace(browserLaunch.DisableNote) != "" {
+				log.Printf("%s", browserLaunch.DisableNote)
+			}
+			return
+		}
+		if err := launcher.OpenBrowser(requestedAttachDecision.URL); err != nil {
 			log.Printf("browser attach launch skipped: %v", err)
 		}
 		return
@@ -114,5 +156,14 @@ func openBrowserEnabled(value string, ok bool) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+func startupAllowsParallel() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_ALLOW_PARALLEL"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }

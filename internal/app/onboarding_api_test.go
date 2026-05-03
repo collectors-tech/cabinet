@@ -33,10 +33,10 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("first sample seed status=%d body=%s", firstSeed.Code, firstSeed.Body.String())
 	}
 	var firstPayload struct {
-		CreatedItems          int  `json:"created_items"`
-		CreatedWishlist       int  `json:"created_wishlist_entries"`
-		TotalItems            int  `json:"total_items"`
-		TotalWishlist         int  `json:"total_wishlist_entries"`
+		CreatedItems            int  `json:"created_items"`
+		CreatedWishlist         int  `json:"created_wishlist_entries"`
+		TotalItems              int  `json:"total_items"`
+		TotalWishlist           int  `json:"total_wishlist_entries"`
 		AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
 	}
 	if err := json.NewDecoder(firstSeed.Body).Decode(&firstPayload); err != nil {
@@ -114,7 +114,83 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	if firstPayload.TotalItems < 6 {
 		t.Fatalf("expected at least 6 seeded items for representative sample content, got %+v", firstPayload)
 	}
+	if firstPayload.TotalItems < 30 {
+		t.Fatalf("expected richer inventory sample content across folders, got %+v", firstPayload)
+	}
 	if firstPayload.TotalWishlist < 3 {
 		t.Fatalf("expected seeded wishlist coverage, got %+v", firstPayload)
+	}
+
+	settingsResp := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/settings", nil, nil)
+	if settingsResp.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settingsResp.Code, settingsResp.Body.String())
+	}
+	var settingsPayload struct {
+		Settings map[string]string `json:"settings"`
+	}
+	if err := json.NewDecoder(settingsResp.Body).Decode(&settingsPayload); err != nil {
+		t.Fatalf("decode settings payload: %v", err)
+	}
+	var folderAssignments map[string]string
+	if err := json.Unmarshal([]byte(settingsPayload.Settings["inventory.folder-item-assignments.v1"]), &folderAssignments); err != nil {
+		t.Fatalf("decode inventory folder assignments: %v", err)
+	}
+	if len(folderAssignments) < 30 {
+		t.Fatalf("expected folder assignments for richer sample inventory, got %d: %+v", len(folderAssignments), folderAssignments)
+	}
+	seenFolders := make(map[string]struct{})
+	for itemID, folderName := range folderAssignments {
+		if strings.TrimSpace(itemID) == "" || strings.TrimSpace(folderName) == "" {
+			t.Fatalf("expected non-empty item and folder assignments, got item=%q folder=%q", itemID, folderName)
+		}
+		seenFolders[strings.TrimSpace(folderName)] = struct{}{}
+	}
+	for _, requiredFolder := range []string{"Store 1", "Store 3", "Warehouse 2", "Archive A"} {
+		if _, ok := seenFolders[requiredFolder]; !ok {
+			t.Fatalf("expected seeded folder assignment for %q, got folders=%+v", requiredFolder, seenFolders)
+		}
+	}
+
+	wishlistResp := doRequest(t, a, http.MethodGet, "/api/wishlist", nil, nil)
+	if wishlistResp.Code != http.StatusOK {
+		t.Fatalf("wishlist sample status=%d body=%s", wishlistResp.Code, wishlistResp.Body.String())
+	}
+	var wishlistPayload struct {
+		Items []struct {
+			Priority       string `json:"priority"`
+			Notes          string `json:"notes"`
+			BelowTargetNow bool   `json:"below_target_now"`
+			HighlightHit   bool   `json:"highlight_hit"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(wishlistResp.Body).Decode(&wishlistPayload); err != nil {
+		t.Fatalf("decode wishlist payload: %v", err)
+	}
+	if len(wishlistPayload.Items) < 5 {
+		t.Fatalf("expected at least 5 representative wishlist sample rows, got %+v", wishlistPayload.Items)
+	}
+	priorities := make(map[string]struct{})
+	hasBelowTarget := false
+	hasActionableNote := false
+	hasHighlightHit := false
+	for _, entry := range wishlistPayload.Items {
+		priorities[strings.TrimSpace(entry.Priority)] = struct{}{}
+		hasBelowTarget = hasBelowTarget || entry.BelowTargetNow
+		hasActionableNote = hasActionableNote || strings.Contains(strings.ToLower(entry.Notes), "sample")
+		hasHighlightHit = hasHighlightHit || entry.HighlightHit
+	}
+	for _, required := range []string{"high", "medium", "low"} {
+		if _, ok := priorities[required]; !ok {
+			t.Fatalf("expected representative wishlist priority %q, got %+v", required, priorities)
+		}
+	}
+	if !hasBelowTarget {
+		t.Fatalf("expected at least one below-target wishlist sample row, got %+v", wishlistPayload.Items)
+	}
+	if !hasActionableNote {
+		t.Fatalf("expected wishlist sample rows to include review notes, got %+v", wishlistPayload.Items)
+	}
+	if !hasHighlightHit {
+		t.Fatalf("expected wishlist sample rows to include highlighted hit coverage, got %+v", wishlistPayload.Items)
 	}
 }

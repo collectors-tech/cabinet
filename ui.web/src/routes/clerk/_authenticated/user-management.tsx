@@ -7,11 +7,11 @@ import {
   useRouter,
 } from '@tanstack/react-router'
 import { SignedIn, useAuth, UserButton } from '@clerk/clerk-react'
-import { ExternalLink, Loader2 } from 'lucide-react'
+import { ExternalLink, Loader2, Users } from 'lucide-react'
 import { ClerkLogo } from '@/assets/clerk-logo'
 import { Button } from '@/components/ui/button'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { LearnMore } from '@/components/learn-more'
 import { Search } from '@/components/search'
@@ -51,7 +51,17 @@ function UserManagement() {
         <UsersProvider>
           <Header fixed>
             <Search />
-            <div className='ms-auto flex items-center space-x-4'>
+            <HeaderTitle
+              title='Users'
+              description='Manage users and roles.'
+              icon={Users}
+              testId='clerk-users-header-title'
+              iconTestId='clerk-users-page-icon'
+            />
+            <div
+              className='ms-auto flex items-center space-x-4'
+              data-header-title-avoid='true'
+            >
               <LanguageSwitch />
               <ThemeSwitch />
               <UserButton />

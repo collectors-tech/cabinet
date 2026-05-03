@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ScanSearch } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
 type QuerySet = {
   id: string
@@ -95,7 +96,11 @@ function parseErrorCode(payload: unknown, fallback: string): string {
   return fallback
 }
 
-function mapScannerActionError(operation: 'run' | 'retry', status: number, errorCode: string): ActionFeedback {
+function mapScannerActionError(
+  operation: 'run' | 'retry',
+  status: number,
+  errorCode: string
+): ActionFeedback {
   if (operation === 'run' && status === 400) {
     return {
       summary: 'Run failed due to query validation.',
@@ -126,7 +131,10 @@ function mapScannerActionError(operation: 'run' | 'retry', status: number, error
   if (status >= 500) {
     return {
       summary: 'Market Watch service is temporarily unavailable.',
-      actions: ['Retry shortly.', 'Check diagnostics for provider/runtime health.'],
+      actions: [
+        'Retry shortly.',
+        'Check diagnostics for provider/runtime health.',
+      ],
       diagnosticCode: errorCode,
     }
   }
@@ -143,33 +151,55 @@ function mapScannerActionError(operation: 'run' | 'retry', status: number, error
 export function Scanner() {
   const [querySets, setQuerySets] = useState<QuerySet[]>([])
   const [failures, setFailures] = useState<Failure[]>([])
-  const [candidatesByQuerySet, setCandidatesByQuerySet] = useState<Record<string, Candidate[]>>({})
-  const [runSummaryByQuerySet, setRunSummaryByQuerySet] = useState<Record<string, RunSummary>>({})
-  const [runMetaByQuerySet, setRunMetaByQuerySet] = useState<Record<string, RunMeta>>({})
+  const [candidatesByQuerySet, setCandidatesByQuerySet] = useState<
+    Record<string, Candidate[]>
+  >({})
+  const [runSummaryByQuerySet, setRunSummaryByQuerySet] = useState<
+    Record<string, RunSummary>
+  >({})
+  const [runMetaByQuerySet, setRunMetaByQuerySet] = useState<
+    Record<string, RunMeta>
+  >({})
   const [providerHealth, setProviderHealth] = useState('unknown')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
-  const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(
+    null
+  )
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
   const [newScheduleCron, setNewScheduleCron] = useState('0 */6 * * *')
-  const [createValidation, setCreateValidation] = useState<CreateQueryValidation>({})
+  const [createValidation, setCreateValidation] =
+    useState<CreateQueryValidation>({})
   const [providerMode, setProviderMode] = useState<ProviderMode>('single')
   const [singleProvider, setSingleProvider] = useState('ebay')
-  const [multiProviders, setMultiProviders] = useState<string[]>(['ebay', 'amazon'])
-  const [providerValidation, setProviderValidation] = useState<string | null>(null)
+  const [multiProviders, setMultiProviders] = useState<string[]>([
+    'ebay',
+    'amazon',
+  ])
+  const [providerValidation, setProviderValidation] = useState<string | null>(
+    null
+  )
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
-  const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<string | null>(null)
-  const [editingQuerySetID, setEditingQuerySetID] = useState<string | null>(null)
+  const [selectedOutputQuerySetID, setSelectedOutputQuerySetID] = useState<
+    string | null
+  >(null)
+  const [editingQuerySetID, setEditingQuerySetID] = useState<string | null>(
+    null
+  )
   const [editingName, setEditingName] = useState('')
   const [editingKeywords, setEditingKeywords] = useState('')
   const [editingScheduleCron, setEditingScheduleCron] = useState('')
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
-  const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(null)
-  const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>('cards')
+  const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(
+    null
+  )
+  const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>(
+    'cards'
+  )
   const quickScanFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadScanner = useCallback(async () => {
@@ -191,8 +221,12 @@ export function Scanner() {
         throw new Error(`provider_health_${healthRes.status}`)
       }
 
-      const querySetPayload = (await querySetsRes.json()) as { query_sets?: QuerySet[] }
-      const failuresPayload = (await failuresRes.json()) as { failures?: Failure[] }
+      const querySetPayload = (await querySetsRes.json()) as {
+        query_sets?: QuerySet[]
+      }
+      const failuresPayload = (await failuresRes.json()) as {
+        failures?: Failure[]
+      }
       const healthPayload = (await healthRes.json()) as { status?: string }
 
       setQuerySets(querySetPayload.query_sets ?? [])
@@ -218,6 +252,28 @@ export function Scanner() {
     void loadScanner()
   }, [loadScanner])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const barcode = new URLSearchParams(window.location.search)
+      .get('barcode')
+      ?.trim()
+    if (!barcode) {
+      return
+    }
+    setNewName(`Barcode ${barcode}`)
+    setNewKeywords(barcode)
+    setActionStatus(`barcode_lookup_ready_${barcode}`)
+    setActionFeedback({
+      summary: 'Barcode lookup is ready for Market Watch.',
+      actions: [
+        'Review provider scope before creating the query set.',
+        'Create the query set or edit the barcode keyword first.',
+      ],
+    })
+  }, [])
+
   const resolveProviderScope = () => {
     if (providerMode === 'single') {
       const normalized = singleProvider.trim().toLowerCase()
@@ -242,7 +298,8 @@ export function Scanner() {
       nextValidation.name = 'Query set name is required.'
     }
     if (keywords.length === 0) {
-      nextValidation.keywords = 'Enter at least one keyword before creating a query set.'
+      nextValidation.keywords =
+        'Enter at least one keyword before creating a query set.'
     }
     if (nextValidation.name || nextValidation.keywords) {
       setCreateValidation(nextValidation)
@@ -278,7 +335,11 @@ export function Scanner() {
     if (!response.ok) {
       setActionStatus('create_query_set_failed')
       setActionFeedback(
-        mapScannerActionError('run', response.status, `create_query_set_${response.status}`)
+        mapScannerActionError(
+          'run',
+          response.status,
+          `create_query_set_${response.status}`
+        )
       )
       return
     }
@@ -323,30 +384,50 @@ export function Scanner() {
         .filter(Boolean),
       schedule_cron: editingScheduleCron.trim(),
     }
-    const response = await fetch(`/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const response = await fetch(
+      `/api/scanner/query-sets/${encodeURIComponent(querySet.id)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    )
     if (!response.ok) {
       setActionStatus('update_query_set_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, `update_query_set_${response.status}`))
+      setActionFeedback(
+        mapScannerActionError(
+          'run',
+          response.status,
+          `update_query_set_${response.status}`
+        )
+      )
       return
     }
     const updated = (await response.json()) as QuerySet
-    setQuerySets((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    setQuerySets((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    )
     setActionStatus(`query_set_updated_${updated.id}`)
     setActionFeedback(null)
     cancelEditQuerySet()
   }
 
   const deleteQuerySet = async (querySetID: string) => {
-    const response = await fetch(`/api/scanner/query-sets/${encodeURIComponent(querySetID)}`, {
-      method: 'DELETE',
-    })
+    const response = await fetch(
+      `/api/scanner/query-sets/${encodeURIComponent(querySetID)}`,
+      {
+        method: 'DELETE',
+      }
+    )
     if (!response.ok) {
       setActionStatus('delete_query_set_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, `delete_query_set_${response.status}`))
+      setActionFeedback(
+        mapScannerActionError(
+          'run',
+          response.status,
+          `delete_query_set_${response.status}`
+        )
+      )
       return
     }
     setQuerySets((current) => current.filter((item) => item.id !== querySetID))
@@ -408,13 +489,17 @@ export function Scanner() {
       setHandoffStatus(`discoveries_handoff_failed_${response.status}`)
       return
     }
-    const payload = (await response.json()) as { items?: Array<{ candidate_id: string }> }
+    const payload = (await response.json()) as {
+      items?: Array<{ candidate_id: string }>
+    }
     setHandoffStatus(`discoveries_handoff_ok_${payload.items?.length ?? 0}`)
   }
 
   const handoffFirstCandidateToWishlist = async (querySetID: string) => {
     const candidates = candidatesByQuerySet[querySetID] ?? []
-    const firstCandidate = candidates.find((candidate) => (candidate.id ?? '').trim() !== '')
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
     if (!firstCandidate || !firstCandidate.id) {
       setHandoffStatus('wishlist_handoff_no_candidate')
       return
@@ -444,7 +529,9 @@ export function Scanner() {
       [querySet.id]: { status: 'running' },
     }))
     const providerScope = Array.isArray(querySet.provider_scope)
-      ? querySet.provider_scope.map((value) => value.trim().toLowerCase()).filter(Boolean)
+      ? querySet.provider_scope
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean)
       : []
     const isBonzaOnly =
       providerScope.length === 1 &&
@@ -466,7 +553,9 @@ export function Scanner() {
           code = fallbackCode
         }
         setActionStatus('run_failed')
-        setActionFeedback(mapScannerActionError('run', bonzaResponse.status, code))
+        setActionFeedback(
+          mapScannerActionError('run', bonzaResponse.status, code)
+        )
         setRunMetaByQuerySet((current) => ({
           ...current,
           [querySet.id]: { status: 'failed' },
@@ -491,7 +580,10 @@ export function Scanner() {
       setActionFeedback(null)
       setRunMetaByQuerySet((current) => ({
         ...current,
-        [querySet.id]: { status: 'succeeded', ranAtISO: new Date().toISOString() },
+        [querySet.id]: {
+          status: 'succeeded',
+          ranAtISO: new Date().toISOString(),
+        },
       }))
       return
     }
@@ -523,7 +615,9 @@ export function Scanner() {
       `/api/scanner/candidates?query_set_id=${encodeURIComponent(querySet.id)}`
     )
     if (candidatesResponse.ok) {
-      const payload = (await candidatesResponse.json()) as { candidates?: Candidate[] }
+      const payload = (await candidatesResponse.json()) as {
+        candidates?: Candidate[]
+      }
       setCandidatesByQuerySet((current) => ({
         ...current,
         [querySet.id]: payload.candidates ?? [],
@@ -541,7 +635,10 @@ export function Scanner() {
     setActionFeedback(null)
     setRunMetaByQuerySet((current) => ({
       ...current,
-      [querySet.id]: { status: 'succeeded', ranAtISO: new Date().toISOString() },
+      [querySet.id]: {
+        status: 'succeeded',
+        ranAtISO: new Date().toISOString(),
+      },
     }))
   }
 
@@ -576,13 +673,13 @@ export function Scanner() {
     await loadScanner()
   }
 
-  const hasNoQuerySets = useMemo(() => !loading && !error && querySets.length === 0, [
-    error,
-    loading,
-    querySets.length,
-  ])
+  const hasNoQuerySets = useMemo(
+    () => !loading && !error && querySets.length === 0,
+    [error, loading, querySets.length]
+  )
 
-  const formatRunStatus = (querySetID: string) => runMetaByQuerySet[querySetID]?.status ?? 'never'
+  const formatRunStatus = (querySetID: string) =>
+    runMetaByQuerySet[querySetID]?.status ?? 'never'
 
   const formatRunTime = (querySetID: string) => {
     const ranAtISO = runMetaByQuerySet[querySetID]?.ranAtISO
@@ -609,7 +706,8 @@ export function Scanner() {
   }
 
   const launchQuickScan = () => {
-    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768
+    const isMobileViewport =
+      typeof window !== 'undefined' && window.innerWidth <= 768
     const hasCameraAPI =
       typeof navigator !== 'undefined' &&
       typeof navigator.mediaDevices !== 'undefined' &&
@@ -618,7 +716,9 @@ export function Scanner() {
     if (isMobileViewport) {
       setQuickScanStatus('Mobile quick capture ready')
     } else if (hasCameraAPI) {
-      setQuickScanStatus('Desktop quick capture ready (camera available + upload fallback)')
+      setQuickScanStatus(
+        'Desktop quick capture ready (camera available + upload fallback)'
+      )
     } else {
       setQuickScanStatus('Desktop quick capture ready (upload fallback active)')
     }
@@ -630,13 +730,20 @@ export function Scanner() {
     if (!file) {
       return
     }
-    const normalized = file.name.replace(/\.[^.]+$/, '').trim().toLowerCase() || 'scan'
+    const normalized =
+      file.name
+        .replace(/\.[^.]+$/, '')
+        .trim()
+        .toLowerCase() || 'scan'
     const suggestions = [
       `${normalized} (primary match)`,
       `${normalized} (alt: foil variant)`,
       `${normalized} (alt: promo variant)`,
     ]
-    const confidencePct = Math.max(52, Math.min(96, 96 - (file.name.length % 32)))
+    const confidencePct = Math.max(
+      52,
+      Math.min(96, 96 - (file.name.length % 32))
+    )
     const entry: QuickScanQueueItem = {
       id: `${Date.now()}-${file.name}`,
       fileName: file.name,
@@ -660,18 +767,25 @@ export function Scanner() {
           ? {
               ...item,
               selectedSuggestion:
-                item.suggestions[(item.suggestions.indexOf(item.selectedSuggestion) + 1) % item.suggestions.length],
+                item.suggestions[
+                  (item.suggestions.indexOf(item.selectedSuggestion) + 1) %
+                    item.suggestions.length
+                ],
               overrideUsed: true,
             }
           : item
       )
     )
-    setQuickScanStatus('Manual override selected. Confirm apply to mutate inventory link state.')
+    setQuickScanStatus(
+      'Manual override selected. Confirm apply to mutate inventory link state.'
+    )
   }
 
   const reviewQuickScanApply = (itemID: string) => {
     setPendingApplyScanID(itemID)
-    setQuickScanStatus('Reviewing apply mutation. Confirm to link scan to inventory.')
+    setQuickScanStatus(
+      'Reviewing apply mutation. Confirm to link scan to inventory.'
+    )
   }
 
   const confirmQuickScanApply = () => {
@@ -685,7 +799,9 @@ export function Scanner() {
           : item
       )
     )
-    setQuickScanStatus('Inventory mutation applied after explicit confirmation.')
+    setQuickScanStatus(
+      'Inventory mutation applied after explicit confirmation.'
+    )
     setPendingApplyScanID(null)
   }
 
@@ -706,7 +822,17 @@ export function Scanner() {
     <>
       <Header fixed>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title='Market Watch'
+          description='Provider scans, listing candidates, and discovery queues.'
+          icon={ScanSearch}
+          testId='market-watch-header-title'
+          iconTestId='market-watch-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -718,11 +844,15 @@ export function Scanner() {
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>Market Watch</h1>
           <p className='text-muted-foreground'>
-            Manage provider query sets, run market watch searches, and recover from provider failures.
+            Manage provider query sets, run market watch searches, and recover
+            from provider failures.
           </p>
         </div>
 
-        <div className='rounded-md border p-3 text-sm' data-testid='scanner-provider-health'>
+        <div
+          className='rounded-md border p-3 text-sm'
+          data-testid='scanner-provider-health'
+        >
           Provider health (eBay): <strong>{providerHealth}</strong>
         </div>
 
@@ -732,14 +862,20 @@ export function Scanner() {
               value={newName}
               onChange={(event) => {
                 setNewName(event.target.value)
-                setCreateValidation((current) => ({ ...current, name: undefined }))
+                setCreateValidation((current) => ({
+                  ...current,
+                  name: undefined,
+                }))
               }}
               placeholder='Query set name'
               aria-invalid={createValidation.name ? 'true' : 'false'}
               data-testid='scanner-new-query-name'
             />
             {createValidation.name ? (
-              <p className='text-xs text-destructive' data-testid='scanner-new-query-name-validation'>
+              <p
+                className='text-xs text-destructive'
+                data-testid='scanner-new-query-name-validation'
+              >
                 {createValidation.name}
               </p>
             ) : null}
@@ -749,14 +885,20 @@ export function Scanner() {
               value={newKeywords}
               onChange={(event) => {
                 setNewKeywords(event.target.value)
-                setCreateValidation((current) => ({ ...current, keywords: undefined }))
+                setCreateValidation((current) => ({
+                  ...current,
+                  keywords: undefined,
+                }))
               }}
               placeholder='Keywords (comma-separated)'
               aria-invalid={createValidation.keywords ? 'true' : 'false'}
               data-testid='scanner-new-query-keywords'
             />
             {createValidation.keywords ? (
-              <p className='text-xs text-destructive' data-testid='scanner-new-query-keywords-validation'>
+              <p
+                className='text-xs text-destructive'
+                data-testid='scanner-new-query-keywords-validation'
+              >
                 {createValidation.keywords}
               </p>
             ) : null}
@@ -798,7 +940,10 @@ export function Scanner() {
           ) : (
             <div className='flex flex-wrap gap-2 md:col-span-2'>
               {MARKET_WATCH_PROVIDER_OPTIONS.map((provider) => (
-                <label key={provider} className='inline-flex items-center gap-2 text-sm'>
+                <label
+                  key={provider}
+                  className='inline-flex items-center gap-2 text-sm'
+                >
                   <input
                     type='checkbox'
                     checked={multiProviders.includes(provider)}
@@ -806,7 +951,9 @@ export function Scanner() {
                       setProviderValidation(null)
                       setMultiProviders((current) => {
                         if (event.target.checked) {
-                          return current.includes(provider) ? current : [...current, provider]
+                          return current.includes(provider)
+                            ? current
+                            : [...current, provider]
                         }
                         return current.filter((value) => value !== provider)
                       })
@@ -818,7 +965,10 @@ export function Scanner() {
               ))}
             </div>
           )}
-          <Button onClick={() => void createQuerySet()} data-testid='scanner-create-query'>
+          <Button
+            onClick={() => void createQuerySet()}
+            data-testid='scanner-create-query'
+          >
             Create Query Set
           </Button>
           <Button
@@ -866,22 +1016,32 @@ export function Scanner() {
             Table
           </Button>
           {quickScanStatus ? (
-            <span className='text-xs text-muted-foreground' data-testid='card-scanner-quick-scan-status'>
+            <span
+              className='text-xs text-muted-foreground'
+              data-testid='card-scanner-quick-scan-status'
+            >
               {quickScanStatus}
             </span>
           ) : (
             <span className='text-xs text-muted-foreground'>
-              Quick Scan supports one-tap mobile capture and desktop upload fallback.
+              Quick Scan supports one-tap mobile capture and desktop upload
+              fallback.
             </span>
           )}
         </section>
-        <section className='rounded-md border p-2 text-xs' data-testid='card-scanner-queue'>
+        <section
+          className='rounded-md border p-2 text-xs'
+          data-testid='card-scanner-queue'
+        >
           {quickScanQueue.length === 0 ? (
             <p className='text-muted-foreground'>No quick-scan items queued.</p>
           ) : (
             <ul className='space-y-1'>
               {quickScanQueue.map((item) => (
-                <li key={item.id} className='flex flex-wrap items-center justify-between gap-2'>
+                <li
+                  key={item.id}
+                  className='flex flex-wrap items-center justify-between gap-2'
+                >
                   <span>{item.fileName}</span>
                   <span className='text-muted-foreground'>{item.status}</span>
                 </li>
@@ -889,7 +1049,10 @@ export function Scanner() {
             </ul>
           )}
         </section>
-        <section className='rounded-md border p-3' data-testid='card-scanner-quick-category'>
+        <section
+          className='rounded-md border p-3'
+          data-testid='card-scanner-quick-category'
+        >
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <p className='text-sm font-medium'>Recent Unlinked Scans</p>
             <div className='flex items-center gap-2'>
@@ -918,8 +1081,12 @@ export function Scanner() {
               No recent unlinked scans. Add quick-scan items to review here.
             </p>
           ) : null}
-          {recentUnlinkedQuickScans.length > 0 && quickCategoryView === 'cards' ? (
-            <ul className='mt-3 space-y-2' data-testid='card-scanner-unlinked-cards-list'>
+          {recentUnlinkedQuickScans.length > 0 &&
+          quickCategoryView === 'cards' ? (
+            <ul
+              className='mt-3 space-y-2'
+              data-testid='card-scanner-unlinked-cards-list'
+            >
               {recentUnlinkedQuickScans.map((item) => (
                 <li
                   key={item.id}
@@ -980,7 +1147,8 @@ export function Scanner() {
                       data-testid={`card-scanner-apply-confirmation-${item.id}`}
                     >
                       <p className='mb-2'>
-                        Confirm apply to link this scan to inventory using selected suggestion.
+                        Confirm apply to link this scan to inventory using
+                        selected suggestion.
                       </p>
                       <div className='flex flex-wrap gap-2'>
                         <Button
@@ -1007,9 +1175,13 @@ export function Scanner() {
               ))}
             </ul>
           ) : null}
-          {recentUnlinkedQuickScans.length > 0 && quickCategoryView === 'table' ? (
+          {recentUnlinkedQuickScans.length > 0 &&
+          quickCategoryView === 'table' ? (
             <div className='mt-3 overflow-x-auto'>
-              <table className='w-full text-xs' data-testid='card-scanner-unlinked-table'>
+              <table
+                className='w-full text-xs'
+                data-testid='card-scanner-unlinked-table'
+              >
                 <thead className='text-left'>
                   <tr>
                     <th className='px-2 py-1'>File</th>
@@ -1025,7 +1197,9 @@ export function Scanner() {
                       <td className='px-2 py-1'>{item.fileName}</td>
                       <td className='px-2 py-1'>{item.confidencePct}%</td>
                       <td className='px-2 py-1'>{item.selectedSuggestion}</td>
-                      <td className='px-2 py-1'>{new Date(item.queuedAtISO).toLocaleString()}</td>
+                      <td className='px-2 py-1'>
+                        {new Date(item.queuedAtISO).toLocaleString()}
+                      </td>
                       <td className='px-2 py-1'>{item.status}</td>
                     </tr>
                   ))}
@@ -1035,7 +1209,10 @@ export function Scanner() {
           ) : null}
         </section>
         {providerValidation ? (
-          <p className='text-sm text-destructive' data-testid='market-watch-provider-validation'>
+          <p
+            className='text-sm text-destructive'
+            data-testid='market-watch-provider-validation'
+          >
             {providerValidation}
           </p>
         ) : null}
@@ -1053,7 +1230,12 @@ export function Scanner() {
           >
             <p className='font-medium'>Market Watch data is unavailable.</p>
             <p className='mt-1 text-muted-foreground'>{error}</p>
-            <Button className='mt-3' variant='outline' size='sm' onClick={() => void loadScanner()}>
+            <Button
+              className='mt-3'
+              variant='outline'
+              size='sm'
+              onClick={() => void loadScanner()}
+            >
               Retry
             </Button>
           </div>
@@ -1064,7 +1246,8 @@ export function Scanner() {
             className='rounded-md border border-dashed p-4 text-sm text-muted-foreground'
             data-testid='scanner-empty-state'
           >
-            No query sets found. Create your first query set to start Market Watch runs.
+            No query sets found. Create your first query set to start Market
+            Watch runs.
           </div>
         ) : null}
 
@@ -1079,7 +1262,10 @@ export function Scanner() {
           </p>
         ) : null}
         {actionFeedback ? (
-          <div className='rounded-md border p-3 text-sm' data-testid='scanner-action-feedback'>
+          <div
+            className='rounded-md border p-3 text-sm'
+            data-testid='scanner-action-feedback'
+          >
             <p className='font-medium'>{actionFeedback.summary}</p>
             <ul className='mt-2 list-disc ps-4 text-muted-foreground'>
               {actionFeedback.actions.map((action) => (
@@ -1087,7 +1273,10 @@ export function Scanner() {
               ))}
             </ul>
             {actionFeedback.diagnosticCode ? (
-              <details className='mt-2 text-xs text-muted-foreground' data-testid='scanner-action-diagnostics'>
+              <details
+                className='mt-2 text-xs text-muted-foreground'
+                data-testid='scanner-action-diagnostics'
+              >
                 <summary>Diagnostics</summary>
                 <p className='mt-1'>{actionFeedback.diagnosticCode}</p>
               </details>
@@ -1096,26 +1285,38 @@ export function Scanner() {
         ) : null}
 
         {querySets.length > 0 && viewMode === 'cards' ? (
-          <section className='rounded-md border' data-testid='scanner-query-list'>
+          <section
+            className='rounded-md border'
+            data-testid='scanner-query-list'
+          >
             <div className='divide-y'>
               {querySets.map((querySet) => (
-                <div key={querySet.id} className='flex flex-wrap items-center justify-between gap-2 p-3'>
+                <div
+                  key={querySet.id}
+                  className='flex flex-wrap items-center justify-between gap-2 p-3'
+                >
                   <div>
                     {editingQuerySetID === querySet.id ? (
                       <div className='grid gap-2'>
                         <Input
                           value={editingName}
-                          onChange={(event) => setEditingName(event.target.value)}
+                          onChange={(event) =>
+                            setEditingName(event.target.value)
+                          }
                           data-testid={`scanner-edit-name-${querySet.id}`}
                         />
                         <Input
                           value={editingKeywords}
-                          onChange={(event) => setEditingKeywords(event.target.value)}
+                          onChange={(event) =>
+                            setEditingKeywords(event.target.value)
+                          }
                           data-testid={`scanner-edit-keywords-${querySet.id}`}
                         />
                         <Input
                           value={editingScheduleCron}
-                          onChange={(event) => setEditingScheduleCron(event.target.value)}
+                          onChange={(event) =>
+                            setEditingScheduleCron(event.target.value)
+                          }
                           data-testid={`scanner-edit-schedule-${querySet.id}`}
                         />
                       </div>
@@ -1133,7 +1334,10 @@ export function Scanner() {
                     >
                       {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
                     </p>
-                    <p className='text-xs text-muted-foreground' data-testid={`scanner-query-schedule-${querySet.id}`}>
+                    <p
+                      className='text-xs text-muted-foreground'
+                      data-testid={`scanner-query-schedule-${querySet.id}`}
+                    >
                       Schedule: {querySet.schedule_cron || 'none'}
                     </p>
                   </div>
@@ -1198,7 +1402,10 @@ export function Scanner() {
         ) : null}
 
         {querySets.length > 0 && viewMode === 'table' ? (
-          <section className='rounded-md border' data-testid='market-watch-query-table'>
+          <section
+            className='rounded-md border'
+            data-testid='market-watch-query-table'
+          >
             <div className='overflow-x-auto'>
               <table className='w-full text-sm'>
                 <thead className='bg-muted/30 text-left'>
@@ -1207,7 +1414,9 @@ export function Scanner() {
                     <th className='px-3 py-2 font-medium'>Provider Scope</th>
                     <th className='px-3 py-2 font-medium'>Last Run Status</th>
                     <th className='px-3 py-2 font-medium'>Last Run Time</th>
-                    <th className='px-3 py-2 font-medium'>Latest Output Summary</th>
+                    <th className='px-3 py-2 font-medium'>
+                      Latest Output Summary
+                    </th>
                     <th className='px-3 py-2 font-medium'>Actions</th>
                   </tr>
                 </thead>
@@ -1218,16 +1427,24 @@ export function Scanner() {
                       <td className='px-3 py-2'>
                         {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
                       </td>
-                      <td className='px-3 py-2 capitalize'>{formatRunStatus(querySet.id)}</td>
-                      <td className='px-3 py-2'>{formatRunTime(querySet.id)}</td>
-                      <td className='px-3 py-2'>{formatOutputSummary(querySet.id)}</td>
+                      <td className='px-3 py-2 capitalize'>
+                        {formatRunStatus(querySet.id)}
+                      </td>
+                      <td className='px-3 py-2'>
+                        {formatRunTime(querySet.id)}
+                      </td>
+                      <td className='px-3 py-2'>
+                        {formatOutputSummary(querySet.id)}
+                      </td>
                       <td className='px-3 py-2'>
                         <Button
                           type='button'
                           size='sm'
                           variant='outline'
                           data-testid={`market-watch-open-output-${querySet.id}`}
-                          onClick={() => setSelectedOutputQuerySetID(querySet.id)}
+                          onClick={() =>
+                            setSelectedOutputQuerySetID(querySet.id)
+                          }
                         >
                           Inspect Output
                         </Button>
@@ -1241,17 +1458,23 @@ export function Scanner() {
         ) : null}
 
         {selectedOutputQuerySetID ? (
-          <section className='rounded-md border p-3' data-testid='market-watch-output-detail'>
+          <section
+            className='rounded-md border p-3'
+            data-testid='market-watch-output-detail'
+          >
             <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='text-sm font-medium'>
-                  {querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)?.name ??
-                    selectedOutputQuerySetID}
+                  {querySets.find(
+                    (querySet) => querySet.id === selectedOutputQuerySetID
+                  )?.name ?? selectedOutputQuerySetID}
                 </p>
                 <p className='mt-1 text-xs text-muted-foreground'>
                   Provider Scope:{' '}
-                  {(querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)
-                    ?.provider_scope ?? ['ebay']
+                  {(
+                    querySets.find(
+                      (querySet) => querySet.id === selectedOutputQuerySetID
+                    )?.provider_scope ?? ['ebay']
                   ).join(', ')}
                 </p>
                 <p className='text-xs text-muted-foreground'>
@@ -1273,28 +1496,41 @@ export function Scanner() {
             {runSummaryByQuerySet[selectedOutputQuerySetID] ? (
               <div className='mt-3 rounded-md border p-2 text-xs'>
                 <p>
-                  Pages scanned: {runSummaryByQuerySet[selectedOutputQuerySetID].page_count}
+                  Pages scanned:{' '}
+                  {runSummaryByQuerySet[selectedOutputQuerySetID].page_count}
                 </p>
                 <p>
-                  Candidates: {runSummaryByQuerySet[selectedOutputQuerySetID].candidates_total}
+                  Candidates:{' '}
+                  {
+                    runSummaryByQuerySet[selectedOutputQuerySetID]
+                      .candidates_total
+                  }
                 </p>
                 <p>
                   Observed page size:{' '}
-                  {runSummaryByQuerySet[selectedOutputQuerySetID].observed_page_size}
+                  {
+                    runSummaryByQuerySet[selectedOutputQuerySetID]
+                      .observed_page_size
+                  }
                 </p>
               </div>
             ) : null}
             <div className='mt-3'>
               <p className='text-xs font-medium'>Latest output items</p>
-              {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length === 0 ? (
-                <p className='text-xs text-muted-foreground'>No output available yet.</p>
+              {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length ===
+              0 ? (
+                <p className='text-xs text-muted-foreground'>
+                  No output available yet.
+                </p>
               ) : (
                 <ul className='mt-1 space-y-1 text-xs text-muted-foreground'>
-                  {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).map((candidate) => (
-                    <li key={candidate.id || candidate.listing_id}>
-                      {candidate.title} ({candidate.source ?? 'unknown'})
-                    </li>
-                  ))}
+                  {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).map(
+                    (candidate) => (
+                      <li key={candidate.id || candidate.listing_id}>
+                        {candidate.title} ({candidate.source ?? 'unknown'})
+                      </li>
+                    )
+                  )}
                 </ul>
               )}
             </div>
@@ -1304,7 +1540,9 @@ export function Scanner() {
                 size='sm'
                 variant='outline'
                 data-testid={`scanner-handoff-wishlist-${selectedOutputQuerySetID}`}
-                onClick={() => void handoffFirstCandidateToWishlist(selectedOutputQuerySetID)}
+                onClick={() =>
+                  void handoffFirstCandidateToWishlist(selectedOutputQuerySetID)
+                }
               >
                 Add First Result to Wishlist
               </Button>
@@ -1314,7 +1552,9 @@ export function Scanner() {
                 variant='outline'
                 data-testid={`scanner-handoff-discoveries-detail-${selectedOutputQuerySetID}`}
                 onClick={() => {
-                  const current = querySets.find((querySet) => querySet.id === selectedOutputQuerySetID)
+                  const current = querySets.find(
+                    (querySet) => querySet.id === selectedOutputQuerySetID
+                  )
                   if (current) {
                     void handoffToDiscoveries(current)
                   }
@@ -1326,45 +1566,56 @@ export function Scanner() {
           </section>
         ) : null}
 
-        {Object.entries(candidatesByQuerySet).map(([querySetID, candidates]) => (
-          <section
-            key={querySetID}
-            className='rounded-md border p-3'
-            data-testid={`scanner-candidates-${querySetID}`}
-          >
-            {runSummaryByQuerySet[querySetID] ? (
-              <p
-                className='mb-2 text-xs text-muted-foreground'
-                data-testid={`scanner-run-summary-${querySetID}`}
-              >
-                Pages: {runSummaryByQuerySet[querySetID].page_count} • Candidates:{' '}
-                {runSummaryByQuerySet[querySetID].candidates_total} • Observed page size:{' '}
-                {runSummaryByQuerySet[querySetID].observed_page_size}
-              </p>
-            ) : null}
-            <p className='mb-2 text-sm font-medium'>Candidates</p>
-            {candidates.length === 0 ? (
-              <p className='text-xs text-muted-foreground'>No candidates returned.</p>
-            ) : (
-              <ul className='space-y-1 text-xs text-muted-foreground'>
-                {candidates.map((candidate) => (
-                  <li key={candidate.id || candidate.listing_id}>
-                    {candidate.title} ({candidate.source ?? 'unknown'})
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
+        {Object.entries(candidatesByQuerySet).map(
+          ([querySetID, candidates]) => (
+            <section
+              key={querySetID}
+              className='rounded-md border p-3'
+              data-testid={`scanner-candidates-${querySetID}`}
+            >
+              {runSummaryByQuerySet[querySetID] ? (
+                <p
+                  className='mb-2 text-xs text-muted-foreground'
+                  data-testid={`scanner-run-summary-${querySetID}`}
+                >
+                  Pages: {runSummaryByQuerySet[querySetID].page_count} •
+                  Candidates:{' '}
+                  {runSummaryByQuerySet[querySetID].candidates_total} • Observed
+                  page size:{' '}
+                  {runSummaryByQuerySet[querySetID].observed_page_size}
+                </p>
+              ) : null}
+              <p className='mb-2 text-sm font-medium'>Candidates</p>
+              {candidates.length === 0 ? (
+                <p className='text-xs text-muted-foreground'>
+                  No candidates returned.
+                </p>
+              ) : (
+                <ul className='space-y-1 text-xs text-muted-foreground'>
+                  {candidates.map((candidate) => (
+                    <li key={candidate.id || candidate.listing_id}>
+                      {candidate.title} ({candidate.source ?? 'unknown'})
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )
+        )}
 
         {failures.length > 0 ? (
           <section className='rounded-md border' data-testid='scanner-failures'>
             <div className='divide-y'>
               {failures.map((failure) => (
-                <div key={failure.id} className='flex flex-wrap items-center justify-between gap-2 p-3'>
+                <div
+                  key={failure.id}
+                  className='flex flex-wrap items-center justify-between gap-2 p-3'
+                >
                   <div>
                     <p className='font-medium'>{failure.provider}</p>
-                    <p className='text-xs text-muted-foreground'>{failure.message}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      {failure.message}
+                    </p>
                   </div>
                   <Button
                     size='sm'

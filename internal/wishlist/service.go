@@ -10,15 +10,22 @@ import (
 )
 
 type Entry struct {
-	ID             string  `json:"id"`
-	ItemID         string  `json:"item_id"`
-	TargetPrice    float64 `json:"target_price"`
-	Priority       string  `json:"priority"`
-	Notes          string  `json:"notes"`
-	HighlightHit   bool    `json:"highlight_hit"`
-	BelowTargetNow bool    `json:"below_target_now"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID                string  `json:"id"`
+	ItemID            string  `json:"item_id"`
+	TargetPrice       float64 `json:"target_price"`
+	Priority          string  `json:"priority"`
+	Notes             string  `json:"notes"`
+	HighlightHit      bool    `json:"highlight_hit"`
+	BelowTargetNow    bool    `json:"below_target_now"`
+	Owned             bool    `json:"owned"`
+	PricePaid         float64 `json:"price_paid"`
+	PurchaseURL       string  `json:"purchase_url"`
+	PurchaseDate      string  `json:"purchase_date"`
+	PurchaseCondition string  `json:"purchase_condition"`
+	Quantity          int     `json:"quantity"`
+	NeededQuantity    int     `json:"needed_quantity"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 type Hit struct {
@@ -53,10 +60,20 @@ func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Ent
 	if in.HighlightHit {
 		highlight = 1
 	}
+	belowTargetNow := 0
+	if in.BelowTargetNow {
+		belowTargetNow = 1
+	}
+	owned := 0
+	if in.Owned {
+		owned = 1
+	}
+	in.Quantity = normalizeWishlistCount(in.Quantity)
+	in.NeededQuantity = normalizeWishlistCount(in.NeededQuantity)
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight)
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity)
 	if err != nil {
 		return Entry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
@@ -84,11 +101,21 @@ func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Ent
 	if in.HighlightHit {
 		highlight = 1
 	}
+	belowTargetNow := 0
+	if in.BelowTargetNow {
+		belowTargetNow = 1
+	}
+	owned := 0
+	if in.Owned {
+		owned = 1
+	}
+	in.Quantity = normalizeWishlistCount(in.Quantity)
+	in.NeededQuantity = normalizeWishlistCount(in.NeededQuantity)
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE wishlist_entries
-		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, updated_at = CURRENT_TIMESTAMP
+		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, below_target_now = ?, owned = ?, price_paid = ?, purchase_url = ?, purchase_date = ?, purchase_condition = ?, quantity = ?, needed_quantity = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.TargetPrice, in.Priority, in.Notes, highlight, in.ID, trimmedProfileID, trimmedProfileID)
+	`, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity, in.ID, trimmedProfileID, trimmedProfileID)
 	if err != nil {
 		return err
 	}
@@ -97,6 +124,18 @@ func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Ent
 
 func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.DeleteForProfile(ctx, "", id)
+}
+
+func (s *Service) ConvertToOwnedForProfile(ctx context.Context, profileID, id string) error {
+	trimmedProfileID := strings.TrimSpace(profileID)
+	itemID, err := s.itemIDForEntry(ctx, trimmedProfileID, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)`, strings.TrimSpace(id), trimmedProfileID, trimmedProfileID); err != nil {
+		return err
+	}
+	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "active", "")
 }
 
 func (s *Service) DeleteForProfile(ctx context.Context, profileID, id string) error {
@@ -119,10 +158,12 @@ func (s *Service) GetByID(ctx context.Context, id string) (Entry, error) {
 func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (Entry, error) {
 	var e Entry
 	var highlight int
+	var belowTargetNow int
+	var owned int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, item_id, target_price, priority, notes, highlight_hit, created_at, updated_at
+		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity, created_at, updated_at
 		FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &e.CreatedAt, &e.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &owned, &e.PricePaid, &e.PurchaseURL, &e.PurchaseDate, &e.PurchaseCondition, &e.Quantity, &e.NeededQuantity, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Entry{}, fmt.Errorf("wishlist entry not found")
@@ -130,7 +171,8 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 		return Entry{}, err
 	}
 	e.HighlightHit = highlight == 1
-	e.BelowTargetNow = s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
+	e.BelowTargetNow = belowTargetNow == 1 || s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
+	e.Owned = owned == 1
 	return e, nil
 }
 
@@ -144,7 +186,7 @@ func (s *Service) ListByProfile(ctx context.Context, profileID string) ([]Entry,
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Entry
+	out := make([]Entry, 0)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
@@ -213,6 +255,13 @@ func normalizeWishlistPriority(raw string) string {
 		return "medium"
 	}
 	return priority
+}
+
+func normalizeWishlistCount(value int) int {
+	if value < 0 {
+		return 0
+	}
+	return value
 }
 
 func (s *Service) itemIDForEntry(ctx context.Context, profileID, entryID string) (string, error) {

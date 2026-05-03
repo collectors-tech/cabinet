@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LayoutDashboard } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -8,13 +10,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { useTranslation } from 'react-i18next'
 
 type DashboardCard = {
   title: string
@@ -84,10 +85,22 @@ export function Dashboard() {
       return []
     }
     return [
-      { title: t('dashboard.metrics.inventoryItems'), value: `${summary.total_items}` },
-      { title: t('dashboard.metrics.inventoryUnits'), value: `${summary.total_instances}` },
-      { title: t('dashboard.metrics.wishlistHits'), value: `${summary.wishlist_hits}` },
-      { title: t('dashboard.metrics.estimatedValue'), value: formatCurrency(summary.estimated_value) },
+      {
+        title: t('dashboard.metrics.inventoryItems'),
+        value: `${summary.total_items}`,
+      },
+      {
+        title: t('dashboard.metrics.inventoryUnits'),
+        value: `${summary.total_instances}`,
+      },
+      {
+        title: t('dashboard.metrics.wishlistHits'),
+        value: `${summary.wishlist_hits}`,
+      },
+      {
+        title: t('dashboard.metrics.estimatedValue'),
+        value: formatCurrency(summary.estimated_value),
+      },
     ]
   }, [summary, t])
 
@@ -95,7 +108,17 @@ export function Dashboard() {
     <>
       <Header fixed>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title={t('dashboard.title')}
+          description={t('dashboard.subtitle')}
+          icon={LayoutDashboard}
+          testId='dashboard-header-title'
+          iconTestId='dashboard-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -106,10 +129,10 @@ export function Dashboard() {
       <Main className='space-y-6'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>{t('dashboard.title')}</h1>
-            <p className='text-muted-foreground'>
-              {t('dashboard.subtitle')}
-            </p>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              {t('dashboard.title')}
+            </h1>
+            <p className='text-muted-foreground'>{t('dashboard.subtitle')}</p>
           </div>
           <Button onClick={() => void loadDashboard()} disabled={loading}>
             {loading ? t('dashboard.refreshing') : t('dashboard.refresh')}
@@ -204,11 +227,15 @@ export function Dashboard() {
           <Card className='col-span-1 lg:col-span-3'>
             <CardHeader>
               <CardTitle>{t('dashboard.recentlyAdded')}</CardTitle>
-              <CardDescription>{t('dashboard.recentlyAddedDescription')}</CardDescription>
+              <CardDescription>
+                {t('dashboard.recentlyAddedDescription')}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className='text-sm text-muted-foreground'>{t('dashboard.loadingItems')}</p>
+                <p className='text-sm text-muted-foreground'>
+                  {t('dashboard.loadingItems')}
+                </p>
               ) : summary?.recently_added?.length ? (
                 <ul className='space-y-2'>
                   {summary.recently_added.map((item) => (
@@ -219,7 +246,9 @@ export function Dashboard() {
                         className='flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted'
                       >
                         <span className='truncate'>{item}</span>
-                        <span className='text-xs text-muted-foreground'>{t('dashboard.openInventory')}</span>
+                        <span className='text-xs text-muted-foreground'>
+                          {t('dashboard.openInventory')}
+                        </span>
                       </a>
                     </li>
                   ))}

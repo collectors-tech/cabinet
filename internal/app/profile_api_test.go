@@ -129,4 +129,16 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	if rebuildPayload["rebuilt_items"].(float64) < 1 || rebuildPayload["rebuilt_photos"].(float64) < 1 {
 		t.Fatalf("expected rebuilt item/photo counts, got %+v", rebuildPayload)
 	}
+
+	repair := doRequest(t, a, http.MethodPost, "/api/data/repair", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if repair.Code != http.StatusOK {
+		t.Fatalf("repair status=%d body=%s", repair.Code, repair.Body.String())
+	}
+	var repairPayload map[string]any
+	if err := json.NewDecoder(repair.Body).Decode(&repairPayload); err != nil {
+		t.Fatalf("decode repair response: %v", err)
+	}
+	if strings.TrimSpace(repairPayload["integrity_check"].(string)) == "" {
+		t.Fatalf("expected integrity check result, got %+v", repairPayload)
+	}
 }

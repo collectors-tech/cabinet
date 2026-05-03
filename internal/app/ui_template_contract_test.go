@@ -230,6 +230,27 @@ func TestI18nBootstrapContract(t *testing.T) {
 	checkContains("../../ui.web/src/locales/en/nav.json", []string{"Dashboard", "Inventory", "Wishlist"})
 }
 
+func TestWishlistLocalizationContract(t *testing.T) {
+	t.Parallel()
+
+	checkContains := func(path string, required []string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(b)
+		for _, token := range required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s missing required wishlist localization token: %s", path, token)
+			}
+		}
+	}
+
+	checkContains("../../ui.web/src/features/wishlist/index.tsx", []string{"t('wishlist.title')", "t('wishlist.description')"})
+	checkContains("../../ui.web/src/locales/en/pages.json", []string{`"wishlist"`, `"title": "Wishlist"`, `"description": "Track wanted items, target prices, and planning decisions before they become owned inventory."`})
+}
+
 func TestLegacyTasksAppsRoutesRemovedContract(t *testing.T) {
 	t.Parallel()
 
@@ -274,7 +295,8 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 		"Folders",
 		"Active Brand",
 		"Active Category",
-		"Collection Browser",
+		"inventory-table-card",
+		"collection-summary-line",
 	})
 }
 
@@ -317,7 +339,7 @@ func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
 	required := []string{
 		"inventoryTreeStorageKey",
 		"inventoryWorkspaceSettingsStorageKeyPrefix",
-		"inventory.folder-tree.v1",
+		"inventory.folder-tree.v2",
 		"loadPersistedWorkspaceSnapshot",
 		"loadProfileWorkspaceSnapshot",
 		"savePersistedWorkspaceSnapshot",
@@ -344,6 +366,96 @@ func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
 	for _, token := range required {
 		if !strings.Contains(src, token) {
 			t.Fatalf("collection workspace missing folder tree persistence/drag token: %s", token)
+		}
+	}
+}
+
+func TestInventorySavedViewsAndFilterContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/tasks/components/tasks-table.tsx")
+	if err != nil {
+		t.Fatalf("read tasks table: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"inventory.saved-views.v1",
+		"inventory-saved-view-select",
+		"inventory-saved-view-save",
+		"inventory-saved-view-name",
+		"inventory-saved-view-submit",
+		"Filter by title or part number...",
+		"Condition",
+		"Category",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("tasks table missing inventory saved view/filter token: %s", token)
+		}
+	}
+}
+
+func TestSettingsOperationsQueueControlsContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/settings/operations/index.tsx")
+	if err != nil {
+		t.Fatalf("read settings operations: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"useProfileSettings",
+		"scanner_schedule",
+		"operations_queue_resume_schedule",
+		"settings-operations-queue-card",
+		"settings-operations-queue-status",
+		"settings-operations-queue-pause",
+		"settings-operations-queue-resume",
+		"Workers paused.",
+		"Workers scheduled:",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("settings operations missing queue control token: %s", token)
+		}
+	}
+
+	forbidden := []string{
+		"Pause Workers (Coming soon)",
+		"Resume Workers (Coming soon)",
+	}
+	for _, token := range forbidden {
+		if strings.Contains(src, token) {
+			t.Fatalf("settings operations still contains placeholder queue control token: %s", token)
+		}
+	}
+}
+
+func TestSettingsOperationsRecoveryWorkflowContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/settings/operations/index.tsx")
+	if err != nil {
+		t.Fatalf("read settings operations: %v", err)
+	}
+	src := string(b)
+
+	required := []string{
+		"settings-operations-auth-recovery-card",
+		"settings-operations-recovery-passphrase-input",
+		"settings-operations-recovery-passphrase-submit",
+		"settings-operations-recovery-reset-submit",
+		"settings-operations-auth-recovery-status",
+		"settings-operations-auth-recovery-summary",
+		"/api/auth/recovery/passphrase",
+		"/api/auth/recovery/reset/begin",
+		"Recovery reset session started.",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("settings operations missing recovery workflow token: %s", token)
 		}
 	}
 }

@@ -1,16 +1,22 @@
 import { useMemo, useState } from 'react'
 import { BookOpenText, FileText, LibraryBig } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { type HelpCenterArticle, helpCenterArticles } from './articles'
 
 type MarkdownBlock =
@@ -110,10 +116,16 @@ function parseMarkdown(content: string): MarkdownBlock[] {
 }
 
 function MarkdownArticle({ article }: { article: HelpCenterArticle }) {
-  const blocks = useMemo(() => parseMarkdown(article.content), [article.content])
+  const blocks = useMemo(
+    () => parseMarkdown(article.content),
+    [article.content]
+  )
 
   return (
-    <div className='space-y-4' data-testid={`help-center-article-content-${article.id}`}>
+    <div
+      className='space-y-4'
+      data-testid={`help-center-article-content-${article.id}`}
+    >
       {blocks.map((block, index) => {
         const key = `${article.id}-${block.type}-${index}`
 
@@ -143,7 +155,10 @@ function MarkdownArticle({ article }: { article: HelpCenterArticle }) {
 
         if (block.type === 'unordered-list') {
           return (
-            <ul key={key} className='list-disc space-y-1 ps-5 text-sm text-muted-foreground'>
+            <ul
+              key={key}
+              className='list-disc space-y-1 ps-5 text-sm text-muted-foreground'
+            >
               {block.items.map((item) => (
                 <li key={`${key}-${item}`}>{item}</li>
               ))}
@@ -153,7 +168,10 @@ function MarkdownArticle({ article }: { article: HelpCenterArticle }) {
 
         if (block.type === 'ordered-list') {
           return (
-            <ol key={key} className='list-decimal space-y-1 ps-5 text-sm text-muted-foreground'>
+            <ol
+              key={key}
+              className='list-decimal space-y-1 ps-5 text-sm text-muted-foreground'
+            >
               {block.items.map((item) => (
                 <li key={`${key}-${item}`}>{item}</li>
               ))}
@@ -172,7 +190,9 @@ function MarkdownArticle({ article }: { article: HelpCenterArticle }) {
 }
 
 export function HelpCenter() {
-  const [selectedArticleId, setSelectedArticleId] = useState(helpCenterArticles[0]?.id ?? '')
+  const [selectedArticleId, setSelectedArticleId] = useState(
+    helpCenterArticles[0]?.id ?? ''
+  )
 
   const groupedArticles = useMemo(() => {
     const grouped = new Map<string, HelpCenterArticle[]>()
@@ -186,13 +206,24 @@ export function HelpCenter() {
   }, [])
 
   const selectedArticle =
-    helpCenterArticles.find((article) => article.id === selectedArticleId) ?? helpCenterArticles[0]
+    helpCenterArticles.find((article) => article.id === selectedArticleId) ??
+    helpCenterArticles[0]
 
   return (
     <>
       <Header fixed>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title='Help Center'
+          description='Browse in-app guides, section walkthroughs, and Cabinet workflow references.'
+          icon={BookOpenText}
+          testId='help-center-header-title'
+          iconTestId='help-center-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -203,7 +234,10 @@ export function HelpCenter() {
       <Main className='space-y-6'>
         <div className='space-y-2'>
           <h1 className='text-2xl font-bold tracking-tight'>Help Center</h1>
-          <p className='text-muted-foreground'>Browse in-app guides, section walkthroughs, and shared Cabinet workflow references.</p>
+          <p className='text-muted-foreground'>
+            Browse in-app guides, section walkthroughs, and shared Cabinet
+            workflow references.
+          </p>
         </div>
 
         <div className='grid gap-4 md:grid-cols-3'>
@@ -215,8 +249,13 @@ export function HelpCenter() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className='text-3xl font-semibold'>{helpCenterArticles.length}</div>
-              <p className='mt-2 text-sm text-muted-foreground'>Help articles are grouped into Getting Started, Sections, and Reference guides.</p>
+              <div className='text-3xl font-semibold'>
+                {helpCenterArticles.length}
+              </div>
+              <p className='mt-2 text-sm text-muted-foreground'>
+                Help articles are grouped into Getting Started, Sections, and
+                Reference guides.
+              </p>
             </CardContent>
           </Card>
 
@@ -228,7 +267,12 @@ export function HelpCenter() {
               </CardTitle>
             </CardHeader>
             <CardContent className='text-sm text-muted-foreground'>
-              Begin with <span className='font-medium text-foreground'>Login and Database Setup</span> to make sure you are in the right Cabinet profile before using Inventory, Wishlist, or Integrations.
+              Begin with{' '}
+              <span className='font-medium text-foreground'>
+                Login and Database Setup
+              </span>{' '}
+              to make sure you are in the right Cabinet profile before using
+              Inventory, Wishlist, or Integrations.
             </CardContent>
           </Card>
 
@@ -240,7 +284,8 @@ export function HelpCenter() {
               </CardTitle>
             </CardHeader>
             <CardContent className='text-sm text-muted-foreground'>
-              Select any article from the library to open its in-app reading panel without leaving the Help Center route.
+              Select any article from the library to open its in-app reading
+              panel without leaving the Help Center route.
             </CardContent>
           </Card>
         </div>
@@ -249,14 +294,17 @@ export function HelpCenter() {
           <Card data-testid='help-center-article-library'>
             <CardHeader>
               <CardTitle>Browse articles</CardTitle>
-              <CardDescription>The Help Center now surfaces the available article set instead of a placeholder-only card.</CardDescription>
+              <CardDescription>
+                The Help Center now surfaces the available article set instead
+                of a placeholder-only card.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className='space-y-6'>
                 {groupedArticles.map(([category, articles]) => (
                   <div key={category} className='space-y-3'>
                     <div className='flex items-center justify-between'>
-                      <h2 className='text-sm font-semibold uppercase tracking-wide text-muted-foreground'>
+                      <h2 className='text-sm font-semibold tracking-wide text-muted-foreground uppercase'>
                         {category}
                       </h2>
                       <Badge variant='outline'>{articles.length}</Badge>
@@ -274,8 +322,12 @@ export function HelpCenter() {
                             onClick={() => setSelectedArticleId(article.id)}
                           >
                             <div className='space-y-1'>
-                              <div className='font-medium text-foreground'>{article.title}</div>
-                              <div className='whitespace-normal text-xs text-muted-foreground'>{article.summary}</div>
+                              <div className='font-medium text-foreground'>
+                                {article.title}
+                              </div>
+                              <div className='text-xs whitespace-normal text-muted-foreground'>
+                                {article.summary}
+                              </div>
                             </div>
                           </Button>
                         )
@@ -293,7 +345,9 @@ export function HelpCenter() {
                 <Badge variant='outline'>{selectedArticle.category}</Badge>
                 <Badge variant='secondary'>In-app article</Badge>
               </div>
-              <CardTitle data-testid='help-center-selected-article-title'>{selectedArticle.title}</CardTitle>
+              <CardTitle data-testid='help-center-selected-article-title'>
+                {selectedArticle.title}
+              </CardTitle>
               <CardDescription>{selectedArticle.summary}</CardDescription>
             </CardHeader>
             <CardContent>

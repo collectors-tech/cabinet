@@ -14,7 +14,7 @@ export function useProfileSettings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const saveInFlightRef = useRef<Promise<Record<string, string>> | null>(null)
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -57,11 +57,8 @@ export function useProfileSettings() {
       if (!activeProfileId) {
         throw new Error('active_profile_missing')
       }
-      if (saveInFlightRef.current) {
-        return saveInFlightRef.current
-      }
 
-      const request = (async () => {
+      const runSave = async () => {
         setSaving(true)
         try {
           const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
@@ -78,14 +75,14 @@ export function useProfileSettings() {
         } finally {
           setSaving(false)
         }
-      })()
-
-      saveInFlightRef.current = request
-      try {
-        return await request
-      } finally {
-        saveInFlightRef.current = null
       }
+
+      const request = saveQueueRef.current.then(runSave, runSave)
+      saveQueueRef.current = request.then(
+        () => undefined,
+        () => undefined
+      )
+      return await request
     },
     [activeProfileId]
   )

@@ -9,9 +9,16 @@ type DataTableToolbarProps<TData> = {
   table: Table<TData>
   searchPlaceholder?: string
   searchKey?: string
+  searchInputTestId?: string
+  toolbarTestId?: string
+  customFilters?: React.ReactNode
   filters?: {
     columnId: string
     title: string
+    singleSelect?: boolean
+    testIdPrefix?: string
+    selectedValues?: Set<string>
+    onSelectedValuesChange?: (values: string[]) => void
     options: {
       label: string
       value: string
@@ -24,17 +31,24 @@ export function DataTableToolbar<TData>({
   table,
   searchPlaceholder = 'Filter...',
   searchKey,
+  searchInputTestId,
+  toolbarTestId,
+  customFilters,
   filters = [],
 }: DataTableToolbarProps<TData>) {
   const isFiltered =
     table.getState().columnFilters.length > 0 || table.getState().globalFilter
 
   return (
-    <div className='flex items-center justify-between'>
-      <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:items-center sm:space-x-2'>
+    <div
+      className='flex flex-wrap items-center justify-between gap-2'
+      data-testid={toolbarTestId}
+    >
+      <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2'>
         {searchKey ? (
           <Input
             placeholder={searchPlaceholder}
+            data-testid={searchInputTestId}
             value={
               (table.getColumn(searchKey)?.getFilterValue() as string) ?? ''
             }
@@ -46,12 +60,13 @@ export function DataTableToolbar<TData>({
         ) : (
           <Input
             placeholder={searchPlaceholder}
+            data-testid={searchInputTestId}
             value={table.getState().globalFilter ?? ''}
             onChange={(event) => table.setGlobalFilter(event.target.value)}
             className='h-8 w-[150px] lg:w-[250px]'
           />
         )}
-        <div className='flex gap-x-2'>
+        <div className='flex flex-wrap gap-2'>
           {filters.map((filter) => {
             const column = table.getColumn(filter.columnId)
             if (!column) return null
@@ -61,10 +76,15 @@ export function DataTableToolbar<TData>({
                 column={column}
                 title={filter.title}
                 options={filter.options}
+                singleSelect={filter.singleSelect}
+                testIdPrefix={filter.testIdPrefix}
+                selectedValues={filter.selectedValues}
+                onSelectedValuesChange={filter.onSelectedValuesChange}
               />
             )
           })}
         </div>
+        {customFilters}
         {isFiltered && (
           <Button
             variant='ghost'

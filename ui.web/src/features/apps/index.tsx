@@ -8,7 +8,13 @@ import {
   useState,
 } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
-import { ArrowDownAZ, ArrowUpAZ, SlidersHorizontal, Store } from 'lucide-react'
+import {
+  ArrowDownAZ,
+  ArrowUpAZ,
+  PlugZap,
+  SlidersHorizontal,
+  Store,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,7 +42,7 @@ import {
 } from '@/components/ui/table'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
-import { Header } from '@/components/layout/header'
+import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
@@ -634,7 +640,17 @@ export function Apps({
     <>
       <Header>
         <Search />
-        <div className='ms-auto flex items-center gap-4'>
+        <HeaderTitle
+          title={title}
+          description={description}
+          icon={PlugZap}
+          testId='integrations-header-title'
+          iconTestId='integrations-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center gap-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />

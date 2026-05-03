@@ -100,6 +100,10 @@ Notes:
 - `./scripts/build-cabinet.ps1` always builds `ui.web` and refreshes `internal/ui/static` before `go build`.
 - Use `./scripts/build-ui-static.ps1` only for explicit UI-only rebuild workflows.
 
+## Product Documentation
+- Top-level feature map / product overview: `docs/PRODUCT-OVERVIEW.md`
+- Help Center section drafts: `docs/help-center/`
+
 ## API Documentation
 - OpenAPI source: `docs/api/openapi.yaml`
 - Runtime docs UI: `http://127.0.0.1:17880/apidocs`

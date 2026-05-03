@@ -67,6 +67,15 @@ func startupMigrationTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func startupSampleDataSeedEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CABINET_SEED_SAMPLE_DATA"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 type App struct {
 	cfg           config.Config
 	db            *sql.DB
@@ -75,6 +84,7 @@ type App struct {
 	authService   *auth.Service
 	openapiSpec   []byte
 	runtimeLogs   *runtimeLogManager
+	runtimeStopCh chan string
 	startupNotice func(string)
 	startupIsTTY  func() bool
 }
@@ -128,8 +138,23 @@ func New(cfg config.Config) (*App, error) {
 		conn.Close()
 		return nil, err
 	}
+	if startupSampleDataSeedEnabled() {
+		result, seedErr := seedOnboardingSampleData(ctx, profiles, collectionRepo, wishlistSvc, mediaService, conn)
+		if seedErr != nil {
+			log.Printf("sample data startup seed skipped: %v", seedErr)
+		} else {
+			log.Printf(
+				"sample data startup seed complete: created_items=%d created_photos=%d created_wishlist_entries=%d total_wishlist_entries=%d",
+				result.CreatedItems,
+				result.CreatedPhotos,
+				result.CreatedWishlistEntries,
+				result.TotalWishlistEntries,
+			)
+		}
+	}
 	cloudLeases := newCloudLeaseStore()
 	cloudEntitlements := newCloudEntitlementStore()
+	runtimeStopCh := make(chan string, 1)
 
 	mux := http.NewServeMux()
 	if isE2EHooksEnabled(cfg) {
@@ -229,6 +254,40 @@ func New(cfg config.Config) (*App, error) {
 			"bind_mode":                    strings.TrimSpace(strings.ToLower(cfg.BindMode)),
 			"runtime_host":                 host,
 			"runtime_port":                 port,
+			"pid":                          os.Getpid(),
+			"data_dir":                     cfg.DataDir,
+		})
+	})
+	mux.HandleFunc("/api/runtime/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !requestIsLoopback(r) {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var payload struct {
+			Reason string `json:"reason"`
+		}
+		if r.Body != nil {
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+		}
+		reason := strings.TrimSpace(payload.Reason)
+		if reason == "" {
+			reason = "api_shutdown"
+		}
+		select {
+		case runtimeStopCh <- reason:
+		default:
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"pid":    os.Getpid(),
+			"reason": reason,
 		})
 	})
 	mux.HandleFunc("/api/auth/provider-options", func(w http.ResponseWriter, r *http.Request) {
@@ -821,33 +880,41 @@ func New(cfg config.Config) (*App, error) {
 			}
 			condition := parseStringArraySetting(settings["grading.enums.condition"], defaultConditionGrades())
 			packaging := parseStringArraySetting(settings["grading.enums.packaging"], defaultPackagingGrades())
+			itemTypeConditionScales := parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"])
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"condition_grades": condition,
-				"packaging_grades": packaging,
+				"condition_grades":           condition,
+				"packaging_grades":           packaging,
+				"item_type_condition_scales": itemTypeConditionScales,
 			})
 		case http.MethodPut:
 			var req struct {
-				ConditionGrades []string `json:"condition_grades"`
-				PackagingGrades []string `json:"packaging_grades"`
+				ConditionGrades         []string                 `json:"condition_grades"`
+				PackagingGrades         []string                 `json:"packaging_grades"`
+				ItemTypeConditionScales []itemTypeConditionScale `json:"item_type_condition_scales"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
+			settings, _ := profiles.GetSettings(r.Context(), active.ID)
 			condition := normalizeStringList(req.ConditionGrades, defaultConditionGrades())
 			packaging := normalizeStringList(req.PackagingGrades, defaultPackagingGrades())
+			itemTypeConditionScales := normalizeItemTypeConditionScales(req.ItemTypeConditionScales, parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"]))
 			conditionRaw, _ := json.Marshal(condition)
 			packagingRaw, _ := json.Marshal(packaging)
+			itemTypeConditionScalesRaw, _ := json.Marshal(itemTypeConditionScales)
 			if putErr := profiles.PutSettings(r.Context(), active.ID, map[string]string{
-				"grading.enums.condition": string(conditionRaw),
-				"grading.enums.packaging": string(packagingRaw),
+				"grading.enums.condition":                  string(conditionRaw),
+				"grading.enums.packaging":                  string(packagingRaw),
+				"grading.enums.item_type_condition_scales": string(itemTypeConditionScalesRaw),
 			}); putErr != nil {
 				http.Error(w, `{"error":"failed_to_save_grading_enums"}`, http.StatusBadRequest)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"condition_grades": condition,
-				"packaging_grades": packaging,
+				"condition_grades":           condition,
+				"packaging_grades":           packaging,
+				"item_type_condition_scales": itemTypeConditionScales,
 			})
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -2711,6 +2778,36 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
+	mux.HandleFunc("/api/wishlist/convert-owned", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		id := strings.TrimSpace(req.ID)
+		if id == "" {
+			http.Error(w, `{"error":"missing_id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := wishlistSvc.ConvertToOwnedForProfile(r.Context(), profileID, id); err != nil {
+			http.Error(w, `{"error":"failed_to_convert_wishlist_to_owned"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
 	mux.HandleFunc("/api/wishlist", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		active, _ := profiles.GetActiveProfile(r.Context())
@@ -2738,9 +2835,63 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(created)
 		case http.MethodPut:
 			var req wishlist.Entry
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var raw map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
+			}
+			encoded, err := json.Marshal(raw)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if err := json.Unmarshal(encoded, &req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			if strings.TrimSpace(req.ID) != "" {
+				existing, err := wishlistSvc.GetByIDForProfile(r.Context(), profileID, req.ID)
+				if err == nil {
+					if _, ok := raw["item_id"]; !ok {
+						req.ItemID = existing.ItemID
+					}
+					if _, ok := raw["target_price"]; !ok {
+						req.TargetPrice = existing.TargetPrice
+					}
+					if _, ok := raw["priority"]; !ok {
+						req.Priority = existing.Priority
+					}
+					if _, ok := raw["notes"]; !ok {
+						req.Notes = existing.Notes
+					}
+					if _, ok := raw["highlight_hit"]; !ok {
+						req.HighlightHit = existing.HighlightHit
+					}
+					if _, ok := raw["below_target_now"]; !ok {
+						req.BelowTargetNow = existing.BelowTargetNow
+					}
+					if _, ok := raw["owned"]; !ok {
+						req.Owned = existing.Owned
+					}
+					if _, ok := raw["price_paid"]; !ok {
+						req.PricePaid = existing.PricePaid
+					}
+					if _, ok := raw["purchase_url"]; !ok {
+						req.PurchaseURL = existing.PurchaseURL
+					}
+					if _, ok := raw["purchase_date"]; !ok {
+						req.PurchaseDate = existing.PurchaseDate
+					}
+					if _, ok := raw["purchase_condition"]; !ok {
+						req.PurchaseCondition = existing.PurchaseCondition
+					}
+					if _, ok := raw["quantity"]; !ok {
+						req.Quantity = existing.Quantity
+					}
+					if _, ok := raw["needed_quantity"]; !ok {
+						req.NeededQuantity = existing.NeededQuantity
+					}
+				}
 			}
 			if err := wishlistSvc.UpdateForProfile(r.Context(), profileID, req); err != nil {
 				http.Error(w, `{"error":"failed_to_update_wishlist"}`, http.StatusBadRequest)
@@ -3504,6 +3655,32 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
+	mux.HandleFunc("/api/chat/inbox/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		inboxID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/inbox/"))
+		if inboxID == "" {
+			http.Error(w, `{"error":"inbox_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Status    string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		item, err := chatSvc.UpdateInboxItemStatus(r.Context(), req.ProfileID, inboxID, req.Status)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_update_chat_inbox_item"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(item)
+	})
 	mux.HandleFunc("/api/chat/attachments", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -4072,6 +4249,31 @@ func New(cfg config.Config) (*App, error) {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+			if len(parts) == 4 && parts[3] == "rotate" {
+				photoID := strings.TrimSpace(parts[2])
+				if photoID == "" {
+					http.Error(w, `{"error":"invalid_photo_id"}`, http.StatusBadRequest)
+					return
+				}
+				if r.Method != http.MethodPut {
+					http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+					return
+				}
+				var req struct {
+					Direction string `json:"direction"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+					return
+				}
+				rotated, err := mediaService.Rotate(r.Context(), itemID, photoID, req.Direction)
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_rotate_photo"}`, http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(rotated)
+				return
+			}
 			if len(parts) == 4 && parts[3] == "file" {
 				photoID := strings.TrimSpace(parts[2])
 				if photoID == "" {
@@ -4132,7 +4334,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		result, err := seedOnboardingSampleData(r.Context(), profiles, collectionRepo, wishlistSvc, conn)
+		result, err := seedOnboardingSampleData(r.Context(), profiles, collectionRepo, wishlistSvc, mediaService, conn)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_seed_onboarding_sample_data"}`, http.StatusBadRequest)
 			return
@@ -4583,13 +4785,14 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	a := &App{
-		cfg:         cfg,
-		db:          conn,
-		srv:         srv,
-		backupSvc:   backupSvc,
-		authService: authService,
-		openapiSpec: openapiSpec,
-		runtimeLogs: runtimeLogs,
+		cfg:           cfg,
+		db:            conn,
+		srv:           srv,
+		backupSvc:     backupSvc,
+		authService:   authService,
+		openapiSpec:   openapiSpec,
+		runtimeLogs:   runtimeLogs,
+		runtimeStopCh: runtimeStopCh,
 		startupNotice: func(line string) {
 			log.Print(line)
 		},
@@ -5589,6 +5792,102 @@ func defaultConditionGrades() []string {
 
 func defaultPackagingGrades() []string {
 	return []string{"sealed_mint", "sealed_good", "opened_complete", "loose"}
+}
+
+type itemTypeConditionScale struct {
+	ItemType   string   `json:"item_type"`
+	Conditions []string `json:"conditions"`
+}
+
+func defaultItemTypeConditionScales() []itemTypeConditionScale {
+	return []itemTypeConditionScale{
+		{
+			ItemType: "Slot Cars",
+			Conditions: []string{
+				"10+ - New, in packaging",
+				"10 - New, with packaging separate",
+				"9 - New, no packaging",
+				"8 - Like new",
+				"7 - Minor track-wear",
+				"6 - Bumper-wear & scratches",
+				"5 - Worn, with scratches & nicks",
+				"4 - Cut wheel wells, but nice",
+				"3 - Cut badly, but good runner",
+				"2 - Good for parts only",
+				"1 - Good for nothing",
+			},
+		},
+		{
+			ItemType: "Trading Cards",
+			Conditions: []string{
+				"Mint (M)",
+				"Near Mint (NM)",
+				"Excellent (EX)",
+				"Good (GD)",
+				"Light Played (LP)",
+				"Played (PL)",
+				"Poor (PO)",
+			},
+		},
+	}
+}
+
+func parseItemTypeConditionScalesSetting(raw string) []itemTypeConditionScale {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return defaultItemTypeConditionScales()
+	}
+	var values []itemTypeConditionScale
+	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
+		return defaultItemTypeConditionScales()
+	}
+	return normalizeItemTypeConditionScales(values, defaultItemTypeConditionScales())
+}
+
+func normalizeItemTypeConditionScales(input []itemTypeConditionScale, fallback []itemTypeConditionScale) []itemTypeConditionScale {
+	out := make([]itemTypeConditionScale, 0, len(input))
+	seenTypes := map[string]struct{}{}
+	for _, scale := range input {
+		itemType := strings.TrimSpace(scale.ItemType)
+		if itemType == "" {
+			continue
+		}
+		typeKey := strings.ToLower(itemType)
+		if _, ok := seenTypes[typeKey]; ok {
+			continue
+		}
+		conditions := normalizeDisplayStringList(scale.Conditions)
+		if len(conditions) == 0 {
+			continue
+		}
+		seenTypes[typeKey] = struct{}{}
+		out = append(out, itemTypeConditionScale{
+			ItemType:   itemType,
+			Conditions: conditions,
+		})
+	}
+	if len(out) == 0 {
+		return append([]itemTypeConditionScale(nil), fallback...)
+	}
+	return out
+}
+
+func normalizeDisplayStringList(input []string) []string {
+	out := make([]string, 0, len(input))
+	seen := map[string]struct{}{}
+	for _, item := range input {
+		clean := strings.TrimSpace(item)
+		if clean == "" {
+			continue
+		}
+		key := strings.ToLower(clean)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, clean)
+	}
+	return out
 }
 
 func parseStringArraySetting(raw string, fallback []string) []string {
@@ -7273,6 +7572,11 @@ func (a *App) Run(ctx context.Context) error {
 		defer cancel()
 		_ = a.srv.Shutdown(shutdownCtx)
 		return a.closeRuntime(true, "shutdown", resolvedURL)
+	case reason := <-a.runtimeStopCh:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = a.srv.Shutdown(shutdownCtx)
+		return a.closeRuntime(true, cleanReason(reason), resolvedURL)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return a.closeRuntime(true, "server_closed", resolvedURL)
@@ -7312,6 +7616,21 @@ func listenWithPortFallback(addr string, maxFallbackAttempts int) (net.Listener,
 		}
 	}
 	return nil, err
+}
+
+func requestIsLoopback(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
 }
 
 func splitHostPort(addr string) (string, int) {

@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type ColumnDef,
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ArrowRightLeft, Pencil, Plus, Tag, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,19 +29,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Header } from '@/components/layout/header'
 import { Input } from '@/components/ui/input'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
+import { Separator } from '@/components/ui/separator'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import {
   Table,
   TableBody,
@@ -47,7 +47,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import {
+  DataTableColumnHeader,
+  DataTablePagination,
+  DataTableToolbar,
+} from '@/components/data-table'
 import {
   type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
@@ -55,7 +65,58 @@ import {
   useWorkspaceCollections,
 } from './use-workspace-collections'
 
+const collectionsHeaderDescription =
+  'Manage collection rows and item placement from the shared Cabinet table surface.'
+
 type CollectionRow = WorkspaceCollectionSummary
+type CollectionMemberRow = WorkspaceCollectionItem
+
+const tableClassName = 'w-full table-fixed'
+const tableCellClassName = 'max-w-0 truncate'
+const tableHeaderClassName = 'max-w-0 truncate'
+
+type InventoryCatalogItem = {
+  id?: string
+  part_number?: string
+  title?: string
+  brand?: string
+  category?: string
+  description?: string
+  status?: string
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function collectionMemberFromInventoryItem(
+  item: InventoryCatalogItem
+): CollectionMemberRow | null {
+  const id = normalizeString(item.id) || normalizeString(item.part_number)
+  const name = normalizeString(item.title) || normalizeString(item.part_number)
+  if (!id || !name) {
+    return null
+  }
+
+  const detail =
+    [
+      normalizeString(item.part_number),
+      normalizeString(item.brand),
+      normalizeString(item.category),
+    ]
+      .filter(Boolean)
+      .join(' · ') ||
+    normalizeString(item.description) ||
+    normalizeString(item.status) ||
+    'Inventory item'
+
+  return {
+    id,
+    name,
+    detail,
+    collectionName: null,
+  }
+}
 
 function buildCollectionColumns({
   onEdit,
@@ -67,34 +128,54 @@ function buildCollectionColumns({
   return [
     {
       accessorKey: 'name',
-      header: 'Collection',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Collection' />
+      ),
       cell: ({ row }) => (
-        <div className='space-y-1'>
-          <div className='font-medium' data-testid={`collections-row-name-${row.original.key}`}>
+        <div className='min-w-0 space-y-1'>
+          <div
+            className='truncate font-medium'
+            data-testid={`collections-row-name-${row.original.key}`}
+          >
             {row.original.name}
           </div>
-          <div className='text-xs text-muted-foreground'>{row.original.description}</div>
+          <div className='truncate text-xs text-muted-foreground'>
+            {row.original.description}
+          </div>
         </div>
       ),
     },
     {
       accessorKey: 'itemCount',
-      header: 'Items',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Items' />
+      ),
       cell: ({ row }) => (
-        <span data-testid={`collections-row-count-${row.original.key}`}>{row.original.itemCount}</span>
+        <span
+          className='block truncate'
+          data-testid={`collections-row-count-${row.original.key}`}
+        >
+          {row.original.itemCount}
+        </span>
       ),
     },
     {
       accessorKey: 'scopeLabel',
-      header: 'Scope',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Scope' />
+      ),
     },
     {
       accessorKey: 'statusLabel',
-      header: 'Status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Status' />
+      ),
     },
     {
       accessorKey: 'updatedLabel',
-      header: 'Updated',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Updated' />
+      ),
     },
     {
       id: 'actions',
@@ -133,6 +214,55 @@ function buildCollectionColumns({
   ]
 }
 
+function buildCollectionMemberColumns(): ColumnDef<CollectionMemberRow>[] {
+  return [
+    {
+      accessorKey: 'name',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Item' />
+      ),
+      cell: ({ row }) => (
+        <span
+          className='block truncate font-medium'
+          data-testid={`collections-member-${collectionKey(row.original.name)}`}
+        >
+          <span
+            className='block truncate'
+            data-testid={`collections-member-name-${collectionKey(row.original.name)}`}
+          >
+            {row.original.name}
+          </span>
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'detail',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Details' />
+      ),
+      cell: ({ row }) => (
+        <span className='block truncate text-muted-foreground'>
+          {row.original.detail}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'collectionName',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Current collection' />
+      ),
+      cell: ({ row }) => (
+        <span
+          className='block truncate text-muted-foreground'
+          data-testid={`collections-member-current-${collectionKey(row.original.name)}`}
+        >
+          Currently in {row.original.collectionName ?? 'Unassigned'}.
+        </span>
+      ),
+    },
+  ]
+}
+
 export function Collections() {
   const {
     activeWorkspaceCollection,
@@ -142,21 +272,90 @@ export function Collections() {
     removeCollection,
     collectionItems,
     collectionSummaries,
-    assignItemToCollection,
   } = useWorkspaceCollections()
 
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'name', desc: false },
+  ])
   const [globalFilter, setGlobalFilter] = useState('')
-  const [selectedCollectionID, setSelectedCollectionID] = useState<string | null>(null)
+  const [memberSorting, setMemberSorting] = useState<SortingState>([
+    { id: 'name', desc: false },
+  ])
+  const [memberGlobalFilter, setMemberGlobalFilter] = useState('')
+  const [selectedCollectionID, setSelectedCollectionID] = useState<
+    string | null
+  >(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [createValue, setCreateValue] = useState('')
   const [editValue, setEditValue] = useState('')
-  const [assignmentItemID, setAssignmentItemID] = useState('')
-  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
+  const [inventoryMembers, setInventoryMembers] = useState<CollectionMemberRow[]>(
+    []
+  )
 
-  const rows = useMemo(() => collectionSummaries, [collectionSummaries])
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadInventoryMembers() {
+      try {
+        const response = await fetch('/api/items', {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          return
+        }
+        const payload = (await response.json()) as { items?: unknown[] }
+        const nextMembers = (payload.items ?? [])
+          .map((item) =>
+            collectionMemberFromInventoryItem(item as InventoryCatalogItem)
+          )
+          .filter((item): item is CollectionMemberRow => item !== null)
+        setInventoryMembers(nextMembers)
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn('Failed to load collection inventory members', error)
+        }
+      }
+    }
+
+    void loadInventoryMembers()
+
+    return () => controller.abort()
+  }, [])
+
+  const collectionAssignmentByID = useMemo(() => {
+    const assignments = new Map<string, string | null>()
+    collectionItems.forEach((item) => {
+      assignments.set(item.id, item.collectionName)
+    })
+    return assignments
+  }, [collectionItems])
+
+  const memberRows = useMemo(() => {
+    if (inventoryMembers.length === 0) {
+      return collectionItems
+    }
+
+    return inventoryMembers.map((item) => ({
+      ...item,
+      collectionName: collectionAssignmentByID.get(item.id) ?? null,
+    }))
+  }, [collectionAssignmentByID, collectionItems, inventoryMembers])
+
+  const rows = useMemo(
+    () =>
+      collectionSummaries.map((summary) => ({
+        ...summary,
+        itemCount:
+          summary.name === 'All Items'
+            ? memberRows.length
+            : memberRows.filter(
+                (item) => item.collectionName === summary.name
+              ).length,
+      })),
+    [collectionSummaries, memberRows]
+  )
 
   const selectedRow = useMemo(
     () =>
@@ -168,36 +367,37 @@ export function Collections() {
   )
 
   const selectedCollectionName = selectedRow?.name ?? 'All Items'
-  const isProtectedCollection = selectedCollectionName === 'All Items'
 
   const selectedCollectionItems = useMemo(
     () =>
-      collectionItems.filter((item) => item.collectionName === selectedCollectionName),
-    [collectionItems, selectedCollectionName]
+      selectedCollectionName === 'All Items'
+        ? memberRows
+        : memberRows.filter(
+            (item) => item.collectionName === selectedCollectionName
+          ),
+    [memberRows, selectedCollectionName]
   )
 
-  const assignmentCandidates = useMemo(
-    () =>
-      collectionItems.filter((item) => item.collectionName !== selectedCollectionName),
-    [collectionItems, selectedCollectionName]
-  )
+  const openEditPanel = useCallback((row: CollectionRow) => {
+    setSelectedCollectionID(row.key)
+    setEditValue(row.name)
+    setEditOpen(true)
+  }, [])
 
   const columns = useMemo(
     () =>
       buildCollectionColumns({
-        onEdit: (row) => {
-          setSelectedCollectionID(row.key)
-          setEditValue(row.name)
-          setEditOpen(true)
-        },
+        onEdit: openEditPanel,
         onDelete: (row) => {
           setSelectedCollectionID(row.key)
           setDeleteOpen(true)
         },
       }),
-    []
+    [openEditPanel]
   )
+  const memberColumns = useMemo(() => buildCollectionMemberColumns(), [])
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -223,17 +423,71 @@ export function Collections() {
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+  })
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const membersTable = useReactTable({
+    data: selectedCollectionItems,
+    columns: memberColumns,
+    state: {
+      sorting: memberSorting,
+      globalFilter: memberGlobalFilter,
+    },
+    onSortingChange: setMemberSorting,
+    onGlobalFilterChange: setMemberGlobalFilter,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const searchValue = String(filterValue).trim().toLowerCase()
+      if (!searchValue) {
+        return true
+      }
+      return [
+        row.original.name,
+        row.original.detail,
+        row.original.collectionName ?? 'Unassigned',
+      ].some((value) => value.toLowerCase().includes(searchValue))
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
   const filteredCount = table.getFilteredRowModel().rows.length
+  const filteredMemberCount = membersTable.getFilteredRowModel().rows.length
+  const visibleRows = table
+    .getRowModel()
+    .rows.map((tableRow) => tableRow.original)
+  const selectedVisibleIndex = selectedRow
+    ? visibleRows.findIndex((row) => row.key === selectedRow.key)
+    : -1
+  const canNavigatePrevious = selectedVisibleIndex > 0
+  const canNavigateNext =
+    selectedVisibleIndex >= 0 && selectedVisibleIndex < visibleRows.length - 1
 
-  function handleSelectCollection(row: CollectionRow) {
-    setSelectedCollectionID(row.key)
-    setActiveWorkspaceCollection(row.name)
+  function navigateEditPanel(offset: number) {
+    if (selectedVisibleIndex < 0) {
+      return
+    }
+    const nextRow = visibleRows[selectedVisibleIndex + offset]
+    if (!nextRow) {
+      return
+    }
+    setSelectedCollectionID(nextRow.key)
+    setEditValue(nextRow.name)
   }
 
-  function handleCreateCollection() {
-    const created = addCollection(createValue)
+  async function handleSelectCollection(row: CollectionRow) {
+    setSelectedCollectionID(row.key)
+    await setActiveWorkspaceCollection(row.name)
+  }
+
+  async function handleCreateCollection() {
+    const created = await addCollection(createValue)
     if (!created) {
       toast.error('Collection name must be unique and non-empty.')
       return
@@ -244,11 +498,11 @@ export function Collections() {
     toast.success(`${created} created and set as the active collection.`)
   }
 
-  function handleRenameCollection() {
+  async function handleRenameCollection() {
     if (!selectedRow) {
       return
     }
-    const renamed = renameCollection(selectedRow.name, editValue)
+    const renamed = await renameCollection(selectedRow.name, editValue)
     if (!renamed) {
       toast.error('Rename failed. Use a unique non-empty collection name.')
       return
@@ -258,12 +512,12 @@ export function Collections() {
     toast.success(`${selectedRow.name} renamed to ${renamed}.`)
   }
 
-  function handleDeleteCollection() {
+  async function handleDeleteCollection() {
     if (!selectedRow) {
       return
     }
     const removedName = selectedRow.name
-    const removed = removeCollection(removedName)
+    const removed = await removeCollection(removedName)
     if (!removed) {
       toast.error('Collection removal failed.')
       return
@@ -273,97 +527,115 @@ export function Collections() {
     toast.success(`${removedName} removed from workspace collections.`)
   }
 
-  function handleAssignToSelectedCollection() {
-    if (!assignmentItemID || !selectedRow || isProtectedCollection) {
-      return
-    }
-    const updated = assignItemToCollection(assignmentItemID, selectedRow.name)
-    if (!updated) {
-      toast.error('Select an item and a valid collection before saving.')
-      return
-    }
-    setAssignmentItemID('')
-    toast.success(`${updated.name} assigned to ${selectedRow.name}.`)
-  }
-
-  function handleMoveItem(item: WorkspaceCollectionItem) {
-    const destination = moveTargets[item.id]
-    if (!destination) {
-      toast.error('Choose a destination collection before moving the item.')
-      return
-    }
-    const updated = assignItemToCollection(item.id, destination)
-    if (!updated) {
-      toast.error('Item move failed.')
-      return
-    }
-    setMoveTargets((current) => {
-      const next = { ...current }
-      delete next[item.id]
-      return next
-    })
-    toast.success(`${item.name} moved to ${destination}.`)
-  }
-
   return (
     <>
-      <Header>
+      <Header fixed data-testid='collections-shell-header'>
         <Search />
-        <div className='ml-auto flex items-center gap-4'>
-          <ThemeSwitch />
-          <LanguageSwitch />
-          <ProfileDropdown />
+        <HeaderTitle
+          title='Collections'
+          description={collectionsHeaderDescription}
+          icon={Tag}
+          testId='collections-header-title'
+          iconTestId='collections-page-icon'
+        />
+        <div
+          className='ms-auto flex min-w-0 items-center gap-3'
+          data-header-title-avoid='true'
+        >
+          <div
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='collections-global-header-actions'
+          >
+            <Button
+              data-testid='collections-new-action'
+              size='icon'
+              aria-label='New collection'
+              title='New collection'
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className='h-4 w-4' aria-hidden='true' />
+            </Button>
+          </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='collections-header-action-separator'
+          />
+          <div className='flex items-center gap-4'>
+            <ThemeSwitch />
+            <LanguageSwitch />
+            <ProfileDropdown />
+          </div>
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='mb-6 flex flex-wrap items-end justify-between gap-3'>
-          <div>
-            <div className='flex items-center gap-2'>
-              <Tag className='h-5 w-5 text-muted-foreground' data-testid='collections-page-icon' />
-              <h1 className='text-2xl font-bold tracking-tight'>Collections</h1>
-            </div>
-            <p className='text-muted-foreground'>
-              Manage collection rows and item placement from the shared Cabinet table surface.
-            </p>
-          </div>
-          <Button data-testid='collections-new-action' onClick={() => setCreateOpen(true)}>
-            <Plus className='mr-2 h-4 w-4' />
-            New collection
-          </Button>
-        </div>
-
-        <div className='grid gap-6 lg:grid-cols-[1.5fr,1fr]'>
-          <Card data-testid='collections-section'>
-            <CardHeader>
-              <CardTitle>Collections table</CardTitle>
-              <CardDescription>
-                Browse, create, rename, and remove collection rows from the same management surface.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='flex items-center gap-3' data-testid='collections-management-tools'>
-                <Input
-                  value={globalFilter}
-                  onChange={(event) => setGlobalFilter(event.target.value)}
-                  placeholder='Filter collections...'
-                  data-testid='collections-search-input'
-                />
-                <div className='text-sm text-muted-foreground' data-testid='collections-management-summary'>
-                  Showing {filteredCount} of {rows.length} collections.
+      <Main fixed className='min-h-0 gap-3 sm:gap-4'>
+        <div
+          className='grid min-h-0 flex-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-4'
+          data-testid='collections-workspace'
+        >
+          <Card
+            className='flex min-h-0 flex-col overflow-hidden'
+            data-testid='collections-section'
+          >
+            <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
+              <div
+                className='space-y-3'
+                data-testid='collections-management-tools'
+              >
+                <div data-testid='collections-table-toolbar'>
+                  <DataTableToolbar
+                    table={table}
+                    searchPlaceholder='Filter collections...'
+                    searchInputTestId='collections-search-input'
+                  />
+                </div>
+                <div
+                  className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
+                  data-testid='collections-management-summary'
+                >
+                  <span>Showing {filteredCount} of {rows.length} collections.</span>
+                  <span
+                    className='inline-flex items-center gap-2'
+                    data-testid='collections-active-browse-control'
+                  >
+                    <span data-testid='collections-active-context'>
+                      {selectedCollectionName}
+                    </span>
+                    <Button
+                      asChild
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      data-testid='collections-active-browse'
+                      aria-label={`Browse ${selectedCollectionName} in inventory`}
+                    >
+                      <a href='/inventory/'>Browse</a>
+                    </Button>
+                  </span>
                 </div>
               </div>
 
-              <div className='rounded-md border' data-testid='collections-shared-table'>
-                <Table>
+              <div
+                className='min-h-0 flex-1 overflow-auto rounded-md border'
+                data-table-surface='true'
+                data-testid='collections-shared-table'
+              >
+                <Table className={tableClassName}>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
                       <TableRow key={headerGroup.id}>
                         {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
+                          <TableHead
+                            key={header.id}
+                            className={tableHeaderClassName}
+                          >
                             {header.isPlaceholder
                               ? null
-                              : flexRender(header.column.columnDef.header, header.getContext())}
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
                           </TableHead>
                         ))}
                       </TableRow>
@@ -379,11 +651,22 @@ export function Collections() {
                             className='cursor-pointer'
                             data-state={isSelected ? 'selected' : undefined}
                             data-testid={`collections-row-${row.original.key}`}
-                            onClick={() => handleSelectCollection(row.original)}
+                            onClick={() => {
+                              void handleSelectCollection(row.original)
+                            }}
+                            onDoubleClick={() => {
+                              openEditPanel(row.original)
+                            }}
                           >
                             {row.getVisibleCells().map((cell) => (
-                              <TableCell key={cell.id}>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              <TableCell
+                                key={cell.id}
+                                className={tableCellClassName}
+                              >
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext()
+                                )}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -391,7 +674,10 @@ export function Collections() {
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={columns.length} className='h-24 text-center'>
+                        <TableCell
+                          colSpan={columns.length}
+                          className='h-24 text-center'
+                        >
                           No collections match the current filter.
                         </TableCell>
                       </TableRow>
@@ -399,142 +685,105 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
+              <div className='mt-auto' data-testid='collections-table-pagination'>
+                <DataTablePagination table={table} />
+              </div>
             </CardContent>
           </Card>
 
-          <div className='space-y-6'>
-            <Card data-testid='collections-selected-panel'>
-              <CardHeader>
-                <CardTitle>Selected collection</CardTitle>
-                <CardDescription>
-                  Keep the active collection context visible while you manage rows and item placement.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-3'>
-                {selectedRow ? (
-                  <>
-                    <div className='font-medium' data-testid='collections-selected-name'>
-                      {selectedRow.name}
-                    </div>
-                    <div className='text-sm text-muted-foreground'>
-                      {selectedRow.description}
-                    </div>
-                    <div className='text-sm text-muted-foreground' data-testid='collections-active-context-message'>
-                      Active collection is {selectedRow.name}. This choice persists for the current signed-in profile.
-                    </div>
-                    <div className='text-xs text-muted-foreground' data-testid='collections-active-context-persistence'>
-                      Persists for this signed-in profile across refresh.
-                    </div>
-                  </>
-                ) : (
-                  <div className='text-sm text-muted-foreground'>Select a collection row to manage it here.</div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card data-testid='collections-assignment-panel'>
-              <CardHeader>
-                <CardTitle>Assign items</CardTitle>
-                <CardDescription>
-                  Add an item into the selected collection or move an item into this collection from another lane.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-4'>
-                {isProtectedCollection ? (
-                  <div className='text-sm text-muted-foreground' data-testid='collections-assignment-disabled'>
-                    Select a specific collection to assign items. “All Items” stays as the global overview.
-                  </div>
-                ) : (
-                  <>
-                    <Select value={assignmentItemID} onValueChange={setAssignmentItemID}>
-                      <SelectTrigger data-testid='collections-assignment-select'>
-                        <SelectValue placeholder='Choose an item to assign' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {assignmentCandidates.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name} ({item.collectionName ?? 'Unassigned'})
-                          </SelectItem>
+          <Card
+            className='flex min-h-0 flex-col overflow-hidden'
+            data-testid='collections-members-panel'
+          >
+            <CardHeader className='shrink-0 py-3'>
+              <CardTitle>Collection members</CardTitle>
+              <CardDescription>
+                Review inventory items assigned to the selected collection.
+                Assign or move items from Inventory row actions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='flex min-h-0 flex-1 flex-col gap-3'>
+              <div className='space-y-3'>
+                <div data-testid='collections-members-table-toolbar'>
+                  <DataTableToolbar
+                    table={membersTable}
+                    searchPlaceholder='Filter collection members...'
+                    searchInputTestId='collections-members-search-input'
+                  />
+                </div>
+                <p
+                  className='text-sm text-muted-foreground'
+                  data-testid='collections-members-summary'
+                >
+                  Showing {filteredMemberCount} of{' '}
+                  {selectedCollectionItems.length} items.
+                </p>
+              </div>
+              <div
+                className='min-h-0 flex-1 overflow-auto rounded-md border'
+                data-table-surface='true'
+                data-testid='collections-members-table'
+              >
+                <Table className={tableClassName}>
+                  <TableHeader>
+                    {membersTable.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead
+                            key={header.id}
+                            className={tableHeaderClassName}
+                          >
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type='button'
-                      onClick={handleAssignToSelectedCollection}
-                      data-testid='collections-assignment-submit'
-                    >
-                      Assign to {selectedCollectionName}
-                    </Button>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card data-testid='collections-members-panel'>
-              <CardHeader>
-                <CardTitle>Collection members</CardTitle>
-                <CardDescription>
-                  Review assigned items and move them deterministically between collections.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-3'>
-                {selectedCollectionItems.length ? (
-                  selectedCollectionItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className='rounded-md border p-3'
-                      data-testid={`collections-member-${collectionKey(item.name)}`}
-                    >
-                      <div className='font-medium' data-testid={`collections-member-name-${collectionKey(item.name)}`}>
-                        {item.name}
-                      </div>
-                      <div className='text-sm text-muted-foreground'>{item.detail}</div>
-                      <div
-                        className='mt-2 text-xs text-muted-foreground'
-                        data-testid={`collections-member-current-${collectionKey(item.name)}`}
-                      >
-                        Currently in {item.collectionName ?? 'Unassigned'}.
-                      </div>
-                      <div className='mt-3 flex items-center gap-3'>
-                        <Select
-                          value={moveTargets[item.id] ?? ''}
-                          onValueChange={(value) =>
-                            setMoveTargets((current) => ({ ...current, [item.id]: value }))
-                          }
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {membersTable.getRowModel().rows.length ? (
+                      membersTable.getRowModel().rows.map((row) => (
+                        <TableRow
+                          key={row.id}
+                          data-testid={`collections-member-row-${row.original.id}`}
                         >
-                          <SelectTrigger data-testid={`collections-move-target-${collectionKey(item.name)}`}>
-                            <SelectValue placeholder='Move to...' />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {rows
-                              .filter((row) => row.name !== 'All Items' && row.name !== item.collectionName)
-                              .map((row) => (
-                                <SelectItem key={row.key} value={row.name}>
-                                  {row.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          data-testid={`collections-move-submit-${collectionKey(item.name)}`}
-                          onClick={() => handleMoveItem(item)}
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell
+                              key={cell.id}
+                              className={tableCellClassName}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow data-testid='collections-members-empty-row'>
+                        <TableCell
+                          colSpan={memberColumns.length}
+                          className='h-24 text-center text-muted-foreground'
                         >
-                          <ArrowRightLeft className='mr-2 h-4 w-4' />
-                          Move item
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className='text-sm text-muted-foreground' data-testid='collections-members-empty'>
-                    No items are currently assigned to {selectedCollectionName}.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                          {selectedCollectionItems.length
+                            ? 'No collection members match the current filter.'
+                            : `No items are currently assigned to ${selectedCollectionName}.`}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className='mt-auto' data-testid='collections-members-table-pagination'>
+                <DataTablePagination table={membersTable} />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </Main>
 
@@ -542,7 +791,9 @@ export function Collections() {
         <DialogContent data-testid='collections-create-dialog'>
           <DialogHeader>
             <DialogTitle>Create collection</DialogTitle>
-            <DialogDescription>Add a new collection row to the management table.</DialogDescription>
+            <DialogDescription>
+              Add a new collection row to the management table.
+            </DialogDescription>
           </DialogHeader>
           <Input
             value={createValue}
@@ -551,38 +802,92 @@ export function Collections() {
             data-testid='collections-create-input'
           />
           <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setCreateOpen(false)}>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setCreateOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type='button' onClick={handleCreateCollection} data-testid='collections-create-submit'>
+            <Button
+              type='button'
+              onClick={() => {
+                void handleCreateCollection()
+              }}
+              data-testid='collections-create-submit'
+            >
               Save collection
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent data-testid='collections-edit-dialog'>
-          <DialogHeader>
-            <DialogTitle>Edit collection</DialogTitle>
-            <DialogDescription>Rename the selected collection through the row workflow.</DialogDescription>
-          </DialogHeader>
-          <Input
-            value={editValue}
-            onChange={(event) => setEditValue(event.target.value)}
-            placeholder='New collection name'
-            data-testid='collections-edit-input'
-          />
-          <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setEditOpen(false)}>
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent
+          className='flex flex-col'
+          data-testid='collections-edit-panel'
+          data-side='right'
+          side='right'
+        >
+          <SheetHeader className='text-start'>
+            <SheetTitle>Edit collection</SheetTitle>
+            <SheetDescription>
+              Rename the selected collection through the row workflow.
+            </SheetDescription>
+            <div className='flex flex-wrap items-center gap-2 pt-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                data-testid='collections-edit-previous'
+                disabled={!canNavigatePrevious}
+                onClick={() => navigateEditPanel(-1)}
+              >
+                Previous
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                data-testid='collections-edit-next'
+                disabled={!canNavigateNext}
+                onClick={() => navigateEditPanel(1)}
+              >
+                Next
+              </Button>
+            </div>
+          </SheetHeader>
+          <div className='flex-1 px-4'>
+            <label className='space-y-2 text-sm font-medium'>
+              <span>Collection name</span>
+              <Input
+                value={editValue}
+                onChange={(event) => setEditValue(event.target.value)}
+                placeholder='New collection name'
+                data-testid='collections-edit-input'
+              />
+            </label>
+          </div>
+          <SheetFooter className='gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setEditOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type='button' onClick={handleRenameCollection} data-testid='collections-edit-submit'>
+            <Button
+              type='button'
+              onClick={() => {
+                void handleRenameCollection()
+              }}
+              data-testid='collections-edit-submit'
+            >
               Save rename
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent data-testid='collections-delete-dialog'>
@@ -598,10 +903,21 @@ export function Collections() {
               : 'No collection is selected.'}
           </p>
           <DialogFooter>
-            <Button type='button' variant='outline' onClick={() => setDeleteOpen(false)}>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setDeleteOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type='button' variant='destructive' onClick={handleDeleteCollection} data-testid='collections-delete-submit'>
+            <Button
+              type='button'
+              variant='destructive'
+              onClick={() => {
+                void handleDeleteCollection()
+              }}
+              data-testid='collections-delete-submit'
+            >
               Delete collection
             </Button>
           </DialogFooter>

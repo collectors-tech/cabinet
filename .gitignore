@@ -9,10 +9,13 @@ bin/
 dist/
 cabinet.exe
 *.tmp
-.tmp_*
+.tmp*
 .agentbus/
 .logs/
 .env
+# Generated Vite output is rebuilt by scripts/build-ui-static.ps1 and should not
+# churn the git worktree on every local build.
+internal/ui/static/index.html
 internal/ui/static/assets/
 data/
 tmp/

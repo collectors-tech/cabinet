@@ -247,11 +247,10 @@ describe('ui-screen-integrations', () => {
   })
 
   it('UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context', () => {
-    let activeProfileCalls = 0
+    let activeProfileRecovered = false
 
     cy.intercept('GET', '/api/profiles/active', (req) => {
-      activeProfileCalls += 1
-      if (activeProfileCalls === 1) {
+      if (!activeProfileRecovered) {
         req.reply({ statusCode: 404, body: { error: 'active_profile_not_set' } })
         return
       }
@@ -267,6 +266,7 @@ describe('ui-screen-integrations', () => {
 
     cy.intercept('PUT', '/api/profiles/active', (req) => {
       expect(req.body.profile_id).to.eq('profile-e2e-002')
+      activeProfileRecovered = true
       req.reply({ statusCode: 200, body: { id: 'profile-e2e-002', name: 'Recovered Profile' } })
     }).as('setActiveProfile')
 

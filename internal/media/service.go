@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	_ "image/png"
+	"image/png"
 	"io"
 	"math"
 	"os"
@@ -47,7 +47,11 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	}
 
 	photoID := uuid.NewString()
-	itemDir := filepath.Join(s.mediaDir, itemID)
+	rootMediaDir, err := s.resolveMediaDirForItem(ctx, itemID)
+	if err != nil {
+		return Photo{}, err
+	}
+	itemDir := filepath.Join(rootMediaDir, itemID)
 	if err := os.MkdirAll(itemDir, 0o755); err != nil {
 		return Photo{}, fmt.Errorf("create item media dir: %w", err)
 	}
@@ -100,6 +104,40 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	}
 
 	return s.GetByID(ctx, photoID)
+}
+
+func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (string, error) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return "", fmt.Errorf("item_id is required")
+	}
+
+	var configuredMediaDir sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+		SELECT ps.value
+		FROM canonical_items ci
+		LEFT JOIN profile_settings ps
+			ON ps.profile_id = ci.profile_id
+			AND ps.key = 'storage.media_dir'
+		WHERE ci.id = ?
+		`,
+		itemID,
+	).Scan(&configuredMediaDir)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("item not found")
+		}
+		return "", fmt.Errorf("resolve item media dir: %w", err)
+	}
+
+	mediaDir := strings.TrimSpace(configuredMediaDir.String)
+	if mediaDir != "" {
+		return mediaDir, nil
+	}
+
+	return s.mediaDir, nil
 }
 
 func (s *Service) ListByItem(ctx context.Context, itemID string) ([]Photo, error) {
@@ -201,6 +239,55 @@ func (s *Service) Delete(ctx context.Context, itemID, photoID string) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) Rotate(ctx context.Context, itemID, photoID, direction string) (Photo, error) {
+	itemID = strings.TrimSpace(itemID)
+	photoID = strings.TrimSpace(photoID)
+	direction = strings.ToLower(strings.TrimSpace(direction))
+	if itemID == "" {
+		return Photo{}, fmt.Errorf("item_id is required")
+	}
+	if photoID == "" {
+		return Photo{}, fmt.Errorf("photo_id is required")
+	}
+	if direction != "left" && direction != "right" {
+		return Photo{}, fmt.Errorf("direction must be left or right")
+	}
+
+	p, err := s.GetByID(ctx, photoID)
+	if err != nil {
+		return Photo{}, err
+	}
+	if p.ItemID != itemID {
+		return Photo{}, fmt.Errorf("photo does not belong to item")
+	}
+
+	srcFile, err := os.Open(p.OriginalPath)
+	if err != nil {
+		return Photo{}, fmt.Errorf("open original image: %w", err)
+	}
+	src, format, err := image.Decode(srcFile)
+	closeErr := srcFile.Close()
+	if err != nil {
+		return Photo{}, fmt.Errorf("decode original image: %w", err)
+	}
+	if closeErr != nil {
+		return Photo{}, fmt.Errorf("close original image: %w", closeErr)
+	}
+
+	rotated := rotateImage(src, direction)
+	if err := encodeOriginalImage(p.OriginalPath, format, rotated); err != nil {
+		return Photo{}, err
+	}
+	if err := generateScaledJPEG(p.OriginalPath, p.PreviewPath, 1024); err != nil {
+		return Photo{}, fmt.Errorf("rebuild rotated preview: %w", err)
+	}
+	if err := generateScaledJPEG(p.OriginalPath, p.ThumbnailPath, 256); err != nil {
+		return Photo{}, fmt.Errorf("rebuild rotated thumbnail: %w", err)
+	}
+
+	return s.GetByID(ctx, photoID)
 }
 
 func (s *Service) RebuildThumbnails(ctx context.Context, itemID string) error {
@@ -318,6 +405,56 @@ func (s *Service) Reorder(ctx context.Context, itemID string, orderedIDs []strin
 		return fmt.Errorf("commit reorder: %w", err)
 	}
 	return nil
+}
+
+func encodeOriginalImage(path, format string, img image.Image) error {
+	tmpPath := path + ".rotate-tmp"
+	outFile, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("create rotated original: %w", err)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "png":
+		err = png.Encode(outFile, img)
+	default:
+		err = jpeg.Encode(outFile, img, &jpeg.Options{Quality: 90})
+	}
+	closeErr := outFile.Close()
+	if err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("encode rotated original: %w", err)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close rotated original: %w", closeErr)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace rotated original: %w", err)
+	}
+	return nil
+}
+
+func rotateImage(src image.Image, direction string) *image.RGBA {
+	b := src.Bounds()
+	w := b.Dx()
+	h := b.Dy()
+	if w <= 0 || h <= 0 {
+		return image.NewRGBA(image.Rect(0, 0, 1, 1))
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, h, w))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := src.At(b.Min.X+x, b.Min.Y+y)
+			if direction == "left" {
+				dst.Set(y, w-1-x, c)
+			} else {
+				dst.Set(h-1-y, x, c)
+			}
+		}
+	}
+	return dst
 }
 
 func generateScaledJPEG(inputPath, outputPath string, maxSize int) error {

@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MessagesSquare, Send } from 'lucide-react'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +10,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 
 type ChatThread = {
   id: string
@@ -98,7 +98,9 @@ export function Chats() {
     'create_inventory_item' | 'create_wishlist_entry' | 'update_inventory_item'
   >('create_inventory_item')
   const [actionTargetItemID, setActionTargetItemID] = useState('')
-  const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(null)
+  const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(
+    null
+  )
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
 
@@ -109,31 +111,34 @@ export function Chats() {
 
   const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
 
-  const loadMessages = useCallback(async (profileID: string, threadID: string) => {
-    if (!profileID || !threadID) {
-      setMessages([])
-      return
-    }
-    setMessagesLoading(true)
-    setSendError(null)
-    try {
-      const response = await fetch(
-        `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`
-      )
-      if (!response.ok) {
-        throw new Error(`chat_messages_${response.status}`)
+  const loadMessages = useCallback(
+    async (profileID: string, threadID: string) => {
+      if (!profileID || !threadID) {
+        setMessages([])
+        return
       }
-      const payload = (await response.json()) as { messages?: ChatMessage[] }
-      setMessages(payload.messages ?? [])
-    } catch (err) {
-      setSendError(
-        err instanceof Error ? err.message : 'failed_to_load_chat_messages'
-      )
-      setMessages([])
-    } finally {
-      setMessagesLoading(false)
-    }
-  }, [])
+      setMessagesLoading(true)
+      setSendError(null)
+      try {
+        const response = await fetch(
+          `/api/chat/messages?profile_id=${encodeURIComponent(profileID)}&thread_id=${encodeURIComponent(threadID)}`
+        )
+        if (!response.ok) {
+          throw new Error(`chat_messages_${response.status}`)
+        }
+        const payload = (await response.json()) as { messages?: ChatMessage[] }
+        setMessages(payload.messages ?? [])
+      } catch (err) {
+        setSendError(
+          err instanceof Error ? err.message : 'failed_to_load_chat_messages'
+        )
+        setMessages([])
+      } finally {
+        setMessagesLoading(false)
+      }
+    },
+    []
+  )
 
   const loadThreads = useCallback(
     async (profileID: string, preserveSelected = true) => {
@@ -273,7 +278,10 @@ export function Chats() {
           title: actionTitle.trim(),
           brand: 'AFX',
           category: 'General',
-          item_id: actionMode === 'update_inventory_item' ? actionTargetItemID.trim() : '',
+          item_id:
+            actionMode === 'update_inventory_item'
+              ? actionTargetItemID.trim()
+              : '',
           priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
         },
       }),
@@ -333,7 +341,17 @@ export function Chats() {
     <>
       <Header>
         <Search />
-        <div className='ms-auto flex items-center space-x-4'>
+        <HeaderTitle
+          title='Chats'
+          description='Persistent profile-scoped conversation threads backed by Cabinet runtime.'
+          icon={MessagesSquare}
+          testId='chats-header-title'
+          iconTestId='chats-page-icon'
+        />
+        <div
+          className='ms-auto flex items-center space-x-4'
+          data-header-title-avoid='true'
+        >
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -346,11 +364,19 @@ export function Chats() {
           <h1 className='text-2xl font-bold tracking-tight'>Chats</h1>
           <MessagesSquare className='h-5 w-5 text-muted-foreground' />
         </div>
-        <p className='text-muted-foreground' data-testid='chat-workspace-description'>
-          Persistent profile-scoped conversation threads backed by Cabinet runtime.
+        <p
+          className='text-muted-foreground'
+          data-testid='chat-workspace-description'
+        >
+          Persistent profile-scoped conversation threads backed by Cabinet
+          runtime.
         </p>
-        <p className='text-sm text-muted-foreground' data-testid='chat-workspace-boundary-note'>
-          Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.
+        <p
+          className='text-sm text-muted-foreground'
+          data-testid='chat-workspace-boundary-note'
+        >
+          Use Assistant for AI-guided help and actions; use Chats for durable
+          conversation threads.
         </p>
         <Separator className='my-4' />
 
@@ -428,7 +454,9 @@ export function Chats() {
             <ScrollArea className='h-[380px] rounded-md border p-3'>
               <div data-testid='chat-message-list' className='space-y-3'>
                 {messagesLoading ? (
-                  <p className='text-sm text-muted-foreground'>Loading messages...</p>
+                  <p className='text-sm text-muted-foreground'>
+                    Loading messages...
+                  </p>
                 ) : null}
                 {!messagesLoading && selectedThread && messages.length === 0 ? (
                   <p className='text-sm text-muted-foreground'>
@@ -436,7 +464,10 @@ export function Chats() {
                   </p>
                 ) : null}
                 {messages.map((message) => (
-                  <div key={message.id} className='rounded-md border p-2 text-sm'>
+                  <div
+                    key={message.id}
+                    className='rounded-md border p-2 text-sm'
+                  >
                     <p className='font-medium'>{prettyRole(message.role)}</p>
                     <p>{message.content}</p>
                   </div>
@@ -444,7 +475,10 @@ export function Chats() {
               </div>
             </ScrollArea>
             {sendError ? (
-              <p className='mt-2 text-sm text-destructive' data-testid='chat-send-error'>
+              <p
+                className='mt-2 text-sm text-destructive'
+                data-testid='chat-send-error'
+              >
                 {sendError}
               </p>
             ) : null}
@@ -486,9 +520,14 @@ export function Chats() {
                   Upload
                 </Button>
               </div>
-              <div data-testid='chat-attachment-list' className='space-y-1 text-sm'>
+              <div
+                data-testid='chat-attachment-list'
+                className='space-y-1 text-sm'
+              >
                 {attachments.length === 0 ? (
-                  <p className='text-muted-foreground'>No attachments uploaded.</p>
+                  <p className='text-muted-foreground'>
+                    No attachments uploaded.
+                  </p>
                 ) : (
                   attachments.map((attachment) => (
                     <p key={attachment.id}>{attachment.filename}</p>
@@ -515,16 +554,24 @@ export function Chats() {
                   }
                   disabled={!selectedThreadId}
                 >
-                  <option value='create_inventory_item'>create_inventory_item</option>
-                  <option value='create_wishlist_entry'>create_wishlist_entry</option>
-                  <option value='update_inventory_item'>update_inventory_item</option>
+                  <option value='create_inventory_item'>
+                    create_inventory_item
+                  </option>
+                  <option value='create_wishlist_entry'>
+                    create_wishlist_entry
+                  </option>
+                  <option value='update_inventory_item'>
+                    update_inventory_item
+                  </option>
                 </select>
               </label>
               {actionMode === 'update_inventory_item' ? (
                 <Input
                   data-testid='chat-preview-target-item-id'
                   value={actionTargetItemID}
-                  onChange={(event) => setActionTargetItemID(event.target.value)}
+                  onChange={(event) =>
+                    setActionTargetItemID(event.target.value)
+                  }
                   placeholder='Existing item ID'
                   disabled={!selectedThreadId}
                 />
@@ -570,8 +617,12 @@ export function Chats() {
                 </Button>
               </div>
               {actionPreview ? (
-                <p data-testid='chat-action-preview' className='text-sm text-muted-foreground'>
-                  Preview {actionPreview.id}: {actionPreview.action} ({actionPreview.status})
+                <p
+                  data-testid='chat-action-preview'
+                  className='text-sm text-muted-foreground'
+                >
+                  Preview {actionPreview.id}: {actionPreview.action} (
+                  {actionPreview.status})
                 </p>
               ) : null}
               {applyResult ? (

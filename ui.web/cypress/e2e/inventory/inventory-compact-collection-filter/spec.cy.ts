@@ -1,0 +1,306 @@
+describe("inventory-compact-collection-filter", () => {
+  function signIn() {
+    cy.viewport(1512, 967);
+    cy.e2eReset();
+    cy.e2eSetSetupState("present");
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
+    });
+  }
+
+  it("keeps folder context controlled by the tree instead of duplicate toolbar filters", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-filter-1",
+            part_number: "PN-FILTER-1",
+            title: "Store One Filtered Item",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-filter-2",
+            part_number: "PN-FILTER-2",
+            title: "Watch List Item",
+            status: "active",
+            category: "Cars",
+          },
+        ],
+      },
+    }).as("itemsCollectionFilter");
+
+    signIn();
+    cy.wait("@itemsCollectionFilter");
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        "cabinet.inventory.item-folder-assignments.v1",
+        JSON.stringify({
+          "item-filter-1": "Store 1",
+          "item-filter-2": "Watch List",
+        })
+      );
+    });
+    cy.reload();
+    cy.wait("@itemsCollectionFilter");
+
+    cy.get('[data-testid="inventory-folder-tree"]').should("be.visible");
+    cy.get('[data-testid="folder-tree-item-store-1"]').should("be.visible");
+    cy.get('[data-testid="inventory-collection-filter"]').should("not.exist");
+    cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
+    cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
+      cy.contains("button", "Condition").should("be.visible");
+      cy.contains("button", "Category").should("be.visible");
+    });
+    cy.contains("Store One Filtered Item").should("be.visible");
+    cy.contains("Watch List Item").should("be.visible");
+
+    cy.get('[data-testid="folder-tree-item-store-1"]').click();
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Store 1");
+    cy.get('[data-testid="inventory-active-folder-control"]').within(() => {
+      cy.get('[data-testid="inventory-active-folder-label"]').should(
+        "contain.text",
+        "Store 1"
+      );
+      cy.contains("button", "Browse")
+        .should("be.visible")
+        .and("have.attr", "aria-controls", "inventory-folder-browser-menu");
+    });
+    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .should("be.visible")
+      .within(() => {
+        cy.get('[data-testid="folder-tree-inline-actions-watch-list"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-row-actions-watch-list"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-add-child-watch-list"]').should(
+          "not.exist"
+        );
+        cy.get('[data-testid="folder-tree-drag-handle-watch-list"]').should(
+          "not.exist"
+        );
+      });
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-watch-list"]')
+      .click();
+    cy.get('[data-testid="collection-active-context"]').should(
+      "contain",
+      "Watch List"
+    );
+    cy.get('[data-testid="inventory-active-folder-label"]').should(
+      "contain.text",
+      "Watch List"
+    );
+    cy.contains("Store One Filtered Item").should("not.exist");
+    cy.contains("Watch List Item").should("be.visible");
+
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-inline-actions-watch-list"]')
+      .should("exist");
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-row-actions-watch-list"]')
+      .should("exist");
+    cy.get('[data-testid="inventory-folder-tree"]')
+      .find('[data-testid="folder-tree-drag-handle-watch-list"]')
+      .should("exist");
+
+    cy.get('[data-testid="folder-tree-add-root"]').click();
+    cy.get('[data-testid="folder-tree-name-input"]').type("Empty Filter Bucket");
+    cy.get('[data-testid="folder-tree-create-submit"]').click();
+    cy.get('[data-testid="collection-active-context"]').should(
+      "contain",
+      "Empty Filter Bucket"
+    );
+    cy.contains("Store One Filtered Item").should("not.exist");
+    cy.contains("Watch List Item").should("not.exist");
+    cy.contains("No results.").should("be.visible");
+  });
+
+  it("filters by full folder-tree folders instead of falling back to All Items", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-store-3-only",
+            part_number: "PN-STORE-3",
+            title: "Store Three Exclusive Item",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-warehouse-2-only",
+            part_number: "PN-WAREHOUSE-2",
+            title: "Warehouse Two Exclusive Item",
+            status: "active",
+            category: "Cards",
+          },
+        ],
+      },
+    }).as("itemsFolderTreeFilter");
+
+    signIn();
+    cy.wait("@itemsFolderTreeFilter");
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        "cabinet.inventory.item-folder-assignments.v1",
+        JSON.stringify({
+          "item-store-3-only": "Store 3",
+          "item-warehouse-2-only": "Warehouse 2",
+        })
+      );
+    });
+    cy.reload();
+    cy.wait("@itemsFolderTreeFilter");
+
+    cy.get('[data-testid="folder-tree-item-store-3"]').click();
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Store 3");
+    cy.contains("Store Three Exclusive Item").should("be.visible");
+    cy.contains("Warehouse Two Exclusive Item").should("not.exist");
+
+    cy.get('[data-testid="folder-tree-toggle-warehouses"]').click();
+    cy.get('[data-testid="folder-tree-item-warehouse-2"]').click();
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Warehouse 2");
+    cy.contains("Warehouse Two Exclusive Item").should("be.visible");
+    cy.contains("Store Three Exclusive Item").should("not.exist");
+  });
+
+  it("uses the folder tree as the only inventory context filter and keeps tree counts aligned with rows", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-watch-count-1",
+            part_number: "PN-WATCH-1",
+            title: "Watch Count One",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-watch-count-2",
+            part_number: "PN-WATCH-2",
+            title: "Watch Count Two",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-store-count-1",
+            part_number: "PN-STORE-COUNT-1",
+            title: "Store Count One",
+            status: "active",
+            category: "Cards",
+          },
+        ],
+      },
+    }).as("itemsFolderCountFilter");
+
+    signIn();
+    cy.wait("@itemsFolderCountFilter");
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        "cabinet.inventory.item-folder-assignments.v1",
+        JSON.stringify({
+          "item-watch-count-1": "Watch List",
+          "item-watch-count-2": "Watch List",
+          "item-store-count-1": "Store 1",
+        })
+      );
+    });
+    cy.reload();
+    cy.wait("@itemsFolderCountFilter");
+
+    cy.contains("p", /Folders:\s*29\s+Items:\s*3/).should("be.visible");
+    cy.get('[data-testid="inventory-collection-filter-select"]').should("not.exist");
+    cy.get('[data-testid="inventory-table-toolbar"]').within(() => {
+      cy.contains("button", "Condition").should("be.visible");
+      cy.contains("button", "Category").should("be.visible");
+    });
+
+    cy.get('[data-testid="folder-tree-item-watch-list"]').click();
+    cy.get('[data-testid="folder-tree-count-watch-list"]').should("have.text", "2");
+    cy.get('[data-testid="collection-active-context"]').should("contain", "Watch List");
+    cy.contains(
+      "p",
+      /Folders:\s*1\s+Items:\s*2\s+Active Brand:\s*All\s+Active Category:\s*All\s+Active Context:\s*Watch List/
+    ).should("be.visible");
+    cy.get('[data-testid^="inventory-item-row-"]').should("have.length", 2);
+    cy.contains("Watch Count One").should("be.visible");
+    cy.contains("Watch Count Two").should("be.visible");
+    cy.contains("Store Count One").should("not.exist");
+    cy.get('[data-testid="inventory-selected-folder-empty"]').should("not.exist");
+  });
+
+  it("stretches the inventory table section to the available viewport height", () => {
+    cy.viewport(1512, 967);
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-layout-1",
+            part_number: "PN-LAYOUT-1",
+            title: "Layout Fill One",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-layout-2",
+            part_number: "PN-LAYOUT-2",
+            title: "Layout Fill Two",
+            status: "active",
+            category: "Cars",
+          },
+          {
+            id: "item-layout-3",
+            part_number: "PN-LAYOUT-3",
+            title: "Layout Fill Three",
+            status: "active",
+            category: "Cars",
+          },
+        ],
+      },
+    }).as("itemsLayoutFill");
+
+    signIn();
+    cy.wait("@itemsLayoutFill");
+    cy.window().then((win) => {
+      win.localStorage.setItem(
+        "cabinet.inventory.item-folder-assignments.v1",
+        JSON.stringify({
+          "item-layout-1": "Store 2",
+          "item-layout-2": "Store 2",
+          "item-layout-3": "Store 2",
+        })
+      );
+    });
+    cy.reload();
+    cy.wait("@itemsLayoutFill");
+
+    cy.get('[data-testid="folder-tree-item-store-2"]').click();
+    cy.get('[data-testid="inventory-workspace"]').should("be.visible");
+    cy.get('[data-testid="inventory-table-card"]').should("be.visible");
+    cy.get('[data-testid="inventory-table-surface"]').should("be.visible");
+
+    cy.get('[data-testid="inventory-table-card"]').then(($card) => {
+      cy.get('[data-testid="inventory-workspace"]').then(($workspace) => {
+        expect($card[0].getBoundingClientRect().height).to.be.closeTo(
+          $workspace[0].getBoundingClientRect().height,
+          2
+        );
+      });
+    });
+    cy.get('[data-testid="inventory-table-surface"]').then(($surface) => {
+      expect($surface[0].getBoundingClientRect().height).to.be.greaterThan(450);
+    });
+    cy.window().then((win) => {
+      expect(win.document.documentElement.scrollHeight).to.be.at.most(
+        win.innerHeight + 2
+      );
+    });
+  });
+});

@@ -21,10 +21,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: ui.web/package-lock.json
       - name: Install OpenSpec CLI
         run: npm install -g @fission-ai/openspec@latest
       - name: Validate OpenSpec
         run: openspec validate --all --strict --no-interactive
+      - name: Install ui.web dependencies
+        run: npm ci
+        working-directory: ui.web
+      - name: Build runtime UI static bundle for Go tests
+        run: npm run build
+        working-directory: ui.web
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
