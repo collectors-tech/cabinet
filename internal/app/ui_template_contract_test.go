@@ -295,7 +295,8 @@ func TestCollectionWorkspaceSemanticContract(t *testing.T) {
 		"Folders",
 		"Active Brand",
 		"Active Category",
-		"Collection Browser",
+		"inventory-table-card",
+		"collection-summary-line",
 	})
 }
 
@@ -338,7 +339,7 @@ func TestInventoryFolderTreePersistenceAndDragContract(t *testing.T) {
 	required := []string{
 		"inventoryTreeStorageKey",
 		"inventoryWorkspaceSettingsStorageKeyPrefix",
-		"inventory.folder-tree.v1",
+		"inventory.folder-tree.v2",
 		"loadPersistedWorkspaceSnapshot",
 		"loadProfileWorkspaceSnapshot",
 		"savePersistedWorkspaceSnapshot",

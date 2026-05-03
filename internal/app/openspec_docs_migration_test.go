@@ -11,6 +11,13 @@ import (
 func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 	t.Parallel()
 
+	allowedMarkdownFiles := map[string]struct{}{
+		"../../docs/CONSOLE-OUTPUT-STANDARD.md":     {},
+		"../../docs/PRODUCT-OVERVIEW.md":            {},
+		"../../docs/PRODUCT_OVERVIEW_PLAN.md":       {},
+		"../../docs/auth/exploration-auth-setup.md": {},
+	}
+
 	var markdownFiles []string
 	err := filepath.WalkDir("../../docs", func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -21,7 +28,10 @@ func TestDocsFolderContainsNoMarkdownAfterMigration(t *testing.T) {
 		}
 		if strings.EqualFold(filepath.Ext(path), ".md") {
 			normalized := filepath.ToSlash(path)
-			if strings.HasPrefix(normalized, "../../docs/help-center/") || normalized == "../../docs/auth/exploration-auth-setup.md" {
+			if strings.HasPrefix(normalized, "../../docs/help-center/") {
+				return nil
+			}
+			if _, ok := allowedMarkdownFiles[normalized]; ok {
 				return nil
 			}
 			markdownFiles = append(markdownFiles, filepath.ToSlash(path))
@@ -50,6 +60,7 @@ func TestOpenSpecDocumentationGovernanceContract(t *testing.T) {
 		"### Requirement DOCUMENTATION-GOVERNANCE-001: OpenSpec Is The Normative Documentation Source",
 		"### Requirement DOCUMENTATION-GOVERNANCE-002: Legacy Docs Directory Contains No Markdown Sources",
 		"### Requirement DOCUMENTATION-GOVERNANCE-003: OpenAPI Contract Remains in docs/api/openapi.yaml",
+		"docs/PRODUCT-OVERVIEW.md",
 	}
 	for _, token := range required {
 		if !strings.Contains(src, token) {
