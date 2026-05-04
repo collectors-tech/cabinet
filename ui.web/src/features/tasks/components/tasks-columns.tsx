@@ -561,6 +561,7 @@ export function getTasksColumns({
           className='translate-y-[2px]'
         />
       ),
+      meta: { className: 'w-12' },
       enableSorting: false,
       enableHiding: false,
     },
@@ -575,8 +576,20 @@ export function getTasksColumns({
                 title={isInventoryRoute ? 'Part #' : 'Task'}
               />
             ),
+            meta: isInventoryRoute
+              ? {
+                  className: 'w-[14rem] max-w-[14rem]',
+                  tdClassName: 'max-w-0',
+                }
+              : undefined,
             cell: ({ row }) => (
-              <div className='w-[120px]'>{row.getValue('id')}</div>
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-part-number'
+                title={String(row.getValue('id'))}
+              >
+                {row.getValue('id')}
+              </span>
             ),
             enableSorting: false,
             enableHiding: false,
@@ -601,8 +614,11 @@ export function getTasksColumns({
             {!isInventoryRoute && !isWishlistRoute && label ? (
               <Badge variant='outline'>{label.label}</Badge>
             ) : null}
-            <div className='flex space-x-2'>
-              <span className='truncate font-medium'>
+            <div className='flex min-w-0 space-x-2'>
+              <span
+                className='block min-w-0 max-w-full truncate font-medium'
+                title={String(row.getValue('title'))}
+              >
                 {row.getValue('title')}
               </span>
             </div>
@@ -640,8 +656,8 @@ export function getTasksColumns({
             cell: ({ row }) => {
               if (isInventoryRoute) {
                 return (
-                  <div className='flex min-w-[100px] items-center gap-2'>
-                    <span className='capitalize'>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    <span className='block max-w-full truncate capitalize'>
                       {String(row.getValue('status'))}
                     </span>
                   </div>
@@ -797,7 +813,11 @@ export function getTasksColumns({
       meta: { className: 'ps-1', tdClassName: 'ps-3' },
       cell: ({ row }) => {
         if (isInventoryRoute) {
-          return <span>{row.original.label || 'Uncategorized'}</span>
+          return (
+            <span className='block max-w-full truncate'>
+              {row.original.label || 'Uncategorized'}
+            </span>
+          )
         }
 
         if (isWishlistRoute) {
@@ -839,6 +859,10 @@ export function getTasksColumns({
     },
     {
       id: 'actions',
+      meta: {
+        className: isInventoryRoute ? 'w-40' : undefined,
+        tdClassName: isInventoryRoute ? 'max-w-none' : undefined,
+      },
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-1'>
           {isInventoryRoute ? (
