@@ -565,6 +565,31 @@ func TestIntegrationsEditPersistenceContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"<Label htmlFor='provider-base-url'>Base URL</Label>",
+		"id='provider-base-url'",
+		"<Label htmlFor='provider-marketplace'>Marketplace / Region</Label>",
+		"id='provider-marketplace'",
+		"<Label htmlFor='provider-items-per-page'>Items per page</Label>",
+		"id='provider-items-per-page'",
+		"<Label htmlFor='provider-token'>New token / API key</Label>",
+		"id='provider-token'",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations provider input label contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 

@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -994,29 +995,41 @@ export function Apps({
                   'Enter provider details, validate health, and save configuration.'}
               </div>
 
-              <Input
-                placeholder='Base URL'
-                value={form.baseURL}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, baseURL: e.target.value }))
-                }
-              />
-              <Input
-                placeholder='Marketplace / Region'
-                value={form.marketplace}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, marketplace: e.target.value }))
-                }
-              />
-              <Input
-                type='number'
-                min='1'
-                placeholder='Items per page'
-                value={form.itemsPerPage}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))
-                }
-              />
+              <div className='space-y-2'>
+                <Label htmlFor='provider-base-url'>Base URL</Label>
+                <Input
+                  id='provider-base-url'
+                  placeholder='Base URL'
+                  value={form.baseURL}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, baseURL: e.target.value }))
+                  }
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
+                <Input
+                  id='provider-marketplace'
+                  placeholder='Marketplace / Region'
+                  value={form.marketplace}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, marketplace: e.target.value }))
+                  }
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='provider-items-per-page'>Items per page</Label>
+                <Input
+                  id='provider-items-per-page'
+                  type='number'
+                  min='1'
+                  placeholder='Items per page'
+                  value={form.itemsPerPage}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))
+                  }
+                />
+              </div>
 
               {editingProvider.auth_mode !== 'none' ? (
                 <div className='space-y-2'>
@@ -1038,15 +1051,19 @@ export function Apps({
                       </Button>
                     </div>
                   ) : (
-                    <Input
-                      type='password'
-                      data-testid='provider-token-input'
-                      placeholder='New token / API key'
-                      value={form.token}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, token: e.target.value }))
-                      }
-                    />
+                    <div className='space-y-2'>
+                      <Label htmlFor='provider-token'>New token / API key</Label>
+                      <Input
+                        id='provider-token'
+                        type='password'
+                        data-testid='provider-token-input'
+                        placeholder='New token / API key'
+                        value={form.token}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, token: e.target.value }))
+                        }
+                      />
+                    </div>
                   )}
                 </div>
               ) : null}
