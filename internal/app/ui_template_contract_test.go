@@ -590,6 +590,30 @@ func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
 	}
 }
 
+func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"/api/provider/health?provider=",
+		"const checkedAt = payload.updated_at ?? new Date().toISOString()",
+		"health: nextProvider.health",
+		"last_run: nextProvider.last_run",
+		"{actionMessage ? <p>{actionMessage}</p> : null}",
+		"Validated ${editingProvider.display_name} health: ${healthStatus}.",
+		"Validating...",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations validate health reconciliation missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 

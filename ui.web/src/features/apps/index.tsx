@@ -606,30 +606,34 @@ export function Apps({
         message?: string
         updated_at?: string
       }
+      const checkedAt = payload.updated_at ?? new Date().toISOString()
+      const healthStatus = payload.status ?? 'unknown'
+      const nextProvider: ProviderRecord = {
+        ...editingProvider,
+        health: {
+          status: healthStatus,
+          message: payload.message,
+          last_checked_at: checkedAt,
+        },
+        last_run: {
+          status: healthStatus === 'ok' ? 'success' : 'failed',
+          finished_at: checkedAt,
+        },
+      }
       setProviders((prev) =>
         prev.map((provider) =>
           provider.provider_id === editingProvider.provider_id
             ? {
                 ...provider,
-                health: {
-                  status: payload.status ?? 'unknown',
-                  message: payload.message,
-                  last_checked_at: payload.updated_at ?? null,
-                },
-                last_run: {
-                  status:
-                    payload.status === 'ok'
-                      ? 'success'
-                      : payload.status === 'unknown'
-                        ? 'never'
-                        : 'failed',
-                  finished_at: payload.updated_at ?? null,
-                },
+                health: nextProvider.health,
+                last_run: nextProvider.last_run,
               }
             : provider
         )
       )
-      setActionMessage(`Validated ${editingProvider.display_name} health.`)
+      setActionMessage(
+        `Validated ${editingProvider.display_name} health: ${healthStatus}.`
+      )
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'validate_failed')
     } finally {
@@ -988,6 +992,7 @@ export function Apps({
                     editingProvider.last_run?.finished_at ??
                     'n/a'}
                 </p>
+                {actionMessage ? <p>{actionMessage}</p> : null}
               </div>
 
               <div className='rounded-md border p-3 text-xs text-muted-foreground'>
@@ -1070,6 +1075,9 @@ export function Apps({
 
               {saveError ? (
                 <p className='text-sm text-destructive'>{saveError}</p>
+              ) : null}
+              {actionMessage ? (
+                <p className='text-sm text-muted-foreground'>{actionMessage}</p>
               ) : null}
 
               <div className='flex flex-wrap justify-end gap-2'>
