@@ -23,3 +23,21 @@ Cabinet SHALL preserve capture metadata needed for reconciliation and future exp
 - **AND** order ID, transaction ID, listing ID, and variation ID SHALL be parsed from card URLs/attributes where visible
 - **AND** note, feedback, contact seller, return, buy-again/view-item, hide-order, and help/report actions SHALL be captured as passive action metadata only
 - **AND** passive capture MUST NOT execute note, feedback, contact, return, buy-again, hide-order, help/report, or other menu actions
+
+### Requirement EBAY-PURCHASE-CAPTURE-003: eBay purchase capture MUST group purchased items under purchase orders
+Cabinet SHALL represent captured eBay purchases as order parent records with child purchased item records, rather than flattening all item cards into one list.
+
+#### Scenario: Group one or more item cards under the captured order
+- **GIVEN** multiple captured eBay purchase-history item cards share the same order ID
+- **WHEN** Cabinet groups the parsed purchase cards for the Purchase Inbox
+- **THEN** one purchase order parent record SHALL be produced for that order ID
+- **AND** each purchased item card SHALL remain a child record under the order parent
+- **AND** order-level metadata such as order total, currency, seller set, status, destination marker, costs, and order detail URL SHALL be preserved on the parent when available
+- **AND** item-level metadata such as listing ID, variation ID, transaction ID, purchased card/aspect metadata, quantity, item price, image, item status, tracking status, note capability, and passive action metadata SHALL remain on the child item
+
+#### Scenario: Merge repeated captures without duplicating child items
+- **GIVEN** the same eBay purchase card is captured more than once
+- **WHEN** Cabinet groups the repeated captures by order
+- **THEN** the repeated captures SHALL merge into the same order parent
+- **AND** matching child items SHALL be merged by transaction ID, listing/variation ID, or purchased identity fallback
+- **AND** updated item metadata from later captures SHALL be preserved without creating duplicate child rows

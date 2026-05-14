@@ -280,6 +280,7 @@ Capabilities:
 
 - Show captured eBay purchases grouped by purchase order.
 - Treat the purchase order as the parent/container record and purchased items as child/sub-item records.
+- Implementation trace: issue #829 adds the first app-local grouping contract in `internal/ebaypurchasecapture`, producing order parent records with child purchase-card records and de-duplicating repeated captures by stable item keys.
 - Create a clear order folder/card for each order ID, for example eBay order `20-14595-70928`.
 - Show order-level metadata on the parent:
   - order ID

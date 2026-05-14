@@ -25,6 +25,16 @@ type PurchaseCard struct {
 	ItemURL           string
 	SellerUsername    string
 	SellerProfileURL  string
+	OrderTotal        string
+	Currency          string
+	Shipping          string
+	Tax               string
+	ImportCharges     string
+	DestinationMarker string
+	OrderStatus       string
+	OrderDetailURL    string
+	ItemStatus        string
+	TrackingStatus    string
 	NoteCapability    NoteCapability
 	Actions           []Action
 }
