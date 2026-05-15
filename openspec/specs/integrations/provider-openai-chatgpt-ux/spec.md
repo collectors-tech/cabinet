@@ -34,3 +34,34 @@ Cabinet MUST define how integrations-level provider defaults interact with Assis
 - **WHEN** user opens Assistant workspace
 - **THEN** assistant selection UI MUST reflect those defaults deterministically
 - **AND** thread metadata MUST record the actual provider/model used for messages and executions
+
+### Requirement PROVIDER-OPENAI-UX-005: OpenAI config SHALL use a clean card and method-aware dialog
+Cabinet MUST adapt the SCHA OpenAI setup pattern into a compact provider card plus a dialog-owned configuration flow. The provider card MUST avoid setup clutter, while the dialog MUST separately present Browser Auth, API key, and Test OpenAI sections.
+
+#### Scenario: Clean OpenAI card with dialog-owned setup
+- **GIVEN** user opens `/integrations`
+- **WHEN** the OpenAI / ChatGPT provider card renders
+- **THEN** card-level setup controls MUST be limited to status and a primary connect/manage action
+- **AND** card-level Validate/Sync/Test/configuration clutter MUST be absent
+- **WHEN** user opens the OpenAI config dialog
+- **THEN** Browser Auth, API key, and Test OpenAI sections MUST be visible inside the dialog
+- **AND** duplicate method narration such as `OpenAI is using: Browser Auth` MUST NOT render
+
+### Requirement PROVIDER-OPENAI-UX-006: Browser Auth SHALL require verifiable proof before connected readiness
+Cabinet MUST NOT mark OpenAI Browser Auth connected from navigation, a user return, or a provider tab launch alone. Connected readiness requires a verifiable callback/artifact/proof recorded by Cabinet.
+
+#### Scenario: Browser Auth setup-needed until proof exists
+- **GIVEN** OpenAI Browser Auth has no verified callback/artifact/proof
+- **WHEN** the OpenAI dialog renders
+- **THEN** Browser Auth MUST show setup-needed or unavailable state
+- **AND** OpenAI MUST NOT be considered connected through Browser Auth
+- **AND** the UI MUST explain that navigation alone is not connected proof
+
+### Requirement PROVIDER-OPENAI-UX-007: API key setup SHALL save secrets separately from profile settings
+Cabinet MUST keep OpenAI API-key entry write-only and store the key through the profile secrets API while storing non-secret OpenAI defaults in profile settings.
+
+#### Scenario: API key connect writes secret and non-secret defaults
+- **GIVEN** user enters an OpenAI API key and default model in the OpenAI dialog
+- **WHEN** user connects or saves OpenAI
+- **THEN** Cabinet MUST write `openai_api_key` through `/api/profiles/:profileId/secrets`
+- **AND** Cabinet MUST write non-secret defaults such as `assistant_default_provider`, `assistant_default_model`, and active method through `/api/profiles/:profileId/settings`
