@@ -1935,6 +1935,23 @@ func New(cfg config.Config) (*App, error) {
 		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "failed_to_run_scanner",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  "review_provider_credentials_and_health",
+					"query_set_id": req.QuerySetID,
+				})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
