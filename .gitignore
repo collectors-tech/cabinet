@@ -4,6 +4,7 @@ ui.web/coverage/
 ui.web/playwright-report/
 ui.web/test-results/
 ui.web/cypress/artifacts/
+ui.web/cypress/downloads/
 bin/
 .idea/
 dist/
