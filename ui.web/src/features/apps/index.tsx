@@ -70,7 +70,25 @@ type ProviderRecord = {
     stock_observation: boolean
     pricing: boolean
     health: boolean
+    assistant?: boolean
+    image_help?: boolean
+    content_generation?: boolean
   }
+  active_auth_method?: 'api_key' | 'browser_auth' | string
+  auth_methods?: {
+    api_key?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+    }
+    browser_auth?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+      setup_message?: string
+    }
+  }
+  model_options?: string[]
   health?: {
     status: 'ok' | 'degraded' | 'down' | 'unknown' | string
     last_checked_at?: string | null
@@ -87,6 +105,8 @@ type IntegrationForm = {
   token: string
   marketplace: string
   itemsPerPage: string
+  openAiModel: string
+  openAiTestPrompt: string
 }
 
 type ProfileOption = {
@@ -129,6 +149,14 @@ function isConnected(
   provider: ProviderRecord,
   settings: Record<string, string>
 ) {
+  if (provider.provider_id === 'openai') {
+    return (
+      settings['openai.active_auth_method'] === 'api_key' ||
+      settings['openai.active_auth_method'] === 'browser_auth' ||
+      provider.active_auth_method === 'api_key' ||
+      provider.active_auth_method === 'browser_auth'
+    )
+  }
   if (provider.auth_mode === 'none') {
     return true
   }
@@ -224,6 +252,9 @@ export function Apps({
     token: '',
     marketplace: '',
     itemsPerPage: '',
+    openAiModel: 'gpt-4o-mini',
+    openAiTestPrompt:
+      'Write one sentence confirming OpenAI is connected to Cabinet.',
   })
 
   const loadBootstrap = useCallback(async () => {
@@ -435,6 +466,9 @@ export function Apps({
       token: '',
       marketplace: settings[keys.marketplaceKey] ?? 'AU',
       itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
+      openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
+      openAiTestPrompt:
+        'Write one sentence confirming OpenAI is connected to Cabinet.',
     })
     setReplaceToken(!provider.has_token)
   }
@@ -510,6 +544,9 @@ export function Apps({
       token: '',
       marketplace: '',
       itemsPerPage: '',
+      openAiModel: 'gpt-4o-mini',
+      openAiTestPrompt:
+        'Write one sentence confirming OpenAI is connected to Cabinet.',
     })
   }
 
@@ -523,6 +560,76 @@ export function Apps({
     try {
       const keys = providerSettingsKeys(editingProvider.provider_id)
       const trimmedToken = form.token.trim()
+      if (editingProvider.provider_id === 'openai') {
+        const openAiSettings: Record<string, string> = {
+          openai_base_url: form.baseURL.trim(),
+          openai_active_auth_method:
+            trimmedToken !== ''
+              ? 'api_key'
+              : (settings['openai_active_auth_method'] ??
+                settings['openai.active_auth_method'] ??
+                ''),
+          'openai.active_auth_method':
+            trimmedToken !== ''
+              ? 'api_key'
+              : (settings['openai.active_auth_method'] ?? ''),
+          assistant_default_provider: 'openai',
+          assistant_default_model: form.openAiModel.trim() || 'gpt-4o-mini',
+          'integration.openai.enabled':
+            trimmedToken !== '' ||
+            settings['openai.active_auth_method'] === 'browser_auth'
+              ? 'true'
+              : 'false',
+        }
+        const settingsResponse = await fetch(
+          `/api/profiles/${activeProfileId}/settings`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: openAiSettings }),
+          }
+        )
+        if (!settingsResponse.ok) {
+          throw new Error(`save_failed_${settingsResponse.status}`)
+        }
+        if (trimmedToken !== '') {
+          const secretResponse = await fetch(
+            `/api/profiles/${activeProfileId}/secrets`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: 'openai_api_key',
+                value: trimmedToken,
+              }),
+            }
+          )
+          if (!secretResponse.ok) {
+            throw new Error(`secret_save_failed_${secretResponse.status}`)
+          }
+        }
+        const payload = (await settingsResponse.json()) as {
+          settings?: Record<string, string>
+        }
+        setSettings(payload.settings ?? {})
+        setProviders((prev) =>
+          prev.map((provider) =>
+            provider.provider_id === 'openai'
+              ? {
+                  ...provider,
+                  has_token: provider.has_token || trimmedToken !== '',
+                  active_auth_method:
+                    trimmedToken !== ''
+                      ? 'api_key'
+                      : provider.active_auth_method,
+                }
+              : provider
+          )
+        )
+        setActionMessage('OpenAI configuration saved.')
+        closeIntegration()
+        return
+      }
       if (
         editingProvider.auth_mode !== 'none' &&
         !editingProvider.has_token &&
@@ -616,7 +723,12 @@ export function Apps({
           last_checked_at: checkedAt,
         },
         last_run: {
-          status: healthStatus === 'ok' ? 'success' : 'failed',
+          status:
+            healthStatus === 'ok'
+              ? 'success'
+              : healthStatus === 'unknown'
+                ? 'never'
+                : 'failed',
           finished_at: checkedAt,
         },
       }
@@ -949,6 +1061,16 @@ export function Apps({
                       Pricing
                     </span>
                   ) : null}
+                  {provider.capabilities.assistant ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Assistant
+                    </span>
+                  ) : null}
+                  {provider.capabilities.image_help ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Image help
+                    </span>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -1000,104 +1122,344 @@ export function Apps({
                   'Enter provider details, validate health, and save configuration.'}
               </div>
 
-              <div className='space-y-2'>
-                <Label htmlFor='provider-base-url'>Base URL</Label>
-                <Input
-                  id='provider-base-url'
-                  placeholder='Base URL'
-                  value={form.baseURL}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, baseURL: e.target.value }))
-                  }
-                />
-              </div>
-              <div className='space-y-2'>
-                <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
-                <Input
-                  id='provider-marketplace'
-                  placeholder='Marketplace / Region'
-                  value={form.marketplace}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, marketplace: e.target.value }))
-                  }
-                />
-              </div>
-              <div className='space-y-2'>
-                <Label htmlFor='provider-items-per-page'>Items per page</Label>
-                <Input
-                  id='provider-items-per-page'
-                  type='number'
-                  min='1'
-                  placeholder='Items per page'
-                  value={form.itemsPerPage}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))
-                  }
-                />
-              </div>
-
-              {editingProvider.auth_mode !== 'none' ? (
-                <div className='space-y-2'>
-                  {editingProvider.has_token && !replaceToken ? (
-                    <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                      <p>Token on file.</p>
-                      <p className='text-muted-foreground'>
-                        Existing token is hidden. Use replace-token to update
-                        it.
-                      </p>
+              {editingProvider.provider_id === 'openai' ? (
+                <div className='space-y-4' data-testid='openai-config-dialog'>
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-browser-auth-section'
+                  >
+                    <div className='flex items-center justify-between gap-3'>
+                      <div>
+                        <p className='font-medium'>Browser Auth</p>
+                        <p className='text-xs text-muted-foreground'>
+                          Use a verified OpenAI/Codex browser-auth artifact when
+                          available.
+                        </p>
+                      </div>
+                      <span
+                        className='rounded bg-muted px-2 py-1 text-xs'
+                        data-testid='openai-browser-auth-status'
+                      >
+                        {settings['openai.browser_auth_state'] ??
+                          editingProvider.auth_methods?.browser_auth?.state ??
+                          'setup_needed'}
+                      </span>
+                    </div>
+                    <p
+                      className='mt-2 text-xs text-muted-foreground'
+                      data-testid='openai-browser-auth-setup-needed'
+                    >
+                      Browser Auth is setup-needed until Cabinet can verify an
+                      acquired callback/artifact. Navigation alone never marks
+                      OpenAI connected.
+                    </p>
+                    <div className='mt-3 flex flex-wrap gap-2'>
                       <Button
+                        type='button'
+                        size='sm'
+                        disabled
+                        data-testid='openai-browser-auth-connect'
+                      >
+                        Only available on this PC
+                      </Button>
+                      <Button
+                        type='button'
                         size='sm'
                         variant='outline'
-                        className='mt-2'
-                        data-testid='replace-token'
-                        onClick={() => setReplaceToken(true)}
+                        data-testid='openai-browser-auth-disconnect'
+                        onClick={() => {
+                          setSettings((prev) => ({
+                            ...prev,
+                            'openai.browser_auth_state': 'disconnected',
+                            'openai.active_auth_method':
+                              prev['openai.active_auth_method'] ===
+                              'browser_auth'
+                                ? ''
+                                : prev['openai.active_auth_method'],
+                          }))
+                        }}
                       >
-                        Replace Token
+                        Disconnect
                       </Button>
                     </div>
-                  ) : (
-                    <div className='space-y-2'>
-                      <Label htmlFor='provider-token'>New token / API key</Label>
+                  </section>
+
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-api-key-section'
+                  >
+                    <div className='flex items-center justify-between gap-3'>
+                      <div>
+                        <p className='font-medium'>API key</p>
+                        <p className='text-xs text-muted-foreground'>
+                          Validate and save an OpenAI API key for Cabinet
+                          assistant, image, and content workflows.
+                        </p>
+                      </div>
+                      <span
+                        className='rounded bg-muted px-2 py-1 text-xs'
+                        data-testid='openai-api-key-status'
+                      >
+                        {editingProvider.has_token ||
+                        settings['openai.active_auth_method'] === 'api_key'
+                          ? 'connected'
+                          : 'setup_needed'}
+                      </span>
+                    </div>
+                    {editingProvider.has_token && !replaceToken ? (
+                      <div className='mt-3 rounded-md border bg-muted/20 p-3 text-xs'>
+                        <p>API key on file.</p>
+                        <p className='text-muted-foreground'>
+                          Existing key is hidden. Replace it to update the
+                          active API-key method.
+                        </p>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='mt-2'
+                          data-testid='replace-token'
+                          onClick={() => setReplaceToken(true)}
+                        >
+                          Replace API key
+                        </Button>
+                      </div>
+                    ) : (
                       <Input
-                        id='provider-token'
+                        className='mt-3'
                         type='password'
                         data-testid='provider-token-input'
-                        placeholder='New token / API key'
+                        placeholder='OpenAI API key'
                         value={form.token}
                         onChange={(e) =>
-                          setForm((prev) => ({ ...prev, token: e.target.value }))
+                          setForm((prev) => ({
+                            ...prev,
+                            token: e.target.value,
+                          }))
+                        }
+                      />
+                    )}
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        onClick={() => void validateProvider()}
+                        disabled={validating}
+                        data-testid='openai-api-key-validate'
+                      >
+                        {validating ? 'Validating...' : 'Validate'}
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        data-testid='openai-api-key-connect'
+                        onClick={() => void saveIntegration()}
+                        disabled={saving}
+                      >
+                        Connect
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='openai-api-key-disconnect'
+                        onClick={() => setReplaceToken(true)}
+                      >
+                        Disconnect
+                      </Button>
+                    </div>
+                  </section>
+
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-test-section'
+                  >
+                    <p className='font-medium'>Test OpenAI</p>
+                    <p className='text-xs text-muted-foreground'>
+                      Uses the active connected method. If no method is
+                      verified, Cabinet shows setup-needed instead of pretending
+                      readiness.
+                    </p>
+                    <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                      <Select
+                        value={form.openAiModel}
+                        onValueChange={(value) =>
+                          setForm((prev) => ({ ...prev, openAiModel: value }))
+                        }
+                      >
+                        <SelectTrigger data-testid='openai-test-model'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(
+                            editingProvider.model_options ?? [
+                              'gpt-4o-mini',
+                              'gpt-4.1-mini',
+                            ]
+                          ).map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        data-testid='openai-active-method'
+                        readOnly
+                        value={
+                          settings['openai.active_auth_method'] ===
+                          'browser_auth'
+                            ? 'Browser Auth'
+                            : settings['openai.active_auth_method'] ===
+                                  'api_key' || editingProvider.has_token
+                              ? 'API key'
+                              : 'None connected'
                         }
                       />
                     </div>
-                  )}
+                    <Input
+                      className='mt-2'
+                      data-testid='openai-test-prompt'
+                      value={form.openAiTestPrompt}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          openAiTestPrompt: e.target.value,
+                        }))
+                      }
+                    />
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-3'
+                      data-testid='openai-test-run'
+                      disabled={!isConnected(editingProvider, settings)}
+                      onClick={() =>
+                        setActionMessage(
+                          'OpenAI test requires a verified active method before Cabinet runs provider calls.'
+                        )
+                      }
+                    >
+                      Test
+                    </Button>
+                  </section>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-base-url'>Base URL</Label>
+                    <Input
+                      id='provider-base-url'
+                      placeholder='Base URL'
+                      value={form.baseURL}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          baseURL: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
+                    <Input
+                      id='provider-marketplace'
+                      placeholder='Marketplace / Region'
+                      value={form.marketplace}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          marketplace: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-items-per-page'>Items per page</Label>
+                    <Input
+                      id='provider-items-per-page'
+                      type='number'
+                      min='1'
+                      placeholder='Items per page'
+                      value={form.itemsPerPage}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          itemsPerPage: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  {editingProvider.auth_mode !== 'none' ? (
+                    <div className='space-y-2'>
+                      {editingProvider.has_token && !replaceToken ? (
+                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                          <p>Token on file.</p>
+                          <p className='text-muted-foreground'>
+                            Existing token is hidden. Use replace-token to
+                            update it.
+                          </p>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='mt-2'
+                            data-testid='replace-token'
+                            onClick={() => setReplaceToken(true)}
+                          >
+                            Replace Token
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className='space-y-2'>
+                          <Label htmlFor='provider-token'>New token / API key</Label>
+                          <Input
+                            id='provider-token'
+                            type='password'
+                            data-testid='provider-token-input'
+                            placeholder='New token / API key'
+                            value={form.token}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                token: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              )}
 
               {saveError ? (
                 <p className='text-sm text-destructive'>{saveError}</p>
               ) : null}
-              {actionMessage ? (
-                <p className='text-sm text-muted-foreground'>{actionMessage}</p>
-              ) : null}
 
               <div className='flex flex-wrap justify-end gap-2'>
-                <Button
-                  variant='outline'
-                  onClick={() => void validateProvider()}
-                  disabled={validating}
-                >
-                  {validating ? 'Validating...' : 'Validate'}
-                </Button>
-                <Button
-                  variant='outline'
-                  onClick={() => {
-                    setActionMessage(
-                      'Sync is initiated from Market Watch query sets. Open Market Watch to run provider discovery.'
-                    )
-                  }}
-                >
-                  Sync
-                </Button>
+                {editingProvider.provider_id !== 'openai' ? (
+                  <>
+                    <Button
+                      variant='outline'
+                      onClick={() => void validateProvider()}
+                      disabled={validating}
+                    >
+                      {validating ? 'Validating...' : 'Validate'}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      onClick={() => {
+                        setActionMessage(
+                          'Sync is initiated from Market Watch query sets. Open Market Watch to run provider discovery.'
+                        )
+                      }}
+                    >
+                      Sync
+                    </Button>
+                  </>
+                ) : null}
                 <Button
                   variant='outline'
                   onClick={closeIntegration}
@@ -1109,7 +1471,11 @@ export function Apps({
                   onClick={() => void saveIntegration()}
                   disabled={saving}
                 >
-                  {saving ? 'Saving...' : 'Save Integration'}
+                  {saving
+                    ? 'Saving...'
+                    : editingProvider.provider_id === 'openai'
+                      ? 'Save OpenAI'
+                      : 'Save Integration'}
                 </Button>
               </div>
             </div>
