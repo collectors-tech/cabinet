@@ -12,6 +12,7 @@ cabinet.exe
 *.tmp
 .tmp*
 .agentbus/
+.work-agent/
 .logs/
 .env
 # Generated Vite output is rebuilt by scripts/build-ui-static.ps1 and should not
