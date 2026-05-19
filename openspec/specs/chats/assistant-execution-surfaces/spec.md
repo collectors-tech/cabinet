@@ -62,6 +62,13 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **AND** content_generate MUST remain preview-only/no-mutation while setup is needed
 - **AND** listing_draft_generate MUST require explicit confirmation before any listing draft mutation can be applied
 
+#### Scenario: Discover image analysis and processing readiness
+- **GIVEN** image_analyze and image_process require OpenAI-backed media processing
+- **WHEN** the assistant queries the governed capability registry before verified provider and media-processing readiness exists
+- **THEN** both capabilities MUST be discoverable with provider requirements, media access requirements, input schema, preview shape, audit behavior, and media result destination
+- **AND** image_analyze MUST remain preview-only/no-mutation while setup is needed
+- **AND** image_process MUST require explicit confirmation before any processed variant is linked or applied
+
 ### Requirement ASSISTANT-EXECUTION-007: Assistant workflow runs SHALL persist auditable execution records
 Cabinet MUST persist OpenAI-backed and agent-backed work as durable workflow run records so previews, confirmations, provider traces, and outcomes are inspectable outside transient chat text.
 
@@ -70,6 +77,13 @@ Cabinet MUST persist OpenAI-backed and agent-backed work as durable workflow run
 - **WHEN** the workflow is accepted for execution or queued for provider work
 - **THEN** Cabinet MUST persist a run id, workflow id, capability id, profile id, source channel, status, progress timestamps, provider trace, result or error payload, and confirmation state
 - **AND** bulk runs MUST expose per-item result state so one failed item does not hide other item outcomes
+
+#### Scenario: Preserve original media through image workflow runs
+- **GIVEN** an assistant image workflow analyzes or processes existing Cabinet media
+- **WHEN** the workflow run completes with preview findings or a processed variant proposal
+- **THEN** the result MUST link back to source media evidence
+- **AND** image analysis MUST NOT create processed variants or mutate item/media records
+- **AND** image processing results MUST preserve original media id, variant media id, provenance, provider trace, and pending confirmation state
 
 ### Requirement ASSISTANT-EXECUTION-008: External intake channels SHALL use the same governed capability model
 Cabinet MUST route Telegram-originated photo, barcode, text, or mixed catalog intake through the same assistant capability registry, preview, confirmation, and audit model as in-app assistant actions.
