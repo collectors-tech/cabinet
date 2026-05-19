@@ -40,7 +40,8 @@ Cabinet SHALL open provider detail modal/drawer from card action to support inst
   - provider setup instructions
   - credential form fields (write-only token input)
   - health and last-run status
-  - provider actions (`Validate`, `Sync`, `Save`)
+  - provider actions (`Validate`, `Save`)
+  - unavailable dialog sync represented as a disabled/explained action when provider discovery must be started from Market Watch query sets
   - save action that persists provider settings
 
 ### Requirement INTEGRATION-022: Integrations screen MUST default to card interactions and keep URL-backed view state

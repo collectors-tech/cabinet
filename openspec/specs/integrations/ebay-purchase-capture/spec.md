@@ -1,0 +1,43 @@
+## Purpose
+Define eBay purchase-history capture behavior for Cabinet browser companion modules.
+
+## Requirements
+### Requirement EBAY-PURCHASE-CAPTURE-001: eBay purchase capture MUST preserve listing title separately from purchased item metadata
+Cabinet SHALL treat eBay purchase-history cards as structured purchase records rather than a flat title export.
+
+#### Scenario: Capture card variant metadata from purchase card
+- **GIVEN** an eBay AU purchase-history card has a broad listing title and item-card aspect metadata
+- **WHEN** Cabinet parses the purchase card capture payload
+- **THEN** the broad listing title SHALL be preserved as listing title
+- **AND** aspect metadata such as `Choose Single Or Playset`, `Card`, and `Quantity` SHALL be preserved as structured key/value metadata
+- **AND** the `Card` aspect SHALL be available as the purchased item identity candidate when present
+- **AND** quantity SHALL be parsed from card metadata when present
+
+### Requirement EBAY-PURCHASE-CAPTURE-002: eBay purchase capture MUST preserve seller, order, transaction, and action metadata separately
+Cabinet SHALL preserve capture metadata needed for reconciliation and future explicit workflows without executing eBay actions during passive capture.
+
+#### Scenario: Capture passive purchase-card actions
+- **GIVEN** an eBay AU purchase-history card contains seller links, note actions, feedback links, and More Actions menu entries
+- **WHEN** Cabinet parses the purchase card capture payload
+- **THEN** seller username and seller profile URL SHALL be captured when visible
+- **AND** order ID, transaction ID, listing ID, and variation ID SHALL be parsed from card URLs/attributes where visible
+- **AND** note, feedback, contact seller, return, buy-again/view-item, hide-order, and help/report actions SHALL be captured as passive action metadata only
+- **AND** passive capture MUST NOT execute note, feedback, contact, return, buy-again, hide-order, help/report, or other menu actions
+
+### Requirement EBAY-PURCHASE-CAPTURE-003: eBay purchase capture MUST group purchased items under purchase orders
+Cabinet SHALL represent captured eBay purchases as order parent records with child purchased item records, rather than flattening all item cards into one list.
+
+#### Scenario: Group one or more item cards under the captured order
+- **GIVEN** multiple captured eBay purchase-history item cards share the same order ID
+- **WHEN** Cabinet groups the parsed purchase cards for the Purchase Inbox
+- **THEN** one purchase order parent record SHALL be produced for that order ID
+- **AND** each purchased item card SHALL remain a child record under the order parent
+- **AND** order-level metadata such as order total, currency, seller set, status, destination marker, costs, and order detail URL SHALL be preserved on the parent when available
+- **AND** item-level metadata such as listing ID, variation ID, transaction ID, purchased card/aspect metadata, quantity, item price, image, item status, tracking status, note capability, and passive action metadata SHALL remain on the child item
+
+#### Scenario: Merge repeated captures without duplicating child items
+- **GIVEN** the same eBay purchase card is captured more than once
+- **WHEN** Cabinet groups the repeated captures by order
+- **THEN** the repeated captures SHALL merge into the same order parent
+- **AND** matching child items SHALL be merged by transaction ID, listing/variation ID, or purchased identity fallback
+- **AND** updated item metadata from later captures SHALL be preserved without creating duplicate child rows
