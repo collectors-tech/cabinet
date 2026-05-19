@@ -328,3 +328,132 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 		t.Fatalf("missing profile status=%d body=%s", missingProfile.Code, missingProfile.Body.String())
 	}
 }
+
+func TestAssistantWorkflowRunsPersistLifecycleAndBulkResults(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Workflow Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Workflow Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	createRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"catalog-draft-from-text",
+		"capability_id":"catalog_add_from_text",
+		"source_channel":"telegram",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"tg-message-1",
+		"confirmation_state":"required",
+		"input":{"text":"AFX slot car notes"},
+		"provider_trace":{"provider":"openai","method":"api_key","model":"gpt-4o-mini"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create workflow run status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run struct {
+		ID                string         `json:"id"`
+		ProfileID         string         `json:"profile_id"`
+		CapabilityID      string         `json:"capability_id"`
+		SourceChannel     string         `json:"source_channel"`
+		SourceThreadID    string         `json:"source_thread_id"`
+		SourceMessageID   string         `json:"source_message_id"`
+		Status            string         `json:"status"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+		Input             map[string]any `json:"input"`
+	}
+	if err := json.NewDecoder(createRun.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if run.ID == "" || run.ProfileID != p.ID || run.Status != "queued" || run.ConfirmationState != "required" {
+		t.Fatalf("unexpected created workflow run: %+v", run)
+	}
+	if run.CapabilityID != "catalog_add_from_text" || run.SourceChannel != "telegram" || run.SourceThreadID != thread.ID || run.SourceMessageID != "tg-message-1" {
+		t.Fatalf("expected source/capability metadata to persist, got %+v", run)
+	}
+	if run.ProviderTrace["provider"] != "openai" || run.Input["text"] != "AFX slot car notes" {
+		t.Fatalf("expected provider trace and input payload, got %+v", run)
+	}
+
+	running := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"running","provider_trace":{"provider":"openai","request_id":"req_123","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
+	if running.Code != http.StatusOK {
+		t.Fatalf("running status=%d body=%s", running.Code, running.Body.String())
+	}
+	if !strings.Contains(running.Body.String(), `"started_at"`) || !strings.Contains(running.Body.String(), `"request_id":"req_123"`) {
+		t.Fatalf("expected running update to persist started_at/provider trace, body=%s", running.Body.String())
+	}
+
+	completed := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"preview-1","summary":"Draft ready"},
+		"bulk_items":[
+			{"item_key":"photo-1","status":"completed","result_id":"draft-1"},
+			{"item_key":"photo-2","status":"failed","error_code":"low_confidence"}
+		]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if completed.Code != http.StatusOK {
+		t.Fatalf("completed status=%d body=%s", completed.Code, completed.Body.String())
+	}
+	if !strings.Contains(completed.Body.String(), `"status":"completed"`) || !strings.Contains(completed.Body.String(), `"confirmation_state":"pending"`) {
+		t.Fatalf("expected completed pending-confirmation state, body=%s", completed.Body.String())
+	}
+	if !strings.Contains(completed.Body.String(), `"item_key":"photo-2"`) || !strings.Contains(completed.Body.String(), `"error_code":"low_confidence"`) {
+		t.Fatalf("expected per-item bulk failure result, body=%s", completed.Body.String())
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), run.ID) || !strings.Contains(list.Body.String(), `"preview_id":"preview-1"`) {
+		t.Fatalf("expected listed run with result payload, body=%s", list.Body.String())
+	}
+
+	failed := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"provider-test",
+		"capability_id":"provider_test",
+		"provider_trace":{"provider":"openai","setup_needed":"api_key_missing"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if failed.Code != http.StatusCreated {
+		t.Fatalf("create failed-run candidate status=%d body=%s", failed.Code, failed.Body.String())
+	}
+	var failedRun struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(failed.Body).Decode(&failedRun); err != nil {
+		t.Fatalf("decode failed run: %v", err)
+	}
+	failedUpdate := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+failedRun.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"failed","error":{"code":"setup_needed","message":"OpenAI API key is not connected","retry":"connect_provider"}}`), map[string]string{"Content-Type": "application/json"})
+	if failedUpdate.Code != http.StatusOK {
+		t.Fatalf("failed update status=%d body=%s", failedUpdate.Code, failedUpdate.Body.String())
+	}
+	if !strings.Contains(failedUpdate.Body.String(), `"status":"failed"`) || !strings.Contains(failedUpdate.Body.String(), `"retry":"connect_provider"`) {
+		t.Fatalf("expected failure payload and retry guidance, body=%s", failedUpdate.Body.String())
+	}
+
+	badStatus := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+failedRun.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"mystery"}`), map[string]string{"Content-Type": "application/json"})
+	if badStatus.Code != http.StatusBadRequest {
+		t.Fatalf("bad status=%d body=%s", badStatus.Code, badStatus.Body.String())
+	}
+}
