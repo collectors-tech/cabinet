@@ -134,4 +134,23 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     cy.wait('@saveSecret')
     cy.contains('OpenAI configuration saved.').should('be.visible')
   })
+
+  it('PROVIDER-OPENAI-UX-008 binds empty API-key save validation to the token field', () => {
+    cy.wait('@activeProfile')
+    cy.wait('@providersRegistry')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="provider-open-openai"]').click()
+    cy.get('[data-testid="openai-api-key-connect"]').click()
+
+    cy.get('[data-testid="provider-token-input"]')
+      .should('be.focused')
+      .and('have.attr', 'aria-invalid', 'true')
+      .and('have.attr', 'aria-describedby', 'provider-token-error')
+    cy.get('#provider-token-error')
+      .should('be.visible')
+      .and('contain', 'OpenAI API key is required before connecting.')
+    cy.get('@saveSettings.all').should('have.length', 0)
+    cy.get('@saveSecret.all').should('have.length', 0)
+  })
 })

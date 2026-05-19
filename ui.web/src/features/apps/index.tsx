@@ -237,6 +237,7 @@ export function Apps({
   const [validating, setValidating] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [tokenFieldError, setTokenFieldError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
   const [rowDetailsProviderID, setRowDetailsProviderID] = useState<
     string | null
@@ -247,6 +248,7 @@ export function Apps({
   )
   const [rowEditOpen, setRowEditOpen] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
+  const tokenInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
     token: '',
@@ -538,6 +540,7 @@ export function Apps({
   const closeIntegration = () => {
     setEditingProviderID(null)
     setSaveError(null)
+    setTokenFieldError(null)
     setReplaceToken(false)
     setForm({
       baseURL: '',
@@ -556,11 +559,21 @@ export function Apps({
     }
     setSaving(true)
     setSaveError(null)
+    setTokenFieldError(null)
     setActionMessage(null)
     try {
       const keys = providerSettingsKeys(editingProvider.provider_id)
       const trimmedToken = form.token.trim()
       if (editingProvider.provider_id === 'openai') {
+        if (
+          trimmedToken === '' &&
+          !editingProvider.has_token &&
+          settings['openai.active_auth_method'] !== 'browser_auth'
+        ) {
+          setTokenFieldError('OpenAI API key is required before connecting.')
+          tokenInputRef.current?.focus()
+          return
+        }
         const openAiSettings: Record<string, string> = {
           openai_base_url: form.baseURL.trim(),
           openai_active_auth_method:
@@ -1224,19 +1237,38 @@ export function Apps({
                         </Button>
                       </div>
                     ) : (
-                      <Input
-                        className='mt-3'
-                        type='password'
-                        data-testid='provider-token-input'
-                        placeholder='OpenAI API key'
-                        value={form.token}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            token: e.target.value,
-                          }))
-                        }
-                      />
+                      <div className='mt-3 space-y-2'>
+                        <Label htmlFor='provider-token'>OpenAI API key</Label>
+                        <Input
+                          ref={tokenInputRef}
+                          id='provider-token'
+                          type='password'
+                          data-testid='provider-token-input'
+                          placeholder='OpenAI API key'
+                          value={form.token}
+                          aria-invalid={tokenFieldError ? 'true' : undefined}
+                          aria-describedby={
+                            tokenFieldError ? 'provider-token-error' : undefined
+                          }
+                          onChange={(e) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              token: e.target.value,
+                            }))
+                            if (tokenFieldError) {
+                              setTokenFieldError(null)
+                            }
+                          }}
+                        />
+                        {tokenFieldError ? (
+                          <p
+                            id='provider-token-error'
+                            className='text-xs text-destructive'
+                          >
+                            {tokenFieldError}
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                     <div className='mt-3 flex flex-wrap gap-2'>
                       <Button
