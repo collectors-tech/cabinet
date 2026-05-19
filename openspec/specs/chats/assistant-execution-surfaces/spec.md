@@ -55,6 +55,13 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **AND** the UI/API MUST NOT mark Browser Auth connected from outbound navigation alone
 - **AND** provider tests MUST return truthful readiness evidence instead of passing only because a credential-like value exists
 
+#### Scenario: Discover content and listing generation readiness
+- **GIVEN** content_generate and listing_draft_generate require OpenAI-backed processing
+- **WHEN** the assistant queries the governed capability registry before verified provider readiness exists
+- **THEN** both capabilities MUST be discoverable with provider requirements, input schema, preview shape, audit behavior, and result destination
+- **AND** content_generate MUST remain preview-only/no-mutation while setup is needed
+- **AND** listing_draft_generate MUST require explicit confirmation before any listing draft mutation can be applied
+
 ### Requirement ASSISTANT-EXECUTION-007: Assistant workflow runs SHALL persist auditable execution records
 Cabinet MUST persist OpenAI-backed and agent-backed work as durable workflow run records so previews, confirmations, provider traces, and outcomes are inspectable outside transient chat text.
 

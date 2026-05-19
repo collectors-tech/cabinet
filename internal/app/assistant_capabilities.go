@@ -1,19 +1,20 @@
 package app
 
 type assistantCapability struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Description     string   `json:"description"`
-	Group           string   `json:"group"`
-	Mode            string   `json:"mode"`
-	PermissionState string   `json:"permission_state"`
-	Requires        []string `json:"requires"`
-	InputSchema     string   `json:"input_schema"`
-	PreviewShape    string   `json:"preview_shape"`
-	ApplyBehavior   string   `json:"apply_behavior"`
-	AuditBehavior   string   `json:"audit_behavior"`
-	ResultLink      string   `json:"result_link"`
-	Unavailable     bool     `json:"unavailable"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Group            string   `json:"group"`
+	Mode             string   `json:"mode"`
+	PermissionState  string   `json:"permission_state"`
+	Requires         []string `json:"requires"`
+	ProviderRequires []string `json:"provider_requires,omitempty"`
+	InputSchema      string   `json:"input_schema"`
+	PreviewShape     string   `json:"preview_shape"`
+	ApplyBehavior    string   `json:"apply_behavior"`
+	AuditBehavior    string   `json:"audit_behavior"`
+	ResultLink       string   `json:"result_link"`
+	Unavailable      bool     `json:"unavailable"`
 }
 
 func assistantCapabilityRegistry() []assistantCapability {
@@ -25,5 +26,7 @@ func assistantCapabilityRegistry() []assistantCapability {
 		{ID: "settings.profile.read", Name: "Read profile settings", Description: "Summarize active profile and provider defaults without changing settings.", Group: "settings", Mode: "read-only", PermissionState: "available", Requires: []string{"profile", "workspace", "thread"}, InputSchema: "settings.profile.read.v1", PreviewShape: "assistant_summary", ApplyBehavior: "not_applicable", AuditBehavior: "thread_message", ResultLink: "/settings"},
 		{ID: "data.import.dry-run", Name: "Dry-run data import", Description: "Validate an import payload and present effects before any apply operation is allowed.", Group: "data", Mode: "preview-only", PermissionState: "preview-only", Requires: []string{"profile", "workspace", "thread", "import_file"}, InputSchema: "data.import.dry_run.v1", PreviewShape: "import_dry_run_summary", ApplyBehavior: "separate_confirmed_apply_required", AuditBehavior: "thread_message_and_inbox_handoff", ResultLink: "/settings/storage"},
 		{ID: "integrations.provider.run", Name: "Run integration provider", Description: "Expose provider execution as setup-needed until credentials and provider health are verified.", Group: "integrations", Mode: "unavailable", PermissionState: "setup-needed", Requires: []string{"profile", "workspace", "thread", "connected_provider"}, InputSchema: "integrations.provider.run.v1", PreviewShape: "provider_run_preview", ApplyBehavior: "unavailable_until_provider_connected", AuditBehavior: "thread_message_and_inbox_handoff", ResultLink: "/integrations", Unavailable: true},
+		{ID: "content_generate", Name: "Generate catalog content", Description: "Draft catalog descriptions, condition notes, and enrichment copy from approved Cabinet item context.", Group: "assistant", Mode: "unavailable", PermissionState: "setup-needed", Requires: []string{"profile", "workspace", "thread", "approved_item_context"}, ProviderRequires: []string{"openai", "verified_api_key_or_browser_auth", "provider_test_passed"}, InputSchema: "assistant.content_generate.v1", PreviewShape: "catalog_content_draft_preview", ApplyBehavior: "preview_only_no_mutation", AuditBehavior: "workflow_run_provider_trace_and_thread_message", ResultLink: "/inventory", Unavailable: true},
+		{ID: "listing_draft_generate", Name: "Generate listing draft", Description: "Create marketplace-ready listing draft content with provider constraints and source attribution.", Group: "assistant", Mode: "unavailable", PermissionState: "setup-needed", Requires: []string{"profile", "workspace", "thread", "approved_item_context", "target_marketplace"}, ProviderRequires: []string{"openai", "verified_api_key_or_browser_auth", "provider_test_passed"}, InputSchema: "assistant.listing_draft_generate.v1", PreviewShape: "listing_draft_preview_with_sources", ApplyBehavior: "requires_explicit_confirmation", AuditBehavior: "workflow_run_provider_trace_confirmation_and_result_link", ResultLink: "/integrations/ebay", Unavailable: true},
 	}
 }

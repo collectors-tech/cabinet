@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -283,12 +284,18 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 		ProfileID    string `json:"profile_id"`
 		Route        string `json:"route"`
 		Capabilities []struct {
-			ID              string   `json:"id"`
-			Group           string   `json:"group"`
-			Mode            string   `json:"mode"`
-			PermissionState string   `json:"permission_state"`
-			Requires        []string `json:"requires"`
-			Unavailable     bool     `json:"unavailable"`
+			ID               string   `json:"id"`
+			Group            string   `json:"group"`
+			Mode             string   `json:"mode"`
+			PermissionState  string   `json:"permission_state"`
+			Requires         []string `json:"requires"`
+			ProviderRequires []string `json:"provider_requires"`
+			InputSchema      string   `json:"input_schema"`
+			PreviewShape     string   `json:"preview_shape"`
+			ApplyBehavior    string   `json:"apply_behavior"`
+			AuditBehavior    string   `json:"audit_behavior"`
+			ResultLink       string   `json:"result_link"`
+			Unavailable      bool     `json:"unavailable"`
 		} `json:"capabilities"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -299,18 +306,33 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	}
 
 	seen := map[string]struct {
-		mode        string
-		permission  string
-		unavailable bool
+		mode             string
+		permission       string
+		unavailable      bool
+		providerRequires []string
+		inputSchema      string
+		previewShape     string
+		applyBehavior    string
+		auditBehavior    string
+		resultLink       string
 	}{}
 	for _, capability := range payload.Capabilities {
 		seen[capability.ID] = struct {
-			mode        string
-			permission  string
-			unavailable bool
-		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable}
+			mode             string
+			permission       string
+			unavailable      bool
+			providerRequires []string
+			inputSchema      string
+			previewShape     string
+			applyBehavior    string
+			auditBehavior    string
+			resultLink       string
+		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable, providerRequires: capability.ProviderRequires, inputSchema: capability.InputSchema, previewShape: capability.PreviewShape, applyBehavior: capability.ApplyBehavior, auditBehavior: capability.AuditBehavior, resultLink: capability.ResultLink}
 		if capability.Group == "" || len(capability.Requires) == 0 {
 			t.Fatalf("capability must expose group and context requirements: %+v", capability)
+		}
+		if capability.InputSchema == "" || capability.PreviewShape == "" || capability.ApplyBehavior == "" || capability.AuditBehavior == "" || capability.ResultLink == "" {
+			t.Fatalf("capability must expose schema, preview, apply, audit and result contract: %+v", capability)
 		}
 	}
 	if got := seen["inventory.item.create"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
@@ -321,6 +343,14 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	}
 	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
 		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
+	}
+	content := seen["content_generate"]
+	if content.mode != "unavailable" || content.permission != "setup-needed" || !content.unavailable || content.previewShape != "catalog_content_draft_preview" || content.applyBehavior != "preview_only_no_mutation" || !slices.Contains(content.providerRequires, "openai") {
+		t.Fatalf("content_generate must expose preview-only setup-needed OpenAI contract, got %+v", content)
+	}
+	listing := seen["listing_draft_generate"]
+	if listing.mode != "unavailable" || listing.permission != "setup-needed" || !listing.unavailable || listing.previewShape != "listing_draft_preview_with_sources" || listing.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(listing.providerRequires, "provider_test_passed") {
+		t.Fatalf("listing_draft_generate must expose confirmation-gated setup-needed OpenAI contract, got %+v", listing)
 	}
 
 	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)
