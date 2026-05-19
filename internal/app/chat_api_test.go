@@ -344,6 +344,14 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
 		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
 	}
+	analyze := seen["image_analyze"]
+	if analyze.mode != "unavailable" || analyze.permission != "setup-needed" || !analyze.unavailable || analyze.previewShape != "image_analysis_preview_with_sources" || analyze.applyBehavior != "preview_only_no_mutation" || !slices.Contains(analyze.providerRequires, "openai") || !slices.Contains(analyze.providerRequires, "provider_test_passed") || !slices.Contains(analyze.providerRequires, "media_read_access") || analyze.resultLink != "/media" {
+		t.Fatalf("image_analyze must expose setup-needed preview-only media analysis contract, got %+v", analyze)
+	}
+	process := seen["image_process"]
+	if process.mode != "unavailable" || process.permission != "setup-needed" || !process.unavailable || process.previewShape != "image_process_variant_preview" || process.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(process.providerRequires, "openai") || !slices.Contains(process.providerRequires, "provider_test_passed") || !slices.Contains(process.providerRequires, "media_write_access") || process.resultLink != "/media" {
+		t.Fatalf("image_process must expose setup-needed confirmation-gated media variant contract, got %+v", process)
+	}
 	content := seen["content_generate"]
 	if content.mode != "unavailable" || content.permission != "setup-needed" || !content.unavailable || content.previewShape != "catalog_content_draft_preview" || content.applyBehavior != "preview_only_no_mutation" || !slices.Contains(content.providerRequires, "openai") {
 		t.Fatalf("content_generate must expose preview-only setup-needed OpenAI contract, got %+v", content)
@@ -608,5 +616,107 @@ func TestAssistantWorkflowRunsPersistLifecycleAndBulkResults(t *testing.T) {
 	badStatus := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+failedRun.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"mystery"}`), map[string]string{"Content-Type": "application/json"})
 	if badStatus.Code != http.StatusBadRequest {
 		t.Fatalf("bad status=%d body=%s", badStatus.Code, badStatus.Body.String())
+	}
+}
+
+func TestAssistantImageCapabilityRunsPreserveOriginalAndAuditLinks(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Image Capability Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Image Capability Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	analyzeRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-image-analyze",
+		"capability_id":"image_analyze",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"not_required",
+		"input":{"media_id":"media-original-1","analysis_goal":"identify visible item details"},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required","media_access":"read"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if analyzeRun.Code != http.StatusCreated {
+		t.Fatalf("create image analyze run status=%d body=%s", analyzeRun.Code, analyzeRun.Body.String())
+	}
+	var analyze struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(analyzeRun.Body).Decode(&analyze); err != nil {
+		t.Fatalf("decode analyze run: %v", err)
+	}
+	if analyze.CapabilityID != "image_analyze" || analyze.ConfirmationState != "not_required" || analyze.ProviderTrace["media_access"] != "read" {
+		t.Fatalf("image_analyze must start as setup-needed preview-only read run, got %+v", analyze)
+	}
+	analyzeDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+analyze.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"preview_id":"image-analysis-preview-1","media_id":"media-original-1","findings":[{"field":"title","value":"AFX slot car","confidence":0.74}],"source_links":[{"type":"media","id":"media-original-1","href":"/media"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if analyzeDone.Code != http.StatusOK {
+		t.Fatalf("complete image analyze run status=%d body=%s", analyzeDone.Code, analyzeDone.Body.String())
+	}
+	if !strings.Contains(analyzeDone.Body.String(), `"confirmation_state":"not_required"`) || !strings.Contains(analyzeDone.Body.String(), `"source_links"`) || strings.Contains(analyzeDone.Body.String(), `"variant_media_id"`) {
+		t.Fatalf("image_analyze must return source-linked preview findings without processed variant mutation, body=%s", analyzeDone.Body.String())
+	}
+
+	processRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-image-process",
+		"capability_id":"image_process",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"required",
+		"input":{"media_id":"media-original-1","operation":"background_cleanup","preserve_original":true},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required","media_access":"read_write"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if processRun.Code != http.StatusCreated {
+		t.Fatalf("create image process run status=%d body=%s", processRun.Code, processRun.Body.String())
+	}
+	var process struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(processRun.Body).Decode(&process); err != nil {
+		t.Fatalf("decode process run: %v", err)
+	}
+	if process.CapabilityID != "image_process" || process.ConfirmationState != "required" || process.ProviderTrace["setup_needed"] != "provider_test_required" || process.ProviderTrace["media_access"] != "read_write" {
+		t.Fatalf("image_process must start confirmation-gated, got %+v", process)
+	}
+	processDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+process.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"image-process-preview-1","original_media_id":"media-original-1","variant_media_id":"media-variant-1","provenance":{"operation":"background_cleanup","source_media_id":"media-original-1"},"result_links":[{"type":"media","id":"media-variant-1","href":"/media"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if processDone.Code != http.StatusOK {
+		t.Fatalf("complete image process run status=%d body=%s", processDone.Code, processDone.Body.String())
+	}
+	if !strings.Contains(processDone.Body.String(), `"confirmation_state":"pending"`) || !strings.Contains(processDone.Body.String(), `"original_media_id":"media-original-1"`) || !strings.Contains(processDone.Body.String(), `"variant_media_id":"media-variant-1"`) || !strings.Contains(processDone.Body.String(), `"source_media_id":"media-original-1"`) {
+		t.Fatalf("image_process must preserve original media provenance and return pending-confirmation variant links, body=%s", processDone.Body.String())
 	}
 }
