@@ -3586,6 +3586,29 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/chat/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		route := strings.TrimSpace(r.URL.Query().Get("route"))
+		if route == "" {
+			route = "/"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id":    profileID,
+			"route":         route,
+			"capabilities":  assistantCapabilityRegistry(),
+			"policy":        "preview-before-apply",
+			"confirm_apply": true,
+		})
+	})
 	mux.HandleFunc("/api/chat/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
