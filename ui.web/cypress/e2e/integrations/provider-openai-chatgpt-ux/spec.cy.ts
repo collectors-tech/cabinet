@@ -99,6 +99,20 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     cy.get('[data-testid="openai-api-key-section"]').should('contain', 'API key')
     cy.get('[data-testid="openai-test-section"]').should('contain', 'Test OpenAI')
     cy.contains('OpenAI is using:').should('not.exist')
+
+    cy.get('[data-testid="openai-config-dialog"]').within(() => {
+      cy.contains('button', 'Sync').should('not.exist')
+      cy.contains('label', 'OpenAI API key').should('be.visible')
+      cy.get('[data-testid="provider-token-input"]')
+        .should('have.attr', 'id', 'provider-token')
+        .and('have.attr', 'placeholder', 'OpenAI API key')
+      cy.contains('label', 'Test model').should('be.visible')
+      cy.get('[data-testid="openai-test-prompt"]').should(
+        'have.attr',
+        'aria-label',
+        'OpenAI test prompt',
+      )
+    })
   })
 
   it('PROVIDER-OPENAI-UX-006 keeps Browser Auth setup-needed until verifiable proof exists', () => {

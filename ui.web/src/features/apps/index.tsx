@@ -1334,45 +1334,65 @@ export function Apps({
                       readiness.
                     </p>
                     <div className='mt-3 grid gap-2 sm:grid-cols-2'>
-                      <Select
-                        value={form.openAiModel}
-                        onValueChange={(value) =>
-                          setForm((prev) => ({ ...prev, openAiModel: value }))
-                        }
-                      >
-                        <SelectTrigger data-testid='openai-test-model'>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(
-                            editingProvider.model_options ?? [
-                              'gpt-4o-mini',
-                              'gpt-4.1-mini',
-                            ]
-                          ).map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        data-testid='openai-active-method'
-                        readOnly
-                        value={
-                          settings['openai.active_auth_method'] ===
-                          'browser_auth'
-                            ? 'Browser Auth'
-                            : settings['openai.active_auth_method'] ===
-                                  'api_key' || editingProvider.has_token
-                              ? 'API key'
-                              : 'None connected'
-                        }
-                      />
+                      <div className='space-y-2'>
+                        <Label htmlFor='openai-test-model'>Test model</Label>
+                        <Select
+                          value={form.openAiModel}
+                          onValueChange={(value) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              openAiModel: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger
+                            id='openai-test-model'
+                            data-testid='openai-test-model'
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(
+                              editingProvider.model_options ?? [
+                                'gpt-4o-mini',
+                                'gpt-4.1-mini',
+                              ]
+                            ).map((model) => (
+                              <SelectItem key={model} value={model}>
+                                {model}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='openai-active-method'>
+                          Active method
+                        </Label>
+                        <Input
+                          id='openai-active-method'
+                          data-testid='openai-active-method'
+                          readOnly
+                          value={
+                            settings['openai.active_auth_method'] ===
+                            'browser_auth'
+                              ? 'Browser Auth'
+                              : settings['openai.active_auth_method'] ===
+                                    'api_key' || editingProvider.has_token
+                                ? 'API key'
+                                : 'None connected'
+                          }
+                        />
+                      </div>
                     </div>
+                    <Label className='mt-3 block' htmlFor='openai-test-prompt'>
+                      Test prompt
+                    </Label>
                     <Input
                       className='mt-2'
+                      id='openai-test-prompt'
                       data-testid='openai-test-prompt'
+                      aria-label='OpenAI test prompt'
                       value={form.openAiTestPrompt}
                       onChange={(e) =>
                         setForm((prev) => ({
