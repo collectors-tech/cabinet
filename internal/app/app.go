@@ -1935,6 +1935,23 @@ func New(cfg config.Config) (*App, error) {
 		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "failed_to_run_scanner",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  "review_provider_credentials_and_health",
+					"query_set_id": req.QuerySetID,
+				})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
@@ -6041,6 +6058,44 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		}
 	}
 	base := []map[string]any{
+		{
+			"provider_id":         "openai",
+			"display_name":        "OpenAI / ChatGPT",
+			"base_domain":         "platform.openai.com",
+			"api_family":          "ai_provider",
+			"api_support_profile": "browser_auth_or_api_key",
+			"active_mode":         strings.TrimSpace(settings["openai.active_auth_method"]),
+			"integration_mode":    "assistant_workflows",
+			"api_available":       true,
+			"auth_requirement":    "browser_auth_or_api_key",
+			"auth_mode":           "hybrid",
+			"active_auth_method":  strings.TrimSpace(settings["openai.active_auth_method"]),
+			"auth_methods": map[string]any{
+				"api_key": map[string]any{
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key"],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+					"credential_present": strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+				},
+				"browser_auth": map[string]any{
+					"state":              map[bool]string{true: strings.TrimSpace(settings["openai.browser_auth_state"]), false: "setup_needed"}[strings.TrimSpace(settings["openai.browser_auth_state"]) != ""],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "browser_auth" && strings.TrimSpace(settings["openai.browser_auth_state"]) == "connected" && strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"credential_present": strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"setup_message":      "Browser Auth requires a verifiable callback/artifact before Cabinet marks OpenAI connected.",
+				},
+			},
+			"model_options": []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"},
+			"capabilities": map[string]bool{
+				"search":             false,
+				"stock_observation":  false,
+				"pricing":            false,
+				"health":             true,
+				"assistant":          true,
+				"image_help":         true,
+				"content_generation": true,
+			},
+			"state":              map[bool]string{true: "ready", false: "needs_config"}[strings.TrimSpace(settings["openai.active_auth_method"]) != ""],
+			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+		},
 		{
 			"provider_id":         "ebay",
 			"display_name":        "eBay",

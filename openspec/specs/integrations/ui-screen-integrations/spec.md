@@ -83,6 +83,17 @@ Integrations screen SHALL expose provider health and actionable controls from de
 - **THEN** Sync MUST NOT be an enabled inert action
 - **AND** the panel MUST explain that sync runs from Market Watch query sets until an in-dialog sync flow exposes progress and completion state
 
+### Requirement UI-SCREEN-INTEGRATIONS-008: Provider validation SHALL reconcile visible health state
+Integrations screen SHALL keep validation completion feedback and visible provider health metadata consistent.
+
+#### Scenario: Successful validation updates visible provider health metadata
+- **GIVEN** a provider detail panel is open and currently shows stale or unknown health metadata
+- **WHEN** the user triggers `Validate` and the health endpoint returns successfully
+- **THEN** the UI MUST expose an in-progress validating state while the request is active
+- **AND** the completion message MUST include the resulting health status
+- **AND** the provider detail panel MUST update health, last-run, and last-checked metadata from the validation result
+- **AND** the provider card MUST use the same reconciled health state after the result is applied
+
 ### Requirement UI-SCREEN-INTEGRATIONS-009: Integrations UI SHALL display provider API family support mapping
 Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algolia/custom) in cards and detail panel.
 
@@ -106,9 +117,20 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
   - disabled/explained `Sync` affordance when sync is unavailable in the dialog
   - `Save Integration` action
 
+### Requirement UI-SCREEN-INTEGRATIONS-010: Provider edit dialog inputs SHALL have visible and programmatic labels
+Integrations provider configuration dialogs MUST render stable visible labels associated with each editable field instead of relying on placeholder text alone.
+
+#### Scenario: Config fields remain labeled after values are populated
+- **GIVEN** provider detail/edit dialog opens for a configurable provider
+- **WHEN** base URL, marketplace/region, items-per-page, or token fields render
+- **THEN** each field MUST have a visible label
+- **AND** each label MUST be programmatically associated with its input by matching `htmlFor` and input `id`
+- **AND** placeholder text MUST NOT be the only source of field meaning
+
 ## Acceptance Criteria
 - Provider cards are sourced from runtime registry, not static seed list.
 - Provider detail panel shows instructions, health, and last-run data.
+- Provider validation feedback and visible health metadata reconcile after successful validation.
 - Token handling is write-only with replace-token flow.
 
 ## Use-Case IDs and E2E Mapping
@@ -125,3 +147,5 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
 | UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-rows-cards-toggle` |
 | UC-INT-UI-10 | Provider API family badge display | Cards show API family labels from registry mapping | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping` |
 | UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry` |
+| UC-INT-UI-12 | Provider edit fields are labeled | Dialog config fields have visible labels associated by `htmlFor`/`id` | `internal/app/ui_template_contract_test.go` `TestIntegrationsProviderConfigInputsHaveLabels` |
+| UC-INT-UI-13 | Validate provider health | Validation shows progress, reconciles health/last-run/last-checked, and reports resulting status | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state` |

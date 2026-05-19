@@ -147,7 +147,7 @@ describe('ui-screen-integrations', () => {
     cy.contains('Last run: success').should('be.visible')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004: persists settings with write-only replace-token flow', () => {
+  it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
@@ -171,8 +171,8 @@ describe('ui-screen-integrations', () => {
               pricing: true,
               health: true,
             },
-            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
-            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
           },
         ],
       },
@@ -189,6 +189,7 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/provider/health?provider=ebay', {
       statusCode: 200,
+      delayMs: 250,
       body: {
         provider: 'ebay',
         status: 'ok',
@@ -218,9 +219,22 @@ describe('ui-screen-integrations', () => {
     cy.contains('input[placeholder="New token / API key"]').should('not.exist')
     cy.get('[data-testid="replace-token"]').click()
     cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.contains('Health: unknown').should('be.visible')
+    cy.contains('Last run: never').should('be.visible')
+    cy.contains('Last checked: n/a').should('be.visible')
     cy.contains('button', 'Validate').click()
+    cy.contains('button', 'Validating...').should('be.visible')
     cy.wait('@validate')
-    cy.contains('Validated eBay health.').should('be.visible')
+    cy.contains('Validated eBay health: ok.').should('be.visible')
+    cy.contains('Health: ok').should('be.visible')
+    cy.contains('Last run: success').should('be.visible')
+    cy.contains('Last checked: 2026-03-01T00:01:00Z').should('be.visible')
+    cy.contains('button', 'Cancel').click()
+    cy.contains('[data-testid="provider-card-ebay"]', 'Health: ok').should('be.visible')
+    cy.contains('[data-testid="provider-card-ebay"]', 'Last run: success').should('be.visible')
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="replace-token"]').click()
+    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
     cy.contains('button', 'Save Integration').click()
     cy.wait('@saveSettings')
     cy.contains('Provider configuration saved.').should('be.visible')
