@@ -345,11 +345,11 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
 	}
 	analyze := seen["image_analyze"]
-	if analyze.mode != "unavailable" || analyze.permission != "setup-needed" || !analyze.unavailable || analyze.previewShape != "image_analysis_preview_with_sources" || analyze.applyBehavior != "preview_only_no_mutation" || !slices.Contains(analyze.providerRequires, "media_read_access") || analyze.resultLink != "/media" {
+	if analyze.mode != "unavailable" || analyze.permission != "setup-needed" || !analyze.unavailable || analyze.previewShape != "image_analysis_preview_with_sources" || analyze.applyBehavior != "preview_only_no_mutation" || !slices.Contains(analyze.providerRequires, "openai") || !slices.Contains(analyze.providerRequires, "provider_test_passed") || !slices.Contains(analyze.providerRequires, "media_read_access") || analyze.resultLink != "/media" {
 		t.Fatalf("image_analyze must expose setup-needed preview-only media analysis contract, got %+v", analyze)
 	}
 	process := seen["image_process"]
-	if process.mode != "unavailable" || process.permission != "setup-needed" || !process.unavailable || process.previewShape != "image_process_variant_preview" || process.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(process.providerRequires, "media_write_access") || process.resultLink != "/media" {
+	if process.mode != "unavailable" || process.permission != "setup-needed" || !process.unavailable || process.previewShape != "image_process_variant_preview" || process.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(process.providerRequires, "openai") || !slices.Contains(process.providerRequires, "provider_test_passed") || !slices.Contains(process.providerRequires, "media_write_access") || process.resultLink != "/media" {
 		t.Fatalf("image_process must expose setup-needed confirmation-gated media variant contract, got %+v", process)
 	}
 	content := seen["content_generate"]
@@ -696,14 +696,15 @@ func TestAssistantImageCapabilityRunsPreserveOriginalAndAuditLinks(t *testing.T)
 		t.Fatalf("create image process run status=%d body=%s", processRun.Code, processRun.Body.String())
 	}
 	var process struct {
-		ID                string `json:"id"`
-		CapabilityID      string `json:"capability_id"`
-		ConfirmationState string `json:"confirmation_state"`
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
 	}
 	if err := json.NewDecoder(processRun.Body).Decode(&process); err != nil {
 		t.Fatalf("decode process run: %v", err)
 	}
-	if process.CapabilityID != "image_process" || process.ConfirmationState != "required" {
+	if process.CapabilityID != "image_process" || process.ConfirmationState != "required" || process.ProviderTrace["setup_needed"] != "provider_test_required" || process.ProviderTrace["media_access"] != "read_write" {
 		t.Fatalf("image_process must start confirmation-gated, got %+v", process)
 	}
 	processDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+process.ID, strings.NewReader(`{
