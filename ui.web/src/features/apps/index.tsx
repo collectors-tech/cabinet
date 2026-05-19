@@ -553,6 +553,17 @@ export function Apps({
     })
   }
 
+  useEffect(() => {
+    if (tokenFieldError) {
+      tokenInputRef.current?.focus()
+    }
+  }, [tokenFieldError])
+
+  const showTokenFieldError = (message: string) => {
+    setTokenFieldError(message)
+    window.setTimeout(() => tokenInputRef.current?.focus(), 0)
+  }
+
   const saveIntegration = async () => {
     if (!activeProfileId || !editingProvider) {
       return
@@ -570,8 +581,7 @@ export function Apps({
           !editingProvider.has_token &&
           settings['openai.active_auth_method'] !== 'browser_auth'
         ) {
-          setTokenFieldError('OpenAI API key is required before connecting.')
-          tokenInputRef.current?.focus()
+          showTokenFieldError('OpenAI API key is required before connecting.')
           return
         }
         const openAiSettings: Record<string, string> = {
@@ -712,8 +722,19 @@ export function Apps({
     if (!editingProvider) {
       return
     }
+    if (
+      editingProvider.provider_id === 'openai' &&
+      form.token.trim() === '' &&
+      !editingProvider.has_token &&
+      settings['openai.active_auth_method'] !== 'browser_auth'
+    ) {
+      setSaveError(null)
+      showTokenFieldError('OpenAI API key is required before validating.')
+      return
+    }
     setValidating(true)
     setSaveError(null)
+    setTokenFieldError(null)
     try {
       const response = await fetch(
         `/api/provider/health?provider=${encodeURIComponent(editingProvider.provider_id)}`

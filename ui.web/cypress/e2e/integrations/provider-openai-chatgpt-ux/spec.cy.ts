@@ -74,6 +74,11 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
       expect(req.body).to.deep.equal({ key: 'openai_api_key', value: 'sk-test-openai' })
       req.reply({ statusCode: 200, body: { ok: true } })
     }).as('saveSecret')
+
+    cy.intercept('GET', '/api/provider/health*', {
+      statusCode: 200,
+      body: { status: 'ok', message: 'ok', updated_at: '2026-05-19T01:20:00Z' },
+    }).as('providerHealth')
   })
 
   it('PROVIDER-OPENAI-UX-001/005 renders a clean card and dialog-owned OpenAI setup sections', () => {
@@ -152,5 +157,23 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
       .and('contain', 'OpenAI API key is required before connecting.')
     cy.get('@saveSettings.all').should('have.length', 0)
     cy.get('@saveSecret.all').should('have.length', 0)
+  })
+
+  it('PROVIDER-OPENAI-UX-008 blocks empty API-key validation before provider health', () => {
+    cy.wait('@activeProfile')
+    cy.wait('@providersRegistry')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="provider-open-openai"]').click()
+    cy.get('[data-testid="openai-api-key-validate"]').click()
+
+    cy.get('[data-testid="provider-token-input"]')
+      .should('be.focused')
+      .and('have.attr', 'aria-invalid', 'true')
+      .and('have.attr', 'aria-describedby', 'provider-token-error')
+    cy.get('#provider-token-error')
+      .should('be.visible')
+      .and('contain', 'OpenAI API key is required before validating.')
+    cy.get('@providerHealth.all').should('have.length', 0)
   })
 })

@@ -66,8 +66,8 @@ Cabinet MUST keep OpenAI API-key entry write-only and store the key through the 
 - **THEN** Cabinet MUST write `openai_api_key` through `/api/profiles/:profileId/secrets`
 - **AND** Cabinet MUST write non-secret defaults such as `assistant_default_provider`, `assistant_default_model`, and active method through `/api/profiles/:profileId/settings`
 
-### Requirement PROVIDER-OPENAI-UX-008: Empty API-key saves SHALL bind validation to the token field
-Cabinet MUST present missing OpenAI API-key validation as field-level feedback on the token input, with an accessible correction path, before any settings or secret save request is attempted.
+### Requirement PROVIDER-OPENAI-UX-008: Empty API-key actions SHALL bind validation to the token field
+Cabinet MUST present missing OpenAI API-key validation as field-level feedback on the token input, with an accessible correction path, before any settings, secret save, or provider health validation request is attempted.
 
 #### Scenario: Empty API-key connect targets the token input
 - **GIVEN** user opens the OpenAI / ChatGPT API-key setup dialog without an existing token
@@ -75,3 +75,10 @@ Cabinet MUST present missing OpenAI API-key validation as field-level feedback o
 - **THEN** Cabinet MUST keep the dialog open and focus the token input
 - **AND** the token input MUST expose invalid state and be described by visible field-level validation copy
 - **AND** Cabinet MUST NOT call profile settings or profile secrets save endpoints
+
+#### Scenario: Empty API-key validate targets the token input
+- **GIVEN** user opens the OpenAI / ChatGPT API-key setup dialog without an existing token
+- **WHEN** user attempts to validate with an empty API-key field
+- **THEN** Cabinet MUST keep the dialog open and focus the token input
+- **AND** the token input MUST expose invalid state and be described by visible field-level validation copy
+- **AND** Cabinet MUST NOT call the provider health endpoint
