@@ -3609,6 +3609,75 @@ func New(cfg config.Config) (*App, error) {
 			"confirm_apply": true,
 		})
 	})
+	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			runs, err := chatSvc.ListWorkflowRuns(r.Context(), profileID, strings.TrimSpace(r.URL.Query().Get("thread_id")))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_workflow_runs"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+		case http.MethodPost:
+			var req chat.CreateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.CreateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/workflow-runs/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		runID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/workflow-runs/"))
+		if runID == "" {
+			http.Error(w, `{"error":"run_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.GetWorkflowRun(r.Context(), profileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		case http.MethodPatch:
+			var req chat.UpdateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			req.RunID = runID
+			run, err := chatSvc.UpdateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_update_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/chat/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
