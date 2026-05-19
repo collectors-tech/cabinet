@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -283,12 +284,18 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 		ProfileID    string `json:"profile_id"`
 		Route        string `json:"route"`
 		Capabilities []struct {
-			ID              string   `json:"id"`
-			Group           string   `json:"group"`
-			Mode            string   `json:"mode"`
-			PermissionState string   `json:"permission_state"`
-			Requires        []string `json:"requires"`
-			Unavailable     bool     `json:"unavailable"`
+			ID               string   `json:"id"`
+			Group            string   `json:"group"`
+			Mode             string   `json:"mode"`
+			PermissionState  string   `json:"permission_state"`
+			Requires         []string `json:"requires"`
+			ProviderRequires []string `json:"provider_requires"`
+			InputSchema      string   `json:"input_schema"`
+			PreviewShape     string   `json:"preview_shape"`
+			ApplyBehavior    string   `json:"apply_behavior"`
+			AuditBehavior    string   `json:"audit_behavior"`
+			ResultLink       string   `json:"result_link"`
+			Unavailable      bool     `json:"unavailable"`
 		} `json:"capabilities"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -299,18 +306,33 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	}
 
 	seen := map[string]struct {
-		mode        string
-		permission  string
-		unavailable bool
+		mode             string
+		permission       string
+		unavailable      bool
+		providerRequires []string
+		inputSchema      string
+		previewShape     string
+		applyBehavior    string
+		auditBehavior    string
+		resultLink       string
 	}{}
 	for _, capability := range payload.Capabilities {
 		seen[capability.ID] = struct {
-			mode        string
-			permission  string
-			unavailable bool
-		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable}
+			mode             string
+			permission       string
+			unavailable      bool
+			providerRequires []string
+			inputSchema      string
+			previewShape     string
+			applyBehavior    string
+			auditBehavior    string
+			resultLink       string
+		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable, providerRequires: capability.ProviderRequires, inputSchema: capability.InputSchema, previewShape: capability.PreviewShape, applyBehavior: capability.ApplyBehavior, auditBehavior: capability.AuditBehavior, resultLink: capability.ResultLink}
 		if capability.Group == "" || len(capability.Requires) == 0 {
 			t.Fatalf("capability must expose group and context requirements: %+v", capability)
+		}
+		if capability.InputSchema == "" || capability.PreviewShape == "" || capability.ApplyBehavior == "" || capability.AuditBehavior == "" || capability.ResultLink == "" {
+			t.Fatalf("capability must expose schema, preview, apply, audit and result contract: %+v", capability)
 		}
 	}
 	if got := seen["inventory.item.create"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
@@ -322,10 +344,141 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
 		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
 	}
+	content := seen["content_generate"]
+	if content.mode != "unavailable" || content.permission != "setup-needed" || !content.unavailable || content.previewShape != "catalog_content_draft_preview" || content.applyBehavior != "preview_only_no_mutation" || !slices.Contains(content.providerRequires, "openai") {
+		t.Fatalf("content_generate must expose preview-only setup-needed OpenAI contract, got %+v", content)
+	}
+	listing := seen["listing_draft_generate"]
+	if listing.mode != "unavailable" || listing.permission != "setup-needed" || !listing.unavailable || listing.previewShape != "listing_draft_preview_with_sources" || listing.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(listing.providerRequires, "provider_test_passed") {
+		t.Fatalf("listing_draft_generate must expose confirmation-gated setup-needed OpenAI contract, got %+v", listing)
+	}
 
 	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)
 	if missingProfile.Code != http.StatusBadRequest {
 		t.Fatalf("missing profile status=%d body=%s", missingProfile.Code, missingProfile.Body.String())
+	}
+}
+
+func TestAssistantContentListingGenerationRunsStayPreviewFirst(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Generated Content Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"GEN-001","title":"Original catalog title","brand":"AFX","category":"Cars","condition":"Used"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Generated Content Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	contentRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-content-generate",
+		"capability_id":"content_generate",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"not_required",
+		"input":{"item_id":"`+item.ID+`","fields":["description","condition_notes"]},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if contentRun.Code != http.StatusCreated {
+		t.Fatalf("create content workflow run status=%d body=%s", contentRun.Code, contentRun.Body.String())
+	}
+	var content struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(contentRun.Body).Decode(&content); err != nil {
+		t.Fatalf("decode content run: %v", err)
+	}
+	if content.CapabilityID != "content_generate" || content.ConfirmationState != "not_required" || content.ProviderTrace["setup_needed"] != "provider_test_required" {
+		t.Fatalf("content_generate must remain setup-needed preview-only metadata, got %+v", content)
+	}
+
+	contentDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+content.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"preview_id":"content-preview-1","item_id":"`+item.ID+`","description":"Generated sales copy","condition_notes":"Generated condition notes"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if contentDone.Code != http.StatusOK {
+		t.Fatalf("complete content run status=%d body=%s", contentDone.Code, contentDone.Body.String())
+	}
+	if !strings.Contains(contentDone.Body.String(), `"preview_id":"content-preview-1"`) || !strings.Contains(contentDone.Body.String(), `"confirmation_state":"not_required"`) {
+		t.Fatalf("content run must return preview result without pending apply state, body=%s", contentDone.Body.String())
+	}
+
+	itemsAfterContent := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if itemsAfterContent.Code != http.StatusOK {
+		t.Fatalf("list items after content run status=%d body=%s", itemsAfterContent.Code, itemsAfterContent.Body.String())
+	}
+	if !strings.Contains(itemsAfterContent.Body.String(), `"title":"Original catalog title"`) || strings.Contains(itemsAfterContent.Body.String(), "Generated sales copy") {
+		t.Fatalf("content_generate result must not silently mutate inventory item, body=%s", itemsAfterContent.Body.String())
+	}
+
+	listingRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-listing-draft-generate",
+		"capability_id":"listing_draft_generate",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"required",
+		"input":{"item_id":"`+item.ID+`","target_marketplace":"ebay"},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if listingRun.Code != http.StatusCreated {
+		t.Fatalf("create listing workflow run status=%d body=%s", listingRun.Code, listingRun.Body.String())
+	}
+	var listing struct {
+		ID                string `json:"id"`
+		CapabilityID      string `json:"capability_id"`
+		ConfirmationState string `json:"confirmation_state"`
+	}
+	if err := json.NewDecoder(listingRun.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode listing run: %v", err)
+	}
+	if listing.CapabilityID != "listing_draft_generate" || listing.ConfirmationState != "required" {
+		t.Fatalf("listing_draft_generate must start confirmation-gated, got %+v", listing)
+	}
+
+	listingDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+listing.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"listing-preview-1","marketplace":"ebay","title":"Generated listing title","sources":[{"type":"item","id":"`+item.ID+`"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if listingDone.Code != http.StatusOK {
+		t.Fatalf("complete listing run status=%d body=%s", listingDone.Code, listingDone.Body.String())
+	}
+	if !strings.Contains(listingDone.Body.String(), `"confirmation_state":"pending"`) || !strings.Contains(listingDone.Body.String(), `"sources"`) {
+		t.Fatalf("listing draft must preserve source-attributed pending confirmation preview, body=%s", listingDone.Body.String())
 	}
 }
 
