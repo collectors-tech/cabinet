@@ -965,7 +965,7 @@ export function Apps({
               {editingProvider?.display_name ?? 'Integration'}
             </DialogTitle>
             <DialogDescription>
-              Manage provider credentials, validation, and sync controls.
+              Manage provider credentials, validation, and setup controls.
             </DialogDescription>
           </DialogHeader>
           {editingProvider ? (
@@ -1063,16 +1063,21 @@ export function Apps({
                 >
                   {validating ? 'Validating...' : 'Validate'}
                 </Button>
-                <Button
-                  variant='outline'
-                  onClick={() => {
-                    setActionMessage(
-                      'Sync is initiated from Market Watch query sets. Open Market Watch to run provider discovery.'
-                    )
-                  }}
-                >
-                  Sync
-                </Button>
+                <div className='flex max-w-xs flex-col items-end gap-1'>
+                  <Button
+                    variant='outline'
+                    disabled
+                    aria-describedby='provider-sync-unavailable'
+                  >
+                    Sync
+                  </Button>
+                  <p
+                    id='provider-sync-unavailable'
+                    className='text-right text-xs text-muted-foreground'
+                  >
+                    Sync runs from Market Watch query sets.
+                  </p>
+                </div>
                 <Button
                   variant='outline'
                   onClick={closeIntegration}

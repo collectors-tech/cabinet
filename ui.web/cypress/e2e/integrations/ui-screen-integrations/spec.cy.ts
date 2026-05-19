@@ -134,12 +134,13 @@ describe('ui-screen-integrations', () => {
     signIn()
 
     cy.get('[data-testid="provider-open-ebay"]').click()
-    cy.contains('Manage provider credentials, validation, and sync controls.').should(
+    cy.contains('Manage provider credentials, validation, and setup controls.').should(
       'be.visible'
     )
     cy.contains('Configure eBay token and marketplace.').should('be.visible')
     cy.contains('button', 'Validate').should('be.visible')
-    cy.contains('button', 'Sync').should('be.visible')
+    cy.contains('button', 'Sync').should('be.disabled')
+    cy.contains('Sync runs from Market Watch query sets.').should('be.visible')
     cy.contains('button', 'Save Integration').should('be.visible')
     cy.contains('Mode: official_api').should('be.visible')
     cy.contains('Health: ok').should('be.visible')

@@ -77,6 +77,12 @@ Integrations screen SHALL derive provider cards exclusively from `GET /api/provi
 ### Requirement UI-SCREEN-INTEGRATIONS-007: Provider detail panel SHALL expose health and action controls
 Integrations screen SHALL expose provider health and actionable controls from detail panel.
 
+#### Scenario: Provider dialog sync action is not inert
+- **GIVEN** a provider detail panel is open and provider discovery runs are started from Market Watch query sets
+- **WHEN** the detail panel renders the Sync affordance
+- **THEN** Sync MUST NOT be an enabled inert action
+- **AND** the panel MUST explain that sync runs from Market Watch query sets until an in-dialog sync flow exposes progress and completion state
+
 ### Requirement UI-SCREEN-INTEGRATIONS-009: Integrations UI SHALL display provider API family support mapping
 Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algolia/custom) in cards and detail panel.
 
@@ -97,7 +103,7 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
   - setup instructions
   - health status and last-run status
   - `Validate` action
-  - `Sync` action
+  - disabled/explained `Sync` affordance when sync is unavailable in the dialog
   - `Save Integration` action
 
 ## Acceptance Criteria
@@ -114,7 +120,7 @@ Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algol
 | UC-INT-UI-04 | Edit existing provider token | Clear token is never shown and replace-token works | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004: persists settings with write-only replace-token flow` |
 | UC-INT-UI-05 | Registry/bootstrap failure | Error state with retry appears | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: renders deterministic bootstrap error with retry control` |
 | UC-INT-UI-06 | Registry-backed provider list | Cards derive from runtime registry response | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to cards and supports filter/sort/view using registry data` |
-| UC-INT-UI-07 | Provider detail actions visible | Validate/Sync/Save controls appear with health/last-run | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
+| UC-INT-UI-07 | Provider detail actions visible | Validate/Save controls appear with health/last-run; dialog Sync is disabled with Market Watch guidance when unsupported | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
 | UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-type-selector-filters-list` |
 | UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-rows-cards-toggle` |
 | UC-INT-UI-10 | Provider API family badge display | Cards show API family labels from registry mapping | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping` |
