@@ -10,7 +10,7 @@ import (
 func TestAssistantOpenAIWorkflowPlanBindsIssue847Contracts(t *testing.T) {
 	t.Parallel()
 
-	planPath := filepath.Join("..", "docs", "assistant-openai-workflow-plan.md")
+	planPath := filepath.Join("..", "openspec", "migration", "assistant-openai-workflow-plan.md")
 	planRaw, err := os.ReadFile(planPath)
 	if err != nil {
 		t.Fatalf("read assistant OpenAI workflow plan: %v", err)
