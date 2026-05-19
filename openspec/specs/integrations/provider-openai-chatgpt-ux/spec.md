@@ -46,6 +46,8 @@ Cabinet MUST adapt the SCHA OpenAI setup pattern into a compact provider card pl
 - **WHEN** user opens the OpenAI config dialog
 - **THEN** Browser Auth, API key, and Test OpenAI sections MUST be visible inside the dialog
 - **AND** duplicate method narration such as `OpenAI is using: Browser Auth` MUST NOT render
+- **AND** generic operational Sync controls MUST NOT render inside the setup-needed OpenAI dialog
+- **AND** API-key and test controls MUST have durable visible or programmatic labels rather than placeholder-only setup fields
 
 ### Requirement PROVIDER-OPENAI-UX-006: Browser Auth SHALL require verifiable proof before connected readiness
 Cabinet MUST NOT mark OpenAI Browser Auth connected from navigation, a user return, or a provider tab launch alone. Connected readiness requires a verifiable callback/artifact/proof recorded by Cabinet.
