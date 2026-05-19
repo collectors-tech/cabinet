@@ -259,3 +259,72 @@ func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
 		t.Fatalf("cross profile apply status=%d body=%s", crossProfileApply.Code, crossProfileApply.Body.String())
 	}
 }
+
+func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Capability Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodGet, "/api/chat/capabilities?profile_id="+p.ID+"&route=/inventory", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("capabilities status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		ProfileID    string `json:"profile_id"`
+		Route        string `json:"route"`
+		Capabilities []struct {
+			ID              string   `json:"id"`
+			Group           string   `json:"group"`
+			Mode            string   `json:"mode"`
+			PermissionState string   `json:"permission_state"`
+			Requires        []string `json:"requires"`
+			Unavailable     bool     `json:"unavailable"`
+		} `json:"capabilities"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode capabilities: %v", err)
+	}
+	if payload.ProfileID != p.ID || payload.Route != "/inventory" {
+		t.Fatalf("expected profile and route context, got %+v", payload)
+	}
+
+	seen := map[string]struct {
+		mode        string
+		permission  string
+		unavailable bool
+	}{}
+	for _, capability := range payload.Capabilities {
+		seen[capability.ID] = struct {
+			mode        string
+			permission  string
+			unavailable bool
+		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable}
+		if capability.Group == "" || len(capability.Requires) == 0 {
+			t.Fatalf("capability must expose group and context requirements: %+v", capability)
+		}
+	}
+	if got := seen["inventory.item.create"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
+		t.Fatalf("inventory create must be available but confirm-required, got %+v", got)
+	}
+	if got := seen["collections.item.assign"]; got.mode != "preview-only" || got.permission != "preview-only" || got.unavailable {
+		t.Fatalf("collections assignment must expose preview-only boundary, got %+v", got)
+	}
+	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
+		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
+	}
+
+	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)
+	if missingProfile.Code != http.StatusBadRequest {
+		t.Fatalf("missing profile status=%d body=%s", missingProfile.Code, missingProfile.Body.String())
+	}
+}

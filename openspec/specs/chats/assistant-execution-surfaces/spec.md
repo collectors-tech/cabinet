@@ -33,3 +33,14 @@ Cabinet MUST expose which classes of assistant actions are read-only, preview-on
 - **GIVEN** assistant proposes an action outside allowed permission scope
 - **WHEN** UI renders the proposal or rejection
 - **THEN** user MUST receive explicit permission-state guidance instead of silent failure or hidden omission
+
+### Requirement ASSISTANT-EXECUTION-005: Assistant SHALL expose an app-wide capability registry
+Cabinet MUST expose a deterministic assistant capability registry for the active profile/workspace so agents can discover supported app functions and their governance boundaries before proposing work.
+
+#### Scenario: Discover governed assistant capabilities
+- **GIVEN** an active profile and assistant thread context
+- **WHEN** the assistant queries the capability registry for the current route
+- **THEN** the response MUST include representative Inventory, Collections, Wishlist, Settings/Data, and Integrations capabilities
+- **AND** each capability MUST declare user-facing purpose, required context, permission state, execution mode, preview/apply behavior, audit behavior, and result destination
+- **AND** mutating capabilities MUST be marked confirm-required or preview-only rather than directly executable from chat
+- **AND** unavailable provider-backed capabilities MUST be returned with setup-needed state instead of being omitted or hallucinated
