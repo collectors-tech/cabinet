@@ -100,3 +100,21 @@ Telegram capture responses MUST include structured channel action button descrip
 - **GIVEN** an authorized Telegram capture is too ambiguous for a safe preview
 - **WHEN** Cabinet returns a follow-up-required response
 - **THEN** the Telegram reply MUST include structured reply button descriptors for barcode, part number, and item title follow-up
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-010: Telegram callback actions SHALL apply or cancel only authorized previews
+Cabinet MUST accept Telegram catalog capture callback actions only from the authorized sender/chat for the profile that owns the preview, and MUST translate confirm/cancel callback data into the same governed preview apply/cancel lifecycle used by Cabinet review.
+
+#### Scenario: Confirm authorized Telegram capture callback
+- **GIVEN** an authorized Telegram capture has created a pending catalog item preview
+- **WHEN** the Telegram channel adapter submits the confirm callback data from the same authorized sender/chat
+- **THEN** Cabinet MUST apply the preview, create the catalog item, and return Telegram-visible confirmed reply state
+
+#### Scenario: Reject unauthorized Telegram capture callback
+- **GIVEN** a pending Telegram catalog capture preview exists for one authorized sender/chat
+- **WHEN** a different sender or chat submits callback data for that preview
+- **THEN** Cabinet MUST reject the callback before applying or cancelling the preview
+
+#### Scenario: Cancel authorized Telegram capture callback
+- **GIVEN** an authorized Telegram capture has created a pending catalog item preview
+- **WHEN** the Telegram channel adapter submits the cancel callback data from the same authorized sender/chat
+- **THEN** Cabinet MUST mark the preview cancelled and MUST NOT create a catalog item

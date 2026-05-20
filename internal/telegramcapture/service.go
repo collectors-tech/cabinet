@@ -27,6 +27,9 @@ type ChatService interface {
 	CreateMessage(ctx context.Context, profileID, threadID, role, content string, messageContext map[string]any) (chat.Message, error)
 	SaveAttachment(ctx context.Context, profileID, threadID, filename, mimeType string, src io.Reader) (chat.Attachment, error)
 	PreviewAction(ctx context.Context, in chat.PreviewActionInput) (chat.ActionPreview, error)
+	GetActionPreview(ctx context.Context, profileID, previewID string) (chat.ActionPreview, error)
+	ApplyAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+	CancelAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
 	CreateInboxItem(ctx context.Context, item chat.InboxItem) (chat.InboxItem, error)
 }
 
@@ -49,6 +52,21 @@ type CaptureInput struct {
 	Media          []MediaInput
 	GroupingHint   string
 	SourceMetadata map[string]any
+}
+
+type CallbackInput struct {
+	SenderID     string
+	ChatID       string
+	CallbackData string
+}
+
+type CallbackResult struct {
+	ProfileID     string                 `json:"profile_id"`
+	PreviewID     string                 `json:"preview_id"`
+	ThreadID      string                 `json:"thread_id"`
+	Action        string                 `json:"action"`
+	ApplyResult   chat.ApplyActionResult `json:"apply_result"`
+	TelegramReply TelegramReply          `json:"telegram_reply"`
 }
 
 type Draft struct {
@@ -283,6 +301,62 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 	}, nil
 }
 
+func (s *Service) HandleCatalogCaptureCallback(ctx context.Context, in CallbackInput) (CallbackResult, error) {
+	if s == nil || s.authorizer == nil || s.chat == nil {
+		return CallbackResult{}, fmt.Errorf("telegram capture service is not configured")
+	}
+	senderID := strings.TrimSpace(in.SenderID)
+	chatID := strings.TrimSpace(in.ChatID)
+	if senderID == "" || chatID == "" {
+		return CallbackResult{}, fmt.Errorf("telegram sender_id and chat_id are required")
+	}
+	action, previewID, err := parseTelegramCallbackData(in.CallbackData)
+	if err != nil {
+		return CallbackResult{}, err
+	}
+	authorized, err := s.authorizer.AuthorizeTelegramCapture(ctx, senderID, chatID)
+	if err != nil {
+		return CallbackResult{}, err
+	}
+	profileID := strings.TrimSpace(authorized.ProfileID)
+	if profileID == "" {
+		return CallbackResult{}, ErrUnauthorizedSender
+	}
+	preview, err := s.chat.GetActionPreview(ctx, profileID, previewID)
+	if err != nil {
+		return CallbackResult{}, err
+	}
+	applyInput := chat.ApplyActionInput{ProfileID: profileID, ThreadID: preview.ThreadID, PreviewID: preview.ID, Confirm: action == "confirm"}
+	var applyResult chat.ApplyActionResult
+	switch action {
+	case "confirm":
+		applyResult, err = s.chat.ApplyAction(ctx, applyInput)
+	case "cancel":
+		applyResult, err = s.chat.CancelAction(ctx, applyInput)
+	default:
+		err = fmt.Errorf("unsupported telegram callback action: %s", action)
+	}
+	if err != nil {
+		return CallbackResult{}, err
+	}
+	return CallbackResult{
+		ProfileID:   profileID,
+		PreviewID:   preview.ID,
+		ThreadID:    preview.ThreadID,
+		Action:      action,
+		ApplyResult: applyResult,
+		TelegramReply: TelegramReply{
+			Text:              telegramCallbackReplyText(action, applyResult),
+			ConfirmationState: telegramCallbackConfirmationState(action),
+			Actions:           []string{"open_cabinet_review"},
+			ReviewURL:         reviewURL(profileID, preview.ThreadID, preview.ID),
+			ActionButtons: []TelegramReplyButton{
+				{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: reviewURL(profileID, preview.ThreadID, preview.ID)},
+			},
+		},
+	}, nil
+}
+
 func CaptureInputFromWebhookUpdate(update WebhookUpdate, draft Draft) (CaptureInput, error) {
 	if update.Message == nil {
 		return CaptureInput{}, fmt.Errorf("telegram webhook update does not contain a message")
@@ -482,6 +556,36 @@ func telegramCallbackData(action, previewID string) string {
 		return ""
 	}
 	return "cabinet:catalog_capture:" + action + ":" + previewID
+}
+
+func parseTelegramCallbackData(raw string) (string, string, error) {
+	parts := strings.Split(strings.TrimSpace(raw), ":")
+	if len(parts) != 4 || parts[0] != "cabinet" || parts[1] != "catalog_capture" {
+		return "", "", fmt.Errorf("invalid telegram catalog capture callback data")
+	}
+	action := strings.TrimSpace(parts[2])
+	previewID := strings.TrimSpace(parts[3])
+	if (action != "confirm" && action != "cancel") || previewID == "" {
+		return "", "", fmt.Errorf("invalid telegram catalog capture callback action")
+	}
+	return action, previewID, nil
+}
+
+func telegramCallbackReplyText(action string, result chat.ApplyActionResult) string {
+	if action == "confirm" {
+		if strings.TrimSpace(result.ItemID) != "" {
+			return "Confirmed. Cabinet added the catalog item and kept the Telegram capture audit trail linked to the review thread."
+		}
+		return "Confirmed. Cabinet applied the catalog capture after explicit approval."
+	}
+	return "Cancelled. Cabinet left the catalog draft unapplied and kept the Telegram capture audit trail for review."
+}
+
+func telegramCallbackConfirmationState(action string) string {
+	if action == "confirm" {
+		return "confirmed"
+	}
+	return "cancelled"
 }
 
 func draftNeedsFollowUp(in CaptureInput, draft Draft) DraftNeedsFollowUpError {

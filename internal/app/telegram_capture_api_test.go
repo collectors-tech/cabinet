@@ -84,6 +84,81 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 }
 
+func TestTelegramCatalogCaptureCallbackAPIConfirmsAuthorizedPreview(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Callback"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"sender-callback",
+			"telegram.catalog_capture.chat_id":"chat-callback"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	capture := doRequest(t, a, http.MethodPost, "/api/telegram/catalog-captures", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"sender-callback",
+		"chat_id":"chat-callback",
+		"barcode":"9312345678902",
+		"draft":{"title":"Callback API Draft","brand":"AFX","category":"Slot"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if capture.Code != http.StatusCreated {
+		t.Fatalf("capture status=%d body=%s", capture.Code, capture.Body.String())
+	}
+	var captured struct {
+		Preview struct {
+			ID string `json:"id"`
+		} `json:"preview"`
+	}
+	if err := json.NewDecoder(capture.Body).Decode(&captured); err != nil {
+		t.Fatalf("decode capture: %v", err)
+	}
+	if captured.Preview.ID == "" {
+		t.Fatalf("expected preview id from capture")
+	}
+	unauthorized := doRequest(t, a, http.MethodPost, "/api/telegram/catalog-capture-callbacks", strings.NewReader(`{
+		"sender_id":"wrong-sender",
+		"chat_id":"chat-callback",
+		"callback_data":"cabinet:catalog_capture:confirm:`+captured.Preview.ID+`"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unauthorized.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized callback status=%d body=%s", unauthorized.Code, unauthorized.Body.String())
+	}
+	confirmed := doRequest(t, a, http.MethodPost, "/api/telegram/catalog-capture-callbacks", strings.NewReader(`{
+		"sender_id":"sender-callback",
+		"chat_id":"chat-callback",
+		"callback_data":"cabinet:catalog_capture:confirm:`+captured.Preview.ID+`"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("confirmed callback status=%d body=%s", confirmed.Code, confirmed.Body.String())
+	}
+	body := confirmed.Body.String()
+	if !strings.Contains(body, `"confirmation_state":"confirmed"`) ||
+		!strings.Contains(body, `"applied":true`) ||
+		!strings.Contains(body, `"item_id":"`) {
+		t.Fatalf("expected callback confirmation to apply preview with Telegram reply, body=%s", body)
+	}
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if !strings.Contains(items.Body.String(), "Callback API Draft") || !strings.Contains(items.Body.String(), "9312345678902") {
+		t.Fatalf("confirmed callback should create catalog item, body=%s", items.Body.String())
+	}
+}
+
 func TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization(t *testing.T) {
 	t.Parallel()
 

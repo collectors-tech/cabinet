@@ -165,6 +165,77 @@ func TestTelegramCaptureDerivesDraftFromBarcodeOnly(t *testing.T) {
 	}
 }
 
+func TestTelegramCaptureCallbackConfirmsAndCancelsPendingPreview(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	profileID := "profile-callback"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Callback"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	chatSvc := chat.NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	svc := NewService(staticAuthorizer{"sender-cb|chat-cb": profileID}, chatSvc)
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-cb",
+		ChatID:   "chat-cb",
+		Barcode:  "4904810900017",
+		Draft:    Draft{Title: "Callback Draft", Brand: "AFX", Category: "Slot"},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() error = %v", err)
+	}
+	confirmed, err := svc.HandleCatalogCaptureCallback(ctx, CallbackInput{
+		SenderID:     "sender-cb",
+		ChatID:       "chat-cb",
+		CallbackData: "cabinet:catalog_capture:confirm:" + result.Preview.ID,
+	})
+	if err != nil {
+		t.Fatalf("HandleCatalogCaptureCallback(confirm) error = %v", err)
+	}
+	if !confirmed.ApplyResult.Applied || confirmed.ApplyResult.ItemID == "" || confirmed.TelegramReply.ConfirmationState != "confirmed" {
+		t.Fatalf("expected callback confirmation to apply item and return Telegram confirmation: %+v", confirmed)
+	}
+	var createdTitle string
+	if err := conn.QueryRowContext(ctx, `SELECT title FROM canonical_items WHERE id = ? AND profile_id = ?`, confirmed.ApplyResult.ItemID, profileID).Scan(&createdTitle); err != nil {
+		t.Fatalf("confirmed callback did not create catalog item: %v", err)
+	}
+	if createdTitle != "Callback Draft" {
+		t.Fatalf("confirmed callback created wrong item title %q", createdTitle)
+	}
+
+	cancelResult, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-cb",
+		ChatID:   "chat-cb",
+		Barcode:  "4904810900018",
+		Draft:    Draft{Title: "Cancel Draft"},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() cancel fixture error = %v", err)
+	}
+	cancelled, err := svc.HandleCatalogCaptureCallback(ctx, CallbackInput{
+		SenderID:     "sender-cb",
+		ChatID:       "chat-cb",
+		CallbackData: "cabinet:catalog_capture:cancel:" + cancelResult.Preview.ID,
+	})
+	if err != nil {
+		t.Fatalf("HandleCatalogCaptureCallback(cancel) error = %v", err)
+	}
+	if cancelled.ApplyResult.Applied || cancelled.TelegramReply.ConfirmationState != "cancelled" {
+		t.Fatalf("expected callback cancellation to leave preview unapplied: %+v", cancelled)
+	}
+	var cancelledCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM canonical_items WHERE part_number = ?`, "4904810900018").Scan(&cancelledCount); err != nil {
+		t.Fatalf("count cancelled item: %v", err)
+	}
+	if cancelledCount != 0 {
+		t.Fatalf("cancelled callback must not create a catalog item, count=%d", cancelledCount)
+	}
+}
+
 func TestTelegramCaptureAmbiguousTextRequiresFollowUp(t *testing.T) {
 	t.Parallel()
 	svc := NewService(staticAuthorizer{"sender-3|chat-3": "profile-follow-up"}, nilChatService{})
@@ -261,6 +332,15 @@ func (nilChatService) SaveAttachment(context.Context, string, string, string, st
 }
 func (nilChatService) PreviewAction(context.Context, chat.PreviewActionInput) (chat.ActionPreview, error) {
 	return chat.ActionPreview{}, nil
+}
+func (nilChatService) GetActionPreview(context.Context, string, string) (chat.ActionPreview, error) {
+	return chat.ActionPreview{}, nil
+}
+func (nilChatService) ApplyAction(context.Context, chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+	return chat.ApplyActionResult{}, nil
+}
+func (nilChatService) CancelAction(context.Context, chat.ApplyActionInput) (chat.ApplyActionResult, error) {
+	return chat.ApplyActionResult{}, nil
 }
 func (nilChatService) CreateInboxItem(context.Context, chat.InboxItem) (chat.InboxItem, error) {
 	return chat.InboxItem{}, nil

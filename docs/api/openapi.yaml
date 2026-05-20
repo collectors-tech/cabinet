@@ -1340,6 +1340,66 @@ paths:
                               enum: [url, callback, reply]
                             action:
                               type: string
+  /api/telegram/catalog-capture-callbacks:
+    post:
+      tags: [Telegram]
+      summary: Handle an authorized Telegram catalog capture callback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sender_id, chat_id, callback_data]
+              properties:
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                callback_data:
+                  type: string
+                  example: cabinet:catalog_capture:confirm:preview-id
+      responses:
+        "200":
+          description: Callback accepted and preview confirmed or cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  preview_id:
+                    type: string
+                  thread_id:
+                    type: string
+                  action:
+                    type: string
+                    enum: [confirm, cancel]
+                  apply_result:
+                    type: object
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                        enum: [confirmed, cancelled]
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /api/telegram/webhook/catalog-captures:
     post:
       tags: [Telegram]

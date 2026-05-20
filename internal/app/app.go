@@ -3651,6 +3651,33 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/telegram/catalog-capture-callbacks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramCatalogCaptureCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
+			SenderID:     req.SenderID,
+			ChatID:       req.ChatID,
+			CallbackData: req.CallbackData,
+		})
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_handle_telegram_capture_callback"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -8096,6 +8123,12 @@ type telegramCatalogCaptureMediaRequest struct {
 	MIMEType      string `json:"mime_type"`
 	Kind          string `json:"kind"`
 	ContentBase64 string `json:"content_base64"`
+}
+
+type telegramCatalogCaptureCallbackRequest struct {
+	SenderID     string `json:"sender_id"`
+	ChatID       string `json:"chat_id"`
+	CallbackData string `json:"callback_data"`
 }
 
 type profileSettingsTelegramAuthorizer struct {

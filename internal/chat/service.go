@@ -740,6 +740,28 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	return result, nil
 }
 
+func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.PreviewID = strings.TrimSpace(in.PreviewID)
+	if in.ProfileID == "" || in.ThreadID == "" || in.PreviewID == "" {
+		return ApplyActionResult{}, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	preview, _, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chat_action_previews
+		SET status = 'cancelled'
+		WHERE id = ? AND profile_id = ? AND thread_id = ?
+	`, in.PreviewID, in.ProfileID, in.ThreadID)
+	if err != nil {
+		return ApplyActionResult{}, fmt.Errorf("mark action cancelled: %w", err)
+	}
+	return ApplyActionResult{Applied: false, Action: preview.Action, PreviewID: preview.ID}, nil
+}
+
 func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
 	var preview ActionPreview
 	var payloadRaw string
@@ -764,6 +786,10 @@ func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID,
 		return ActionPreview{}, nil, fmt.Errorf("decode payload: %w", err)
 	}
 	return preview, payload, nil
+}
+
+func (s *Service) GetActionPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
+	return s.getPreview(ctx, profileID, previewID)
 }
 
 func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
