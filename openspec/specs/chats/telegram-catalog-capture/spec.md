@@ -63,3 +63,17 @@ Cabinet MUST normalize Telegram webhook updates into the same catalog capture in
 - **GIVEN** Telegram sends a webhook update containing text with a barcode-like number and no media
 - **WHEN** Cabinet normalizes the webhook update for catalog intake
 - **THEN** Cabinet MUST preserve the text and inferred barcode without creating synthetic media attachments
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-007: Telegram webhook catalog capture API SHALL resolve profile authorization before preview creation
+Cabinet MUST accept raw Telegram webhook updates through a dedicated catalog capture endpoint, resolve the sender/chat against persisted profile authorization settings, and then create the capture through the governed preview-before-apply service.
+
+#### Scenario: Accept authorized Telegram webhook capture
+- **GIVEN** a Cabinet profile has persisted Telegram catalog capture sender/chat authorization settings
+- **WHEN** the webhook endpoint receives a matching Telegram update with text, barcode-like content, and media metadata
+- **THEN** Cabinet MUST resolve the profile from the sender/chat, normalize the update, and create the preview/inbox handoff without requiring a profile id in the webhook payload
+- **AND** no catalog item MUST be created until explicit confirmation is submitted
+
+#### Scenario: Reject unauthorized Telegram webhook capture
+- **GIVEN** no Cabinet profile has matching Telegram sender/chat authorization settings
+- **WHEN** the webhook endpoint receives a Telegram update from that sender/chat
+- **THEN** Cabinet MUST reject the request before creating capture records

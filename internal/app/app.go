@@ -3600,6 +3600,35 @@ func New(cfg config.Config) (*App, error) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/telegram/webhook/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var update telegramcapture.WebhookUpdate
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		input, err := telegramcapture.CaptureInputFromWebhookUpdate(update, telegramcapture.Draft{})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_telegram_webhook_update"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		result, err := svc.IngestCatalogCapture(r.Context(), input)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -8052,6 +8081,10 @@ type profileSettingsTelegramAuthorizer struct {
 	profileID string
 }
 
+type allProfilesTelegramAuthorizer struct {
+	profiles *profile.Repository
+}
+
 func (a profileSettingsTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
 	profileID := strings.TrimSpace(a.profileID)
 	if profileID == "" || a.profiles == nil {
@@ -8068,6 +8101,30 @@ func (a profileSettingsTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.
 		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
 	}
 	return telegramcapture.AuthorizedProfile{ProfileID: profileID}, nil
+}
+
+func (a allProfilesTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
+	if a.profiles == nil || strings.TrimSpace(senderID) == "" || strings.TrimSpace(chatID) == "" {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	profiles, err := a.profiles.List(ctx)
+	if err != nil {
+		return telegramcapture.AuthorizedProfile{}, err
+	}
+	for _, candidate := range profiles {
+		settings, err := a.profiles.GetSettings(ctx, candidate.ID)
+		if err != nil {
+			return telegramcapture.AuthorizedProfile{}, err
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != strings.TrimSpace(senderID) {
+			continue
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != strings.TrimSpace(chatID) {
+			continue
+		}
+		return telegramcapture.AuthorizedProfile{ProfileID: candidate.ID}, nil
+	}
+	return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
 }
 
 func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]telegramcapture.MediaInput, error) {

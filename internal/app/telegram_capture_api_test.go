@@ -81,3 +81,79 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 		t.Fatalf("telegram API capture must not create catalog item before confirmation, body=%s", items.Body.String())
 	}
 }
+
+func TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Webhook"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"12345",
+			"telegram.catalog_capture.chat_id":"-5235769556"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	unauthorized := doRequest(t, a, http.MethodPost, "/api/telegram/webhook/catalog-captures", strings.NewReader(`{
+		"update_id": 7001,
+		"message": {
+			"message_id": 42,
+			"from": {"id": 99999},
+			"chat": {"id": -5235769556},
+			"text": "Please draft barcode 4904810900016"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if unauthorized.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized webhook status=%d body=%s", unauthorized.Code, unauthorized.Body.String())
+	}
+
+	capture := doRequest(t, a, http.MethodPost, "/api/telegram/webhook/catalog-captures", strings.NewReader(`{
+		"update_id": 7002,
+		"message": {
+			"message_id": 43,
+			"date": 1716170000,
+			"from": {"id": 12345},
+			"chat": {"id": -5235769556},
+			"media_group_id": "album-1",
+			"caption": "Front image and barcode 4904810900016",
+			"photo": [
+				{"file_id":"small-photo","file_unique_id":"small","width":90,"height":90,"file_size":1024},
+				{"file_id":"large-photo","file_unique_id":"large","width":1280,"height":720,"file_size":2048}
+			]
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if capture.Code != http.StatusCreated {
+		t.Fatalf("capture status=%d body=%s", capture.Code, capture.Body.String())
+	}
+	body := capture.Body.String()
+	if !strings.Contains(body, `"profile_id":"`+p.ID+`"`) ||
+		!strings.Contains(body, `"source":"telegram_catalog_capture"`) ||
+		!strings.Contains(body, `"source_message_id":"43"`) ||
+		!strings.Contains(body, `"barcode":"4904810900016"`) ||
+		!strings.Contains(body, `"filename":"large.jpg"`) ||
+		!strings.Contains(body, `"payload_type":"caption+photo"`) ||
+		!strings.Contains(body, `"telegram_reply"`) {
+		t.Fatalf("expected webhook capture response to include normalized source/profile/media metadata, body=%s", body)
+	}
+
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Contains(items.Body.String(), "Barcode 4904810900016") || strings.Contains(items.Body.String(), "4904810900016") {
+		t.Fatalf("telegram webhook capture must not create catalog item before confirmation, body=%s", items.Body.String())
+	}
+}
