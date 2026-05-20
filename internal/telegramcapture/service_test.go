@@ -297,6 +297,58 @@ func TestCaptureInputFromWebhookUpdateNormalizesMixedPhotoCaption(t *testing.T) 
 	}
 }
 
+func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramPhotoBytes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	input, err := CaptureInputFromWebhookUpdateWithMedia(ctx, WebhookUpdate{
+		UpdateID: 101,
+		Message: &WebhookMessage{
+			MessageID: 55,
+			Date:      1716170500,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Caption:   "Captured box barcode 9312345678901",
+			Photo: []WebhookPhotoSize{
+				{FileID: "small-photo", FileUniqueID: "small", Width: 90, Height: 90, FileSize: 1024},
+				{FileID: "large-photo", FileUniqueID: "large", Width: 1280, Height: 720, FileSize: 2048},
+			},
+		},
+	}, Draft{Title: "Resolved Photo Draft"}, staticMediaResolver{
+		"large-photo": {
+			Filename: "telegram-large-photo.jpg",
+			MIMEType: "image/jpeg",
+			Reader:   strings.NewReader("resolved-photo-bytes"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CaptureInputFromWebhookUpdateWithMedia() error = %v", err)
+	}
+	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].Filename != "telegram-large-photo.jpg" || input.Media[0].Reader == nil {
+		t.Fatalf("resolved media did not preserve Telegram file id and attach bytes: %+v", input.Media)
+	}
+
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	profileID := "profile-resolved-media"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Resolved Media"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	svc := NewService(staticAuthorizer{"12345|-5235769556": profileID}, chat.NewService(conn, filepath.Join(t.TempDir(), "attachments")))
+	result, err := svc.IngestCatalogCapture(ctx, input)
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() resolved media error = %v", err)
+	}
+	if len(result.Attachments) != 1 || result.Attachments[0].Filename != "telegram-large-photo.jpg" || result.Attachments[0].MimeType != "image/jpeg" {
+		t.Fatalf("resolved attachment metadata not preserved: %+v", result.Attachments)
+	}
+	if result.Attachments[0].SizeBytes != int64(len("resolved-photo-bytes")) {
+		t.Fatalf("resolved media bytes were not persisted, attachment=%+v", result.Attachments[0])
+	}
+}
+
 func TestCaptureInputFromWebhookUpdateNormalizesTextOnlyBarcode(t *testing.T) {
 	t.Parallel()
 	input, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
@@ -344,4 +396,14 @@ func (nilChatService) CancelAction(context.Context, chat.ApplyActionInput) (chat
 }
 func (nilChatService) CreateInboxItem(context.Context, chat.InboxItem) (chat.InboxItem, error) {
 	return chat.InboxItem{}, nil
+}
+
+type staticMediaResolver map[string]MediaInput
+
+func (r staticMediaResolver) ResolveTelegramMedia(_ context.Context, media MediaInput) (MediaInput, error) {
+	resolved, ok := r[strings.TrimSpace(media.FileID)]
+	if !ok {
+		return MediaInput{}, errors.New("missing telegram media fixture")
+	}
+	return resolved, nil
 }
