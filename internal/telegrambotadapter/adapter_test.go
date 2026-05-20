@@ -1,11 +1,26 @@
 package telegrambotadapter
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/telegramcapture"
 )
+
+type fakeCabinetGateway struct {
+	path     string
+	body     any
+	response telegramcapture.TelegramReply
+}
+
+func (f *fakeCabinetGateway) PostJSON(_ context.Context, path string, body any, response any) (int, error) {
+	f.path = path
+	f.body = body
+	out := response.(*cabinetTelegramReplyResponse)
+	out.TelegramReply = f.response
+	return 200, nil
+}
 
 func TestCabinetRequestFromUpdateRoutesWebhookMessage(t *testing.T) {
 	t.Parallel()
@@ -172,6 +187,107 @@ func TestAnswerCallbackQueryFromReplyRendersCallbackAcknowledgement(t *testing.T
 	}
 	if body["show_alert"].(bool) {
 		t.Fatalf("callback acknowledgement should be non-alert by default: %+v", body)
+	}
+}
+
+func TestDispatchUpdateSendsCaptureReplyThroughBotAPI(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{response: telegramcapture.TelegramReply{
+		Text:              "Draft ready for review: Slot car.",
+		ConfirmationState: "preview_required",
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Confirm in Cabinet", Kind: "callback", CallbackData: "cabinet:catalog_capture:confirm:preview-1"},
+		},
+	}}
+	result, err := DispatchUpdate(context.Background(), gateway, Update{
+		UpdateID: 7002,
+		Message: &WebhookMessage{
+			MessageID: 43,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Text:      "Barcode 4904810900016",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdate() error = %v", err)
+	}
+	if result.CabinetPath != WebhookCapturePath || gateway.path != WebhookCapturePath {
+		t.Fatalf("dispatch did not route message through webhook capture path: result=%+v gateway=%q", result, gateway.path)
+	}
+	if len(result.BotCalls) != 1 || result.BotCalls[0].Method != "sendMessage" {
+		t.Fatalf("expected one sendMessage call, got %+v", result.BotCalls)
+	}
+	body := mustJSONMap(t, result.BotCalls[0].Body)
+	if body["chat_id"] != "-5235769556" || body["text"] != "Draft ready for review: Slot car." {
+		t.Fatalf("sendMessage call did not preserve chat/text: %+v", body)
+	}
+}
+
+func TestDispatchUpdateAcknowledgesAndEditsCallbackReply(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{response: telegramcapture.TelegramReply{
+		Text:              "Confirmed. Cabinet added the catalog item.",
+		ConfirmationState: "confirmed",
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", URL: "/chats?preview_id=preview-1"},
+		},
+	}}
+	result, err := DispatchUpdate(context.Background(), gateway, Update{
+		UpdateID: 8001,
+		CallbackQuery: &CallbackQuery{
+			ID:   "callback-1",
+			From: WebhookUser{ID: 12345},
+			Message: &CallbackMessage{
+				MessageID: 44,
+				Chat:      WebhookChat{ID: -5235769556},
+			},
+			Data: "cabinet:catalog_capture:confirm:preview-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdate() callback error = %v", err)
+	}
+	if result.CabinetPath != CaptureCallbackPath || gateway.path != CaptureCallbackPath {
+		t.Fatalf("dispatch did not route callback through callback path: result=%+v gateway=%q", result, gateway.path)
+	}
+	if len(result.BotCalls) != 2 || result.BotCalls[0].Method != "answerCallbackQuery" || result.BotCalls[1].Method != "editMessageText" {
+		t.Fatalf("expected answerCallbackQuery then editMessageText, got %+v", result.BotCalls)
+	}
+	ack := mustJSONMap(t, result.BotCalls[0].Body)
+	if ack["callback_query_id"] != "callback-1" || ack["text"] != "Confirmed. Cabinet added the catalog item." {
+		t.Fatalf("callback acknowledgement did not preserve id/text: %+v", ack)
+	}
+	edit := mustJSONMap(t, result.BotCalls[1].Body)
+	if edit["chat_id"] != "-5235769556" || edit["message_id"] != "44" {
+		t.Fatalf("editMessageText did not target callback message: %+v", edit)
+	}
+}
+
+func TestBotAPIEndpointNewRequestBindsTokenAndJSONBody(t *testing.T) {
+	t.Parallel()
+
+	call, err := SendMessageFromReply("-5235769556", telegramcapture.TelegramReply{Text: "Draft ready."})
+	if err != nil {
+		t.Fatalf("SendMessageFromReply() error = %v", err)
+	}
+	req, err := (BotAPIEndpoint{BaseURL: "https://telegram.example.test", Token: "bot-token-1"}).NewRequest(context.Background(), call)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	if req.Method != "POST" || req.URL.String() != "https://telegram.example.test/botbot-token-1/sendMessage" {
+		t.Fatalf("unexpected Telegram Bot API request target: method=%s url=%s", req.Method, req.URL.String())
+	}
+	if req.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("expected JSON content type, got %q", req.Header.Get("Content-Type"))
+	}
+	var body map[string]any
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+	if body["chat_id"] != "-5235769556" || body["text"] != "Draft ready." {
+		t.Fatalf("request body did not preserve sendMessage payload: %+v", body)
 	}
 }
 
