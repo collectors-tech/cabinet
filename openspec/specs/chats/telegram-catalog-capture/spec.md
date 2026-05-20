@@ -134,3 +134,9 @@ Cabinet MUST provide a Telegram bot adapter contract that maps Telegram message 
 - **THEN** URL and callback action buttons MUST render as inline keyboard controls
 - **AND** follow-up reply actions MUST render as a one-time reply keyboard
 - **AND** callback result replies MUST be renderable as an edit to the original Telegram message
+
+#### Scenario: Acknowledge Telegram callback queries
+- **GIVEN** Telegram delivers a callback query for a Cabinet catalog capture action
+- **WHEN** Cabinet returns a confirmation or cancellation Telegram reply
+- **THEN** the adapter MUST render an answerCallbackQuery payload using the callback query id and user-visible result text
+- **AND** the acknowledgement MUST be non-alert by default so the callback interaction clears without interrupting the chat

@@ -90,6 +90,12 @@ type EditMessageTextRequest struct {
 	ReplyMarkup any    `json:"reply_markup,omitempty"`
 }
 
+type AnswerCallbackQueryRequest struct {
+	CallbackQueryID string `json:"callback_query_id"`
+	Text            string `json:"text,omitempty"`
+	ShowAlert       bool   `json:"show_alert"`
+}
+
 type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
 }
@@ -136,6 +142,19 @@ func EditMessageFromReply(chatID, messageID string, reply telegramcapture.Telegr
 		ReplyMarkup: replyMarkup(reply),
 	}
 	return BotAPICall{Method: "editMessageText", Body: body}, nil
+}
+
+func AnswerCallbackQueryFromReply(callbackQueryID string, reply telegramcapture.TelegramReply) (BotAPICall, error) {
+	callbackQueryID = strings.TrimSpace(callbackQueryID)
+	if callbackQueryID == "" {
+		return BotAPICall{}, fmt.Errorf("telegram callback_query_id is required")
+	}
+	body := AnswerCallbackQueryRequest{
+		CallbackQueryID: callbackQueryID,
+		Text:            replyText(reply),
+		ShowAlert:       false,
+	}
+	return BotAPICall{Method: "answerCallbackQuery", Body: body}, nil
 }
 
 func MarshalBody(call BotAPICall) ([]byte, error) {

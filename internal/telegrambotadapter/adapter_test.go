@@ -153,6 +153,28 @@ func TestEditMessageFromReplyRendersCallbackResult(t *testing.T) {
 	}
 }
 
+func TestAnswerCallbackQueryFromReplyRendersCallbackAcknowledgement(t *testing.T) {
+	t.Parallel()
+
+	call, err := AnswerCallbackQueryFromReply("callback-1", telegramcapture.TelegramReply{
+		Text:              "Confirmed. Cabinet added the catalog item.",
+		ConfirmationState: "confirmed",
+	})
+	if err != nil {
+		t.Fatalf("AnswerCallbackQueryFromReply() error = %v", err)
+	}
+	if call.Method != "answerCallbackQuery" {
+		t.Fatalf("expected answerCallbackQuery, got %q", call.Method)
+	}
+	body := mustJSONMap(t, call.Body)
+	if body["callback_query_id"] != "callback-1" || body["text"] != "Confirmed. Cabinet added the catalog item." {
+		t.Fatalf("answerCallbackQuery payload did not preserve callback/text: %+v", body)
+	}
+	if body["show_alert"].(bool) {
+		t.Fatalf("callback acknowledgement should be non-alert by default: %+v", body)
+	}
+}
+
 func mustJSONMap(t *testing.T, value any) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(value)
