@@ -3594,6 +3594,17 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
 				return
 			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
 			return
 		}
@@ -3621,6 +3632,17 @@ func New(cfg config.Config) (*App, error) {
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
 				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
 				return
 			}
 			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)

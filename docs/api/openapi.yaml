@@ -1285,6 +1285,33 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "422":
+          description: Capture needs Telegram-visible follow-up before preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [telegram_capture_needs_follow_up]
+                  reason:
+                    type: string
+                  missing_fields:
+                    type: array
+                    items:
+                      type: string
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
   /api/telegram/webhook/catalog-captures:
     post:
       tags: [Telegram]
@@ -1384,6 +1411,24 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "422":
+          description: Webhook capture needs Telegram-visible follow-up before preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [telegram_capture_needs_follow_up]
+                  reason:
+                    type: string
+                  missing_fields:
+                    type: array
+                    items:
+                      type: string
+                  telegram_reply:
+                    type: object
   /api/chat/threads:
     get:
       tags: [Chat]

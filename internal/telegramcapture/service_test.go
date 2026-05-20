@@ -158,6 +158,28 @@ func TestTelegramCaptureDerivesDraftFromBarcodeOnly(t *testing.T) {
 	}
 }
 
+func TestTelegramCaptureAmbiguousTextRequiresFollowUp(t *testing.T) {
+	t.Parallel()
+	svc := NewService(staticAuthorizer{"sender-3|chat-3": "profile-follow-up"}, nilChatService{})
+	_, err := svc.IngestCatalogCapture(context.Background(), CaptureInput{
+		SenderID: "sender-3",
+		ChatID:   "chat-3",
+		Text:     "This is the blue boxed one from the bench.",
+	})
+	if !errors.Is(err, ErrDraftNeedsFollowUp) {
+		t.Fatalf("expected ErrDraftNeedsFollowUp, got %v", err)
+	}
+	var followUp DraftNeedsFollowUpError
+	if !errors.As(err, &followUp) {
+		t.Fatalf("expected DraftNeedsFollowUpError, got %T", err)
+	}
+	if followUp.Reply.ConfirmationState != "follow_up_required" ||
+		!strings.Contains(followUp.Reply.Text, "barcode, part number, or clearer item title") ||
+		len(followUp.MissingFields) == 0 {
+		t.Fatalf("follow-up prompt did not explain the missing draft identity: %+v", followUp)
+	}
+}
+
 func TestCaptureInputFromWebhookUpdateNormalizesMixedPhotoCaption(t *testing.T) {
 	t.Parallel()
 	input, err := CaptureInputFromWebhookUpdate(WebhookUpdate{

@@ -157,3 +157,57 @@ func TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization(t *testing
 		t.Fatalf("telegram webhook capture must not create catalog item before confirmation, body=%s", items.Body.String())
 	}
 }
+
+func TestTelegramCatalogCaptureWebhookAPIRequestsFollowUpForAmbiguousText(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Follow Up"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"12345",
+			"telegram.catalog_capture.chat_id":"-5235769556"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	followUp := doRequest(t, a, http.MethodPost, "/api/telegram/webhook/catalog-captures", strings.NewReader(`{
+		"update_id": 7003,
+		"message": {
+			"message_id": 44,
+			"from": {"id": 12345},
+			"chat": {"id": -5235769556},
+			"text": "This is the blue boxed one from the bench"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if followUp.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("follow-up status=%d body=%s", followUp.Code, followUp.Body.String())
+	}
+	body := followUp.Body.String()
+	if !strings.Contains(body, `"error":"telegram_capture_needs_follow_up"`) ||
+		!strings.Contains(body, `"confirmation_state":"follow_up_required"`) ||
+		!strings.Contains(body, `"reply_with_barcode"`) ||
+		!strings.Contains(body, `"barcode_or_part_number"`) {
+		t.Fatalf("expected Telegram-visible follow-up response for ambiguous text, body=%s", body)
+	}
+
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Contains(items.Body.String(), "blue boxed") {
+		t.Fatalf("ambiguous Telegram follow-up must not create catalog item, body=%s", items.Body.String())
+	}
+}

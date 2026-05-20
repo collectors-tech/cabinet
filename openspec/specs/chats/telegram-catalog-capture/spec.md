@@ -77,3 +77,12 @@ Cabinet MUST accept raw Telegram webhook updates through a dedicated catalog cap
 - **GIVEN** no Cabinet profile has matching Telegram sender/chat authorization settings
 - **WHEN** the webhook endpoint receives a Telegram update from that sender/chat
 - **THEN** Cabinet MUST reject the request before creating capture records
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-008: Ambiguous Telegram captures SHALL request follow-up instead of inventing draft fields
+When authorized Telegram text or media does not contain enough item identity to create a safe catalog preview, Cabinet MUST return a Telegram-visible follow-up prompt and MUST NOT create preview, Inbox, attachment, or catalog records from invented details.
+
+#### Scenario: Request follow-up for ambiguous text-only capture
+- **GIVEN** a Cabinet profile has persisted Telegram catalog capture sender/chat authorization settings
+- **WHEN** the webhook endpoint receives an authorized text-only update without a barcode, part number, or resolved draft title
+- **THEN** Cabinet MUST return a follow-up-required response with Telegram-facing reply copy and missing identity fields
+- **AND** no catalog item MUST be created from the ambiguous text

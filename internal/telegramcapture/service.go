@@ -12,6 +12,7 @@ import (
 )
 
 var ErrUnauthorizedSender = errors.New("telegram sender is not authorized for Cabinet capture")
+var ErrDraftNeedsFollowUp = errors.New("telegram catalog capture needs follow-up before preview")
 
 type Authorizer interface {
 	AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (AuthorizedProfile, error)
@@ -123,6 +124,24 @@ type TelegramReply struct {
 	Actions           []string `json:"actions"`
 }
 
+type DraftNeedsFollowUpError struct {
+	Reply         TelegramReply `json:"telegram_reply"`
+	Reason        string        `json:"reason"`
+	MissingFields []string      `json:"missing_fields"`
+}
+
+func (e DraftNeedsFollowUpError) Error() string {
+	reason := strings.TrimSpace(e.Reason)
+	if reason == "" {
+		return ErrDraftNeedsFollowUp.Error()
+	}
+	return ErrDraftNeedsFollowUp.Error() + ": " + reason
+}
+
+func (e DraftNeedsFollowUpError) Unwrap() error {
+	return ErrDraftNeedsFollowUp
+}
+
 func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (CaptureResult, error) {
 	if s == nil || s.authorizer == nil || s.chat == nil {
 		return CaptureResult{}, fmt.Errorf("telegram capture service is not configured")
@@ -143,7 +162,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 
 	draft := normalizeDraft(in.Draft, in.Barcode)
 	if strings.TrimSpace(draft.PartNumber) == "" || strings.TrimSpace(draft.Title) == "" {
-		return CaptureResult{}, fmt.Errorf("telegram catalog capture requires a draft part_number and title before preview")
+		return CaptureResult{}, draftNeedsFollowUp(in, draft)
 	}
 
 	thread, err := s.chat.CreateThread(ctx, profileID, threadTitle(draft), map[string]any{
@@ -438,5 +457,28 @@ func telegramReply(draft Draft, reviewURL string) TelegramReply {
 		ReviewURL:         reviewURL,
 		ConfirmationState: "preview_required",
 		Actions:           []string{"open_cabinet_review", "confirm_in_cabinet", "cancel_in_cabinet"},
+	}
+}
+
+func draftNeedsFollowUp(in CaptureInput, draft Draft) DraftNeedsFollowUpError {
+	missing := []string{}
+	if strings.TrimSpace(draft.PartNumber) == "" {
+		missing = append(missing, "barcode_or_part_number")
+	}
+	if strings.TrimSpace(draft.Title) == "" {
+		missing = append(missing, "title_or_description")
+	}
+	reason := "missing enough catalog identity to create a safe preview"
+	if strings.TrimSpace(in.Text) != "" || len(in.Media) > 0 {
+		reason = "ambiguous Telegram capture needs one more identifying detail before Cabinet can create a safe preview"
+	}
+	return DraftNeedsFollowUpError{
+		Reason:        reason,
+		MissingFields: missing,
+		Reply: TelegramReply{
+			Text:              "I need one more detail before I can draft this safely. Reply with a barcode, part number, or clearer item title and I will prepare a Cabinet review draft.",
+			ConfirmationState: "follow_up_required",
+			Actions:           []string{"reply_with_barcode", "reply_with_part_number", "reply_with_item_title"},
+		},
 	}
 }
