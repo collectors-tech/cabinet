@@ -65,12 +65,20 @@ type MediaInput struct {
 }
 
 type CaptureResult struct {
-	ProfileID   string
-	Thread      chat.Thread
-	Message     chat.Message
-	Attachments []chat.Attachment
-	Preview     chat.ActionPreview
-	InboxItem   chat.InboxItem
+	ProfileID     string             `json:"profile_id"`
+	Thread        chat.Thread        `json:"thread"`
+	Message       chat.Message       `json:"message"`
+	Attachments   []chat.Attachment  `json:"attachments"`
+	Preview       chat.ActionPreview `json:"preview"`
+	InboxItem     chat.InboxItem     `json:"inbox_item"`
+	TelegramReply TelegramReply      `json:"telegram_reply"`
+}
+
+type TelegramReply struct {
+	Text              string   `json:"text"`
+	ReviewURL         string   `json:"review_url"`
+	ConfirmationState string   `json:"confirmation_state"`
+	Actions           []string `json:"actions"`
 }
 
 func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (CaptureResult, error) {
@@ -169,6 +177,8 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		return CaptureResult{}, err
 	}
 
+	reviewURL := reviewURL(profileID, thread.ID, preview.ID)
+	telegramReply := telegramReply(draft, reviewURL)
 	inboxItem, err := s.chat.CreateInboxItem(ctx, chat.InboxItem{
 		ProfileID: profileID,
 		ThreadID:  thread.ID,
@@ -184,6 +194,8 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 			"source_message_id":  strings.TrimSpace(in.MessageID),
 			"attachment_count":   len(attachments),
 			"confirmation_state": "preview_required",
+			"review_url":         reviewURL,
+			"telegram_reply":     telegramReply,
 		},
 	})
 	if err != nil {
@@ -191,12 +203,13 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 	}
 
 	return CaptureResult{
-		ProfileID:   profileID,
-		Thread:      thread,
-		Message:     message,
-		Attachments: attachments,
-		Preview:     preview,
-		InboxItem:   inboxItem,
+		ProfileID:     profileID,
+		Thread:        thread,
+		Message:       message,
+		Attachments:   attachments,
+		Preview:       preview,
+		InboxItem:     inboxItem,
+		TelegramReply: telegramReply,
 	}, nil
 }
 
@@ -235,4 +248,21 @@ func messageContent(in CaptureInput, draft Draft) string {
 	}
 	parts = append(parts, "Draft: "+strings.TrimSpace(draft.PartNumber)+" - "+strings.TrimSpace(draft.Title))
 	return strings.Join(parts, "\n")
+}
+
+func reviewURL(profileID, threadID, previewID string) string {
+	return "/chats?profile_id=" + strings.TrimSpace(profileID) + "&thread_id=" + strings.TrimSpace(threadID) + "&preview_id=" + strings.TrimSpace(previewID)
+}
+
+func telegramReply(draft Draft, reviewURL string) TelegramReply {
+	title := strings.TrimSpace(draft.Title)
+	if title == "" {
+		title = "catalog draft"
+	}
+	return TelegramReply{
+		Text:              "Draft ready for review: " + title + ". Open Cabinet to confirm or cancel before anything is added to inventory.",
+		ReviewURL:         reviewURL,
+		ConfirmationState: "preview_required",
+		Actions:           []string{"open_cabinet_review", "confirm_in_cabinet", "cancel_in_cabinet"},
+	}
 }

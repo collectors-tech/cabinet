@@ -1253,6 +1253,34 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  profile_id:
+                    type: string
+                  thread:
+                    type: object
+                  message:
+                    type: object
+                  attachments:
+                    type: array
+                    items:
+                      type: object
+                  preview:
+                    type: object
+                  inbox_item:
+                    type: object
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
         "400":
           $ref: "#/components/responses/Error"
         "403":

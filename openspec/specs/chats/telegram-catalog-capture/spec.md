@@ -42,3 +42,11 @@ When Telegram intake receives a barcode but no resolved product lookup, Cabinet 
 - **THEN** the preview MUST use the barcode as the part number and a clear barcode-derived title
 - **AND** any missing product facts MUST remain unset for user review
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-005: Telegram catalog capture SHALL return a confirmation handoff
+Cabinet MUST return Telegram-facing confirmation copy and a Cabinet review link for each accepted capture so channel adapters can tell the user how to confirm or cancel the draft without applying it automatically.
+
+#### Scenario: Return Telegram review instructions
+- **GIVEN** an authorized Telegram capture creates a catalog draft preview
+- **WHEN** Cabinet returns the capture result to the Telegram channel adapter
+- **THEN** the response MUST include user-facing reply text, a Cabinet review URL, confirmation-required state, and available review actions
+- **AND** the Inbox handoff metadata MUST preserve the same review URL and Telegram reply controls for audit/recovery

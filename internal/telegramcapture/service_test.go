@@ -101,6 +101,19 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 	if result.InboxItem.Source != "telegram_catalog_capture" || result.InboxItem.Metadata["confirmation_state"] != "preview_required" {
 		t.Fatalf("inbox item did not record confirmation-required source: %+v", result.InboxItem)
 	}
+	if result.TelegramReply.ConfirmationState != "preview_required" ||
+		!strings.Contains(result.TelegramReply.Text, "Open Cabinet to confirm or cancel") ||
+		!strings.Contains(result.TelegramReply.ReviewURL, result.Thread.ID) ||
+		!strings.Contains(result.TelegramReply.ReviewURL, result.Preview.ID) {
+		t.Fatalf("telegram reply did not expose a confirmation handoff: %+v", result.TelegramReply)
+	}
+	if result.InboxItem.Metadata["review_url"] != result.TelegramReply.ReviewURL {
+		t.Fatalf("inbox metadata did not preserve Telegram review URL: %+v", result.InboxItem.Metadata)
+	}
+	replyMeta, ok := result.InboxItem.Metadata["telegram_reply"].(map[string]any)
+	if !ok || replyMeta["review_url"] != result.TelegramReply.ReviewURL || len(replyMeta["actions"].([]any)) == 0 {
+		t.Fatalf("inbox metadata did not preserve Telegram reply controls: %#v", result.InboxItem.Metadata["telegram_reply"])
+	}
 
 	var itemCount int
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM canonical_items WHERE profile_id = ?`, profileID).Scan(&itemCount); err != nil {

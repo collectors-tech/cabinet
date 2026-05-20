@@ -65,9 +65,12 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 	if !strings.Contains(capture.Body.String(), `"source":"telegram_catalog_capture"`) ||
 		!strings.Contains(capture.Body.String(), `"confirmation_state":"preview_required"`) ||
+		!strings.Contains(capture.Body.String(), `"telegram_reply"`) ||
+		!strings.Contains(capture.Body.String(), `"review_url":"/chats?profile_id=`) ||
+		!strings.Contains(capture.Body.String(), `"confirm_in_cabinet"`) ||
 		!strings.Contains(capture.Body.String(), `"source_message_id":"message-42"`) ||
 		!strings.Contains(capture.Body.String(), `"filename":"front.jpg"`) {
-		t.Fatalf("expected capture response to include audit metadata and confirmation-required inbox handoff, body=%s", capture.Body.String())
+		t.Fatalf("expected capture response to include audit metadata and Telegram confirmation handoff, body=%s", capture.Body.String())
 	}
 
 	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
