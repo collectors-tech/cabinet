@@ -1281,6 +1281,22 @@ paths:
                         type: array
                         items:
                           type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
+                            url:
+                              type: string
+                            callback_data:
+                              type: string
         "400":
           $ref: "#/components/responses/Error"
         "403":
@@ -1312,6 +1328,18 @@ paths:
                         type: array
                         items:
                           type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
   /api/telegram/webhook/catalog-captures:
     post:
       tags: [Telegram]
@@ -1407,6 +1435,33 @@ paths:
                     type: object
                   telegram_reply:
                     type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
+                            url:
+                              type: string
+                            callback_data:
+                              type: string
         "400":
           $ref: "#/components/responses/Error"
         "403":
@@ -1429,6 +1484,27 @@ paths:
                       type: string
                   telegram_reply:
                     type: object
+                    properties:
+                      text:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
   /api/chat/threads:
     get:
       tags: [Chat]

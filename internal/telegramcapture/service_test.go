@@ -107,11 +107,18 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 		!strings.Contains(result.TelegramReply.ReviewURL, result.Preview.ID) {
 		t.Fatalf("telegram reply did not expose a confirmation handoff: %+v", result.TelegramReply)
 	}
+	if len(result.TelegramReply.ActionButtons) != 3 ||
+		result.TelegramReply.ActionButtons[0].Kind != "url" ||
+		result.TelegramReply.ActionButtons[0].URL != result.TelegramReply.ReviewURL ||
+		result.TelegramReply.ActionButtons[1].CallbackData != "cabinet:catalog_capture:confirm:"+result.Preview.ID ||
+		result.TelegramReply.ActionButtons[2].CallbackData != "cabinet:catalog_capture:cancel:"+result.Preview.ID {
+		t.Fatalf("telegram reply did not expose structured review/confirm/cancel buttons: %+v", result.TelegramReply.ActionButtons)
+	}
 	if result.InboxItem.Metadata["review_url"] != result.TelegramReply.ReviewURL {
 		t.Fatalf("inbox metadata did not preserve Telegram review URL: %+v", result.InboxItem.Metadata)
 	}
 	replyMeta, ok := result.InboxItem.Metadata["telegram_reply"].(map[string]any)
-	if !ok || replyMeta["review_url"] != result.TelegramReply.ReviewURL || len(replyMeta["actions"].([]any)) == 0 {
+	if !ok || replyMeta["review_url"] != result.TelegramReply.ReviewURL || len(replyMeta["actions"].([]any)) == 0 || len(replyMeta["action_buttons"].([]any)) != 3 {
 		t.Fatalf("inbox metadata did not preserve Telegram reply controls: %#v", result.InboxItem.Metadata["telegram_reply"])
 	}
 
@@ -177,6 +184,11 @@ func TestTelegramCaptureAmbiguousTextRequiresFollowUp(t *testing.T) {
 		!strings.Contains(followUp.Reply.Text, "barcode, part number, or clearer item title") ||
 		len(followUp.MissingFields) == 0 {
 		t.Fatalf("follow-up prompt did not explain the missing draft identity: %+v", followUp)
+	}
+	if len(followUp.Reply.ActionButtons) != 3 ||
+		followUp.Reply.ActionButtons[0].Kind != "reply" ||
+		followUp.Reply.ActionButtons[0].Action != "reply_with_barcode" {
+		t.Fatalf("follow-up prompt did not expose structured reply actions: %+v", followUp.Reply.ActionButtons)
 	}
 }
 

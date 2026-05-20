@@ -67,6 +67,8 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 		!strings.Contains(capture.Body.String(), `"confirmation_state":"preview_required"`) ||
 		!strings.Contains(capture.Body.String(), `"telegram_reply"`) ||
 		!strings.Contains(capture.Body.String(), `"review_url":"/chats?profile_id=`) ||
+		!strings.Contains(capture.Body.String(), `"action_buttons"`) ||
+		!strings.Contains(capture.Body.String(), `"callback_data":"cabinet:catalog_capture:confirm:`) ||
 		!strings.Contains(capture.Body.String(), `"confirm_in_cabinet"`) ||
 		!strings.Contains(capture.Body.String(), `"source_message_id":"message-42"`) ||
 		!strings.Contains(capture.Body.String(), `"filename":"front.jpg"`) {
@@ -198,6 +200,7 @@ func TestTelegramCatalogCaptureWebhookAPIRequestsFollowUpForAmbiguousText(t *tes
 	body := followUp.Body.String()
 	if !strings.Contains(body, `"error":"telegram_capture_needs_follow_up"`) ||
 		!strings.Contains(body, `"confirmation_state":"follow_up_required"`) ||
+		!strings.Contains(body, `"action_buttons"`) ||
 		!strings.Contains(body, `"reply_with_barcode"`) ||
 		!strings.Contains(body, `"barcode_or_part_number"`) {
 		t.Fatalf("expected Telegram-visible follow-up response for ambiguous text, body=%s", body)

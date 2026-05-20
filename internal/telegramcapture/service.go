@@ -118,10 +118,19 @@ type CaptureResult struct {
 }
 
 type TelegramReply struct {
-	Text              string   `json:"text"`
-	ReviewURL         string   `json:"review_url"`
-	ConfirmationState string   `json:"confirmation_state"`
-	Actions           []string `json:"actions"`
+	Text              string                `json:"text"`
+	ReviewURL         string                `json:"review_url,omitempty"`
+	ConfirmationState string                `json:"confirmation_state"`
+	Actions           []string              `json:"actions"`
+	ActionButtons     []TelegramReplyButton `json:"action_buttons,omitempty"`
+}
+
+type TelegramReplyButton struct {
+	Label        string `json:"label"`
+	Kind         string `json:"kind"`
+	Action       string `json:"action"`
+	URL          string `json:"url,omitempty"`
+	CallbackData string `json:"callback_data,omitempty"`
 }
 
 type DraftNeedsFollowUpError struct {
@@ -239,7 +248,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 	}
 
 	reviewURL := reviewURL(profileID, thread.ID, preview.ID)
-	telegramReply := telegramReply(draft, reviewURL)
+	telegramReply := telegramReply(draft, reviewURL, preview.ID)
 	inboxItem, err := s.chat.CreateInboxItem(ctx, chat.InboxItem{
 		ProfileID: profileID,
 		ThreadID:  thread.ID,
@@ -447,17 +456,32 @@ func reviewURL(profileID, threadID, previewID string) string {
 	return "/chats?profile_id=" + strings.TrimSpace(profileID) + "&thread_id=" + strings.TrimSpace(threadID) + "&preview_id=" + strings.TrimSpace(previewID)
 }
 
-func telegramReply(draft Draft, reviewURL string) TelegramReply {
+func telegramReply(draft Draft, reviewURL, previewID string) TelegramReply {
 	title := strings.TrimSpace(draft.Title)
 	if title == "" {
 		title = "catalog draft"
 	}
+	previewID = strings.TrimSpace(previewID)
 	return TelegramReply{
 		Text:              "Draft ready for review: " + title + ". Open Cabinet to confirm or cancel before anything is added to inventory.",
 		ReviewURL:         reviewURL,
 		ConfirmationState: "preview_required",
 		Actions:           []string{"open_cabinet_review", "confirm_in_cabinet", "cancel_in_cabinet"},
+		ActionButtons: []TelegramReplyButton{
+			{Label: "Open Cabinet review", Kind: "url", Action: "open_cabinet_review", URL: strings.TrimSpace(reviewURL)},
+			{Label: "Confirm in Cabinet", Kind: "callback", Action: "confirm_in_cabinet", CallbackData: telegramCallbackData("confirm", previewID)},
+			{Label: "Cancel in Cabinet", Kind: "callback", Action: "cancel_in_cabinet", CallbackData: telegramCallbackData("cancel", previewID)},
+		},
 	}
+}
+
+func telegramCallbackData(action, previewID string) string {
+	action = strings.TrimSpace(action)
+	previewID = strings.TrimSpace(previewID)
+	if action == "" || previewID == "" {
+		return ""
+	}
+	return "cabinet:catalog_capture:" + action + ":" + previewID
 }
 
 func draftNeedsFollowUp(in CaptureInput, draft Draft) DraftNeedsFollowUpError {
@@ -479,6 +503,11 @@ func draftNeedsFollowUp(in CaptureInput, draft Draft) DraftNeedsFollowUpError {
 			Text:              "I need one more detail before I can draft this safely. Reply with a barcode, part number, or clearer item title and I will prepare a Cabinet review draft.",
 			ConfirmationState: "follow_up_required",
 			Actions:           []string{"reply_with_barcode", "reply_with_part_number", "reply_with_item_title"},
+			ActionButtons: []TelegramReplyButton{
+				{Label: "Send barcode", Kind: "reply", Action: "reply_with_barcode"},
+				{Label: "Send part number", Kind: "reply", Action: "reply_with_part_number"},
+				{Label: "Send item title", Kind: "reply", Action: "reply_with_item_title"},
+			},
 		},
 	}
 }

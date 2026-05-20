@@ -86,3 +86,17 @@ When authorized Telegram text or media does not contain enough item identity to 
 - **WHEN** the webhook endpoint receives an authorized text-only update without a barcode, part number, or resolved draft title
 - **THEN** Cabinet MUST return a follow-up-required response with Telegram-facing reply copy and missing identity fields
 - **AND** no catalog item MUST be created from the ambiguous text
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-009: Telegram replies SHALL expose structured channel action buttons
+Telegram capture responses MUST include structured channel action button descriptors so Telegram adapters can render URL, callback, and reply controls without scraping human-readable copy.
+
+#### Scenario: Return structured review action buttons
+- **GIVEN** an authorized Telegram capture creates a catalog draft preview
+- **WHEN** Cabinet returns the capture result to the Telegram channel adapter
+- **THEN** the Telegram reply MUST include a URL button for Cabinet review plus callback buttons for confirm and cancel actions that reference the preview id
+- **AND** the Inbox handoff metadata MUST preserve those action button descriptors for audit/recovery
+
+#### Scenario: Return structured follow-up reply buttons
+- **GIVEN** an authorized Telegram capture is too ambiguous for a safe preview
+- **WHEN** Cabinet returns a follow-up-required response
+- **THEN** the Telegram reply MUST include structured reply button descriptors for barcode, part number, and item title follow-up
