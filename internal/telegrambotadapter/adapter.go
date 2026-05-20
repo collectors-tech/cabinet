@@ -1,8 +1,12 @@
 package telegrambotadapter
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/telegramcapture"
@@ -75,6 +79,61 @@ func CabinetRequestFromUpdate(update Update) (CabinetRequest, error) {
 type BotAPICall struct {
 	Method string
 	Body   any
+}
+
+type CabinetGateway interface {
+	PostJSON(ctx context.Context, path string, body any, response any) (int, error)
+}
+
+type DispatchResult struct {
+	CabinetPath string
+	BotCalls    []BotAPICall
+}
+
+type cabinetTelegramReplyResponse struct {
+	TelegramReply telegramcapture.TelegramReply `json:"telegram_reply"`
+}
+
+func DispatchUpdate(ctx context.Context, gateway CabinetGateway, update Update) (DispatchResult, error) {
+	if gateway == nil {
+		return DispatchResult{}, fmt.Errorf("cabinet gateway is required")
+	}
+	req, err := CabinetRequestFromUpdate(update)
+	if err != nil {
+		return DispatchResult{}, err
+	}
+	var response cabinetTelegramReplyResponse
+	if _, err := gateway.PostJSON(ctx, req.Path, req.Body, &response); err != nil {
+		return DispatchResult{}, err
+	}
+	result := DispatchResult{CabinetPath: req.Path}
+	if update.CallbackQuery != nil {
+		callback := update.CallbackQuery
+		ack, err := AnswerCallbackQueryFromReply(callback.ID, response.TelegramReply)
+		if err != nil {
+			return DispatchResult{}, err
+		}
+		edit, err := EditMessageFromReply(telegramID(callback.Message.Chat.ID), telegramID(callback.Message.MessageID), response.TelegramReply)
+		if err != nil {
+			return DispatchResult{}, err
+		}
+		result.BotCalls = []BotAPICall{ack, edit}
+		return result, nil
+	}
+	if update.Message != nil {
+		send, err := SendMessageFromReply(telegramID(update.Message.Chat.ID), response.TelegramReply)
+		if err != nil {
+			return DispatchResult{}, err
+		}
+		result.BotCalls = []BotAPICall{send}
+		return result, nil
+	}
+	return DispatchResult{}, fmt.Errorf("telegram update does not contain a supported catalog capture message or callback")
+}
+
+type BotAPIEndpoint struct {
+	BaseURL string
+	Token   string
 }
 
 type SendMessageRequest struct {
@@ -159,6 +218,35 @@ func AnswerCallbackQueryFromReply(callbackQueryID string, reply telegramcapture.
 
 func MarshalBody(call BotAPICall) ([]byte, error) {
 	return json.Marshal(call.Body)
+}
+
+func (endpoint BotAPIEndpoint) NewRequest(ctx context.Context, call BotAPICall) (*http.Request, error) {
+	method := strings.TrimSpace(call.Method)
+	if method == "" {
+		return nil, fmt.Errorf("telegram bot api method is required")
+	}
+	token := strings.TrimSpace(endpoint.Token)
+	if token == "" {
+		return nil, fmt.Errorf("telegram bot token is required")
+	}
+	base := strings.TrimRight(strings.TrimSpace(endpoint.BaseURL), "/")
+	if base == "" {
+		base = "https://api.telegram.org"
+	}
+	parsed, err := url.Parse(base + "/bot" + url.PathEscape(token) + "/" + method)
+	if err != nil {
+		return nil, err
+	}
+	body, err := MarshalBody(call)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return req, nil
 }
 
 func replyText(reply telegramcapture.TelegramReply) string {

@@ -140,3 +140,24 @@ Cabinet MUST provide a Telegram bot adapter contract that maps Telegram message 
 - **WHEN** Cabinet returns a confirmation or cancellation Telegram reply
 - **THEN** the adapter MUST render an answerCallbackQuery payload using the callback query id and user-visible result text
 - **AND** the acknowledgement MUST be non-alert by default so the callback interaction clears without interrupting the chat
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-012: Telegram bot runtime wiring SHALL dispatch updates through Cabinet and bind Bot API requests at the edge
+Cabinet MUST provide runtime-safe wiring that dispatches Telegram updates through the governed Cabinet catalog capture APIs, then converts the returned structured Telegram reply into Bot API requests using a caller-provided bot token.
+
+#### Scenario: Dispatch message update and send Cabinet reply
+- **GIVEN** Telegram delivers a message update to the bot runtime wiring
+- **WHEN** Cabinet returns a structured capture or follow-up Telegram reply
+- **THEN** the runtime wiring MUST route the update through the webhook catalog capture API
+- **AND** it MUST render a sendMessage Bot API call to the originating Telegram chat
+
+#### Scenario: Dispatch callback update and update Telegram message
+- **GIVEN** Telegram delivers a callback query update to the bot runtime wiring
+- **WHEN** Cabinet returns a structured confirmation or cancellation Telegram reply
+- **THEN** the runtime wiring MUST route the update through the catalog capture callback API
+- **AND** it MUST render both answerCallbackQuery and editMessageText Bot API calls for the originating callback/message
+
+#### Scenario: Bind Bot API request with runtime token
+- **GIVEN** the runtime wiring has a Telegram Bot API call and a bot token from runtime configuration
+- **WHEN** it prepares the outbound Telegram request
+- **THEN** it MUST POST JSON to the Telegram Bot API method URL for that token
+- **AND** it MUST require the token at request construction time rather than embedding it in persisted specs or fixtures
