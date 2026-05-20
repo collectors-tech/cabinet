@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -136,6 +137,32 @@ type BotAPIEndpoint struct {
 	Token   string
 }
 
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+type BotAPIFileResolver struct {
+	Endpoint   BotAPIEndpoint
+	HTTPClient HTTPDoer
+}
+
+type GetFileRequest struct {
+	FileID string `json:"file_id"`
+}
+
+type getFileResponse struct {
+	OK          bool           `json:"ok"`
+	Description string         `json:"description,omitempty"`
+	Result      BotAPIFileInfo `json:"result"`
+}
+
+type BotAPIFileInfo struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	FileSize     int    `json:"file_size"`
+	FilePath     string `json:"file_path"`
+}
+
 type SendMessageRequest struct {
 	ChatID      string `json:"chat_id"`
 	Text        string `json:"text"`
@@ -247,6 +274,117 @@ func (endpoint BotAPIEndpoint) NewRequest(ctx context.Context, call BotAPICall) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	return req, nil
+}
+
+func (endpoint BotAPIEndpoint) NewGetFileRequest(ctx context.Context, fileID string) (*http.Request, error) {
+	fileID = strings.TrimSpace(fileID)
+	if fileID == "" {
+		return nil, fmt.Errorf("telegram file_id is required")
+	}
+	return endpoint.NewRequest(ctx, BotAPICall{
+		Method: "getFile",
+		Body:   GetFileRequest{FileID: fileID},
+	})
+}
+
+func (endpoint BotAPIEndpoint) NewFileDownloadRequest(ctx context.Context, filePath string) (*http.Request, error) {
+	filePath = strings.Trim(strings.TrimSpace(filePath), "/")
+	if filePath == "" {
+		return nil, fmt.Errorf("telegram file_path is required")
+	}
+	token := strings.TrimSpace(endpoint.Token)
+	if token == "" {
+		return nil, fmt.Errorf("telegram bot token is required")
+	}
+	base := strings.TrimRight(strings.TrimSpace(endpoint.BaseURL), "/")
+	if base == "" {
+		base = "https://api.telegram.org"
+	}
+	parsed, err := url.Parse(base + "/file/bot" + url.PathEscape(token) + "/" + escapeTelegramFilePath(filePath))
+	if err != nil {
+		return nil, err
+	}
+	return http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+}
+
+func (resolver BotAPIFileResolver) ResolveTelegramMedia(ctx context.Context, media telegramcapture.MediaInput) (telegramcapture.MediaInput, error) {
+	fileID := strings.TrimSpace(media.FileID)
+	if fileID == "" {
+		return telegramcapture.MediaInput{}, fmt.Errorf("telegram media file_id is required")
+	}
+	client := resolver.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	getFileReq, err := resolver.Endpoint.NewGetFileRequest(ctx, fileID)
+	if err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	getFileResp, err := client.Do(getFileReq)
+	if err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	defer getFileResp.Body.Close()
+	if getFileResp.StatusCode < 200 || getFileResp.StatusCode >= 300 {
+		return telegramcapture.MediaInput{}, fmt.Errorf("telegram getFile returned status %d", getFileResp.StatusCode)
+	}
+	var payload getFileResponse
+	if err := json.NewDecoder(getFileResp.Body).Decode(&payload); err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	if !payload.OK || strings.TrimSpace(payload.Result.FilePath) == "" {
+		description := strings.TrimSpace(payload.Description)
+		if description == "" {
+			description = "telegram getFile did not return a downloadable file path"
+		}
+		return telegramcapture.MediaInput{}, fmt.Errorf("%s", description)
+	}
+	downloadReq, err := resolver.Endpoint.NewFileDownloadRequest(ctx, payload.Result.FilePath)
+	if err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	downloadResp, err := client.Do(downloadReq)
+	if err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	defer downloadResp.Body.Close()
+	if downloadResp.StatusCode < 200 || downloadResp.StatusCode >= 300 {
+		return telegramcapture.MediaInput{}, fmt.Errorf("telegram file download returned status %d", downloadResp.StatusCode)
+	}
+	body, err := io.ReadAll(downloadResp.Body)
+	if err != nil {
+		return telegramcapture.MediaInput{}, err
+	}
+	resolved := media
+	if id := strings.TrimSpace(payload.Result.FileID); id != "" {
+		resolved.FileID = id
+	}
+	if strings.TrimSpace(resolved.Filename) == "" {
+		resolved.Filename = telegramFileName(payload.Result.FilePath)
+	}
+	if strings.TrimSpace(resolved.MIMEType) == "" {
+		resolved.MIMEType = strings.TrimSpace(downloadResp.Header.Get("Content-Type"))
+	}
+	resolved.Reader = bytes.NewReader(body)
+	return resolved, nil
+}
+
+func escapeTelegramFilePath(filePath string) string {
+	segments := strings.Split(strings.Trim(filePath, "/"), "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/")
+}
+
+func telegramFileName(filePath string) string {
+	segments := strings.Split(strings.Trim(filePath, "/"), "/")
+	for i := len(segments) - 1; i >= 0; i-- {
+		if name := strings.TrimSpace(segments[i]); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func replyText(reply telegramcapture.TelegramReply) string {

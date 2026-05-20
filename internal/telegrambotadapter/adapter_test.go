@@ -3,6 +3,9 @@ package telegrambotadapter
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/telegramcapture"
@@ -288,6 +291,94 @@ func TestBotAPIEndpointNewRequestBindsTokenAndJSONBody(t *testing.T) {
 	}
 	if body["chat_id"] != "-5235769556" || body["text"] != "Draft ready." {
 		t.Fatalf("request body did not preserve sendMessage payload: %+v", body)
+	}
+}
+
+func TestBotAPIEndpointBuildsGetFileAndDownloadRequests(t *testing.T) {
+	t.Parallel()
+
+	endpoint := BotAPIEndpoint{BaseURL: "https://telegram.example.test", Token: "bot-token-1"}
+	getFileReq, err := endpoint.NewGetFileRequest(context.Background(), "telegram-file-1")
+	if err != nil {
+		t.Fatalf("NewGetFileRequest() error = %v", err)
+	}
+	if getFileReq.Method != http.MethodPost || getFileReq.URL.String() != "https://telegram.example.test/botbot-token-1/getFile" {
+		t.Fatalf("unexpected getFile request: method=%s url=%s", getFileReq.Method, getFileReq.URL.String())
+	}
+	var getFileBody map[string]any
+	if err := json.NewDecoder(getFileReq.Body).Decode(&getFileBody); err != nil {
+		t.Fatalf("decode getFile body: %v", err)
+	}
+	if getFileBody["file_id"] != "telegram-file-1" {
+		t.Fatalf("getFile body did not preserve file_id: %+v", getFileBody)
+	}
+	downloadReq, err := endpoint.NewFileDownloadRequest(context.Background(), "photos/file 1.jpg")
+	if err != nil {
+		t.Fatalf("NewFileDownloadRequest() error = %v", err)
+	}
+	if downloadReq.Method != http.MethodGet || downloadReq.URL.String() != "https://telegram.example.test/file/botbot-token-1/photos/file%201.jpg" {
+		t.Fatalf("unexpected download request: method=%s url=%s", downloadReq.Method, downloadReq.URL.String())
+	}
+}
+
+func TestBotAPIFileResolverDownloadsTelegramMediaBytes(t *testing.T) {
+	t.Parallel()
+
+	const mediaBytes = "resolved telegram photo bytes"
+	var sawGetFile bool
+	var sawDownload bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/botbot-token-1/getFile":
+			sawGetFile = true
+			if r.Method != http.MethodPost {
+				t.Fatalf("getFile method = %s", r.Method)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode getFile request: %v", err)
+			}
+			if body["file_id"] != "telegram-file-photo-1" {
+				t.Fatalf("getFile request did not preserve file_id: %+v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"file_id":"telegram-file-photo-1","file_unique_id":"unique-photo-1","file_size":29,"file_path":"photos/photo-1.jpg"}}`))
+		case "/file/botbot-token-1/photos/photo-1.jpg":
+			sawDownload = true
+			if r.Method != http.MethodGet {
+				t.Fatalf("download method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte(mediaBytes))
+		default:
+			t.Fatalf("unexpected Telegram test path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	resolver := BotAPIFileResolver{
+		Endpoint:   BotAPIEndpoint{BaseURL: server.URL, Token: "bot-token-1"},
+		HTTPClient: server.Client(),
+	}
+	resolved, err := resolver.ResolveTelegramMedia(context.Background(), telegramcapture.MediaInput{
+		FileID: "telegram-file-photo-1",
+		Kind:   "photo",
+	})
+	if err != nil {
+		t.Fatalf("ResolveTelegramMedia() error = %v", err)
+	}
+	if !sawGetFile || !sawDownload {
+		t.Fatalf("resolver did not call both getFile and file download: getFile=%v download=%v", sawGetFile, sawDownload)
+	}
+	if resolved.FileID != "telegram-file-photo-1" || resolved.Filename != "photo-1.jpg" || resolved.MIMEType != "image/jpeg" || resolved.Kind != "photo" {
+		t.Fatalf("resolved media did not preserve expected metadata: %+v", resolved)
+	}
+	raw, err := io.ReadAll(resolved.Reader)
+	if err != nil {
+		t.Fatalf("read resolved media: %v", err)
+	}
+	if string(raw) != mediaBytes {
+		t.Fatalf("resolved media bytes = %q", string(raw))
 	}
 }
 
