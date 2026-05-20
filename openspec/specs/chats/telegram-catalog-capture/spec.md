@@ -10,6 +10,12 @@ Cabinet MUST map each Telegram sender/chat to an explicitly authorized Cabinet p
 - **WHEN** Cabinet evaluates the catalog capture request
 - **THEN** Cabinet MUST reject the request before creating any chat thread, attachment, preview, inbox item, or catalog record
 
+#### Scenario: Accept authorized Telegram API capture
+- **GIVEN** a Cabinet profile has persisted Telegram catalog capture sender/chat authorization settings
+- **WHEN** the Telegram catalog capture API receives matching sender/chat input for that profile
+- **THEN** Cabinet MUST accept the request and create the capture through the governed preview-before-apply path
+- **AND** a sender/chat mismatch MUST return an authorization failure without creating capture records
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-002: Telegram catalog capture SHALL preserve source and media metadata
 Cabinet MUST persist Telegram source identifiers and media metadata with the assistant thread/message context so the capture remains auditable from Inbox and Assistant surfaces.
 
@@ -35,5 +41,4 @@ When Telegram intake receives a barcode but no resolved product lookup, Cabinet 
 - **WHEN** Cabinet creates the preview
 - **THEN** the preview MUST use the barcode as the part number and a clear barcode-derived title
 - **AND** any missing product facts MUST remain unset for user review
-
 

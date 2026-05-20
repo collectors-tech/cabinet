@@ -33,6 +33,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/logs/debug",
 		"/api/ai/toggle",
 		"/api/ai/suggest/photo",
+		"/api/telegram/catalog-captures",
 		"/api/chat/threads",
 		"/api/chat/messages",
 		"/api/chat/attachments",

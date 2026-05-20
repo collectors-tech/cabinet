@@ -446,6 +446,9 @@
 | ANTFARM-WORKFLOW-002 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/metadata.json` workflow identity contract | `TestAntFarmCabinetMetadataMatchesLocalWorkflow` (`tests/antfarm_workflow_contract_test.go`) | implemented |
 | ANTFARM-WORKFLOW-003 | openspec/specs/general/antfarm-workflow-portability/spec.md | `.antfarm/workflows/cabinet/agents/*` role profile completeness contract | `TestAntFarmCabinetWorkflowRoleProfilesAreComplete` (`tests/antfarm_workflow_contract_test.go`) | implemented |
 
-
+| TELEGRAM-CATALOG-CAPTURE-001 | openspec/specs/chats/telegram-catalog-capture/spec.md | Telegram sender/chat authorization before capture records | `TestTelegramCaptureRejectsUnauthorizedSender` (`internal/telegramcapture/service_test.go`); `TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization` (`internal/app/telegram_capture_api_test.go`) | implemented |
+| TELEGRAM-CATALOG-CAPTURE-002 | openspec/specs/chats/telegram-catalog-capture/spec.md | Telegram source/media metadata preservation | `TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying` (`internal/telegramcapture/service_test.go`); `TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization` (`internal/app/telegram_capture_api_test.go`) | implemented |
+| TELEGRAM-CATALOG-CAPTURE-003 | openspec/specs/chats/telegram-catalog-capture/spec.md | Preview/inbox handoff before catalog mutation | `TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying` (`internal/telegramcapture/service_test.go`); `TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization` (`internal/app/telegram_capture_api_test.go`) | implemented |
+| TELEGRAM-CATALOG-CAPTURE-004 | openspec/specs/chats/telegram-catalog-capture/spec.md | Barcode-only manual draft path when lookup is unavailable | `TestTelegramCaptureDerivesDraftFromBarcodeOnly` (`internal/telegramcapture/service_test.go`) | implemented |
 
 
