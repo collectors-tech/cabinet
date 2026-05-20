@@ -118,3 +118,19 @@ Cabinet MUST accept Telegram catalog capture callback actions only from the auth
 - **GIVEN** an authorized Telegram capture has created a pending catalog item preview
 - **WHEN** the Telegram channel adapter submits the cancel callback data from the same authorized sender/chat
 - **THEN** Cabinet MUST mark the preview cancelled and MUST NOT create a catalog item
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-011: Telegram bot adapter SHALL route updates and render Bot API payloads deterministically
+Cabinet MUST provide a Telegram bot adapter contract that maps Telegram message and callback updates to the correct Cabinet catalog capture APIs and renders structured Cabinet replies into Telegram Bot API payloads without scraping human-readable copy.
+
+#### Scenario: Route Telegram bot updates to Cabinet catalog capture APIs
+- **GIVEN** Telegram delivers either a message update or a callback query update to the bot adapter
+- **WHEN** the adapter prepares the Cabinet handoff
+- **THEN** message updates MUST route to the raw webhook catalog capture endpoint with original update context
+- **AND** callback query updates MUST route to the catalog capture callback endpoint with sender id, chat id, and callback data preserved
+
+#### Scenario: Render Telegram review and follow-up controls
+- **GIVEN** Cabinet returns a structured Telegram reply for a preview, follow-up, confirmation, or cancellation state
+- **WHEN** the adapter prepares a Telegram Bot API response
+- **THEN** URL and callback action buttons MUST render as inline keyboard controls
+- **AND** follow-up reply actions MUST render as a one-time reply keyboard
+- **AND** callback result replies MUST be renderable as an edit to the original Telegram message
