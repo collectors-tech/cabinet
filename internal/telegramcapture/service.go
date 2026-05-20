@@ -84,6 +84,10 @@ type MediaInput struct {
 	Reader   io.Reader
 }
 
+type WebhookMediaResolver interface {
+	ResolveTelegramMedia(ctx context.Context, media MediaInput) (MediaInput, error)
+}
+
 type WebhookUpdate struct {
 	UpdateID int64           `json:"update_id"`
 	Message  *WebhookMessage `json:"message"`
@@ -388,6 +392,43 @@ func CaptureInputFromWebhookUpdate(update WebhookUpdate, draft Draft) (CaptureIn
 			"payload_type":   webhookPayloadType(message),
 		},
 	}, nil
+}
+
+func CaptureInputFromWebhookUpdateWithMedia(ctx context.Context, update WebhookUpdate, draft Draft, resolver WebhookMediaResolver) (CaptureInput, error) {
+	input, err := CaptureInputFromWebhookUpdate(update, draft)
+	if err != nil || resolver == nil || len(input.Media) == 0 {
+		return input, err
+	}
+	resolvedMedia := make([]MediaInput, 0, len(input.Media))
+	for _, media := range input.Media {
+		resolved, err := resolver.ResolveTelegramMedia(ctx, media)
+		if err != nil {
+			return CaptureInput{}, err
+		}
+		resolvedMedia = append(resolvedMedia, mergeResolvedMedia(media, resolved))
+	}
+	input.Media = resolvedMedia
+	return input, nil
+}
+
+func mergeResolvedMedia(original, resolved MediaInput) MediaInput {
+	out := original
+	if fileID := strings.TrimSpace(resolved.FileID); fileID != "" {
+		out.FileID = fileID
+	}
+	if filename := strings.TrimSpace(resolved.Filename); filename != "" {
+		out.Filename = filename
+	}
+	if mimeType := strings.TrimSpace(resolved.MIMEType); mimeType != "" {
+		out.MIMEType = mimeType
+	}
+	if kind := strings.TrimSpace(resolved.Kind); kind != "" {
+		out.Kind = kind
+	}
+	if resolved.Reader != nil {
+		out.Reader = resolved.Reader
+	}
+	return out
 }
 
 func webhookMediaInputs(message *WebhookMessage) []MediaInput {

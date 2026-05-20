@@ -161,3 +161,13 @@ Cabinet MUST provide runtime-safe wiring that dispatches Telegram updates throug
 - **WHEN** it prepares the outbound Telegram request
 - **THEN** it MUST POST JSON to the Telegram Bot API method URL for that token
 - **AND** it MUST require the token at request construction time rather than embedding it in persisted specs or fixtures
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-013: Telegram webhook media SHALL resolve file ids into persisted attachment bytes
+Cabinet MUST support a channel-edge media resolver that turns Telegram webhook photo/document file identifiers into attachment readers before capture ingestion, while preserving the Telegram file id, filename, MIME type, and source metadata used for audit.
+
+#### Scenario: Resolve Telegram photo bytes before capture ingestion
+- **GIVEN** Telegram delivers a webhook message with one or more photo sizes
+- **WHEN** the channel edge resolves the selected Telegram file id into media bytes
+- **THEN** Cabinet MUST persist those bytes as the capture attachment
+- **AND** the persisted attachment metadata MUST preserve the Telegram file id-derived filename, MIME type, and photo kind
+- **AND** the capture MUST still create only a preview/inbox handoff until explicit confirmation
