@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/collectors-tech/cabinet/internal/chat"
@@ -62,6 +63,47 @@ type MediaInput struct {
 	MIMEType string
 	Kind     string
 	Reader   io.Reader
+}
+
+type WebhookUpdate struct {
+	UpdateID int64           `json:"update_id"`
+	Message  *WebhookMessage `json:"message"`
+}
+
+type WebhookMessage struct {
+	MessageID    int64              `json:"message_id"`
+	Date         int64              `json:"date"`
+	From         WebhookUser        `json:"from"`
+	Chat         WebhookChat        `json:"chat"`
+	Text         string             `json:"text"`
+	Caption      string             `json:"caption"`
+	MediaGroupID string             `json:"media_group_id"`
+	Photo        []WebhookPhotoSize `json:"photo"`
+	Document     *WebhookDocument   `json:"document"`
+}
+
+type WebhookUser struct {
+	ID int64 `json:"id"`
+}
+
+type WebhookChat struct {
+	ID int64 `json:"id"`
+}
+
+type WebhookPhotoSize struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	FileSize     int    `json:"file_size"`
+}
+
+type WebhookDocument struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	FileName     string `json:"file_name"`
+	MIMEType     string `json:"mime_type"`
+	FileSize     int    `json:"file_size"`
 }
 
 type CaptureResult struct {
@@ -211,6 +253,138 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		InboxItem:     inboxItem,
 		TelegramReply: telegramReply,
 	}, nil
+}
+
+func CaptureInputFromWebhookUpdate(update WebhookUpdate, draft Draft) (CaptureInput, error) {
+	if update.Message == nil {
+		return CaptureInput{}, fmt.Errorf("telegram webhook update does not contain a message")
+	}
+	message := update.Message
+	senderID := telegramID(message.From.ID)
+	chatID := telegramID(message.Chat.ID)
+	if senderID == "" || chatID == "" {
+		return CaptureInput{}, fmt.Errorf("telegram webhook sender and chat are required")
+	}
+	text := strings.TrimSpace(message.Text)
+	if text == "" {
+		text = strings.TrimSpace(message.Caption)
+	}
+	media := webhookMediaInputs(message)
+	return CaptureInput{
+		SenderID:     senderID,
+		ChatID:       chatID,
+		MessageID:    telegramID(message.MessageID),
+		Text:         text,
+		Barcode:      inferBarcode(text),
+		Draft:        draft,
+		Media:        media,
+		GroupingHint: strings.TrimSpace(message.MediaGroupID),
+		SourceMetadata: map[string]any{
+			"update_id":      update.UpdateID,
+			"message_date":   message.Date,
+			"media_group_id": strings.TrimSpace(message.MediaGroupID),
+			"payload_type":   webhookPayloadType(message),
+		},
+	}, nil
+}
+
+func webhookMediaInputs(message *WebhookMessage) []MediaInput {
+	if message == nil {
+		return nil
+	}
+	media := []MediaInput{}
+	if photo := largestPhoto(message.Photo); photo.FileID != "" {
+		filename := strings.TrimSpace(photo.FileUniqueID)
+		if filename == "" {
+			filename = strings.TrimSpace(photo.FileID)
+		}
+		media = append(media, MediaInput{
+			FileID:   strings.TrimSpace(photo.FileID),
+			Filename: filename + ".jpg",
+			MIMEType: "image/jpeg",
+			Kind:     "photo",
+		})
+	}
+	if doc := message.Document; doc != nil && strings.HasPrefix(strings.ToLower(strings.TrimSpace(doc.MIMEType)), "image/") {
+		filename := strings.TrimSpace(doc.FileName)
+		if filename == "" {
+			filename = strings.TrimSpace(doc.FileUniqueID)
+		}
+		if filename == "" {
+			filename = strings.TrimSpace(doc.FileID)
+		}
+		media = append(media, MediaInput{
+			FileID:   strings.TrimSpace(doc.FileID),
+			Filename: filename,
+			MIMEType: strings.TrimSpace(doc.MIMEType),
+			Kind:     "document_image",
+		})
+	}
+	return media
+}
+
+func largestPhoto(photos []WebhookPhotoSize) WebhookPhotoSize {
+	var selected WebhookPhotoSize
+	for _, photo := range photos {
+		if strings.TrimSpace(photo.FileID) == "" {
+			continue
+		}
+		if selected.FileID == "" || photo.FileSize > selected.FileSize || (photo.FileSize == selected.FileSize && photo.Width*photo.Height > selected.Width*selected.Height) {
+			selected = photo
+		}
+	}
+	return selected
+}
+
+func webhookPayloadType(message *WebhookMessage) string {
+	if message == nil {
+		return "unknown"
+	}
+	parts := []string{}
+	if strings.TrimSpace(message.Text) != "" {
+		parts = append(parts, "text")
+	}
+	if strings.TrimSpace(message.Caption) != "" {
+		parts = append(parts, "caption")
+	}
+	if len(message.Photo) > 0 {
+		parts = append(parts, "photo")
+	}
+	if message.Document != nil {
+		parts = append(parts, "document")
+	}
+	if len(parts) == 0 {
+		return "unknown"
+	}
+	return strings.Join(parts, "+")
+}
+
+func inferBarcode(text string) string {
+	var best strings.Builder
+	var current strings.Builder
+	flush := func() {
+		if current.Len() >= 8 && current.Len() <= 14 && current.Len() > best.Len() {
+			best.Reset()
+			best.WriteString(current.String())
+		}
+		current.Reset()
+	}
+	for _, r := range text {
+		if r >= '0' && r <= '9' {
+			current.WriteRune(r)
+			continue
+		}
+		flush()
+	}
+	flush()
+	return best.String()
+}
+
+func telegramID(id int64) string {
+	if id == 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
 }
 
 func normalizeDraft(draft Draft, barcode string) Draft {

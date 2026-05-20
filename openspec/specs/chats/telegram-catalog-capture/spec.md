@@ -50,3 +50,16 @@ Cabinet MUST return Telegram-facing confirmation copy and a Cabinet review link 
 - **WHEN** Cabinet returns the capture result to the Telegram channel adapter
 - **THEN** the response MUST include user-facing reply text, a Cabinet review URL, confirmation-required state, and available review actions
 - **AND** the Inbox handoff metadata MUST preserve the same review URL and Telegram reply controls for audit/recovery
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-006: Telegram webhook payloads SHALL normalize into governed capture inputs
+Cabinet MUST normalize Telegram webhook updates into the same catalog capture input used by the governed intake service before authorization, preview creation, or mutation handling.
+
+#### Scenario: Normalize mixed Telegram photo caption capture
+- **GIVEN** Telegram sends a webhook update containing a sender, chat, message id, media group id, photo sizes, and a caption with barcode-like text
+- **WHEN** Cabinet normalizes the webhook update for catalog intake
+- **THEN** Cabinet MUST preserve sender/chat/message identifiers, media grouping, update metadata, caption text, inferred barcode, and the largest available photo as capture media
+
+#### Scenario: Normalize text-only barcode capture
+- **GIVEN** Telegram sends a webhook update containing text with a barcode-like number and no media
+- **WHEN** Cabinet normalizes the webhook update for catalog intake
+- **THEN** Cabinet MUST preserve the text and inferred barcode without creating synthetic media attachments

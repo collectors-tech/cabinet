@@ -158,6 +158,62 @@ func TestTelegramCaptureDerivesDraftFromBarcodeOnly(t *testing.T) {
 	}
 }
 
+func TestCaptureInputFromWebhookUpdateNormalizesMixedPhotoCaption(t *testing.T) {
+	t.Parallel()
+	input, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 99,
+		Message: &WebhookMessage{
+			MessageID:    42,
+			Date:         1716170000,
+			From:         WebhookUser{ID: 12345},
+			Chat:         WebhookChat{ID: -5235769556},
+			Caption:      "Front photo with barcode 9312345678901",
+			MediaGroupID: "album-1",
+			Photo: []WebhookPhotoSize{
+				{FileID: "small-photo", FileUniqueID: "small", Width: 90, Height: 90, FileSize: 1024},
+				{FileID: "large-photo", FileUniqueID: "large", Width: 1280, Height: 720, FileSize: 2048},
+			},
+		},
+	}, Draft{Title: "Caption Draft"})
+	if err != nil {
+		t.Fatalf("CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+	if input.SenderID != "12345" || input.ChatID != "-5235769556" || input.MessageID != "42" {
+		t.Fatalf("telegram IDs were not normalized: %+v", input)
+	}
+	if input.Text != "Front photo with barcode 9312345678901" || input.Barcode != "9312345678901" {
+		t.Fatalf("caption/barcode were not normalized: text=%q barcode=%q", input.Text, input.Barcode)
+	}
+	if input.GroupingHint != "album-1" || input.SourceMetadata["payload_type"] != "caption+photo" {
+		t.Fatalf("source metadata did not preserve Telegram grouping/type: %+v", input.SourceMetadata)
+	}
+	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].Filename != "large.jpg" || input.Media[0].Kind != "photo" {
+		t.Fatalf("largest photo was not mapped to Cabinet media input: %+v", input.Media)
+	}
+}
+
+func TestCaptureInputFromWebhookUpdateNormalizesTextOnlyBarcode(t *testing.T) {
+	t.Parallel()
+	input, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 100,
+		Message: &WebhookMessage{
+			MessageID: 7,
+			From:      WebhookUser{ID: 2468},
+			Chat:      WebhookChat{ID: 1357},
+			Text:      "Please draft this barcode: 4904810900016",
+		},
+	}, Draft{})
+	if err != nil {
+		t.Fatalf("CaptureInputFromWebhookUpdate() text-only error = %v", err)
+	}
+	if input.Text != "Please draft this barcode: 4904810900016" || input.Barcode != "4904810900016" {
+		t.Fatalf("text-only barcode was not normalized: %+v", input)
+	}
+	if len(input.Media) != 0 || input.SourceMetadata["payload_type"] != "text" {
+		t.Fatalf("text-only webhook should not create media and should preserve type: %+v", input)
+	}
+}
+
 type nilChatService struct{}
 
 func (nilChatService) CreateThread(context.Context, string, string, map[string]any) (chat.Thread, error) {
