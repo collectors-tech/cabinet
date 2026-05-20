@@ -1935,6 +1935,23 @@ func New(cfg config.Config) (*App, error) {
 		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "failed_to_run_scanner",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  "review_provider_credentials_and_health",
+					"query_set_id": req.QuerySetID,
+				})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
@@ -3565,6 +3582,98 @@ func New(cfg config.Config) (*App, error) {
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(thread)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		route := strings.TrimSpace(r.URL.Query().Get("route"))
+		if route == "" {
+			route = "/"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id":    profileID,
+			"route":         route,
+			"capabilities":  assistantCapabilityRegistry(),
+			"policy":        "preview-before-apply",
+			"confirm_apply": true,
+		})
+	})
+	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			runs, err := chatSvc.ListWorkflowRuns(r.Context(), profileID, strings.TrimSpace(r.URL.Query().Get("thread_id")))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_workflow_runs"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+		case http.MethodPost:
+			var req chat.CreateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.CreateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/workflow-runs/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		runID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/workflow-runs/"))
+		if runID == "" {
+			http.Error(w, `{"error":"run_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.GetWorkflowRun(r.Context(), profileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		case http.MethodPatch:
+			var req chat.UpdateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			req.RunID = runID
+			run, err := chatSvc.UpdateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_update_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
@@ -6041,6 +6150,44 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 		}
 	}
 	base := []map[string]any{
+		{
+			"provider_id":         "openai",
+			"display_name":        "OpenAI / ChatGPT",
+			"base_domain":         "platform.openai.com",
+			"api_family":          "ai_provider",
+			"api_support_profile": "browser_auth_or_api_key",
+			"active_mode":         strings.TrimSpace(settings["openai.active_auth_method"]),
+			"integration_mode":    "assistant_workflows",
+			"api_available":       true,
+			"auth_requirement":    "browser_auth_or_api_key",
+			"auth_mode":           "hybrid",
+			"active_auth_method":  strings.TrimSpace(settings["openai.active_auth_method"]),
+			"auth_methods": map[string]any{
+				"api_key": map[string]any{
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key"],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+					"credential_present": strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+				},
+				"browser_auth": map[string]any{
+					"state":              map[bool]string{true: strings.TrimSpace(settings["openai.browser_auth_state"]), false: "setup_needed"}[strings.TrimSpace(settings["openai.browser_auth_state"]) != ""],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "browser_auth" && strings.TrimSpace(settings["openai.browser_auth_state"]) == "connected" && strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"credential_present": strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"setup_message":      "Browser Auth requires a verifiable callback/artifact before Cabinet marks OpenAI connected.",
+				},
+			},
+			"model_options": []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"},
+			"capabilities": map[string]bool{
+				"search":             false,
+				"stock_observation":  false,
+				"pricing":            false,
+				"health":             true,
+				"assistant":          true,
+				"image_help":         true,
+				"content_generation": true,
+			},
+			"state":              map[bool]string{true: "ready", false: "needs_config"}[strings.TrimSpace(settings["openai.active_auth_method"]) != ""],
+			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+		},
 		{
 			"provider_id":         "ebay",
 			"display_name":        "eBay",
