@@ -221,3 +221,13 @@ Telegram channel adapters MUST be able to group webhook updates that share the s
 - **THEN** Cabinet MUST combine those updates into one capture input with all media attachments preserved in order
 - **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, media group id, and album payload metadata
 - **AND** updates from a different sender or chat MUST remain separate even when the media group id matches
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-019: Telegram webhook barcode captures SHALL use local barcode lookup evidence
+When an authorized Telegram webhook capture contains a barcode that already matches a Cabinet item in the authorized profile, Cabinet MUST use that local match as lookup-backed draft evidence instead of falling back to a generic manual barcode draft.
+
+#### Scenario: Draft webhook barcode capture from local match
+- **GIVEN** a Cabinet profile has Telegram capture authorization and an existing catalog item with a matching barcode
+- **WHEN** the Telegram webhook catalog capture endpoint receives a message containing that barcode from the authorized sender/chat
+- **THEN** Cabinet MUST create the preview using the matched item part number, title, brand, and category
+- **AND** the preview and Inbox metadata MUST preserve local barcode lookup source evidence
+- **AND** no catalog item MUST be created until explicit confirmation is submitted
