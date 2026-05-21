@@ -70,10 +70,13 @@ type CallbackResult struct {
 }
 
 type Draft struct {
-	PartNumber string
-	Title      string
-	Brand      string
-	Category   string
+	PartNumber       string
+	Title            string
+	Brand            string
+	Category         string
+	LookupSource     string
+	LookupURL        string
+	LookupConfidence string
 }
 
 type MediaInput struct {
@@ -256,14 +259,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		ProfileID: profileID,
 		ThreadID:  thread.ID,
 		Action:    "create_inventory_item",
-		Payload: map[string]any{
-			"part_number": strings.TrimSpace(draft.PartNumber),
-			"title":       strings.TrimSpace(draft.Title),
-			"brand":       strings.TrimSpace(draft.Brand),
-			"category":    strings.TrimSpace(draft.Category),
-			"source":      "telegram",
-			"barcode":     strings.TrimSpace(in.Barcode),
-		},
+		Payload:   previewPayload(draft, in.Barcode),
 	})
 	if err != nil {
 		return CaptureResult{}, err
@@ -271,6 +267,24 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 
 	reviewURL := reviewURL(profileID, thread.ID, preview.ID)
 	telegramReply := telegramReply(draft, reviewURL, preview.ID)
+	inboxMetadata := map[string]any{
+		"preview_id":         preview.ID,
+		"source_channel":     "telegram",
+		"source_chat_id":     chatID,
+		"source_sender_id":   senderID,
+		"source_message_id":  strings.TrimSpace(in.MessageID),
+		"attachment_count":   len(attachments),
+		"media":              mediaContext,
+		"confirmation_state": "preview_required",
+		"review_url":         reviewURL,
+		"telegram_reply":     telegramReply,
+	}
+	if len(in.SourceMetadata) > 0 {
+		inboxMetadata["source_metadata"] = in.SourceMetadata
+	}
+	if lookup := lookupMetadata(draft); len(lookup) > 0 {
+		inboxMetadata["lookup"] = lookup
+	}
 	inboxItem, err := s.chat.CreateInboxItem(ctx, chat.InboxItem{
 		ProfileID: profileID,
 		ThreadID:  thread.ID,
@@ -278,17 +292,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		Status:    "queued",
 		Title:     "Telegram catalog draft ready",
 		Summary:   "Review and confirm the Telegram catalog draft before it can mutate Cabinet inventory.",
-		Metadata: map[string]any{
-			"preview_id":         preview.ID,
-			"source_channel":     "telegram",
-			"source_chat_id":     chatID,
-			"source_sender_id":   senderID,
-			"source_message_id":  strings.TrimSpace(in.MessageID),
-			"attachment_count":   len(attachments),
-			"confirmation_state": "preview_required",
-			"review_url":         reviewURL,
-			"telegram_reply":     telegramReply,
-		},
+		Metadata:  inboxMetadata,
 	})
 	if err != nil {
 		return CaptureResult{}, err
@@ -535,6 +539,9 @@ func normalizeDraft(draft Draft, barcode string) Draft {
 	draft.Title = strings.TrimSpace(draft.Title)
 	draft.Brand = strings.TrimSpace(draft.Brand)
 	draft.Category = strings.TrimSpace(draft.Category)
+	draft.LookupSource = strings.TrimSpace(draft.LookupSource)
+	draft.LookupURL = strings.TrimSpace(draft.LookupURL)
+	draft.LookupConfidence = strings.TrimSpace(draft.LookupConfidence)
 	barcode = strings.TrimSpace(barcode)
 	if draft.PartNumber == "" {
 		draft.PartNumber = barcode
@@ -543,6 +550,35 @@ func normalizeDraft(draft Draft, barcode string) Draft {
 		draft.Title = "Barcode " + barcode
 	}
 	return draft
+}
+
+func previewPayload(draft Draft, barcode string) map[string]any {
+	payload := map[string]any{
+		"part_number": strings.TrimSpace(draft.PartNumber),
+		"title":       strings.TrimSpace(draft.Title),
+		"brand":       strings.TrimSpace(draft.Brand),
+		"category":    strings.TrimSpace(draft.Category),
+		"source":      "telegram",
+		"barcode":     strings.TrimSpace(barcode),
+	}
+	if lookup := lookupMetadata(draft); len(lookup) > 0 {
+		payload["lookup"] = lookup
+	}
+	return payload
+}
+
+func lookupMetadata(draft Draft) map[string]any {
+	lookup := map[string]any{}
+	if source := strings.TrimSpace(draft.LookupSource); source != "" {
+		lookup["source"] = source
+	}
+	if url := strings.TrimSpace(draft.LookupURL); url != "" {
+		lookup["url"] = url
+	}
+	if confidence := strings.TrimSpace(draft.LookupConfidence); confidence != "" {
+		lookup["confidence"] = confidence
+	}
+	return lookup
 }
 
 func threadTitle(draft Draft) string {

@@ -23,6 +23,7 @@ Cabinet MUST persist Telegram source identifiers and media metadata with the ass
 - **GIVEN** an authorized Telegram sender sends item text, barcode data, and one or more media attachments
 - **WHEN** Cabinet creates the assistant capture thread
 - **THEN** the thread/message context MUST preserve source channel, sender/chat/message identifiers, barcode/grouping metadata, and attachment metadata including filename, MIME type, and Telegram file id where available
+- **AND** the Inbox audit metadata MUST preserve the Telegram media source fields and source metadata needed to recover the capture without reading the assistant message payload
 
 ### Requirement TELEGRAM-CATALOG-CAPTURE-003: Telegram catalog capture SHALL create drafts before mutation
 Telegram intake MUST produce a preview/inbox handoff first; it MUST NOT create or update catalog inventory records until an explicit confirmation is applied.
@@ -200,3 +201,13 @@ Cabinet MUST expose profile-scoped controls for the Telegram sender/chat authori
 - **WHEN** they enter a Telegram sender id and chat id and save the profile form
 - **THEN** Cabinet MUST persist `telegram.catalog_capture.sender_id` and `telegram.catalog_capture.chat_id` through the profile settings API
 - **AND** reloading the profile settings screen MUST show the saved sender/chat authorization values
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-017: Lookup-backed Telegram drafts SHALL preserve lookup evidence
+When Telegram catalog intake receives a barcode/product lookup result, Cabinet MUST preserve lookup source evidence with the preview and Inbox audit trail so reviewers can distinguish resolved lookup-backed drafts from the manual barcode fallback.
+
+#### Scenario: Preserve resolved lookup evidence in preview and audit metadata
+- **GIVEN** an authorized Telegram capture includes a barcode and a resolved draft from a lookup source
+- **WHEN** Cabinet creates the confirmation-required catalog preview
+- **THEN** the preview payload MUST include the lookup source, URL, and confidence when available
+- **AND** the Inbox item metadata MUST preserve the same lookup evidence for audit/review
+- **AND** the preview MUST still require explicit confirmation before any catalog or inventory mutation

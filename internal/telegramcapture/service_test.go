@@ -101,6 +101,18 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 	if result.InboxItem.Source != "telegram_catalog_capture" || result.InboxItem.Metadata["confirmation_state"] != "preview_required" {
 		t.Fatalf("inbox item did not record confirmation-required source: %+v", result.InboxItem)
 	}
+	inboxMedia, ok := result.InboxItem.Metadata["media"].([]any)
+	if !ok || len(inboxMedia) != 1 {
+		t.Fatalf("inbox metadata did not preserve Telegram media audit details: %#v", result.InboxItem.Metadata["media"])
+	}
+	inboxMedia0, ok := inboxMedia[0].(map[string]any)
+	if !ok || inboxMedia0["file_id"] != "telegram-file-photo-1" || inboxMedia0["filename"] != "front.jpg" || inboxMedia0["mime_type"] != "image/jpeg" {
+		t.Fatalf("inbox metadata did not preserve Telegram media source fields: %#v", result.InboxItem.Metadata["media"])
+	}
+	inboxSourceMetadata, ok := result.InboxItem.Metadata["source_metadata"].(map[string]any)
+	if !ok || inboxSourceMetadata["caption"] != "front and barcode" {
+		t.Fatalf("inbox metadata did not preserve Telegram source metadata: %#v", result.InboxItem.Metadata["source_metadata"])
+	}
 	if result.TelegramReply.ConfirmationState != "preview_required" ||
 		!strings.Contains(result.TelegramReply.Text, "Open Cabinet to confirm or cancel") ||
 		!strings.Contains(result.TelegramReply.ReviewURL, result.Thread.ID) ||
@@ -162,6 +174,49 @@ func TestTelegramCaptureDerivesDraftFromBarcodeOnly(t *testing.T) {
 	}
 	if result.Preview.Payload["part_number"] != "4904810900016" || result.Preview.Payload["title"] != "Barcode 4904810900016" {
 		t.Fatalf("barcode-only capture did not create manual draft path: %+v", result.Preview.Payload)
+	}
+}
+
+func TestTelegramCapturePreservesResolvedLookupEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	profileID := "profile-lookup"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Lookup"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	svc := NewService(staticAuthorizer{"sender-lookup|chat-lookup": profileID}, chat.NewService(conn, filepath.Join(t.TempDir(), "attachments")))
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-lookup",
+		ChatID:   "chat-lookup",
+		Barcode:  "4904810900019",
+		Draft: Draft{
+			PartNumber:       "TOMY-001",
+			Title:            "Lookup-backed Tomy release",
+			Brand:            "Tomy",
+			Category:         "Die-cast",
+			LookupSource:     "barcode_local",
+			LookupURL:        "/api/barcodes/4904810900019",
+			LookupConfidence: "high",
+		},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() lookup-backed capture error = %v", err)
+	}
+	lookup, ok := result.Preview.Payload["lookup"].(map[string]any)
+	if !ok || lookup["source"] != "barcode_local" || lookup["url"] != "/api/barcodes/4904810900019" || lookup["confidence"] != "high" {
+		t.Fatalf("preview payload did not preserve lookup evidence: %+v", result.Preview.Payload)
+	}
+	inboxLookup, ok := result.InboxItem.Metadata["lookup"].(map[string]any)
+	if !ok || inboxLookup["source"] != "barcode_local" || inboxLookup["confidence"] != "high" {
+		t.Fatalf("inbox metadata did not preserve lookup audit evidence: %+v", result.InboxItem.Metadata)
+	}
+	if result.Preview.Payload["part_number"] != "TOMY-001" || result.Preview.Payload["title"] != "Lookup-backed Tomy release" {
+		t.Fatalf("lookup-backed draft fields were not used in preview: %+v", result.Preview.Payload)
 	}
 }
 
@@ -233,6 +288,51 @@ func TestTelegramCaptureCallbackConfirmsAndCancelsPendingPreview(t *testing.T) {
 	}
 	if cancelledCount != 0 {
 		t.Fatalf("cancelled callback must not create a catalog item, count=%d", cancelledCount)
+	}
+}
+
+func TestTelegramCaptureCallbackRejectsDifferentAuthorizedSender(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	ownerProfileID := "profile-callback-owner"
+	otherProfileID := "profile-callback-other"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?), (?, ?)`, ownerProfileID, "Telegram Callback Owner", otherProfileID, "Telegram Callback Other"); err != nil {
+		t.Fatalf("insert profiles: %v", err)
+	}
+	chatSvc := chat.NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	svc := NewService(staticAuthorizer{
+		"sender-owner|chat-owner": ownerProfileID,
+		"sender-other|chat-other": otherProfileID,
+	}, chatSvc)
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-owner",
+		ChatID:   "chat-owner",
+		Barcode:  "4904810900020",
+		Draft:    Draft{Title: "Owner Draft"},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() error = %v", err)
+	}
+
+	_, err = svc.HandleCatalogCaptureCallback(ctx, CallbackInput{
+		SenderID:     "sender-other",
+		ChatID:       "chat-other",
+		CallbackData: "cabinet:catalog_capture:confirm:" + result.Preview.ID,
+	})
+	if err == nil {
+		t.Fatalf("expected different authorized sender/chat to be rejected before applying preview")
+	}
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM canonical_items WHERE profile_id IN (?, ?)`, ownerProfileID, otherProfileID).Scan(&itemCount); err != nil {
+		t.Fatalf("count catalog items: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("cross-sender callback must not create a catalog item, count=%d", itemCount)
 	}
 }
 
