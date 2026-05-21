@@ -415,6 +415,174 @@ func CaptureInputFromWebhookUpdateWithMedia(ctx context.Context, update WebhookU
 	return input, nil
 }
 
+func GroupCaptureInputs(inputs []CaptureInput) []CaptureInput {
+	groups := make(map[string]int)
+	out := make([]CaptureInput, 0, len(inputs))
+	for _, input := range inputs {
+		groupKey := captureGroupKey(input)
+		if groupKey == "" {
+			out = append(out, input)
+			continue
+		}
+		if index, ok := groups[groupKey]; ok {
+			out[index] = mergeCaptureInputGroup(out[index], input)
+			continue
+		}
+		groups[groupKey] = len(out)
+		out = append(out, normalizeGroupedCaptureInput(input))
+	}
+	return out
+}
+
+func captureGroupKey(input CaptureInput) string {
+	senderID := strings.TrimSpace(input.SenderID)
+	chatID := strings.TrimSpace(input.ChatID)
+	groupingHint := strings.TrimSpace(input.GroupingHint)
+	if senderID == "" || chatID == "" || groupingHint == "" {
+		return ""
+	}
+	return senderID + "|" + chatID + "|" + groupingHint
+}
+
+func normalizeGroupedCaptureInput(input CaptureInput) CaptureInput {
+	input.SenderID = strings.TrimSpace(input.SenderID)
+	input.ChatID = strings.TrimSpace(input.ChatID)
+	input.MessageID = strings.TrimSpace(input.MessageID)
+	input.Text = strings.TrimSpace(input.Text)
+	input.Barcode = strings.TrimSpace(input.Barcode)
+	input.GroupingHint = strings.TrimSpace(input.GroupingHint)
+	metadata := cloneMetadata(input.SourceMetadata)
+	metadata["media_group_id"] = input.GroupingHint
+	metadata["grouped_message_ids"] = appendStringValue(nil, input.MessageID)
+	metadata["message_count"] = 1
+	metadata["payload_type"] = groupedPayloadType(metadata["payload_type"])
+	input.SourceMetadata = metadata
+	return input
+}
+
+func mergeCaptureInputGroup(base, next CaptureInput) CaptureInput {
+	next = normalizeGroupedCaptureInput(next)
+	base.Text = joinNonEmpty("\n", base.Text, next.Text)
+	if strings.TrimSpace(base.Barcode) == "" {
+		base.Barcode = strings.TrimSpace(next.Barcode)
+	}
+	base.Draft = mergeDraft(base.Draft, next.Draft)
+	base.Media = append(base.Media, next.Media...)
+	base.SourceMetadata = mergeGroupedMetadata(base.SourceMetadata, next.SourceMetadata)
+	return base
+}
+
+func mergeDraft(base, next Draft) Draft {
+	if strings.TrimSpace(base.PartNumber) == "" {
+		base.PartNumber = strings.TrimSpace(next.PartNumber)
+	}
+	if strings.TrimSpace(base.Title) == "" {
+		base.Title = strings.TrimSpace(next.Title)
+	}
+	if strings.TrimSpace(base.Brand) == "" {
+		base.Brand = strings.TrimSpace(next.Brand)
+	}
+	if strings.TrimSpace(base.Category) == "" {
+		base.Category = strings.TrimSpace(next.Category)
+	}
+	if strings.TrimSpace(base.LookupSource) == "" {
+		base.LookupSource = strings.TrimSpace(next.LookupSource)
+	}
+	if strings.TrimSpace(base.LookupURL) == "" {
+		base.LookupURL = strings.TrimSpace(next.LookupURL)
+	}
+	if strings.TrimSpace(base.LookupConfidence) == "" {
+		base.LookupConfidence = strings.TrimSpace(next.LookupConfidence)
+	}
+	return base
+}
+
+func mergeGroupedMetadata(base, next map[string]any) map[string]any {
+	out := cloneMetadata(base)
+	for _, messageID := range stringSlice(next["grouped_message_ids"]) {
+		out["grouped_message_ids"] = appendStringValue(out["grouped_message_ids"], messageID)
+	}
+	out["message_count"] = len(stringSlice(out["grouped_message_ids"]))
+	if updateIDs := appendMetadataValues(out["grouped_update_ids"], base["update_id"], next["update_id"]); len(updateIDs) > 0 {
+		out["grouped_update_ids"] = updateIDs
+	}
+	out["payload_type"] = groupedPayloadType(joinNonEmpty("+", fmt.Sprint(base["payload_type"]), fmt.Sprint(next["payload_type"])))
+	return out
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range metadata {
+		out[key] = value
+	}
+	return out
+}
+
+func appendMetadataValues(existing any, values ...any) []any {
+	out := []any{}
+	if current, ok := existing.([]any); ok {
+		out = append(out, current...)
+	}
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func stringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = appendStringValue(out, fmt.Sprint(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func appendStringValue(existing any, value string) []string {
+	out := stringSlice(existing)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return out
+	}
+	for _, current := range out {
+		if current == value {
+			return out
+		}
+	}
+	return append(out, value)
+}
+
+func joinNonEmpty(separator string, values ...string) string {
+	parts := []string{}
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, separator)
+}
+
+func groupedPayloadType(value any) string {
+	parts := []string{"telegram_album"}
+	for _, part := range strings.Split(fmt.Sprint(value), "+") {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "<nil>" || part == "telegram_album" {
+			continue
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "+")
+}
+
 func mergeResolvedMedia(original, resolved MediaInput) MediaInput {
 	out := original
 	if fileID := strings.TrimSpace(resolved.FileID); fileID != "" {
