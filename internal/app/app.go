@@ -3630,7 +3630,23 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_telegram_webhook_update"}`, http.StatusBadRequest)
 			return
 		}
-		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), input.SenderID, input.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		if draft, ok, err := telegramCatalogCaptureLocalBarcodeDraft(r.Context(), conn, authorized.ProfileID, input.Barcode); err != nil {
+			http.Error(w, `{"error":"failed_to_lookup_telegram_barcode"}`, http.StatusBadRequest)
+			return
+		} else if ok {
+			input.Draft = draft
+		}
+		svc := telegramcapture.NewService(authorizer, chatSvc)
 		result, err := svc.IngestCatalogCapture(r.Context(), input)
 		if err != nil {
 			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
@@ -8186,6 +8202,37 @@ func (a allProfilesTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Cont
 		return telegramcapture.AuthorizedProfile{ProfileID: candidate.ID}, nil
 	}
 	return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+}
+
+func telegramCatalogCaptureLocalBarcodeDraft(ctx context.Context, conn *sql.DB, profileID, barcodeValue string) (telegramcapture.Draft, bool, error) {
+	profileID = strings.TrimSpace(profileID)
+	barcodeValue = strings.TrimSpace(barcodeValue)
+	if conn == nil || profileID == "" || barcodeValue == "" {
+		return telegramcapture.Draft{}, false, nil
+	}
+
+	var itemID string
+	var draft telegramcapture.Draft
+	err := conn.QueryRowContext(ctx, `
+		SELECT c.id, c.part_number, c.title, c.brand, c.category
+		FROM item_barcodes b
+		JOIN canonical_items c ON c.id = b.item_id
+		WHERE b.barcode = ?
+			AND c.profile_id = ?
+			AND COALESCE(c.deleted_at, '') = ''
+		ORDER BY b.created_at ASC
+		LIMIT 1
+	`, barcodeValue, profileID).Scan(&itemID, &draft.PartNumber, &draft.Title, &draft.Brand, &draft.Category)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return telegramcapture.Draft{}, false, nil
+		}
+		return telegramcapture.Draft{}, false, err
+	}
+	draft.LookupSource = "barcode_local"
+	draft.LookupURL = "/api/barcodes/" + url.PathEscape(barcodeValue)
+	draft.LookupConfidence = "high"
+	return draft, strings.TrimSpace(itemID) != "", nil
 }
 
 func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]telegramcapture.MediaInput, error) {

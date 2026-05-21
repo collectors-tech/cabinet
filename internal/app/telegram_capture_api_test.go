@@ -285,6 +285,67 @@ func TestTelegramCatalogCaptureWebhookAPIResolvesProfileAuthorization(t *testing
 	}
 }
 
+func TestTelegramCatalogCaptureWebhookAPIUsesLocalBarcodeLookup(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Webhook Lookup"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"12345",
+			"telegram.catalog_capture.chat_id":"-5235769556"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES (?,?,?,?,?,?)`, "tg-lookup-item", p.ID, "Tomy", "Die-cast", "TOMY-LOOKUP-001", "Lookup Matched Tomy Release"); err != nil {
+		t.Fatalf("insert local lookup item: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO item_barcodes(id, item_id, barcode) VALUES (?,?,?)`, "tg-lookup-barcode", "tg-lookup-item", "4904810900999"); err != nil {
+		t.Fatalf("insert local lookup barcode: %v", err)
+	}
+
+	capture := doRequest(t, a, http.MethodPost, "/api/telegram/webhook/catalog-captures", strings.NewReader(`{
+		"update_id": 7010,
+		"message": {
+			"message_id": 50,
+			"from": {"id": 12345},
+			"chat": {"id": -5235769556},
+			"text": "Please draft barcode 4904810900999"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if capture.Code != http.StatusCreated {
+		t.Fatalf("capture status=%d body=%s", capture.Code, capture.Body.String())
+	}
+	body := capture.Body.String()
+	if !strings.Contains(body, `"part_number":"TOMY-LOOKUP-001"`) ||
+		!strings.Contains(body, `"title":"Lookup Matched Tomy Release"`) ||
+		!strings.Contains(body, `"brand":"Tomy"`) ||
+		!strings.Contains(body, `"category":"Die-cast"`) ||
+		!strings.Contains(body, `"lookup":{"confidence":"high","source":"barcode_local","url":"/api/barcodes/4904810900999"}`) {
+		t.Fatalf("expected webhook barcode capture to use local lookup-backed draft evidence, body=%s", body)
+	}
+
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Count(items.Body.String(), "Lookup Matched Tomy Release") != 1 {
+		t.Fatalf("telegram webhook lookup capture must not create a duplicate catalog item before confirmation, body=%s", items.Body.String())
+	}
+}
+
 func TestTelegramCatalogCaptureWebhookAPIRequestsFollowUpForAmbiguousText(t *testing.T) {
 	t.Parallel()
 
