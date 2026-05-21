@@ -1228,6 +1228,12 @@ paths:
                       type: string
                     category:
                       type: string
+                    lookup_source:
+                      type: string
+                    lookup_url:
+                      type: string
+                    lookup_confidence:
+                      type: string
                 media:
                   type: array
                   items:

@@ -3582,10 +3582,13 @@ func New(cfg config.Config) (*App, error) {
 			GroupingHint:   req.GroupingHint,
 			SourceMetadata: req.SourceMetadata,
 			Draft: telegramcapture.Draft{
-				PartNumber: req.Draft.PartNumber,
-				Title:      req.Draft.Title,
-				Brand:      req.Draft.Brand,
-				Category:   req.Draft.Category,
+				PartNumber:       req.Draft.PartNumber,
+				Title:            req.Draft.Title,
+				Brand:            req.Draft.Brand,
+				Category:         req.Draft.Category,
+				LookupSource:     req.Draft.LookupSource,
+				LookupURL:        req.Draft.LookupURL,
+				LookupConfidence: req.Draft.LookupConfidence,
 			},
 			Media: media,
 		})
@@ -8108,10 +8111,13 @@ type telegramCatalogCaptureRequest struct {
 	Barcode      string `json:"barcode"`
 	GroupingHint string `json:"grouping_hint"`
 	Draft        struct {
-		PartNumber string `json:"part_number"`
-		Title      string `json:"title"`
-		Brand      string `json:"brand"`
-		Category   string `json:"category"`
+		PartNumber       string `json:"part_number"`
+		Title            string `json:"title"`
+		Brand            string `json:"brand"`
+		Category         string `json:"category"`
+		LookupSource     string `json:"lookup_source"`
+		LookupURL        string `json:"lookup_url"`
+		LookupConfidence string `json:"lookup_confidence"`
 	} `json:"draft"`
 	Media          []telegramCatalogCaptureMediaRequest `json:"media"`
 	SourceMetadata map[string]any                       `json:"source_metadata"`
