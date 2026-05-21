@@ -141,7 +141,11 @@ export function Chats() {
   )
 
   const loadThreads = useCallback(
-    async (profileID: string, preserveSelected = true) => {
+    async (
+      profileID: string,
+      preserveSelected = true,
+      preferredThreadID = ''
+    ) => {
       const response = await fetch(
         `/api/chat/threads?profile_id=${encodeURIComponent(profileID)}`
       )
@@ -151,11 +155,15 @@ export function Chats() {
       const payload = (await response.json()) as { threads?: ChatThread[] }
       const nextThreads = payload.threads ?? []
       setThreads(nextThreads)
+      const requestedThread = preferredThreadID.trim()
       const nextSelected =
-        preserveSelected &&
-        nextThreads.some((thread) => thread.id === selectedThreadId)
-          ? selectedThreadId
-          : (nextThreads[0]?.id ?? '')
+        requestedThread &&
+        nextThreads.some((thread) => thread.id === requestedThread)
+          ? requestedThread
+          : preserveSelected &&
+              nextThreads.some((thread) => thread.id === selectedThreadId)
+            ? selectedThreadId
+            : (nextThreads[0]?.id ?? '')
       setSelectedThreadId(nextSelected)
       await loadMessages(profileID, nextSelected)
     },
@@ -176,7 +184,11 @@ export function Chats() {
         throw new Error('active_profile_missing')
       }
       setActiveProfileId(profileID)
-      await loadThreads(profileID, false)
+      const requestedThread =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('thread_id') ?? ''
+          : ''
+      await loadThreads(profileID, false, requestedThread)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'failed_to_bootstrap_chat')
       setThreads([])

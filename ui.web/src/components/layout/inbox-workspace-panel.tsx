@@ -23,6 +23,13 @@ type InboxItem = {
   summary: string
   metadata?: {
     assistant?: { provider?: string; model?: string }
+    review_url?: string
+    preview_id?: string
+    confirmation_state?: string
+    telegram_reply?: {
+      review_url?: string
+      confirmation_state?: string
+    }
     item?: {
       id?: string
       title?: string
@@ -83,6 +90,14 @@ function sourceLabel(source?: string) {
 
 function itemLink(item: InboxItem) {
   const metadata = item.metadata
+  const reviewHref =
+    metadata?.review_url ?? metadata?.telegram_reply?.review_url ?? ''
+  if (item.source === 'telegram_catalog_capture' && reviewHref) {
+    return {
+      href: reviewHref,
+      label: 'Review Telegram capture',
+    }
+  }
   const href = metadata?.item?.href ?? metadata?.item_href
   const id = metadata?.item?.id ?? metadata?.item_id
   const title = metadata?.item?.title ?? metadata?.item_title

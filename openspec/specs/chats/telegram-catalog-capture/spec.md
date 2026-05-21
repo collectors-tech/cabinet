@@ -182,3 +182,12 @@ Cabinet MUST provide a Telegram Bot API media resolver that uses a runtime-suppl
 - **AND** it MUST download the returned file path through the token-bound file endpoint
 - **AND** it MUST return a media reader with preserved file id, resolved filename, MIME type, and original media kind for capture ingestion
 - **AND** it MUST require the runtime token at request construction time rather than persisting it in specs, fixtures, or capture records
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-015: Cabinet Inbox review links SHALL open Telegram capture threads
+Telegram catalog capture Inbox items MUST expose the capture review URL as an actionable Cabinet link, and the Chats review surface MUST select the requested capture thread from that URL.
+
+#### Scenario: Inbox opens the Telegram capture review thread
+- **GIVEN** a Telegram catalog capture creates an Inbox item with metadata.review_url, thread_id, and preview_id
+- **WHEN** the user opens the Inbox catch-up card and follows the review link
+- **THEN** the link MUST point to the Cabinet Chats review URL
+- **AND** the Chats surface MUST select the requested Telegram capture thread instead of defaulting to another thread
