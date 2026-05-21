@@ -165,6 +165,49 @@ func TestTelegramCaptureDerivesDraftFromBarcodeOnly(t *testing.T) {
 	}
 }
 
+func TestTelegramCapturePreservesResolvedLookupEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	profileID := "profile-lookup"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Lookup"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	svc := NewService(staticAuthorizer{"sender-lookup|chat-lookup": profileID}, chat.NewService(conn, filepath.Join(t.TempDir(), "attachments")))
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-lookup",
+		ChatID:   "chat-lookup",
+		Barcode:  "4904810900019",
+		Draft: Draft{
+			PartNumber:       "TOMY-001",
+			Title:            "Lookup-backed Tomy release",
+			Brand:            "Tomy",
+			Category:         "Die-cast",
+			LookupSource:     "barcode_local",
+			LookupURL:        "/api/barcodes/4904810900019",
+			LookupConfidence: "high",
+		},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() lookup-backed capture error = %v", err)
+	}
+	lookup, ok := result.Preview.Payload["lookup"].(map[string]any)
+	if !ok || lookup["source"] != "barcode_local" || lookup["url"] != "/api/barcodes/4904810900019" || lookup["confidence"] != "high" {
+		t.Fatalf("preview payload did not preserve lookup evidence: %+v", result.Preview.Payload)
+	}
+	inboxLookup, ok := result.InboxItem.Metadata["lookup"].(map[string]any)
+	if !ok || inboxLookup["source"] != "barcode_local" || inboxLookup["confidence"] != "high" {
+		t.Fatalf("inbox metadata did not preserve lookup audit evidence: %+v", result.InboxItem.Metadata)
+	}
+	if result.Preview.Payload["part_number"] != "TOMY-001" || result.Preview.Payload["title"] != "Lookup-backed Tomy release" {
+		t.Fatalf("lookup-backed draft fields were not used in preview: %+v", result.Preview.Payload)
+	}
+}
+
 func TestTelegramCaptureCallbackConfirmsAndCancelsPendingPreview(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
