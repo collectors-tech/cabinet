@@ -211,3 +211,13 @@ When Telegram catalog intake receives a barcode/product lookup result, Cabinet M
 - **THEN** the preview payload MUST include the lookup source, URL, and confidence when available
 - **AND** the Inbox item metadata MUST preserve the same lookup evidence for audit/review
 - **AND** the preview MUST still require explicit confirmation before any catalog or inventory mutation
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-018: Telegram media-group captures SHALL group album photos before draft creation
+Telegram channel adapters MUST be able to group webhook updates that share the same sender, chat, and Telegram media group id into one governed catalog capture input before preview creation.
+
+#### Scenario: Group multi-photo Telegram album into one draft input
+- **GIVEN** Telegram delivers multiple photo webhook updates with the same sender, chat, and media group id
+- **WHEN** Cabinet prepares catalog capture input for the channel adapter
+- **THEN** Cabinet MUST combine those updates into one capture input with all media attachments preserved in order
+- **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, media group id, and album payload metadata
+- **AND** updates from a different sender or chat MUST remain separate even when the media group id matches

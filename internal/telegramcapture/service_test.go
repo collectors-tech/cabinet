@@ -397,6 +397,89 @@ func TestCaptureInputFromWebhookUpdateNormalizesMixedPhotoCaption(t *testing.T) 
 	}
 }
 
+func TestGroupCaptureInputsCombinesTelegramAlbumMedia(t *testing.T) {
+	t.Parallel()
+	first, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2001,
+		Message: &WebhookMessage{
+			MessageID:    61,
+			Date:         1716170600,
+			From:         WebhookUser{ID: 12345},
+			Chat:         WebhookChat{ID: -5235769556},
+			Caption:      "Front and barcode 4904810900016",
+			MediaGroupID: "album-42",
+			Photo: []WebhookPhotoSize{
+				{FileID: "front-small", FileUniqueID: "front-small", Width: 90, Height: 90, FileSize: 512},
+				{FileID: "front-large", FileUniqueID: "front", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{})
+	if err != nil {
+		t.Fatalf("first CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+	second, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2002,
+		Message: &WebhookMessage{
+			MessageID:    62,
+			Date:         1716170601,
+			From:         WebhookUser{ID: 12345},
+			Chat:         WebhookChat{ID: -5235769556},
+			Caption:      "Back of the same boxed item",
+			MediaGroupID: "album-42",
+			Photo: []WebhookPhotoSize{
+				{FileID: "back-large", FileUniqueID: "back", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{Title: "Album grouped draft", Brand: "Tomy"})
+	if err != nil {
+		t.Fatalf("second CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+	other, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2003,
+		Message: &WebhookMessage{
+			MessageID:    63,
+			From:         WebhookUser{ID: 99999},
+			Chat:         WebhookChat{ID: -5235769556},
+			Caption:      "Different sender in a same-named album",
+			MediaGroupID: "album-42",
+			Photo: []WebhookPhotoSize{
+				{FileID: "other-large", FileUniqueID: "other", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{Title: "Other sender draft"})
+	if err != nil {
+		t.Fatalf("other CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+
+	grouped := GroupCaptureInputs([]CaptureInput{first, second, other})
+	if len(grouped) != 2 {
+		t.Fatalf("expected album inputs to group by sender/chat/media group, got %d: %+v", len(grouped), grouped)
+	}
+	album := grouped[0]
+	if album.SenderID != "12345" || album.ChatID != "-5235769556" || album.GroupingHint != "album-42" {
+		t.Fatalf("grouped album identity was not preserved: %+v", album)
+	}
+	if len(album.Media) != 2 || album.Media[0].FileID != "front-large" || album.Media[1].FileID != "back-large" {
+		t.Fatalf("grouped album media was not preserved in order: %+v", album.Media)
+	}
+	if album.Barcode != "4904810900016" || album.Draft.Title != "Album grouped draft" || album.Draft.Brand != "Tomy" {
+		t.Fatalf("grouped album did not preserve barcode and downstream draft fields: %+v", album)
+	}
+	if !strings.Contains(album.Text, "Front and barcode") || !strings.Contains(album.Text, "Back of the same boxed item") {
+		t.Fatalf("grouped album text did not preserve captions: %q", album.Text)
+	}
+	messageIDs, ok := album.SourceMetadata["grouped_message_ids"].([]string)
+	if !ok || len(messageIDs) != 2 || messageIDs[0] != "61" || messageIDs[1] != "62" {
+		t.Fatalf("grouped metadata did not preserve message ids: %+v", album.SourceMetadata)
+	}
+	if album.SourceMetadata["message_count"] != 2 || !strings.Contains(album.SourceMetadata["payload_type"].(string), "telegram_album") {
+		t.Fatalf("grouped metadata did not classify the album: %+v", album.SourceMetadata)
+	}
+	if grouped[1].SenderID != "99999" || len(grouped[1].Media) != 1 {
+		t.Fatalf("same media_group_id from another sender must remain separate: %+v", grouped[1])
+	}
+}
+
 func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramPhotoBytes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
