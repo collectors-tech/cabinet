@@ -84,6 +84,56 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 }
 
+func TestTelegramCatalogCaptureAPIPreservesLookupEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Lookup API"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"sender-lookup",
+			"telegram.catalog_capture.chat_id":"chat-lookup"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	capture := doRequest(t, a, http.MethodPost, "/api/telegram/catalog-captures", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"sender-lookup",
+		"chat_id":"chat-lookup",
+		"barcode":"4904810900019",
+		"draft":{
+			"part_number":"TOMY-001",
+			"title":"Lookup-backed Tomy release",
+			"brand":"Tomy",
+			"category":"Die-cast",
+			"lookup_source":"barcode_local",
+			"lookup_url":"/api/barcodes/4904810900019",
+			"lookup_confidence":"high"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if capture.Code != http.StatusCreated {
+		t.Fatalf("capture status=%d body=%s", capture.Code, capture.Body.String())
+	}
+	body := capture.Body.String()
+	if !strings.Contains(body, `"lookup":{"confidence":"high","source":"barcode_local","url":"/api/barcodes/4904810900019"}`) ||
+		!strings.Contains(body, `"part_number":"TOMY-001"`) ||
+		!strings.Contains(body, `"title":"Lookup-backed Tomy release"`) {
+		t.Fatalf("expected direct API capture to preserve lookup evidence in preview and audit metadata, body=%s", body)
+	}
+}
+
 func TestTelegramCatalogCaptureCallbackAPIConfirmsAuthorizedPreview(t *testing.T) {
 	t.Parallel()
 
