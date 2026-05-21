@@ -291,6 +291,51 @@ func TestTelegramCaptureCallbackConfirmsAndCancelsPendingPreview(t *testing.T) {
 	}
 }
 
+func TestTelegramCaptureCallbackRejectsDifferentAuthorizedSender(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	ownerProfileID := "profile-callback-owner"
+	otherProfileID := "profile-callback-other"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?), (?, ?)`, ownerProfileID, "Telegram Callback Owner", otherProfileID, "Telegram Callback Other"); err != nil {
+		t.Fatalf("insert profiles: %v", err)
+	}
+	chatSvc := chat.NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	svc := NewService(staticAuthorizer{
+		"sender-owner|chat-owner": ownerProfileID,
+		"sender-other|chat-other": otherProfileID,
+	}, chatSvc)
+	result, err := svc.IngestCatalogCapture(ctx, CaptureInput{
+		SenderID: "sender-owner",
+		ChatID:   "chat-owner",
+		Barcode:  "4904810900020",
+		Draft:    Draft{Title: "Owner Draft"},
+	})
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() error = %v", err)
+	}
+
+	_, err = svc.HandleCatalogCaptureCallback(ctx, CallbackInput{
+		SenderID:     "sender-other",
+		ChatID:       "chat-other",
+		CallbackData: "cabinet:catalog_capture:confirm:" + result.Preview.ID,
+	})
+	if err == nil {
+		t.Fatalf("expected different authorized sender/chat to be rejected before applying preview")
+	}
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM canonical_items WHERE profile_id IN (?, ?)`, ownerProfileID, otherProfileID).Scan(&itemCount); err != nil {
+		t.Fatalf("count catalog items: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("cross-sender callback must not create a catalog item, count=%d", itemCount)
+	}
+}
+
 func TestTelegramCaptureAmbiguousTextRequiresFollowUp(t *testing.T) {
 	t.Parallel()
 	svc := NewService(staticAuthorizer{"sender-3|chat-3": "profile-follow-up"}, nilChatService{})
