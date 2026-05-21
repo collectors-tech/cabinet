@@ -191,3 +191,12 @@ Telegram catalog capture Inbox items MUST expose the capture review URL as an ac
 - **WHEN** the user opens the Inbox catch-up card and follows the review link
 - **THEN** the link MUST point to the Cabinet Chats review URL
 - **AND** the Chats surface MUST select the requested Telegram capture thread instead of defaulting to another thread
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-016: Profile settings SHALL manage Telegram capture authorization
+Cabinet MUST expose profile-scoped controls for the Telegram sender/chat authorization settings used by catalog capture intake, so users can configure the external channel without direct database edits.
+
+#### Scenario: Persist Telegram capture authorization from profile settings
+- **GIVEN** the user opens Profile settings for the active Cabinet profile
+- **WHEN** they enter a Telegram sender id and chat id and save the profile form
+- **THEN** Cabinet MUST persist `telegram.catalog_capture.sender_id` and `telegram.catalog_capture.chat_id` through the profile settings API
+- **AND** reloading the profile settings screen MUST show the saved sender/chat authorization values
