@@ -23,6 +23,7 @@ Cabinet MUST persist Telegram source identifiers and media metadata with the ass
 - **GIVEN** an authorized Telegram sender sends item text, barcode data, and one or more media attachments
 - **WHEN** Cabinet creates the assistant capture thread
 - **THEN** the thread/message context MUST preserve source channel, sender/chat/message identifiers, barcode/grouping metadata, and attachment metadata including filename, MIME type, and Telegram file id where available
+- **AND** the Inbox audit metadata MUST preserve the Telegram media source fields and source metadata needed to recover the capture without reading the assistant message payload
 
 ### Requirement TELEGRAM-CATALOG-CAPTURE-003: Telegram catalog capture SHALL create drafts before mutation
 Telegram intake MUST produce a preview/inbox handoff first; it MUST NOT create or update catalog inventory records until an explicit confirmation is applied.

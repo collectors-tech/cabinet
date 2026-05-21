@@ -274,9 +274,13 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		"source_sender_id":   senderID,
 		"source_message_id":  strings.TrimSpace(in.MessageID),
 		"attachment_count":   len(attachments),
+		"media":              mediaContext,
 		"confirmation_state": "preview_required",
 		"review_url":         reviewURL,
 		"telegram_reply":     telegramReply,
+	}
+	if len(in.SourceMetadata) > 0 {
+		inboxMetadata["source_metadata"] = in.SourceMetadata
 	}
 	if lookup := lookupMetadata(draft); len(lookup) > 0 {
 		inboxMetadata["lookup"] = lookup

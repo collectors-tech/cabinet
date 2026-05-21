@@ -101,6 +101,18 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 	if result.InboxItem.Source != "telegram_catalog_capture" || result.InboxItem.Metadata["confirmation_state"] != "preview_required" {
 		t.Fatalf("inbox item did not record confirmation-required source: %+v", result.InboxItem)
 	}
+	inboxMedia, ok := result.InboxItem.Metadata["media"].([]any)
+	if !ok || len(inboxMedia) != 1 {
+		t.Fatalf("inbox metadata did not preserve Telegram media audit details: %#v", result.InboxItem.Metadata["media"])
+	}
+	inboxMedia0, ok := inboxMedia[0].(map[string]any)
+	if !ok || inboxMedia0["file_id"] != "telegram-file-photo-1" || inboxMedia0["filename"] != "front.jpg" || inboxMedia0["mime_type"] != "image/jpeg" {
+		t.Fatalf("inbox metadata did not preserve Telegram media source fields: %#v", result.InboxItem.Metadata["media"])
+	}
+	inboxSourceMetadata, ok := result.InboxItem.Metadata["source_metadata"].(map[string]any)
+	if !ok || inboxSourceMetadata["caption"] != "front and barcode" {
+		t.Fatalf("inbox metadata did not preserve Telegram source metadata: %#v", result.InboxItem.Metadata["source_metadata"])
+	}
 	if result.TelegramReply.ConfirmationState != "preview_required" ||
 		!strings.Contains(result.TelegramReply.Text, "Open Cabinet to confirm or cancel") ||
 		!strings.Contains(result.TelegramReply.ReviewURL, result.Thread.ID) ||
