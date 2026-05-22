@@ -229,6 +229,13 @@ func mergePurchaseCard(existing, incoming PurchaseCard) PurchaseCard {
 }
 
 func purchaseItemKey(card PurchaseCard) string {
+	return PurchaseItemKey(card)
+}
+
+// PurchaseItemKey returns the stable review/action key for a captured purchase
+// item so API callers can confirm actions against the same target Cabinet shows
+// in Purchase Inbox reviews.
+func PurchaseItemKey(card PurchaseCard) string {
 	return firstNonEmpty(
 		card.TransactionID,
 		joinKey(card.ListingID, card.VariationID),

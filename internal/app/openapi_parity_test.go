@@ -36,6 +36,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/telegram/catalog-captures",
 		"/api/telegram/webhook/catalog-captures",
 		"/api/integrations/ebay/purchase-inbox/reviews",
+		"/api/integrations/ebay/purchase-inbox/actions",
 		"/api/chat/threads",
 		"/api/chat/messages",
 		"/api/chat/attachments",
