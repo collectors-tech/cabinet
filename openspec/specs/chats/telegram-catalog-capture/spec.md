@@ -267,8 +267,17 @@ Telegram channel adapters MUST be able to group webhook updates that share the s
 - **GIVEN** Telegram delivers multiple photo webhook updates with the same sender, chat, and media group id
 - **WHEN** Cabinet prepares catalog capture input for the channel adapter
 - **THEN** Cabinet MUST combine those updates into one capture input with all media attachments preserved in order
-- **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, media group id, and album payload metadata
+- **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, distinct grouped update ids in arrival order, media group id, and album payload metadata
 - **AND** updates from a different sender or chat MUST remain separate even when the media group id matches
+
+### Requirement TELEGRAM-CATALOG-CAPTURE-023: Ungrouped Telegram photos SHALL remain separate capture inputs
+Telegram channel adapters MUST NOT merge independent photo messages just because they come from the same authorized sender/chat. Only updates with a shared Telegram media group id may be combined into one draft input.
+
+#### Scenario: Keep independent same-chat photo messages separate
+- **GIVEN** Telegram delivers multiple photo webhook updates from the same sender and chat without a media group id
+- **WHEN** Cabinet prepares catalog capture inputs for the channel adapter
+- **THEN** Cabinet MUST keep each update as a separate capture input
+- **AND** each separate input MUST preserve its own message id, photo media, barcode, text/caption, and draft fields for separate preview confirmation
 
 ### Requirement TELEGRAM-CATALOG-CAPTURE-019: Telegram webhook barcode captures SHALL use local barcode lookup evidence
 When an authorized Telegram webhook capture contains a barcode that already matches a Cabinet item in the authorized profile, Cabinet MUST use that local match as lookup-backed draft evidence instead of falling back to a generic manual barcode draft.
