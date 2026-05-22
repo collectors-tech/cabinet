@@ -58,3 +58,15 @@ Cabinet SHALL convert grouped purchase captures into review records that expose 
 - **THEN** the order and item SHALL be marked as needs-review
 - **AND** missing fields SHALL be listed for the item
 - **AND** Cabinet SHALL suggest completing missing fields rather than offering a mutating link or convert action
+
+### Requirement EBAY-PURCHASE-CAPTURE-005: Purchase Inbox API MUST prepare review records without inventory mutation
+Cabinet SHALL expose a profile-scoped Purchase Inbox API boundary that prepares captured eBay purchase cards for Inbox review while preserving confirmation-before-mutation behavior.
+
+#### Scenario: Prepare Purchase Inbox reviews from captured cards
+- **GIVEN** Cabinet has an active profile and receives captured eBay purchase cards for Purchase Inbox review
+- **WHEN** the client posts the cards to the Purchase Inbox review API
+- **THEN** Cabinet SHALL return review records grouped by purchase order for the active profile
+- **AND** ready items SHALL expose confirmation-required link-existing-item and convert-to-inventory actions
+- **AND** incomplete items SHALL expose missing field details and non-mutating completion actions
+- **AND** the API response SHALL identify the source as ebay_purchase_capture
+- **AND** the API MUST NOT create, link, or update inventory records while preparing review records
