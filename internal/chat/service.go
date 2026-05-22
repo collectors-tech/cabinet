@@ -96,6 +96,51 @@ type ApplyActionResult struct {
 	PreviewID  string `json:"preview_id"`
 }
 
+type WorkflowRun struct {
+	ID                string           `json:"id"`
+	ProfileID         string           `json:"profile_id"`
+	WorkflowID        string           `json:"workflow_id"`
+	CapabilityID      string           `json:"capability_id"`
+	SourceChannel     string           `json:"source_channel"`
+	SourceThreadID    string           `json:"source_thread_id,omitempty"`
+	SourceMessageID   string           `json:"source_message_id,omitempty"`
+	Status            string           `json:"status"`
+	Input             map[string]any   `json:"input,omitempty"`
+	ProviderTrace     map[string]any   `json:"provider_trace,omitempty"`
+	Result            map[string]any   `json:"result,omitempty"`
+	Error             map[string]any   `json:"error,omitempty"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items,omitempty"`
+	CreatedAt         string           `json:"created_at"`
+	UpdatedAt         string           `json:"updated_at"`
+	StartedAt         string           `json:"started_at,omitempty"`
+	CompletedAt       string           `json:"completed_at,omitempty"`
+}
+
+type CreateWorkflowRunInput struct {
+	ProfileID         string           `json:"profile_id"`
+	WorkflowID        string           `json:"workflow_id"`
+	CapabilityID      string           `json:"capability_id"`
+	SourceChannel     string           `json:"source_channel"`
+	SourceThreadID    string           `json:"source_thread_id"`
+	SourceMessageID   string           `json:"source_message_id"`
+	Input             map[string]any   `json:"input"`
+	ProviderTrace     map[string]any   `json:"provider_trace"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items"`
+}
+
+type UpdateWorkflowRunInput struct {
+	ProfileID         string           `json:"profile_id"`
+	RunID             string           `json:"run_id"`
+	Status            string           `json:"status"`
+	ProviderTrace     map[string]any   `json:"provider_trace"`
+	Result            map[string]any   `json:"result"`
+	Error             map[string]any   `json:"error"`
+	ConfirmationState string           `json:"confirmation_state"`
+	BulkItems         []map[string]any `json:"bulk_items"`
+}
+
 func NewService(db *sql.DB, dataDir string) *Service {
 	return &Service{db: db, dataDir: dataDir}
 }
@@ -257,6 +302,194 @@ func parseContextJSON(raw string) map[string]any {
 		return map[string]any{}
 	}
 	return out
+}
+
+func marshalBulkItemsJSON(items []map[string]any) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	raw, err := json.Marshal(items)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+func parseBulkItemsJSON(raw string) []map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []map[string]any{}
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return []map[string]any{}
+	}
+	return out
+}
+
+func normalizeWorkflowStatus(status string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "":
+		return "queued", nil
+	case "queued", "running", "needs_input", "completed", "failed", "cancelled":
+		return strings.TrimSpace(strings.ToLower(status)), nil
+	default:
+		return "", fmt.Errorf("unsupported workflow status: %s", status)
+	}
+}
+
+func normalizeConfirmationState(state string) string {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "required", "pending", "confirmed", "cancelled", "not_required":
+		return strings.TrimSpace(strings.ToLower(state))
+	default:
+		return "not_required"
+	}
+}
+
+func (s *Service) CreateWorkflowRun(ctx context.Context, in CreateWorkflowRunInput) (WorkflowRun, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.WorkflowID = strings.TrimSpace(in.WorkflowID)
+	in.CapabilityID = strings.TrimSpace(in.CapabilityID)
+	in.SourceChannel = strings.TrimSpace(in.SourceChannel)
+	in.SourceThreadID = strings.TrimSpace(in.SourceThreadID)
+	in.SourceMessageID = strings.TrimSpace(in.SourceMessageID)
+	if in.ProfileID == "" || in.WorkflowID == "" || in.CapabilityID == "" {
+		return WorkflowRun{}, fmt.Errorf("profile_id, workflow_id and capability_id are required")
+	}
+	if in.SourceChannel == "" {
+		in.SourceChannel = "in_app_chat"
+	}
+	status, err := normalizeWorkflowStatus("queued")
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO assistant_workflow_runs(
+			id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+			status, input_json, provider_trace_json, confirmation_state, bulk_items_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, in.ProfileID, in.WorkflowID, in.CapabilityID, in.SourceChannel, in.SourceThreadID, in.SourceMessageID,
+		status, marshalContextJSON(in.Input), marshalContextJSON(in.ProviderTrace), normalizeConfirmationState(in.ConfirmationState), marshalBulkItemsJSON(in.BulkItems)); err != nil {
+		return WorkflowRun{}, fmt.Errorf("create workflow run: %w", err)
+	}
+	return s.GetWorkflowRun(ctx, in.ProfileID, id)
+}
+
+func (s *Service) ListWorkflowRuns(ctx context.Context, profileID, threadID string) ([]WorkflowRun, error) {
+	profileID = strings.TrimSpace(profileID)
+	threadID = strings.TrimSpace(threadID)
+	if profileID == "" {
+		return nil, fmt.Errorf("profile_id is required")
+	}
+	query := `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+		       status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+		       created_at, updated_at, started_at, completed_at
+		FROM assistant_workflow_runs
+		WHERE profile_id = ?`
+	args := []any{profileID}
+	if threadID != "" {
+		query += ` AND source_thread_id = ?`
+		args = append(args, threadID)
+	}
+	query += ` ORDER BY updated_at DESC, created_at DESC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WorkflowRun
+	for rows.Next() {
+		run, err := scanWorkflowRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) GetWorkflowRun(ctx context.Context, profileID, runID string) (WorkflowRun, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, workflow_id, capability_id, source_channel, source_thread_id, source_message_id,
+		       status, input_json, provider_trace_json, result_json, error_json, confirmation_state, bulk_items_json,
+		       created_at, updated_at, started_at, completed_at
+		FROM assistant_workflow_runs
+		WHERE id = ? AND profile_id = ?
+	`, strings.TrimSpace(runID), strings.TrimSpace(profileID))
+	run, err := scanWorkflowRun(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return WorkflowRun{}, fmt.Errorf("workflow run not found")
+		}
+		return WorkflowRun{}, err
+	}
+	return run, nil
+}
+
+func (s *Service) UpdateWorkflowRun(ctx context.Context, in UpdateWorkflowRunInput) (WorkflowRun, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.RunID = strings.TrimSpace(in.RunID)
+	if in.ProfileID == "" || in.RunID == "" {
+		return WorkflowRun{}, fmt.Errorf("profile_id and run_id are required")
+	}
+	status, err := normalizeWorkflowStatus(in.Status)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	confirmationState := normalizeConfirmationState(in.ConfirmationState)
+	if confirmationState == "not_required" {
+		current, err := s.GetWorkflowRun(ctx, in.ProfileID, in.RunID)
+		if err != nil {
+			return WorkflowRun{}, err
+		}
+		confirmationState = current.ConfirmationState
+	}
+	startedAtExpr := "started_at"
+	if status == "running" {
+		startedAtExpr = "COALESCE(NULLIF(started_at, ''), CURRENT_TIMESTAMP)"
+	}
+	completedAtExpr := "completed_at"
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		completedAtExpr = "COALESCE(NULLIF(completed_at, ''), CURRENT_TIMESTAMP)"
+	}
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf(`
+		UPDATE assistant_workflow_runs
+		SET status = ?, provider_trace_json = ?, result_json = ?, error_json = ?, confirmation_state = ?,
+		    bulk_items_json = ?, updated_at = CURRENT_TIMESTAMP, started_at = %s, completed_at = %s
+		WHERE id = ? AND profile_id = ?
+	`, startedAtExpr, completedAtExpr),
+		status, marshalContextJSON(in.ProviderTrace), marshalContextJSON(in.Result), marshalContextJSON(in.Error),
+		confirmationState, marshalBulkItemsJSON(in.BulkItems), in.RunID, in.ProfileID)
+	if err != nil {
+		return WorkflowRun{}, fmt.Errorf("update workflow run: %w", err)
+	}
+	return s.GetWorkflowRun(ctx, in.ProfileID, in.RunID)
+}
+
+type workflowRunScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanWorkflowRun(scanner workflowRunScanner) (WorkflowRun, error) {
+	var run WorkflowRun
+	var inputJSON, providerTraceJSON, resultJSON, errorJSON, bulkItemsJSON string
+	err := scanner.Scan(
+		&run.ID, &run.ProfileID, &run.WorkflowID, &run.CapabilityID, &run.SourceChannel, &run.SourceThreadID, &run.SourceMessageID,
+		&run.Status, &inputJSON, &providerTraceJSON, &resultJSON, &errorJSON, &run.ConfirmationState, &bulkItemsJSON,
+		&run.CreatedAt, &run.UpdatedAt, &run.StartedAt, &run.CompletedAt,
+	)
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	run.Input = parseContextJSON(inputJSON)
+	run.ProviderTrace = parseContextJSON(providerTraceJSON)
+	run.Result = parseContextJSON(resultJSON)
+	run.Error = parseContextJSON(errorJSON)
+	run.BulkItems = parseBulkItemsJSON(bulkItemsJSON)
+	return run, nil
 }
 
 func (s *Service) CreateInboxItem(ctx context.Context, item InboxItem) (InboxItem, error) {
@@ -507,6 +740,28 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	return result, nil
 }
 
+func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyActionResult, error) {
+	in.ProfileID = strings.TrimSpace(in.ProfileID)
+	in.ThreadID = strings.TrimSpace(in.ThreadID)
+	in.PreviewID = strings.TrimSpace(in.PreviewID)
+	if in.ProfileID == "" || in.ThreadID == "" || in.PreviewID == "" {
+		return ApplyActionResult{}, fmt.Errorf("profile_id, thread_id and preview_id are required")
+	}
+	preview, _, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chat_action_previews
+		SET status = 'cancelled'
+		WHERE id = ? AND profile_id = ? AND thread_id = ?
+	`, in.PreviewID, in.ProfileID, in.ThreadID)
+	if err != nil {
+		return ApplyActionResult{}, fmt.Errorf("mark action cancelled: %w", err)
+	}
+	return ApplyActionResult{Applied: false, Action: preview.Action, PreviewID: preview.ID}, nil
+}
+
 func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
 	var preview ActionPreview
 	var payloadRaw string
@@ -531,6 +786,10 @@ func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID,
 		return ActionPreview{}, nil, fmt.Errorf("decode payload: %w", err)
 	}
 	return preview, payload, nil
+}
+
+func (s *Service) GetActionPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {
+	return s.getPreview(ctx, profileID, previewID)
 }
 
 func (s *Service) getPreview(ctx context.Context, profileID, previewID string) (ActionPreview, error) {

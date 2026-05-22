@@ -1,0 +1,114 @@
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestOpenAIRegistryExposesMethodAwareSetupNeededState(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIRegistryProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(payload.Providers, "openai")
+	if openai == nil {
+		t.Fatalf("expected openai provider in registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", openai["auth_mode"]); got != "hybrid" {
+		t.Fatalf("expected hybrid auth mode, got %q", got)
+	}
+	if got := fmt.Sprintf("%v", openai["state"]); got != "needs_config" {
+		t.Fatalf("expected setup-needed state before proof, got %q", got)
+	}
+	methods, ok := openai["auth_methods"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth_methods map, got %#v", openai["auth_methods"])
+	}
+	browser, ok := methods["browser_auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected browser_auth method, got %#v", methods["browser_auth"])
+	}
+	if got := fmt.Sprintf("%v", browser["state"]); got != "setup_needed" {
+		t.Fatalf("expected browser auth setup_needed until proof, got %q", got)
+	}
+	if connected, _ := browser["connected"].(bool); connected {
+		t.Fatalf("browser auth must not be connected without a verified artifact/callback")
+	}
+}
+
+func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIConfiguredProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"browser_auth","openai.browser_auth_state":"pending","openai.browser_auth_artifact_present":"false"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(payload.Providers, "openai")
+	methods := openai["auth_methods"].(map[string]any)
+	browser := methods["browser_auth"].(map[string]any)
+	if got := fmt.Sprintf("%v", browser["state"]); got != "pending" {
+		t.Fatalf("expected browser auth pending state, got %q", got)
+	}
+	if connected, _ := browser["connected"].(bool); connected {
+		t.Fatalf("browser auth must not be connected when active method is browser_auth but proof is pending")
+	}
+}
+
+func findRegistryProvider(providers []map[string]any, id string) map[string]any {
+	for _, provider := range providers {
+		if fmt.Sprintf("%v", provider["provider_id"]) == id {
+			return provider
+		}
+	}
+	return nil
+}
