@@ -111,4 +111,33 @@ describe('purchases/purchase-inbox', () => {
       .should('be.visible')
       .and('contain', 'Purchase Inbox could not load reviews.')
   })
+
+  it('EBAY-PURCHASE-CAPTURE-006 exposes loading state while reviews are prepared', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/integrations/ebay/purchase-inbox/reviews', (req) => {
+      req.reply({
+        delay: 500,
+        statusCode: 200,
+        body: {
+          source: 'ebay_purchase_capture',
+          profile_id: 'e2e-profile-001',
+          reviews: [],
+        },
+      })
+    }).as('preparePurchaseReviews')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
+    cy.get('[data-testid="purchase-inbox-loading-state"]')
+      .should('be.visible')
+      .and('contain', 'Preparing purchase review records...')
+    cy.wait('@preparePurchaseReviews')
+    cy.get('[data-testid="purchase-inbox-loading-state"]').should('not.exist')
+    cy.get('[data-testid="purchase-inbox-empty-state"]').should('be.visible')
+  })
 })
