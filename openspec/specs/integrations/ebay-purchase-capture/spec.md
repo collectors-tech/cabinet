@@ -91,3 +91,23 @@ Cabinet SHALL expose a Purchase Inbox UI surface for captured eBay purchase revi
 - **GIVEN** the Purchase Inbox review API is unavailable or returns an error
 - **WHEN** the user prepares review records
 - **THEN** the UI SHALL show an error state that keeps the page usable and retryable
+
+### Requirement EBAY-PURCHASE-CAPTURE-007: Purchase Inbox action API MUST apply only explicitly confirmed link or convert actions
+Cabinet SHALL expose a profile-scoped Purchase Inbox action API that applies only ready purchase item link/convert actions after explicit confirmation and preserves purchase provenance.
+
+#### Scenario: Reject unconfirmed purchase item mutation
+- **GIVEN** a ready Purchase Inbox item exposes a mutating link or convert action
+- **WHEN** the client posts the action without explicit confirmation
+- **THEN** Cabinet SHALL reject the request before creating or updating inventory records
+
+#### Scenario: Convert a confirmed purchase item to inventory
+- **GIVEN** a ready Purchase Inbox item has stable identity, quantity, price, and eBay source evidence
+- **WHEN** the client posts a confirmed convert-to-inventory action for the matching target key
+- **THEN** Cabinet SHALL create an active inventory item scoped to the active profile
+- **AND** the created item SHALL preserve purchase source URL and audit metadata linking back to the eBay purchase capture
+
+#### Scenario: Link a confirmed purchase item to an existing inventory record
+- **GIVEN** a ready Purchase Inbox item and an existing inventory item owned by the active profile
+- **WHEN** the client posts a confirmed link-existing-inventory-item action for the matching target key
+- **THEN** Cabinet SHALL update only the owned inventory item with purchase provenance
+- **AND** Cabinet SHALL reject links to missing or other-profile inventory records

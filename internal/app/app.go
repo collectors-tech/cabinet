@@ -3066,6 +3066,92 @@ func New(cfg config.Config) (*App, error) {
 		}
 		return count > 0
 	}
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/actions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		var req struct {
+			ActionID       string                           `json:"action_id"`
+			TargetKey      string                           `json:"target_key"`
+			Confirmed      bool                             `json:"confirmed"`
+			ExistingItemID string                           `json:"existing_item_id"`
+			Card           ebaypurchasecapture.PurchaseCard `json:"card"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		actionID := strings.TrimSpace(req.ActionID)
+		if !req.Confirmed {
+			http.Error(w, `{"error":"purchase_inbox_action_requires_confirmation"}`, http.StatusConflict)
+			return
+		}
+		if actionID != "link_existing_inventory_item" && actionID != "convert_to_inventory_item" {
+			http.Error(w, `{"error":"unsupported_purchase_inbox_action"}`, http.StatusBadRequest)
+			return
+		}
+		targetKey := ebaypurchasecapture.PurchaseItemKey(req.Card)
+		if targetKey == "" || strings.TrimSpace(req.TargetKey) != targetKey {
+			http.Error(w, `{"error":"purchase_inbox_target_mismatch"}`, http.StatusBadRequest)
+			return
+		}
+		itemReview := ebaypurchasecapture.BuildPurchaseInboxReviews([]ebaypurchasecapture.PurchaseCard{req.Card})
+		if len(itemReview) == 0 || len(itemReview[0].Items) == 0 || itemReview[0].Items[0].Status != "ready_to_link_or_convert" {
+			http.Error(w, `{"error":"purchase_inbox_item_not_ready"}`, http.StatusBadRequest)
+			return
+		}
+
+		switch actionID {
+		case "link_existing_inventory_item":
+			existingItemID := strings.TrimSpace(req.ExistingItemID)
+			if !itemOwnedByProfile(r.Context(), profileID, existingItemID) {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing, err := collectionRepo.GetItemByID(r.Context(), existingItemID)
+			if err != nil {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing.Notes = appendPurchaseInboxNote(existing.Notes, req.Card)
+			existing.SourceURLs = appendPurchaseInboxSourceURL(existing.SourceURLs, req.Card.ItemURL)
+			updated, err := collectionRepo.UpdateItem(r.Context(), existingItemID, existing)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_link_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"action_id":   actionID,
+				"target_key":  targetKey,
+				"profile_id":  profileID,
+				"linked_item": updated,
+				"audit":       purchaseInboxActionAudit(req.Card, existingItemID),
+			})
+		case "convert_to_inventory_item":
+			created, err := collectionRepo.CreateItemForProfile(r.Context(), profileID, purchaseInboxCardToItem(req.Card))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_convert_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":           true,
+				"action_id":    actionID,
+				"target_key":   targetKey,
+				"profile_id":   profileID,
+				"created_item": created,
+				"audit":        purchaseInboxActionAudit(req.Card, created.ID),
+			})
+		}
+	})
 	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -6704,6 +6790,83 @@ func parsePositiveInt(raw string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func purchaseInboxCardToItem(card ebaypurchasecapture.PurchaseCard) collection.Item {
+	title := strings.TrimSpace(firstNonEmptyString(card.PurchasedIdentity, card.ListingTitle))
+	partNumber := strings.TrimSpace(firstNonEmptyString(card.ListingID, card.TransactionID, ebaypurchasecapture.PurchaseItemKey(card)))
+	return collection.Item{
+		Brand:      "Unknown",
+		Category:   "General",
+		PartNumber: partNumber,
+		Title:      title,
+		Status:     "active",
+		Notes:      appendPurchaseInboxNote("", card),
+		SourceURLs: appendPurchaseInboxSourceURL(nil, card.ItemURL),
+		Tags:       []string{"purchase-inbox", "ebay-purchase"},
+	}
+}
+
+func appendPurchaseInboxNote(existing string, card ebaypurchasecapture.PurchaseCard) string {
+	parts := []string{"Purchase Inbox confirmed eBay capture"}
+	if v := strings.TrimSpace(card.OrderID); v != "" {
+		parts = append(parts, "order "+v)
+	}
+	if v := strings.TrimSpace(card.TransactionID); v != "" {
+		parts = append(parts, "transaction "+v)
+	}
+	if v := strings.TrimSpace(card.ListingID); v != "" {
+		parts = append(parts, "listing "+v)
+	}
+	if card.Quantity > 0 {
+		parts = append(parts, fmt.Sprintf("quantity %d", card.Quantity))
+	}
+	if v := strings.TrimSpace(card.ItemPrice); v != "" {
+		parts = append(parts, "price "+v)
+	}
+	note := strings.Join(parts, "; ") + "."
+	if strings.TrimSpace(existing) == "" {
+		return note
+	}
+	if strings.Contains(existing, note) {
+		return existing
+	}
+	return strings.TrimSpace(existing) + "\n" + note
+}
+
+func appendPurchaseInboxSourceURL(existing []string, rawURL string) []string {
+	trimmed := strings.TrimSpace(rawURL)
+	out := append([]string{}, existing...)
+	if trimmed == "" {
+		return out
+	}
+	for _, value := range out {
+		if strings.TrimSpace(value) == trimmed {
+			return out
+		}
+	}
+	return append(out, trimmed)
+}
+
+func purchaseInboxActionAudit(card ebaypurchasecapture.PurchaseCard, itemID string) map[string]any {
+	return map[string]any{
+		"source":         "ebay_purchase_capture",
+		"item_id":        strings.TrimSpace(itemID),
+		"target_key":     ebaypurchasecapture.PurchaseItemKey(card),
+		"order_id":       strings.TrimSpace(card.OrderID),
+		"listing_id":     strings.TrimSpace(card.ListingID),
+		"transaction_id": strings.TrimSpace(card.TransactionID),
+		"confirmed":      true,
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func discoverFrontlineAlgoliaConfig(

@@ -1228,6 +1228,55 @@ paths:
           $ref: "#/components/responses/Error"
         "405":
           $ref: "#/components/responses/Error"
+  /api/integrations/ebay/purchase-inbox/actions:
+    post:
+      tags: [Integrations]
+      summary: Apply a confirmed eBay Purchase Inbox link or convert action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_id, target_key, confirmed, card]
+              properties:
+                action_id:
+                  type: string
+                  enum: [link_existing_inventory_item, convert_to_inventory_item]
+                target_key:
+                  type: string
+                confirmed:
+                  type: boolean
+                existing_item_id:
+                  type: string
+                card:
+                  type: object
+      responses:
+        "200":
+          description: Confirmed Purchase Inbox action result with audit metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  action_id:
+                    type: string
+                  target_key:
+                    type: string
+                  profile_id:
+                    type: string
+                  audit:
+                    type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
   /api/telegram/catalog-captures:
     post:
       tags: [Telegram]
