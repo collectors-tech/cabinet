@@ -163,6 +163,12 @@ Cabinet MUST provide runtime-safe wiring that dispatches Telegram updates throug
 - **THEN** it MUST POST JSON to the Telegram Bot API method URL for that token
 - **AND** it MUST require the token at request construction time rather than embedding it in persisted specs or fixtures
 
+#### Scenario: Execute rendered Bot API calls and report outbound failures
+- **GIVEN** the runtime wiring has dispatched a Telegram update through Cabinet and rendered one or more Bot API calls
+- **WHEN** it executes those calls with the caller-provided Telegram endpoint, token, and HTTP client
+- **THEN** it MUST POST each rendered Bot API call in order
+- **AND** any outbound Telegram Bot API failure MUST be returned with method/status/body evidence while preserving the Cabinet dispatch path and rendered calls for handoff logging
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-020: Telegram bot adapter SHALL return user-visible failure feedback from Cabinet dispatch errors
 Cabinet Telegram bot dispatch MUST convert structured Cabinet capture/callback failures into Telegram-visible Bot API replies, and MUST provide a safe fallback reply when Cabinet cannot return structured copy.
 

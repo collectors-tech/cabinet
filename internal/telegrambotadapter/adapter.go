@@ -89,6 +89,7 @@ type CabinetGateway interface {
 type DispatchResult struct {
 	CabinetPath  string
 	CabinetError string
+	BotAPIErrors []string
 	BotCalls     []BotAPICall
 }
 
@@ -135,6 +136,45 @@ func DispatchUpdate(ctx context.Context, gateway CabinetGateway, update Update) 
 		return result, nil
 	}
 	return DispatchResult{}, fmt.Errorf("telegram update does not contain a supported catalog capture message or callback")
+}
+
+func DispatchUpdateToBotAPI(ctx context.Context, gateway CabinetGateway, endpoint BotAPIEndpoint, client HTTPDoer, update Update) (DispatchResult, error) {
+	result, err := DispatchUpdate(ctx, gateway, update)
+	if err != nil {
+		return result, err
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	for _, call := range result.BotCalls {
+		req, err := endpoint.NewRequest(ctx, call)
+		if err != nil {
+			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
+			return result, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
+			return result, err
+		}
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body := ""
+			if resp.Body != nil {
+				raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				body = strings.TrimSpace(string(raw))
+			}
+			err := fmt.Errorf("telegram bot api %s returned status %d", call.Method, resp.StatusCode)
+			if body != "" {
+				err = fmt.Errorf("%w: %s", err, body)
+			}
+			result.BotAPIErrors = append(result.BotAPIErrors, err.Error())
+			return result, err
+		}
+	}
+	return result, nil
 }
 
 func failureTelegramReply() telegramcapture.TelegramReply {
