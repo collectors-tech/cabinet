@@ -184,6 +184,16 @@ Cabinet Telegram bot dispatch MUST convert structured Cabinet capture/callback f
 - **THEN** the adapter MUST preserve the Cabinet dispatch path and error for logging
 - **AND** it MUST render answerCallbackQuery and editMessageText payloads with safe user-visible failure copy for the originating callback/message
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-021: Telegram bot adapter SHALL cap rendered reply text to Bot API limits
+Cabinet Telegram bot dispatch MUST cap rendered message, edit, and callback acknowledgement text before constructing Telegram Bot API payloads so long Cabinet reply copy does not create avoidable outbound Bot API failures.
+
+#### Scenario: Cap rendered Telegram reply payload text
+- **GIVEN** Cabinet returns a structured Telegram reply whose text exceeds a Telegram Bot API payload limit
+- **WHEN** the adapter renders sendMessage, editMessageText, or answerCallbackQuery payloads
+- **THEN** message and edit payload text MUST fit within the Telegram message text limit
+- **AND** callback acknowledgement text MUST fit within the Telegram callback answer text limit
+- **AND** truncated text MUST remain non-empty and visibly indicate truncation
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-013: Telegram webhook media SHALL resolve file ids into persisted attachment bytes
 Cabinet MUST support a channel-edge media resolver that turns Telegram webhook photo/document file identifiers into attachment readers before capture ingestion, while preserving the Telegram file id, filename, MIME type, and source metadata used for audit.
 

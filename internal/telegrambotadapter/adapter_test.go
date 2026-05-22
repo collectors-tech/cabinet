@@ -199,6 +199,32 @@ func TestAnswerCallbackQueryFromReplyRendersCallbackAcknowledgement(t *testing.T
 	}
 }
 
+func TestReplyRenderingCapsTelegramTextLengths(t *testing.T) {
+	t.Parallel()
+
+	longRunes := strings.Repeat("A", telegramMessageTextLimit+25)
+	send, err := SendMessageFromReply("-5235769556", telegramcapture.TelegramReply{Text: longRunes})
+	if err != nil {
+		t.Fatalf("SendMessageFromReply() long text error = %v", err)
+	}
+	sendBody := mustJSONMap(t, send.Body)
+	sendText := sendBody["text"].(string)
+	if len([]rune(sendText)) != telegramMessageTextLimit || !strings.HasSuffix(sendText, "...") {
+		t.Fatalf("sendMessage text was not capped at Telegram limit: len=%d suffix=%q", len([]rune(sendText)), sendText[len(sendText)-3:])
+	}
+
+	callbackText := strings.Repeat("B", telegramCallbackTextLimit+25)
+	ack, err := AnswerCallbackQueryFromReply("callback-1", telegramcapture.TelegramReply{Text: callbackText})
+	if err != nil {
+		t.Fatalf("AnswerCallbackQueryFromReply() long text error = %v", err)
+	}
+	ackBody := mustJSONMap(t, ack.Body)
+	ackText := ackBody["text"].(string)
+	if len([]rune(ackText)) != telegramCallbackTextLimit || !strings.HasSuffix(ackText, "...") {
+		t.Fatalf("answerCallbackQuery text was not capped at Telegram limit: len=%d suffix=%q", len([]rune(ackText)), ackText[len(ackText)-3:])
+	}
+}
+
 func TestDispatchUpdateSendsCaptureReplyThroughBotAPI(t *testing.T) {
 	t.Parallel()
 
