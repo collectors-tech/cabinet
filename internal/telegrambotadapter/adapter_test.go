@@ -3,6 +3,7 @@ package telegrambotadapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ type fakeCabinetGateway struct {
 	path     string
 	body     any
 	response telegramcapture.TelegramReply
+	err      error
 }
 
 func (f *fakeCabinetGateway) PostJSON(_ context.Context, path string, body any, response any) (int, error) {
@@ -22,6 +24,9 @@ func (f *fakeCabinetGateway) PostJSON(_ context.Context, path string, body any, 
 	f.body = body
 	out := response.(*cabinetTelegramReplyResponse)
 	out.TelegramReply = f.response
+	if f.err != nil {
+		return 500, f.err
+	}
 	return 200, nil
 }
 
@@ -265,6 +270,83 @@ func TestDispatchUpdateAcknowledgesAndEditsCallbackReply(t *testing.T) {
 	edit := mustJSONMap(t, result.BotCalls[1].Body)
 	if edit["chat_id"] != "-5235769556" || edit["message_id"] != "44" {
 		t.Fatalf("editMessageText did not target callback message: %+v", edit)
+	}
+}
+
+func TestDispatchUpdateSendsStructuredFailureReplyWhenCabinetRejectsCapture(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{
+		response: telegramcapture.TelegramReply{
+			Text:              "I need a barcode, part number, or clearer item title before I can draft this safely.",
+			ConfirmationState: "follow_up_required",
+			ActionButtons: []telegramcapture.TelegramReplyButton{
+				{Label: "Send barcode", Kind: "reply", Action: "reply_with_barcode"},
+			},
+		},
+		err: errors.New("cabinet returned 422 telegram_capture_needs_follow_up"),
+	}
+	result, err := DispatchUpdate(context.Background(), gateway, Update{
+		UpdateID: 7003,
+		Message: &WebhookMessage{
+			MessageID: 45,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Text:      "blue boxed one from the bench",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdate() structured failure error = %v", err)
+	}
+	if result.CabinetPath != WebhookCapturePath || result.CabinetError == "" {
+		t.Fatalf("dispatch did not preserve Cabinet path/error: %+v", result)
+	}
+	if len(result.BotCalls) != 1 || result.BotCalls[0].Method != "sendMessage" {
+		t.Fatalf("expected one failure sendMessage call, got %+v", result.BotCalls)
+	}
+	body := mustJSONMap(t, result.BotCalls[0].Body)
+	if body["chat_id"] != "-5235769556" || body["text"] != "I need a barcode, part number, or clearer item title before I can draft this safely." {
+		t.Fatalf("failure sendMessage did not preserve structured Telegram reply: %+v", body)
+	}
+	markup := body["reply_markup"].(map[string]any)
+	rows := markup["keyboard"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("structured follow-up controls were not rendered on failure: %#v", markup)
+	}
+}
+
+func TestDispatchUpdateAcknowledgesAndEditsFallbackFailureForCallback(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{err: errors.New("cabinet callback endpoint unavailable")}
+	result, err := DispatchUpdate(context.Background(), gateway, Update{
+		UpdateID: 8002,
+		CallbackQuery: &CallbackQuery{
+			ID:   "callback-2",
+			From: WebhookUser{ID: 12345},
+			Message: &CallbackMessage{
+				MessageID: 46,
+				Chat:      WebhookChat{ID: -5235769556},
+			},
+			Data: "cabinet:catalog_capture:confirm:preview-2",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdate() callback fallback error = %v", err)
+	}
+	if result.CabinetPath != CaptureCallbackPath || result.CabinetError == "" {
+		t.Fatalf("dispatch did not preserve callback path/error: %+v", result)
+	}
+	if len(result.BotCalls) != 2 || result.BotCalls[0].Method != "answerCallbackQuery" || result.BotCalls[1].Method != "editMessageText" {
+		t.Fatalf("expected callback failure ack and edit calls, got %+v", result.BotCalls)
+	}
+	ack := mustJSONMap(t, result.BotCalls[0].Body)
+	if ack["callback_query_id"] != "callback-2" || ack["text"] == "" {
+		t.Fatalf("fallback callback ack did not preserve visible failure text: %+v", ack)
+	}
+	edit := mustJSONMap(t, result.BotCalls[1].Body)
+	if edit["chat_id"] != "-5235769556" || edit["message_id"] != "46" || edit["text"] == "" {
+		t.Fatalf("fallback callback edit did not target the original message with failure text: %+v", edit)
 	}
 }
 
