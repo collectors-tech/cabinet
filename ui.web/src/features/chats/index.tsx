@@ -69,6 +69,11 @@ type ChatApplyResult = {
   preview_id: string
 }
 
+type AssistantDefaults = {
+  provider: string
+  model: string
+}
+
 function prettyRole(role: ChatMessage['role']) {
   if (role === 'assistant') {
     return 'Assistant'
@@ -81,6 +86,12 @@ function prettyRole(role: ChatMessage['role']) {
 
 export function Chats() {
   const [activeProfileId, setActiveProfileId] = useState('')
+  const [assistantDefaults, setAssistantDefaults] = useState<AssistantDefaults>(
+    {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+    }
+  )
   const [threads, setThreads] = useState<ChatThread[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -185,6 +196,21 @@ export function Chats() {
         throw new Error('active_profile_missing')
       }
       setActiveProfileId(profileID)
+      const settingsResponse = await fetch(
+        `/api/profiles/${profileID}/settings`
+      )
+      if (settingsResponse.ok) {
+        const settingsPayload = (await settingsResponse.json()) as {
+          settings?: Record<string, string>
+        }
+        const settings = settingsPayload.settings ?? {}
+        setAssistantDefaults({
+          provider: settings.assistant_default_provider?.trim() || 'openai',
+          model: settings.assistant_default_model?.trim() || 'gpt-4o-mini',
+        })
+      } else {
+        setAssistantDefaults({ provider: 'openai', model: 'gpt-4o-mini' })
+      }
       const requestedThread =
         typeof window !== 'undefined'
           ? (new URLSearchParams(window.location.search).get('thread_id') ?? '')
@@ -297,6 +323,8 @@ export function Chats() {
               ? actionTargetItemID.trim()
               : '',
           priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
+          assistant_provider: assistantDefaults.provider,
+          assistant_model: assistantDefaults.model,
         },
       }),
     })
@@ -558,7 +586,16 @@ export function Chats() {
             </div>
 
             <div className='mt-4 space-y-3 rounded-md border p-3'>
-              <p className='text-sm font-medium'>Action Preview</p>
+              <div className='flex flex-wrap items-start justify-between gap-2'>
+                <p className='text-sm font-medium'>Action Preview</p>
+                <p
+                  className='rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground'
+                  data-testid='chat-assistant-defaults'
+                >
+                  Assistant default: {assistantDefaults.provider} /{' '}
+                  {assistantDefaults.model}
+                </p>
+              </div>
               <label className='grid gap-1 text-sm'>
                 <span>Action Mode</span>
                 <select
@@ -643,7 +680,14 @@ export function Chats() {
                   className='text-sm text-muted-foreground'
                 >
                   Preview {actionPreview.id}: {actionPreview.action} (
-                  {actionPreview.status})
+                  {actionPreview.status}) via{' '}
+                  {String(
+                    actionPreview.payload?.assistant_provider ?? 'openai'
+                  )}{' '}
+                  /{' '}
+                  {String(
+                    actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
+                  )}
                 </p>
               ) : null}
               {applyResult ? (
@@ -670,7 +714,7 @@ export function Chats() {
             <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
               {actionPreview
-                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
                 : 'No action preview selected.'}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -26,6 +26,22 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
   }
 
+  function openChatsWithAssistantDefaults(provider: string, model: string) {
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.request('PUT', '/api/profiles/e2e-profile-001/settings', {
+      settings: {
+        assistant_default_provider: provider,
+        assistant_default_model: model,
+      },
+    })
+      .its('status')
+      .should('eq', 200)
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/chats/' })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
+  }
+
   function openInbox() {
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -132,6 +148,36 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-apply-confirm-submit"]').click()
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews', () => {
+    openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
+    createThread('E2E Copilot Provider Defaults Thread')
+
+    cy.get('[data-testid="chat-assistant-defaults"]').should(
+      'contain',
+      'anthropic / claude-3-7-sonnet'
+    )
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Draft this with the active assistant defaults')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Draft this with the active assistant defaults'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
+    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-012-PROVIDER')
+    cy.get('[data-testid="chat-preview-title"]').clear().type('Provider Default Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]').should(
+      'contain',
+      'anthropic / claude-3-7-sonnet'
+    )
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-summary"]').should(
+      'contain',
+      'assistant=anthropic/claude-3-7-sonnet'
+    )
   })
 
   it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {
