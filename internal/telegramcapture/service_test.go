@@ -532,6 +532,72 @@ func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramPhotoBytes(t *tes
 	}
 }
 
+func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramImageDocumentBytes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	input, err := CaptureInputFromWebhookUpdateWithMedia(ctx, WebhookUpdate{
+		UpdateID: 102,
+		Message: &WebhookMessage{
+			MessageID: 56,
+			Date:      1716170501,
+			From:      WebhookUser{ID: 23456},
+			Chat:      WebhookChat{ID: -5235769556},
+			Caption:   "Box art document barcode 4904810900021",
+			Document: &WebhookDocument{
+				FileID:       "telegram-doc-file",
+				FileUniqueID: "telegram-doc-unique",
+				FileName:     "box-art.png",
+				MIMEType:     "image/png",
+				FileSize:     4096,
+			},
+		},
+	}, Draft{Title: "Resolved Document Draft"}, staticMediaResolver{
+		"telegram-doc-file": {
+			Filename: "box-art.png",
+			MIMEType: "image/png",
+			Reader:   strings.NewReader("resolved-document-bytes"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CaptureInputFromWebhookUpdateWithMedia() document error = %v", err)
+	}
+	if len(input.Media) != 1 || input.Media[0].FileID != "telegram-doc-file" || input.Media[0].Kind != "document_image" || input.Media[0].Reader == nil {
+		t.Fatalf("resolved image document did not preserve Telegram document media: %+v", input.Media)
+	}
+	if input.SourceMetadata["payload_type"] != "caption+document" || input.Barcode != "4904810900021" {
+		t.Fatalf("image document capture did not preserve payload type and barcode context: %+v", input)
+	}
+
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	profileID := "profile-resolved-document"
+	if _, err := conn.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES (?, ?)`, profileID, "Telegram Resolved Document"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	svc := NewService(staticAuthorizer{"23456|-5235769556": profileID}, chat.NewService(conn, filepath.Join(t.TempDir(), "attachments")))
+	result, err := svc.IngestCatalogCapture(ctx, input)
+	if err != nil {
+		t.Fatalf("IngestCatalogCapture() resolved document error = %v", err)
+	}
+	if len(result.Attachments) != 1 || result.Attachments[0].Filename != "box-art.png" || result.Attachments[0].MimeType != "image/png" {
+		t.Fatalf("resolved document attachment metadata not preserved: %+v", result.Attachments)
+	}
+	media, ok := result.InboxItem.Metadata["media"].([]any)
+	if !ok || len(media) != 1 {
+		t.Fatalf("inbox metadata did not preserve image document media: %+v", result.InboxItem.Metadata)
+	}
+	media0, ok := media[0].(map[string]any)
+	if !ok || media0["kind"] != "document_image" || media0["file_id"] != "telegram-doc-file" {
+		t.Fatalf("inbox metadata did not preserve Telegram document audit fields: %+v", media)
+	}
+	if result.Attachments[0].SizeBytes != int64(len("resolved-document-bytes")) {
+		t.Fatalf("resolved image document bytes were not persisted, attachment=%+v", result.Attachments[0])
+	}
+}
+
 func TestCaptureInputFromWebhookUpdateNormalizesTextOnlyBarcode(t *testing.T) {
 	t.Parallel()
 	input, err := CaptureInputFromWebhookUpdate(WebhookUpdate{

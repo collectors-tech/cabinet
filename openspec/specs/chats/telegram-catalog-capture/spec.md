@@ -214,6 +214,13 @@ Cabinet MUST support a channel-edge media resolver that turns Telegram webhook p
 - **AND** the persisted attachment metadata MUST preserve the Telegram file id-derived filename, MIME type, and photo kind
 - **AND** the capture MUST still create only a preview/inbox handoff until explicit confirmation
 
+#### Scenario: Resolve Telegram image document bytes before capture ingestion
+- **GIVEN** Telegram delivers a webhook message with an image document, caption, and file id
+- **WHEN** the channel edge resolves the document file id into media bytes
+- **THEN** Cabinet MUST persist those bytes as the capture attachment
+- **AND** the persisted attachment and Inbox audit metadata MUST preserve the Telegram file id, filename, MIME type, document-image kind, caption payload type, and inferred barcode context
+- **AND** the capture MUST still create only a preview/inbox handoff until explicit confirmation
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-014: Telegram bot media resolver SHALL retrieve Bot API files before Cabinet ingestion
 Cabinet MUST provide a Telegram Bot API media resolver that uses a runtime-supplied bot token to call \`getFile\`, download the returned file path, and return attachment bytes plus media metadata to the governed capture intake path.
 
