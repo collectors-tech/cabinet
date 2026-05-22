@@ -102,6 +102,7 @@ export function Chats() {
     null
   )
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
+  const [applyNotice, setApplyNotice] = useState('')
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
 
   const selectedThread = useMemo(
@@ -186,7 +187,7 @@ export function Chats() {
       setActiveProfileId(profileID)
       const requestedThread =
         typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('thread_id') ?? ''
+          ? (new URLSearchParams(window.location.search).get('thread_id') ?? '')
           : ''
       await loadThreads(profileID, false, requestedThread)
     } catch (err) {
@@ -278,6 +279,7 @@ export function Chats() {
     }
     setSendError(null)
     setApplyResult(null)
+    setApplyNotice('')
     const response = await fetch('/api/chat/actions/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -323,11 +325,18 @@ export function Chats() {
     })
     if (!response.ok) {
       setSendError(`chat_action_apply_${response.status}`)
+      setApplyNotice('Action apply failed; preview remains pending.')
       return
     }
     const result = (await response.json()) as ChatApplyResult
     setApplyResult(result)
+    setApplyNotice('')
     setConfirmApplyOpen(false)
+  }
+
+  const cancelPreviewApply = () => {
+    setConfirmApplyOpen(false)
+    setApplyNotice('Action apply canceled; preview remains pending.')
   }
 
   const applyResultSummary = (() => {
@@ -642,6 +651,14 @@ export function Chats() {
                   {applyResultSummary}
                 </p>
               ) : null}
+              {applyNotice ? (
+                <p
+                  data-testid='chat-action-apply-notice'
+                  className='text-sm text-muted-foreground'
+                >
+                  {applyNotice}
+                </p>
+              ) : null}
             </div>
           </div>
         </section>
@@ -658,7 +675,10 @@ export function Chats() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid='chat-apply-confirm-cancel'>
+            <AlertDialogCancel
+              data-testid='chat-apply-confirm-cancel'
+              onClick={cancelPreviewApply}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
