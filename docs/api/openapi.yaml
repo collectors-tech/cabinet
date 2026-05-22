@@ -1191,6 +1191,43 @@ paths:
                 $ref: "#/components/schemas/AISuggestion"
         "400":
           $ref: "#/components/responses/Error"
+  /api/integrations/ebay/purchase-inbox/reviews:
+    post:
+      tags: [Integrations]
+      summary: Prepare eBay Purchase Inbox review records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cards]
+              properties:
+                cards:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Purchase Inbox review records grouped by order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  source:
+                    type: string
+                    enum: [ebay_purchase_capture]
+                  reviews:
+                    type: array
+                    items:
+                      type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
   /api/telegram/catalog-captures:
     post:
       tags: [Telegram]

@@ -42,6 +42,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/db"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/ebaypurchasecapture"
 	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
@@ -3027,6 +3028,31 @@ func New(cfg config.Config) (*App, error) {
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
+	})
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Cards []ebaypurchasecapture.PurchaseCard `json:"cards"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		reviews := ebaypurchasecapture.BuildPurchaseInboxReviews(req.Cards)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": strings.TrimSpace(active.ID),
+			"source":     "ebay_purchase_capture",
+			"reviews":    reviews,
+		})
 	})
 	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
 		profileID = strings.TrimSpace(profileID)

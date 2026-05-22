@@ -6,41 +6,41 @@ import "sort"
 // Order-level metadata lives here, while each captured item card remains a child
 // record so reconciliation and landed-cost allocation can reason at both levels.
 type PurchaseOrder struct {
-	OrderID           string
-	SellerUsernames   []string
-	OrderTotal        string
-	Currency          string
-	Shipping          string
-	Tax               string
-	ImportCharges     string
-	DestinationMarker string
-	OrderStatus       string
-	OrderDetailURL    string
-	Items             []PurchaseCard
+	OrderID           string         `json:"order_id,omitempty"`
+	SellerUsernames   []string       `json:"seller_usernames,omitempty"`
+	OrderTotal        string         `json:"order_total,omitempty"`
+	Currency          string         `json:"currency,omitempty"`
+	Shipping          string         `json:"shipping,omitempty"`
+	Tax               string         `json:"tax,omitempty"`
+	ImportCharges     string         `json:"import_charges,omitempty"`
+	DestinationMarker string         `json:"destination_marker,omitempty"`
+	OrderStatus       string         `json:"order_status,omitempty"`
+	OrderDetailURL    string         `json:"order_detail_url,omitempty"`
+	Items             []PurchaseCard `json:"items,omitempty"`
 }
 
 // PurchaseInboxReview is the review-ready representation used by the Purchase
 // Inbox before any link or convert action mutates Cabinet inventory.
 type PurchaseInboxReview struct {
-	Order            PurchaseOrder
-	Status           string
-	Items            []PurchaseInboxItemReview
-	SuggestedActions []PurchaseInboxAction
+	Order            PurchaseOrder             `json:"order"`
+	Status           string                    `json:"status"`
+	Items            []PurchaseInboxItemReview `json:"items"`
+	SuggestedActions []PurchaseInboxAction     `json:"suggested_actions"`
 }
 
 type PurchaseInboxItemReview struct {
-	Item             PurchaseCard
-	Status           string
-	MissingFields    []string
-	SuggestedActions []PurchaseInboxAction
+	Item             PurchaseCard          `json:"item"`
+	Status           string                `json:"status"`
+	MissingFields    []string              `json:"missing_fields"`
+	SuggestedActions []PurchaseInboxAction `json:"suggested_actions"`
 }
 
 type PurchaseInboxAction struct {
-	ID                   string
-	Label                string
-	Scope                string
-	TargetKey            string
-	RequiresConfirmation bool
+	ID                   string `json:"id"`
+	Label                string `json:"label"`
+	Scope                string `json:"scope"`
+	TargetKey            string `json:"target_key"`
+	RequiresConfirmation bool   `json:"requires_confirmation"`
 }
 
 // GroupPurchaseCardsByOrder folds parsed eBay purchase-history cards into stable

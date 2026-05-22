@@ -12,45 +12,45 @@ import (
 // It intentionally separates broad listing metadata from the actual purchased item
 // variant/aspect metadata shown inside the purchase card.
 type PurchaseCard struct {
-	ListingID         string
-	VariationID       string
-	TransactionID     string
-	OrderID           string
-	ListingTitle      string
-	PurchasedIdentity string
-	Aspects           map[string]string
-	Quantity          int
-	ItemPrice         string
-	ImageURL          string
-	ItemURL           string
-	SellerUsername    string
-	SellerProfileURL  string
-	OrderTotal        string
-	Currency          string
-	Shipping          string
-	Tax               string
-	ImportCharges     string
-	DestinationMarker string
-	OrderStatus       string
-	OrderDetailURL    string
-	ItemStatus        string
-	TrackingStatus    string
-	NoteCapability    NoteCapability
-	Actions           []Action
+	ListingID         string            `json:"listing_id,omitempty"`
+	VariationID       string            `json:"variation_id,omitempty"`
+	TransactionID     string            `json:"transaction_id,omitempty"`
+	OrderID           string            `json:"order_id,omitempty"`
+	ListingTitle      string            `json:"listing_title,omitempty"`
+	PurchasedIdentity string            `json:"purchased_identity,omitempty"`
+	Aspects           map[string]string `json:"aspects,omitempty"`
+	Quantity          int               `json:"quantity,omitempty"`
+	ItemPrice         string            `json:"item_price,omitempty"`
+	ImageURL          string            `json:"image_url,omitempty"`
+	ItemURL           string            `json:"item_url,omitempty"`
+	SellerUsername    string            `json:"seller_username,omitempty"`
+	SellerProfileURL  string            `json:"seller_profile_url,omitempty"`
+	OrderTotal        string            `json:"order_total,omitempty"`
+	Currency          string            `json:"currency,omitempty"`
+	Shipping          string            `json:"shipping,omitempty"`
+	Tax               string            `json:"tax,omitempty"`
+	ImportCharges     string            `json:"import_charges,omitempty"`
+	DestinationMarker string            `json:"destination_marker,omitempty"`
+	OrderStatus       string            `json:"order_status,omitempty"`
+	OrderDetailURL    string            `json:"order_detail_url,omitempty"`
+	ItemStatus        string            `json:"item_status,omitempty"`
+	TrackingStatus    string            `json:"tracking_status,omitempty"`
+	NoteCapability    NoteCapability    `json:"note_capability,omitempty"`
+	Actions           []Action          `json:"actions,omitempty"`
 }
 
 type NoteCapability struct {
-	TextareaID string
-	MaxLength  int
-	Actions    []Action
+	TextareaID string   `json:"textarea_id,omitempty"`
+	MaxLength  int      `json:"max_length,omitempty"`
+	Actions    []Action `json:"actions,omitempty"`
 }
 
 type Action struct {
-	Name     string
-	Label    string
-	URL      string
-	Enabled  bool
-	Metadata map[string]string
+	Name     string            `json:"name,omitempty"`
+	Label    string            `json:"label,omitempty"`
+	URL      string            `json:"url,omitempty"`
+	Enabled  bool              `json:"enabled"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 var (
