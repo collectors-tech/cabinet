@@ -163,6 +163,21 @@ Cabinet MUST provide runtime-safe wiring that dispatches Telegram updates throug
 - **THEN** it MUST POST JSON to the Telegram Bot API method URL for that token
 - **AND** it MUST require the token at request construction time rather than embedding it in persisted specs or fixtures
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-020: Telegram bot adapter SHALL return user-visible failure feedback from Cabinet dispatch errors
+Cabinet Telegram bot dispatch MUST convert structured Cabinet capture/callback failures into Telegram-visible Bot API replies, and MUST provide a safe fallback reply when Cabinet cannot return structured copy.
+
+#### Scenario: Render structured Cabinet failure reply for message capture
+- **GIVEN** Telegram delivers a message update to the bot adapter
+- **WHEN** Cabinet rejects the capture with a structured Telegram reply such as follow-up-required or authorization failure
+- **THEN** the adapter MUST preserve the Cabinet dispatch path and error for logging
+- **AND** it MUST render the structured Telegram reply as a sendMessage payload to the originating chat
+
+#### Scenario: Render fallback callback failure feedback
+- **GIVEN** Telegram delivers a callback query for a Cabinet catalog capture action
+- **WHEN** Cabinet callback dispatch fails without a structured Telegram reply
+- **THEN** the adapter MUST preserve the Cabinet dispatch path and error for logging
+- **AND** it MUST render answerCallbackQuery and editMessageText payloads with safe user-visible failure copy for the originating callback/message
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-013: Telegram webhook media SHALL resolve file ids into persisted attachment bytes
 Cabinet MUST support a channel-edge media resolver that turns Telegram webhook photo/document file identifiers into attachment readers before capture ingestion, while preserving the Telegram file id, filename, MIME type, and source metadata used for audit.
 

@@ -87,8 +87,9 @@ type CabinetGateway interface {
 }
 
 type DispatchResult struct {
-	CabinetPath string
-	BotCalls    []BotAPICall
+	CabinetPath  string
+	CabinetError string
+	BotCalls     []BotAPICall
 }
 
 type cabinetTelegramReplyResponse struct {
@@ -104,10 +105,14 @@ func DispatchUpdate(ctx context.Context, gateway CabinetGateway, update Update) 
 		return DispatchResult{}, err
 	}
 	var response cabinetTelegramReplyResponse
-	if _, err := gateway.PostJSON(ctx, req.Path, req.Body, &response); err != nil {
-		return DispatchResult{}, err
-	}
+	_, postErr := gateway.PostJSON(ctx, req.Path, req.Body, &response)
 	result := DispatchResult{CabinetPath: req.Path}
+	if postErr != nil {
+		result.CabinetError = postErr.Error()
+		if response.TelegramReply.Text == "" {
+			response.TelegramReply = failureTelegramReply()
+		}
+	}
 	if update.CallbackQuery != nil {
 		callback := update.CallbackQuery
 		ack, err := AnswerCallbackQueryFromReply(callback.ID, response.TelegramReply)
@@ -130,6 +135,14 @@ func DispatchUpdate(ctx context.Context, gateway CabinetGateway, update Update) 
 		return result, nil
 	}
 	return DispatchResult{}, fmt.Errorf("telegram update does not contain a supported catalog capture message or callback")
+}
+
+func failureTelegramReply() telegramcapture.TelegramReply {
+	return telegramcapture.TelegramReply{
+		Text:              "Cabinet could not process this Telegram catalog capture yet. Please retry or open Cabinet to review the capture.",
+		ConfirmationState: "error",
+		Actions:           []string{"retry", "open_cabinet"},
+	}
 }
 
 type BotAPIEndpoint struct {
