@@ -450,8 +450,25 @@ func TestGroupCaptureInputsCombinesTelegramAlbumMedia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("other CaptureInputFromWebhookUpdate() error = %v", err)
 	}
+	third, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2004,
+		Message: &WebhookMessage{
+			MessageID:    64,
+			Date:         1716170602,
+			From:         WebhookUser{ID: 12345},
+			Chat:         WebhookChat{ID: -5235769556},
+			Caption:      "Side detail for the same boxed item",
+			MediaGroupID: "album-42",
+			Photo: []WebhookPhotoSize{
+				{FileID: "side-large", FileUniqueID: "side", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{})
+	if err != nil {
+		t.Fatalf("third CaptureInputFromWebhookUpdate() error = %v", err)
+	}
 
-	grouped := GroupCaptureInputs([]CaptureInput{first, second, other})
+	grouped := GroupCaptureInputs([]CaptureInput{first, second, other, third})
 	if len(grouped) != 2 {
 		t.Fatalf("expected album inputs to group by sender/chat/media group, got %d: %+v", len(grouped), grouped)
 	}
@@ -459,21 +476,25 @@ func TestGroupCaptureInputsCombinesTelegramAlbumMedia(t *testing.T) {
 	if album.SenderID != "12345" || album.ChatID != "-5235769556" || album.GroupingHint != "album-42" {
 		t.Fatalf("grouped album identity was not preserved: %+v", album)
 	}
-	if len(album.Media) != 2 || album.Media[0].FileID != "front-large" || album.Media[1].FileID != "back-large" {
+	if len(album.Media) != 3 || album.Media[0].FileID != "front-large" || album.Media[1].FileID != "back-large" || album.Media[2].FileID != "side-large" {
 		t.Fatalf("grouped album media was not preserved in order: %+v", album.Media)
 	}
 	if album.Barcode != "4904810900016" || album.Draft.Title != "Album grouped draft" || album.Draft.Brand != "Tomy" {
 		t.Fatalf("grouped album did not preserve barcode and downstream draft fields: %+v", album)
 	}
-	if !strings.Contains(album.Text, "Front and barcode") || !strings.Contains(album.Text, "Back of the same boxed item") {
+	if !strings.Contains(album.Text, "Front and barcode") || !strings.Contains(album.Text, "Back of the same boxed item") || !strings.Contains(album.Text, "Side detail") {
 		t.Fatalf("grouped album text did not preserve captions: %q", album.Text)
 	}
 	messageIDs, ok := album.SourceMetadata["grouped_message_ids"].([]string)
-	if !ok || len(messageIDs) != 2 || messageIDs[0] != "61" || messageIDs[1] != "62" {
+	if !ok || len(messageIDs) != 3 || messageIDs[0] != "61" || messageIDs[1] != "62" || messageIDs[2] != "64" {
 		t.Fatalf("grouped metadata did not preserve message ids: %+v", album.SourceMetadata)
 	}
-	if album.SourceMetadata["message_count"] != 2 || !strings.Contains(album.SourceMetadata["payload_type"].(string), "telegram_album") {
+	if album.SourceMetadata["message_count"] != 3 || !strings.Contains(album.SourceMetadata["payload_type"].(string), "telegram_album") {
 		t.Fatalf("grouped metadata did not classify the album: %+v", album.SourceMetadata)
+	}
+	updateIDs, ok := album.SourceMetadata["grouped_update_ids"].([]any)
+	if !ok || len(updateIDs) != 3 || updateIDs[0] != int64(2001) || updateIDs[1] != int64(2002) || updateIDs[2] != int64(2004) {
+		t.Fatalf("grouped metadata did not preserve distinct update ids in order: %+v", album.SourceMetadata)
 	}
 	if grouped[1].SenderID != "99999" || len(grouped[1].Media) != 1 {
 		t.Fatalf("same media_group_id from another sender must remain separate: %+v", grouped[1])

@@ -503,7 +503,7 @@ func mergeGroupedMetadata(base, next map[string]any) map[string]any {
 		out["grouped_message_ids"] = appendStringValue(out["grouped_message_ids"], messageID)
 	}
 	out["message_count"] = len(stringSlice(out["grouped_message_ids"]))
-	if updateIDs := appendMetadataValues(out["grouped_update_ids"], base["update_id"], next["update_id"]); len(updateIDs) > 0 {
+	if updateIDs := appendUniqueMetadataValues(out["grouped_update_ids"], base["update_id"], next["update_id"]); len(updateIDs) > 0 {
 		out["grouped_update_ids"] = updateIDs
 	}
 	out["payload_type"] = groupedPayloadType(joinNonEmpty("+", fmt.Sprint(base["payload_type"]), fmt.Sprint(next["payload_type"])))
@@ -530,6 +530,21 @@ func appendMetadataValues(existing any, values ...any) []any {
 		out = append(out, value)
 	}
 	return out
+}
+
+func appendUniqueMetadataValues(existing any, values ...any) []any {
+	out := appendMetadataValues(existing, values...)
+	seen := map[string]bool{}
+	unique := make([]any, 0, len(out))
+	for _, value := range out {
+		key := fmt.Sprintf("%T:%v", value, value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		unique = append(unique, value)
+	}
+	return unique
 }
 
 func stringSlice(value any) []string {

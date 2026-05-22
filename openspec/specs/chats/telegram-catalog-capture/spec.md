@@ -267,7 +267,7 @@ Telegram channel adapters MUST be able to group webhook updates that share the s
 - **GIVEN** Telegram delivers multiple photo webhook updates with the same sender, chat, and media group id
 - **WHEN** Cabinet prepares catalog capture input for the channel adapter
 - **THEN** Cabinet MUST combine those updates into one capture input with all media attachments preserved in order
-- **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, media group id, and album payload metadata
+- **AND** the combined input MUST preserve captions/text, inferred barcode, draft fields, grouped message ids, distinct grouped update ids in arrival order, media group id, and album payload metadata
 - **AND** updates from a different sender or chat MUST remain separate even when the media group id matches
 
 ### Requirement TELEGRAM-CATALOG-CAPTURE-023: Ungrouped Telegram photos SHALL remain separate capture inputs
