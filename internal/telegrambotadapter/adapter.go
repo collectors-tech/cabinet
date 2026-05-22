@@ -18,6 +18,8 @@ const (
 	CaptureCallbackPath       = "/api/telegram/catalog-capture-callbacks"
 	telegramMessageTextLimit  = 4096
 	telegramCallbackTextLimit = 200
+	telegramButtonTextLimit   = 64
+	telegramCallbackDataLimit = 64
 )
 
 type Update struct {
@@ -468,7 +470,7 @@ func replyMarkup(reply telegramcapture.TelegramReply) any {
 	inlineRows := [][]InlineKeyboardButton{}
 	replyRows := [][]KeyboardButton{}
 	for _, button := range reply.ActionButtons {
-		label := strings.TrimSpace(button.Label)
+		label := truncateTelegramText(strings.TrimSpace(button.Label), telegramButtonTextLimit)
 		if label == "" {
 			continue
 		}
@@ -479,7 +481,9 @@ func replyMarkup(reply telegramcapture.TelegramReply) any {
 			}
 		case "callback":
 			if data := strings.TrimSpace(button.CallbackData); data != "" {
-				inlineRows = append(inlineRows, []InlineKeyboardButton{{Text: label, CallbackData: data}})
+				if len([]byte(data)) <= telegramCallbackDataLimit {
+					inlineRows = append(inlineRows, []InlineKeyboardButton{{Text: label, CallbackData: data}})
+				}
 			}
 		case "reply":
 			replyRows = append(replyRows, []KeyboardButton{{Text: label}})

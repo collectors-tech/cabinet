@@ -225,6 +225,54 @@ func TestReplyRenderingCapsTelegramTextLengths(t *testing.T) {
 	}
 }
 
+func TestReplyRenderingCapsButtonTextAndSkipsOversizedCallbackData(t *testing.T) {
+	t.Parallel()
+
+	longLabel := strings.Repeat("Confirm ", 20)
+	call, err := SendMessageFromReply("-5235769556", telegramcapture.TelegramReply{
+		Text: "Draft ready.",
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: longLabel, Kind: "url", URL: "http://127.0.0.1:17882/chats?thread_id=thread-1"},
+			{Label: "Overlong callback", Kind: "callback", CallbackData: "cabinet:catalog_capture:confirm:" + strings.Repeat("preview", 20)},
+			{Label: "Confirm", Kind: "callback", CallbackData: "cabinet:catalog_capture:confirm:preview-1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SendMessageFromReply() error = %v", err)
+	}
+	body := mustJSONMap(t, call.Body)
+	markup := body["reply_markup"].(map[string]any)
+	rows := markup["inline_keyboard"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("expected URL row and valid callback row only, got %#v", rows)
+	}
+	urlButton := rows[0].([]any)[0].(map[string]any)
+	if text := urlButton["text"].(string); len([]rune(text)) != telegramButtonTextLimit || !strings.HasSuffix(text, "...") {
+		t.Fatalf("URL button text was not capped visibly: %q", text)
+	}
+	callbackButton := rows[1].([]any)[0].(map[string]any)
+	if callbackButton["callback_data"] != "cabinet:catalog_capture:confirm:preview-1" {
+		t.Fatalf("valid callback button was not preserved after skipping oversized callback data: %#v", callbackButton)
+	}
+
+	replyCall, err := SendMessageFromReply("-5235769556", telegramcapture.TelegramReply{
+		Text: "Need one more detail.",
+		ActionButtons: []telegramcapture.TelegramReplyButton{
+			{Label: longLabel, Kind: "reply", Action: "reply_with_barcode"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SendMessageFromReply() reply keyboard error = %v", err)
+	}
+	replyBody := mustJSONMap(t, replyCall.Body)
+	replyMarkup := replyBody["reply_markup"].(map[string]any)
+	replyRows := replyMarkup["keyboard"].([]any)
+	replyButton := replyRows[0].([]any)[0].(map[string]any)
+	if text := replyButton["text"].(string); len([]rune(text)) != telegramButtonTextLimit || !strings.HasSuffix(text, "...") {
+		t.Fatalf("reply keyboard button text was not capped visibly: %q", text)
+	}
+}
+
 func TestDispatchUpdateSendsCaptureReplyThroughBotAPI(t *testing.T) {
 	t.Parallel()
 
