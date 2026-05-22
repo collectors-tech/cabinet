@@ -254,6 +254,9 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 	if len(in.SourceMetadata) > 0 {
 		messageContext["source_metadata"] = in.SourceMetadata
 	}
+	if lookup := lookupMetadata(draft); len(lookup) > 0 {
+		messageContext["lookup"] = lookup
+	}
 	message, err := s.chat.CreateMessage(ctx, profileID, thread.ID, "user", messageContent(in, draft), messageContext)
 	if err != nil {
 		return CaptureResult{}, err
