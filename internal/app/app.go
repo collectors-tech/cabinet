@@ -3385,7 +3385,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		sum, err := dashboardSvc.Summary(r.Context())
+		profileID := ""
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+		sum, err := dashboardSvc.Summary(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_load_dashboard"}`, http.StatusInternalServerError)
 			return
