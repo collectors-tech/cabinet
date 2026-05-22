@@ -480,6 +480,59 @@ func TestGroupCaptureInputsCombinesTelegramAlbumMedia(t *testing.T) {
 	}
 }
 
+func TestGroupCaptureInputsKeepsUngroupedPhotosSeparate(t *testing.T) {
+	t.Parallel()
+	first, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2101,
+		Message: &WebhookMessage{
+			MessageID: 71,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Caption:   "Loose front photo 4904810900016",
+			Photo: []WebhookPhotoSize{
+				{FileID: "loose-front", FileUniqueID: "loose-front", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{Title: "Loose front draft"})
+	if err != nil {
+		t.Fatalf("first CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+	second, err := CaptureInputFromWebhookUpdate(WebhookUpdate{
+		UpdateID: 2102,
+		Message: &WebhookMessage{
+			MessageID: 72,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Caption:   "Loose back photo 4904810900017",
+			Photo: []WebhookPhotoSize{
+				{FileID: "loose-back", FileUniqueID: "loose-back", Width: 1280, Height: 720, FileSize: 4096},
+			},
+		},
+	}, Draft{Title: "Loose back draft"})
+	if err != nil {
+		t.Fatalf("second CaptureInputFromWebhookUpdate() error = %v", err)
+	}
+
+	grouped := GroupCaptureInputs([]CaptureInput{first, second})
+	if len(grouped) != 2 {
+		t.Fatalf("independent photo messages without media_group_id must remain separate, got %d: %+v", len(grouped), grouped)
+	}
+	if grouped[0].MessageID != "71" || grouped[1].MessageID != "72" {
+		t.Fatalf("separate capture message ids were not preserved: %+v", grouped)
+	}
+	if grouped[0].GroupingHint != "" || grouped[1].GroupingHint != "" {
+		t.Fatalf("ungrouped photo messages must not gain grouping hints: %+v", grouped)
+	}
+	if len(grouped[0].Media) != 1 || grouped[0].Media[0].FileID != "loose-front" ||
+		len(grouped[1].Media) != 1 || grouped[1].Media[0].FileID != "loose-back" {
+		t.Fatalf("separate photo media were not preserved independently: %+v", grouped)
+	}
+	if grouped[0].Barcode != "4904810900016" || grouped[1].Barcode != "4904810900017" ||
+		grouped[0].Draft.Title != "Loose front draft" || grouped[1].Draft.Title != "Loose back draft" {
+		t.Fatalf("separate photo capture context was not preserved independently: %+v", grouped)
+	}
+}
+
 func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramPhotoBytes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
