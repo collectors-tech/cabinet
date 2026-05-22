@@ -659,7 +659,7 @@ func TestBotAPIFileResolverDownloadsTelegramMediaBytes(t *testing.T) {
 	if !sawGetFile || !sawDownload {
 		t.Fatalf("resolver did not call both getFile and file download: getFile=%v download=%v", sawGetFile, sawDownload)
 	}
-	if resolved.FileID != "telegram-file-photo-1" || resolved.Filename != "photo-1.jpg" || resolved.MIMEType != "image/jpeg" || resolved.Kind != "photo" {
+	if resolved.FileID != "telegram-file-photo-1" || resolved.FileUniqueID != "unique-photo-1" || resolved.FileSize != 29 || resolved.Filename != "photo-1.jpg" || resolved.MIMEType != "image/jpeg" || resolved.Kind != "photo" {
 		t.Fatalf("resolved media did not preserve expected metadata: %+v", resolved)
 	}
 	raw, err := io.ReadAll(resolved.Reader)

@@ -416,6 +416,12 @@ func (resolver BotAPIFileResolver) ResolveTelegramMedia(ctx context.Context, med
 	if id := strings.TrimSpace(payload.Result.FileID); id != "" {
 		resolved.FileID = id
 	}
+	if uniqueID := strings.TrimSpace(payload.Result.FileUniqueID); uniqueID != "" {
+		resolved.FileUniqueID = uniqueID
+	}
+	if payload.Result.FileSize > 0 {
+		resolved.FileSize = payload.Result.FileSize
+	}
 	if strings.TrimSpace(resolved.Filename) == "" {
 		resolved.Filename = telegramFileName(payload.Result.FilePath)
 	}

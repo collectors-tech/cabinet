@@ -279,6 +279,15 @@ Telegram channel adapters MUST NOT merge independent photo messages just because
 - **THEN** Cabinet MUST keep each update as a separate capture input
 - **AND** each separate input MUST preserve its own message id, photo media, barcode, text/caption, and draft fields for separate preview confirmation
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-024: Telegram media audit metadata SHALL preserve source file identifiers and sizes
+Telegram media capture metadata MUST preserve Telegram source file identifiers and file size evidence in assistant message context and Inbox audit metadata so captured media remains traceable after Bot API file resolution and attachment persistence.
+
+#### Scenario: Preserve Telegram media source identifiers and sizes
+- **GIVEN** Telegram delivers a photo or image document with file id, file unique id, and file size metadata
+- **WHEN** Cabinet normalizes, resolves, and persists the media as part of a catalog capture
+- **THEN** the capture media input MUST preserve the Telegram file id, file unique id, and file size
+- **AND** the assistant message media context and Inbox media metadata MUST include the same source identifiers and size evidence alongside attachment id, filename, MIME type, and media kind
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-019: Telegram webhook barcode captures SHALL use local barcode lookup evidence
 When an authorized Telegram webhook capture contains a barcode that already matches a Cabinet item in the authorized profile, Cabinet MUST use that local match as lookup-backed draft evidence instead of falling back to a generic manual barcode draft.
 

@@ -80,11 +80,13 @@ type Draft struct {
 }
 
 type MediaInput struct {
-	FileID   string
-	Filename string
-	MIMEType string
-	Kind     string
-	Reader   io.Reader
+	FileID       string
+	FileUniqueID string
+	FileSize     int
+	Filename     string
+	MIMEType     string
+	Kind         string
+	Reader       io.Reader
 }
 
 type WebhookMediaResolver interface {
@@ -230,11 +232,13 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		}
 		attachments = append(attachments, attachment)
 		mediaContext = append(mediaContext, map[string]any{
-			"attachment_id": attachment.ID,
-			"file_id":       strings.TrimSpace(media.FileID),
-			"filename":      attachment.Filename,
-			"mime_type":     attachment.MimeType,
-			"kind":          strings.TrimSpace(media.Kind),
+			"attachment_id":  attachment.ID,
+			"file_id":        strings.TrimSpace(media.FileID),
+			"file_unique_id": strings.TrimSpace(media.FileUniqueID),
+			"file_size":      media.FileSize,
+			"filename":       attachment.Filename,
+			"mime_type":      attachment.MimeType,
+			"kind":           strings.TrimSpace(media.Kind),
 		})
 	}
 
@@ -606,6 +610,12 @@ func mergeResolvedMedia(original, resolved MediaInput) MediaInput {
 	if filename := strings.TrimSpace(resolved.Filename); filename != "" {
 		out.Filename = filename
 	}
+	if fileUniqueID := strings.TrimSpace(resolved.FileUniqueID); fileUniqueID != "" {
+		out.FileUniqueID = fileUniqueID
+	}
+	if resolved.FileSize > 0 {
+		out.FileSize = resolved.FileSize
+	}
 	if mimeType := strings.TrimSpace(resolved.MIMEType); mimeType != "" {
 		out.MIMEType = mimeType
 	}
@@ -629,10 +639,12 @@ func webhookMediaInputs(message *WebhookMessage) []MediaInput {
 			filename = strings.TrimSpace(photo.FileID)
 		}
 		media = append(media, MediaInput{
-			FileID:   strings.TrimSpace(photo.FileID),
-			Filename: filename + ".jpg",
-			MIMEType: "image/jpeg",
-			Kind:     "photo",
+			FileID:       strings.TrimSpace(photo.FileID),
+			FileUniqueID: strings.TrimSpace(photo.FileUniqueID),
+			FileSize:     photo.FileSize,
+			Filename:     filename + ".jpg",
+			MIMEType:     "image/jpeg",
+			Kind:         "photo",
 		})
 	}
 	if doc := message.Document; doc != nil && strings.HasPrefix(strings.ToLower(strings.TrimSpace(doc.MIMEType)), "image/") {
@@ -644,10 +656,12 @@ func webhookMediaInputs(message *WebhookMessage) []MediaInput {
 			filename = strings.TrimSpace(doc.FileID)
 		}
 		media = append(media, MediaInput{
-			FileID:   strings.TrimSpace(doc.FileID),
-			Filename: filename,
-			MIMEType: strings.TrimSpace(doc.MIMEType),
-			Kind:     "document_image",
+			FileID:       strings.TrimSpace(doc.FileID),
+			FileUniqueID: strings.TrimSpace(doc.FileUniqueID),
+			FileSize:     doc.FileSize,
+			Filename:     filename,
+			MIMEType:     strings.TrimSpace(doc.MIMEType),
+			Kind:         "document_image",
 		})
 	}
 	return media
