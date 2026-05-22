@@ -85,6 +85,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
 
+#### Scenario: Cancel apply keeps preview pending
+- **GIVEN** user has a previewed chat action and the confirm-before-apply dialog is open
+- **WHEN** user cancels the apply confirmation
+- **THEN** Cabinet MUST close the confirmation dialog without applying the action
+- **AND** the pending preview MUST remain visible with actionable cancellation feedback
+
 #### Scenario: Empty thread cannot preview actions without source context
 - **GIVEN** a chat thread has no messages and no uploaded attachment context
 - **WHEN** the user opens Action Preview controls
@@ -143,3 +149,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-08 | Preview action | `Preview Action` renders dry-run output before apply | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations` |
 | UC-CHAT-09 | Mobile image attachment flow | image attachment supports confirm-before-apply workflow | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow` |
 | UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |
+| UC-CHAT-11 | Cancel preview apply | Preview remains pending and no applied result is shown | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action` |

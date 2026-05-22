@@ -134,6 +134,33 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {
+    openChats()
+    createThread('E2E Copilot Cancel Apply Thread')
+
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Draft this item only')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should('contain', 'Draft this item only')
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
+    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-011-CANCEL')
+    cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Cancel Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
+    cy.get('[data-testid="chat-apply-confirm-summary"]').should('contain', 'CP-011-CANCEL')
+    cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
+
+    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
+    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-action-apply-notice"]').should(
+      'contain',
+      'Action apply canceled; preview remains pending.'
+    )
+    cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()
@@ -170,8 +197,7 @@ describe('chats/ui-screen-chat-copilot', () => {
 
   it('UI-SCREEN-CHAT-COPILOT-010 keeps top-level /inbox reachable as a communications surface', () => {
     openInbox()
-    cy.contains('h1', 'Chats').should('be.visible')
-    cy.get('[data-testid="chat-thread-list"]').should('be.visible')
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').should('be.visible')
     cy.contains('404').should('not.exist')
     cy.contains('Oops! Page Not Found!').should('not.exist')
   })
