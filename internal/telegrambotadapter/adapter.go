@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	WebhookCapturePath  = "/api/telegram/webhook/catalog-captures"
-	CaptureCallbackPath = "/api/telegram/catalog-capture-callbacks"
+	WebhookCapturePath        = "/api/telegram/webhook/catalog-captures"
+	CaptureCallbackPath       = "/api/telegram/catalog-capture-callbacks"
+	telegramMessageTextLimit  = 4096
+	telegramCallbackTextLimit = 200
 )
 
 type Update struct {
@@ -262,7 +264,7 @@ func SendMessageFromReply(chatID string, reply telegramcapture.TelegramReply) (B
 	}
 	body := SendMessageRequest{
 		ChatID:      chatID,
-		Text:        replyText(reply),
+		Text:        replyText(reply, telegramMessageTextLimit),
 		ReplyMarkup: replyMarkup(reply),
 	}
 	return BotAPICall{Method: "sendMessage", Body: body}, nil
@@ -277,7 +279,7 @@ func EditMessageFromReply(chatID, messageID string, reply telegramcapture.Telegr
 	body := EditMessageTextRequest{
 		ChatID:      chatID,
 		MessageID:   messageID,
-		Text:        replyText(reply),
+		Text:        replyText(reply, telegramMessageTextLimit),
 		ReplyMarkup: replyMarkup(reply),
 	}
 	return BotAPICall{Method: "editMessageText", Body: body}, nil
@@ -290,7 +292,7 @@ func AnswerCallbackQueryFromReply(callbackQueryID string, reply telegramcapture.
 	}
 	body := AnswerCallbackQueryRequest{
 		CallbackQueryID: callbackQueryID,
-		Text:            replyText(reply),
+		Text:            replyText(reply, telegramCallbackTextLimit),
 		ShowAlert:       false,
 	}
 	return BotAPICall{Method: "answerCallbackQuery", Body: body}, nil
@@ -440,12 +442,26 @@ func telegramFileName(filePath string) string {
 	return ""
 }
 
-func replyText(reply telegramcapture.TelegramReply) string {
+func replyText(reply telegramcapture.TelegramReply, limit int) string {
 	text := strings.TrimSpace(reply.Text)
 	if text == "" {
-		return "Cabinet updated the Telegram catalog capture."
+		text = "Cabinet updated the Telegram catalog capture."
 	}
-	return text
+	return truncateTelegramText(text, limit)
+}
+
+func truncateTelegramText(text string, limit int) string {
+	if limit <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
 }
 
 func replyMarkup(reply telegramcapture.TelegramReply) any {
