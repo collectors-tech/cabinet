@@ -19,6 +19,30 @@ type PurchaseOrder struct {
 	Items             []PurchaseCard
 }
 
+// PurchaseInboxReview is the review-ready representation used by the Purchase
+// Inbox before any link or convert action mutates Cabinet inventory.
+type PurchaseInboxReview struct {
+	Order            PurchaseOrder
+	Status           string
+	Items            []PurchaseInboxItemReview
+	SuggestedActions []PurchaseInboxAction
+}
+
+type PurchaseInboxItemReview struct {
+	Item             PurchaseCard
+	Status           string
+	MissingFields    []string
+	SuggestedActions []PurchaseInboxAction
+}
+
+type PurchaseInboxAction struct {
+	ID                   string
+	Label                string
+	Scope                string
+	TargetKey            string
+	RequiresConfirmation bool
+}
+
 // GroupPurchaseCardsByOrder folds parsed eBay purchase-history cards into stable
 // order parent records. Repeated captures merge into the same order and item key
 // rather than duplicating child items.
@@ -53,6 +77,106 @@ func GroupPurchaseCardsByOrder(cards []PurchaseCard) []PurchaseOrder {
 		orders = append(orders, *orderByID[orderID])
 	}
 	return orders
+}
+
+func BuildPurchaseInboxReviews(cards []PurchaseCard) []PurchaseInboxReview {
+	orders := GroupPurchaseCardsByOrder(cards)
+	reviews := make([]PurchaseInboxReview, 0, len(orders))
+	for _, order := range orders {
+		itemReviews := make([]PurchaseInboxItemReview, 0, len(order.Items))
+		status := "ready"
+		for _, item := range order.Items {
+			itemReview := buildPurchaseInboxItemReview(item)
+			if itemReview.Status == "needs_review" {
+				status = "needs_review"
+			}
+			itemReviews = append(itemReviews, itemReview)
+		}
+		reviews = append(reviews, PurchaseInboxReview{
+			Order:            order,
+			Status:           status,
+			Items:            itemReviews,
+			SuggestedActions: purchaseInboxOrderActions(order, status),
+		})
+	}
+	return reviews
+}
+
+func buildPurchaseInboxItemReview(item PurchaseCard) PurchaseInboxItemReview {
+	missing := purchaseInboxMissingFields(item)
+	status := "ready_to_link_or_convert"
+	if len(missing) > 0 {
+		status = "needs_review"
+	}
+	return PurchaseInboxItemReview{
+		Item:             item,
+		Status:           status,
+		MissingFields:    missing,
+		SuggestedActions: purchaseInboxItemActions(item, len(missing) == 0),
+	}
+}
+
+func purchaseInboxMissingFields(item PurchaseCard) []string {
+	missing := make([]string, 0, 3)
+	if firstNonEmpty(item.PurchasedIdentity, item.ListingTitle) == "" {
+		missing = append(missing, "purchased_identity")
+	}
+	if item.Quantity == 0 {
+		missing = append(missing, "quantity")
+	}
+	if firstNonEmpty(item.ItemPrice, item.OrderTotal) == "" {
+		missing = append(missing, "item_price")
+	}
+	return missing
+}
+
+func purchaseInboxOrderActions(order PurchaseOrder, status string) []PurchaseInboxAction {
+	actions := []PurchaseInboxAction{{
+		ID:                   "review_purchase_order",
+		Label:                "Review purchase order",
+		Scope:                "order",
+		TargetKey:            order.OrderID,
+		RequiresConfirmation: false,
+	}}
+	if status == "ready" {
+		actions = append(actions, PurchaseInboxAction{
+			ID:                   "mark_order_reviewed",
+			Label:                "Mark order reviewed",
+			Scope:                "order",
+			TargetKey:            order.OrderID,
+			RequiresConfirmation: true,
+		})
+	}
+	return actions
+}
+
+func purchaseInboxItemActions(item PurchaseCard, ready bool) []PurchaseInboxAction {
+	targetKey := purchaseItemKey(item)
+	if !ready {
+		return []PurchaseInboxAction{{
+			ID:                   "complete_purchase_item_fields",
+			Label:                "Complete missing purchase item fields",
+			Scope:                "item",
+			TargetKey:            targetKey,
+			RequiresConfirmation: false,
+		}}
+	}
+	return []PurchaseInboxAction{
+		{
+			ID:                   "link_existing_inventory_item",
+			Label:                "Link existing inventory item",
+			Scope:                "item",
+			TargetKey:            targetKey,
+			RequiresConfirmation: true,
+		},
+		{
+			ID:                   "convert_to_inventory_item",
+			Label:                "Convert to inventory item",
+			Scope:                "item",
+			TargetKey:            targetKey,
+			RequiresConfirmation: true,
+		},
+	}
 }
 
 func mergeOrderMetadata(order *PurchaseOrder, card PurchaseCard) {

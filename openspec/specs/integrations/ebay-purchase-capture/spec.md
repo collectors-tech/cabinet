@@ -41,3 +41,20 @@ Cabinet SHALL represent captured eBay purchases as order parent records with chi
 - **THEN** the repeated captures SHALL merge into the same order parent
 - **AND** matching child items SHALL be merged by transaction ID, listing/variation ID, or purchased identity fallback
 - **AND** updated item metadata from later captures SHALL be preserved without creating duplicate child rows
+
+### Requirement EBAY-PURCHASE-CAPTURE-004: Purchase Inbox review records MUST expose safe item actions before mutation
+Cabinet SHALL convert grouped purchase captures into review records that expose order/item status, missing fields, and suggested next actions without linking or creating inventory records automatically.
+
+#### Scenario: Build review actions for a ready purchase item
+- **GIVEN** a captured purchase item has stable identity, quantity, and price evidence
+- **WHEN** Cabinet prepares Purchase Inbox review records
+- **THEN** the item SHALL expose link-existing-item and convert-to-inventory suggested actions
+- **AND** each mutating suggested action SHALL require explicit confirmation before inventory state changes
+- **AND** the action target SHALL use a stable purchase item key derived from captured order/item metadata
+
+#### Scenario: Flag incomplete purchase item fields
+- **GIVEN** a captured purchase item is missing quantity or price evidence
+- **WHEN** Cabinet prepares Purchase Inbox review records
+- **THEN** the order and item SHALL be marked as needs-review
+- **AND** missing fields SHALL be listed for the item
+- **AND** Cabinet SHALL suggest completing missing fields rather than offering a mutating link or convert action

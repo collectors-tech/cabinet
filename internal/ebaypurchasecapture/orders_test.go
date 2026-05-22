@@ -110,3 +110,79 @@ func TestGroupPurchaseCardsByOrderMergesRepeatedCaptures(t *testing.T) {
 		t.Fatalf("merged item status = %+v", item)
 	}
 }
+
+func TestBuildPurchaseInboxReviewsExposesConfirmationRequiredActions(t *testing.T) {
+	cards := []PurchaseCard{
+		{
+			OrderID:           "20-14595-70928",
+			ListingID:         "316046161178",
+			VariationID:       "615514115326",
+			TransactionID:     "10080684936020",
+			PurchasedIdentity: "Card A 001/100",
+			Quantity:          1,
+			ItemPrice:         "AU $3.50",
+			SellerUsername:    "seller-a",
+		},
+	}
+
+	reviews := BuildPurchaseInboxReviews(cards)
+
+	if len(reviews) != 1 {
+		t.Fatalf("reviews = %d", len(reviews))
+	}
+	review := reviews[0]
+	if review.Status != "ready" {
+		t.Fatalf("review status = %q", review.Status)
+	}
+	if len(review.Items) != 1 {
+		t.Fatalf("item reviews = %d", len(review.Items))
+	}
+	item := review.Items[0]
+	if item.Status != "ready_to_link_or_convert" || len(item.MissingFields) != 0 {
+		t.Fatalf("item review = %+v", item)
+	}
+	if len(item.SuggestedActions) != 2 {
+		t.Fatalf("suggested item actions = %+v", item.SuggestedActions)
+	}
+	for _, action := range item.SuggestedActions {
+		if !action.RequiresConfirmation {
+			t.Fatalf("action %q must require confirmation before mutation", action.ID)
+		}
+		if action.TargetKey == "" {
+			t.Fatalf("action %q missing stable target key", action.ID)
+		}
+	}
+	if len(review.SuggestedActions) != 2 || !review.SuggestedActions[1].RequiresConfirmation {
+		t.Fatalf("order review actions should expose explicit reviewed confirmation: %+v", review.SuggestedActions)
+	}
+}
+
+func TestBuildPurchaseInboxReviewsFlagsMissingItemFields(t *testing.T) {
+	cards := []PurchaseCard{
+		{
+			OrderID:        "20-14595-70928",
+			ListingID:      "316046161178",
+			ListingTitle:   "Captured listing title only",
+			SellerUsername: "seller-a",
+		},
+	}
+
+	reviews := BuildPurchaseInboxReviews(cards)
+
+	if len(reviews) != 1 || reviews[0].Status != "needs_review" {
+		t.Fatalf("review did not surface needs_review: %+v", reviews)
+	}
+	item := reviews[0].Items[0]
+	if item.Status != "needs_review" {
+		t.Fatalf("item status = %q", item.Status)
+	}
+	if !containsString(item.MissingFields, "quantity") || !containsString(item.MissingFields, "item_price") {
+		t.Fatalf("missing fields = %+v", item.MissingFields)
+	}
+	if len(item.SuggestedActions) != 1 || item.SuggestedActions[0].ID != "complete_purchase_item_fields" {
+		t.Fatalf("needs-review action = %+v", item.SuggestedActions)
+	}
+	if item.SuggestedActions[0].RequiresConfirmation {
+		t.Fatalf("field completion prompt should not be modelled as a mutating confirmation action")
+	}
+}
