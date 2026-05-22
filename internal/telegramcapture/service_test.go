@@ -221,6 +221,10 @@ func TestTelegramCapturePreservesResolvedLookupEvidence(t *testing.T) {
 	if !ok || lookup["source"] != "barcode_local" || lookup["url"] != "/api/barcodes/4904810900019" || lookup["confidence"] != "high" {
 		t.Fatalf("preview payload did not preserve lookup evidence: %+v", result.Preview.Payload)
 	}
+	messageLookup, ok := result.Message.Context["lookup"].(map[string]any)
+	if !ok || messageLookup["source"] != "barcode_local" || messageLookup["url"] != "/api/barcodes/4904810900019" || messageLookup["confidence"] != "high" {
+		t.Fatalf("message context did not preserve lookup audit evidence: %+v", result.Message.Context)
+	}
 	inboxLookup, ok := result.InboxItem.Metadata["lookup"].(map[string]any)
 	if !ok || inboxLookup["source"] != "barcode_local" || inboxLookup["confidence"] != "high" {
 		t.Fatalf("inbox metadata did not preserve lookup audit evidence: %+v", result.InboxItem.Metadata)
