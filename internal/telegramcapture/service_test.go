@@ -62,11 +62,13 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 		},
 		Media: []MediaInput{
 			{
-				FileID:   "telegram-file-photo-1",
-				Filename: "front.jpg",
-				MIMEType: "image/jpeg",
-				Kind:     "photo",
-				Reader:   strings.NewReader("front-image-bytes"),
+				FileID:       "telegram-file-photo-1",
+				FileUniqueID: "telegram-unique-photo-1",
+				FileSize:     2048,
+				Filename:     "front.jpg",
+				MIMEType:     "image/jpeg",
+				Kind:         "photo",
+				Reader:       strings.NewReader("front-image-bytes"),
 			},
 		},
 		SourceMetadata: map[string]any{"caption": "front and barcode"},
@@ -92,6 +94,14 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 	if result.Message.Context["source_channel"] != "telegram" || result.Message.Context["barcode"] != "9312345678901" {
 		t.Fatalf("message context did not preserve Telegram/barcode context: %+v", result.Message.Context)
 	}
+	messageMedia, ok := result.Message.Context["media"].([]any)
+	if !ok || len(messageMedia) != 1 {
+		t.Fatalf("message context did not preserve Telegram media audit details: %#v", result.Message.Context["media"])
+	}
+	messageMedia0, ok := messageMedia[0].(map[string]any)
+	if !ok || messageMedia0["file_unique_id"] != "telegram-unique-photo-1" || !mediaFileSizeEquals(messageMedia0["file_size"], 2048) {
+		t.Fatalf("message context did not preserve Telegram media source identifiers: %#v", result.Message.Context["media"])
+	}
 	if result.Preview.Action != "create_inventory_item" || result.Preview.Status != "previewed" {
 		t.Fatalf("expected previewed create_inventory_item action, got %+v", result.Preview)
 	}
@@ -106,7 +116,7 @@ func TestTelegramCaptureCreatesPreviewThreadAndInboxWithoutApplying(t *testing.T
 		t.Fatalf("inbox metadata did not preserve Telegram media audit details: %#v", result.InboxItem.Metadata["media"])
 	}
 	inboxMedia0, ok := inboxMedia[0].(map[string]any)
-	if !ok || inboxMedia0["file_id"] != "telegram-file-photo-1" || inboxMedia0["filename"] != "front.jpg" || inboxMedia0["mime_type"] != "image/jpeg" {
+	if !ok || inboxMedia0["file_id"] != "telegram-file-photo-1" || inboxMedia0["file_unique_id"] != "telegram-unique-photo-1" || !mediaFileSizeEquals(inboxMedia0["file_size"], 2048) || inboxMedia0["filename"] != "front.jpg" || inboxMedia0["mime_type"] != "image/jpeg" {
 		t.Fatalf("inbox metadata did not preserve Telegram media source fields: %#v", result.InboxItem.Metadata["media"])
 	}
 	inboxSourceMetadata, ok := result.InboxItem.Metadata["source_metadata"].(map[string]any)
@@ -392,7 +402,7 @@ func TestCaptureInputFromWebhookUpdateNormalizesMixedPhotoCaption(t *testing.T) 
 	if input.GroupingHint != "album-1" || input.SourceMetadata["payload_type"] != "caption+photo" {
 		t.Fatalf("source metadata did not preserve Telegram grouping/type: %+v", input.SourceMetadata)
 	}
-	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].Filename != "large.jpg" || input.Media[0].Kind != "photo" {
+	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].FileUniqueID != "large" || input.Media[0].FileSize != 2048 || input.Media[0].Filename != "large.jpg" || input.Media[0].Kind != "photo" {
 		t.Fatalf("largest photo was not mapped to Cabinet media input: %+v", input.Media)
 	}
 }
@@ -572,15 +582,17 @@ func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramPhotoBytes(t *tes
 		},
 	}, Draft{Title: "Resolved Photo Draft"}, staticMediaResolver{
 		"large-photo": {
-			Filename: "telegram-large-photo.jpg",
-			MIMEType: "image/jpeg",
-			Reader:   strings.NewReader("resolved-photo-bytes"),
+			FileUniqueID: "resolved-large",
+			FileSize:     4096,
+			Filename:     "telegram-large-photo.jpg",
+			MIMEType:     "image/jpeg",
+			Reader:       strings.NewReader("resolved-photo-bytes"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("CaptureInputFromWebhookUpdateWithMedia() error = %v", err)
 	}
-	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].Filename != "telegram-large-photo.jpg" || input.Media[0].Reader == nil {
+	if len(input.Media) != 1 || input.Media[0].FileID != "large-photo" || input.Media[0].FileUniqueID != "resolved-large" || input.Media[0].FileSize != 4096 || input.Media[0].Filename != "telegram-large-photo.jpg" || input.Media[0].Reader == nil {
 		t.Fatalf("resolved media did not preserve Telegram file id and attach bytes: %+v", input.Media)
 	}
 
@@ -627,15 +639,17 @@ func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramImageDocumentByte
 		},
 	}, Draft{Title: "Resolved Document Draft"}, staticMediaResolver{
 		"telegram-doc-file": {
-			Filename: "box-art.png",
-			MIMEType: "image/png",
-			Reader:   strings.NewReader("resolved-document-bytes"),
+			FileUniqueID: "resolved-doc-unique",
+			FileSize:     8192,
+			Filename:     "box-art.png",
+			MIMEType:     "image/png",
+			Reader:       strings.NewReader("resolved-document-bytes"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("CaptureInputFromWebhookUpdateWithMedia() document error = %v", err)
 	}
-	if len(input.Media) != 1 || input.Media[0].FileID != "telegram-doc-file" || input.Media[0].Kind != "document_image" || input.Media[0].Reader == nil {
+	if len(input.Media) != 1 || input.Media[0].FileID != "telegram-doc-file" || input.Media[0].FileUniqueID != "resolved-doc-unique" || input.Media[0].FileSize != 8192 || input.Media[0].Kind != "document_image" || input.Media[0].Reader == nil {
 		t.Fatalf("resolved image document did not preserve Telegram document media: %+v", input.Media)
 	}
 	if input.SourceMetadata["payload_type"] != "caption+document" || input.Barcode != "4904810900021" {
@@ -664,7 +678,7 @@ func TestCaptureInputFromWebhookUpdateWithMediaResolvesTelegramImageDocumentByte
 		t.Fatalf("inbox metadata did not preserve image document media: %+v", result.InboxItem.Metadata)
 	}
 	media0, ok := media[0].(map[string]any)
-	if !ok || media0["kind"] != "document_image" || media0["file_id"] != "telegram-doc-file" {
+	if !ok || media0["kind"] != "document_image" || media0["file_id"] != "telegram-doc-file" || media0["file_unique_id"] != "resolved-doc-unique" || !mediaFileSizeEquals(media0["file_size"], 8192) {
 		t.Fatalf("inbox metadata did not preserve Telegram document audit fields: %+v", media)
 	}
 	if result.Attachments[0].SizeBytes != int64(len("resolved-document-bytes")) {
@@ -729,4 +743,17 @@ func (r staticMediaResolver) ResolveTelegramMedia(_ context.Context, media Media
 		return MediaInput{}, errors.New("missing telegram media fixture")
 	}
 	return resolved, nil
+}
+
+func mediaFileSizeEquals(value any, expected int) bool {
+	switch typed := value.(type) {
+	case int:
+		return typed == expected
+	case int64:
+		return typed == int64(expected)
+	case float64:
+		return typed == float64(expected)
+	default:
+		return false
+	}
 }
