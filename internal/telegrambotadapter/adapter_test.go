@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/telegramcapture"
@@ -347,6 +348,138 @@ func TestDispatchUpdateAcknowledgesAndEditsFallbackFailureForCallback(t *testing
 	edit := mustJSONMap(t, result.BotCalls[1].Body)
 	if edit["chat_id"] != "-5235769556" || edit["message_id"] != "46" || edit["text"] == "" {
 		t.Fatalf("fallback callback edit did not target the original message with failure text: %+v", edit)
+	}
+}
+
+func TestDispatchUpdateToBotAPIPostsRenderedMessageCall(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{response: telegramcapture.TelegramReply{
+		Text:              "Draft ready for review: Slot car.",
+		ConfirmationState: "preview_required",
+	}}
+	var sawSendMessage bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/botbot-token-1/sendMessage" {
+			t.Fatalf("unexpected Bot API path: %s", r.URL.Path)
+		}
+		sawSendMessage = true
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("unexpected Bot API request method/header: method=%s content-type=%s", r.Method, r.Header.Get("Content-Type"))
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode sendMessage body: %v", err)
+		}
+		if body["chat_id"] != "-5235769556" || body["text"] != "Draft ready for review: Slot car." {
+			t.Fatalf("sendMessage body did not preserve rendered reply: %+v", body)
+		}
+		_, _ = w.Write([]byte("{\"ok\":true}"))
+	}))
+	defer server.Close()
+
+	result, err := DispatchUpdateToBotAPI(context.Background(), gateway, BotAPIEndpoint{BaseURL: server.URL, Token: "bot-token-1"}, server.Client(), Update{
+		UpdateID: 7004,
+		Message: &WebhookMessage{
+			MessageID: 47,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Text:      "Barcode 4904810900016",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdateToBotAPI() error = %v", err)
+	}
+	if !sawSendMessage || result.CabinetPath != WebhookCapturePath || len(result.BotCalls) != 1 || len(result.BotAPIErrors) != 0 {
+		t.Fatalf("dispatch did not execute rendered Bot API message call cleanly: saw=%v result=%+v", sawSendMessage, result)
+	}
+}
+
+func TestDispatchUpdateToBotAPIPostsCallbackAckAndEditCalls(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{response: telegramcapture.TelegramReply{
+		Text:              "Confirmed. Cabinet added the catalog item.",
+		ConfirmationState: "confirmed",
+	}}
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Path)
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode Bot API body: %v", err)
+		}
+		switch r.URL.Path {
+		case "/botbot-token-1/answerCallbackQuery":
+			if body["callback_query_id"] != "callback-3" {
+				t.Fatalf("answerCallbackQuery body did not preserve callback id: %+v", body)
+			}
+		case "/botbot-token-1/editMessageText":
+			if body["chat_id"] != "-5235769556" || body["message_id"] != "48" {
+				t.Fatalf("editMessageText body did not target original message: %+v", body)
+			}
+		default:
+			t.Fatalf("unexpected Bot API path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte("{\"ok\":true}"))
+	}))
+	defer server.Close()
+
+	result, err := DispatchUpdateToBotAPI(context.Background(), gateway, BotAPIEndpoint{BaseURL: server.URL, Token: "bot-token-1"}, server.Client(), Update{
+		UpdateID: 8003,
+		CallbackQuery: &CallbackQuery{
+			ID:   "callback-3",
+			From: WebhookUser{ID: 12345},
+			Message: &CallbackMessage{
+				MessageID: 48,
+				Chat:      WebhookChat{ID: -5235769556},
+			},
+			Data: "cabinet:catalog_capture:confirm:preview-3",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DispatchUpdateToBotAPI() callback error = %v", err)
+	}
+	if result.CabinetPath != CaptureCallbackPath || len(result.BotCalls) != 2 || len(result.BotAPIErrors) != 0 {
+		t.Fatalf("callback dispatch did not execute cleanly: result=%+v", result)
+	}
+	if len(seen) != 2 || seen[0] != "/botbot-token-1/answerCallbackQuery" || seen[1] != "/botbot-token-1/editMessageText" {
+		t.Fatalf("expected callback ack then edit Bot API calls, saw %#v", seen)
+	}
+}
+
+func TestDispatchUpdateToBotAPIReportsOutboundFailure(t *testing.T) {
+	t.Parallel()
+
+	gateway := &fakeCabinetGateway{response: telegramcapture.TelegramReply{
+		Text:              "Draft ready for review: Slot car.",
+		ConfirmationState: "preview_required",
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/botbot-token-1/sendMessage" {
+			t.Fatalf("unexpected Bot API path: %s", r.URL.Path)
+		}
+		http.Error(w, "{\"ok\":false,\"description\":\"chat not found\"}", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	result, err := DispatchUpdateToBotAPI(context.Background(), gateway, BotAPIEndpoint{BaseURL: server.URL, Token: "bot-token-1"}, server.Client(), Update{
+		UpdateID: 7005,
+		Message: &WebhookMessage{
+			MessageID: 49,
+			From:      WebhookUser{ID: 12345},
+			Chat:      WebhookChat{ID: -5235769556},
+			Text:      "Barcode 4904810900016",
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected outbound Bot API failure")
+	}
+	if result.CabinetPath != WebhookCapturePath || len(result.BotCalls) != 1 || len(result.BotAPIErrors) != 1 {
+		t.Fatalf("dispatch did not preserve outbound failure evidence: result=%+v err=%v", result, err)
+	}
+	if !strings.Contains(result.BotAPIErrors[0], "sendMessage") || !strings.Contains(result.BotAPIErrors[0], "chat not found") {
+		t.Fatalf("outbound failure did not include method and response body: %+v", result.BotAPIErrors)
 	}
 }
 
