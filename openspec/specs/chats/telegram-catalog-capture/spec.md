@@ -194,6 +194,16 @@ Cabinet Telegram bot dispatch MUST cap rendered message, edit, and callback ackn
 - **AND** callback acknowledgement text MUST fit within the Telegram callback answer text limit
 - **AND** truncated text MUST remain non-empty and visibly indicate truncation
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-022: Telegram bot adapter SHALL keep rendered button payloads within Bot API limits
+Cabinet Telegram bot dispatch MUST cap rendered button labels and avoid invalid callback payloads before constructing Telegram Bot API reply markup so long Cabinet action descriptors do not create avoidable outbound Bot API failures.
+
+#### Scenario: Cap rendered Telegram reply markup buttons
+- **GIVEN** Cabinet returns structured Telegram reply buttons with labels longer than the Bot API button text limit
+- **WHEN** the adapter renders inline or reply keyboard markup
+- **THEN** each rendered button label MUST fit within the Telegram button text limit
+- **AND** truncated labels MUST remain non-empty and visibly indicate truncation
+- **AND** callback buttons whose callback data exceeds the Telegram callback data limit MUST be omitted while valid URL, reply, and callback alternatives remain renderable
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-013: Telegram webhook media SHALL resolve file ids into persisted attachment bytes
 Cabinet MUST support a channel-edge media resolver that turns Telegram webhook photo/document file identifiers into attachment readers before capture ingestion, while preserving the Telegram file id, filename, MIME type, and source metadata used for audit.
 
