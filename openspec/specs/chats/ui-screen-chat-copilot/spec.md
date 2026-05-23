@@ -97,6 +97,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **THEN** `Preview Action` MUST remain disabled until source conversation context exists
 - **AND** the UI MUST NOT generate preview artifacts from seeded defaults alone
 
+#### Scenario: Provider defaults are visible on previewed chat actions
+- **GIVEN** the active profile has assistant provider/model defaults configured
+- **WHEN** the user previews a structured chat action
+- **THEN** the chat action surface MUST show the active assistant provider/model defaults before apply
+- **AND** the preview and confirm-before-apply summary MUST preserve the same provider/model context
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -150,3 +156,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-09 | Mobile image attachment flow | image attachment supports confirm-before-apply workflow | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow` |
 | UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |
 | UC-CHAT-11 | Cancel preview apply | Preview remains pending and no applied result is shown | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action` |
+| UC-CHAT-12 | Provider defaults in preview | Preview and confirm summary preserve active assistant provider/model defaults | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews` |
