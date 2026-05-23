@@ -122,7 +122,8 @@ describe('chats/ui-screen-chat-copilot', () => {
 
   it('UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations', () => {
     openChats()
-    createThread('E2E Copilot CRUD Thread')
+    const threadTitle = 'E2E Copilot CRUD Thread'
+    createThread(threadTitle)
 
     cy.get('[data-testid="chat-compose-input"]').clear().type('Please create this item')
     cy.get('[data-testid="chat-send-button"]').click()
@@ -148,6 +149,47 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
     cy.get('[data-testid="chat-apply-confirm-submit"]').click()
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
+    cy.request('/api/chat/threads?profile_id=e2e-profile-001').then((threadsResponse) => {
+      expect(threadsResponse.status).to.eq(200)
+      const threads = threadsResponse.body.threads as Array<{
+        id: string
+        title: string
+      }>
+      const thread = threads.find((item) => item.title === threadTitle)
+      expect(thread, 'created chat thread').to.exist
+      cy.request(
+        `/api/chat/messages?profile_id=e2e-profile-001&thread_id=${thread?.id}`
+      ).then((messagesResponse) => {
+        expect(messagesResponse.status).to.eq(200)
+        const messages = messagesResponse.body.messages as Array<{
+          content?: string
+          role?: string
+        }>
+        expect(
+          messages.some(
+            (message) =>
+              message.role === 'assistant' &&
+              String(message.content ?? '').includes(
+                'Applied create_wishlist_entry to wishlist'
+              ) &&
+              String(message.content ?? '').includes('for item')
+          ),
+          'wishlist assistant outcome links entry and item'
+        ).to.eq(true)
+      })
+    })
+    cy.request('/api/items?status=wishlist').then((response) => {
+      expect(response.status).to.eq(200)
+      const items = response.body.items as Array<{
+        part_number?: string
+        status?: string
+        title?: string
+      }>
+      const created = items.find((item) => item.part_number === 'CP-007-WISH')
+      expect(created, 'created wishlist-backed item').to.exist
+      expect(created?.status).to.eq('wishlist')
+      expect(created?.title).to.eq('Copilot Wishlist Create')
+    })
   })
 
   it('UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews', () => {

@@ -1071,7 +1071,10 @@ func applyActionMessage(result ApplyActionResult) string {
 	case "assign_collection_item":
 		return fmt.Sprintf("Applied assign_collection_item to %s in %s.", result.ItemID, result.CollectionName)
 	case "create_wishlist_entry":
-		return fmt.Sprintf("Applied create_wishlist_entry to %s.", result.WishlistID)
+		if strings.TrimSpace(result.ItemID) != "" {
+			return fmt.Sprintf("Applied create_wishlist_entry to wishlist %s for item %s.", result.WishlistID, result.ItemID)
+		}
+		return fmt.Sprintf("Applied create_wishlist_entry to wishlist %s.", result.WishlistID)
 	default:
 		if strings.TrimSpace(result.ItemID) != "" {
 			return fmt.Sprintf("Applied %s to %s.", result.Action, result.ItemID)
