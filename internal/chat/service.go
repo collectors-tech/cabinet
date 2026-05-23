@@ -94,6 +94,8 @@ type ApplyActionResult struct {
 	ItemID         string `json:"item_id,omitempty"`
 	WishlistID     string `json:"wishlist_id,omitempty"`
 	CollectionName string `json:"collection_name,omitempty"`
+	PartNumber     string `json:"part_number,omitempty"`
+	Title          string `json:"title,omitempty"`
 	PreviewID      string `json:"preview_id"`
 }
 
@@ -714,12 +716,16 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 			return ApplyActionResult{}, err
 		}
 		result.ItemID = itemID
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
 	case "update_inventory_item":
 		itemID, err := s.applyUpdateItem(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
 		}
 		result.ItemID = itemID
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
 	case "create_wishlist_entry":
 		itemID, wishlistID, err := s.applyCreateWishlistEntry(ctx, in.ProfileID, payload)
 		if err != nil {
@@ -727,6 +733,8 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		}
 		result.ItemID = itemID
 		result.WishlistID = wishlistID
+		result.PartNumber = trimPayloadString(payload, "part_number")
+		result.Title = trimPayloadString(payload, "title")
 	case "assign_collection_item":
 		itemID, collectionName, err := s.applyAssignCollectionItem(ctx, in.ProfileID, payload)
 		if err != nil {
@@ -752,6 +760,8 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 			"item_id":          result.ItemID,
 			"wishlist_id":      result.WishlistID,
 			"collection_name":  result.CollectionName,
+			"part_number":      result.PartNumber,
+			"title":            result.Title,
 			"confirmation":     "confirmed",
 			"mutation_applied": result.Applied,
 		},
@@ -1066,7 +1076,13 @@ func ensureCollectionName(collections []string, name string) []string {
 	return append(collections, name)
 }
 
+func trimPayloadString(payload map[string]any, key string) string {
+	value, _ := payload[key].(string)
+	return strings.TrimSpace(value)
+}
+
 func applyActionMessage(result ApplyActionResult) string {
+	fieldSummary := applyActionFieldSummary(result)
 	switch result.Action {
 	case "assign_collection_item":
 		return fmt.Sprintf("Applied assign_collection_item to %s in %s.", result.ItemID, result.CollectionName)
@@ -1077,10 +1093,24 @@ func applyActionMessage(result ApplyActionResult) string {
 		return fmt.Sprintf("Applied create_wishlist_entry to wishlist %s.", result.WishlistID)
 	default:
 		if strings.TrimSpace(result.ItemID) != "" {
+			if fieldSummary != "" {
+				return fmt.Sprintf("Applied %s to %s with %s.", result.Action, result.ItemID, fieldSummary)
+			}
 			return fmt.Sprintf("Applied %s to %s.", result.Action, result.ItemID)
 		}
 		return fmt.Sprintf("Applied %s.", result.Action)
 	}
+}
+
+func applyActionFieldSummary(result ApplyActionResult) string {
+	parts := []string{}
+	if strings.TrimSpace(result.PartNumber) != "" {
+		parts = append(parts, fmt.Sprintf("part_number=%s", strings.TrimSpace(result.PartNumber)))
+	}
+	if strings.TrimSpace(result.Title) != "" {
+		parts = append(parts, fmt.Sprintf("title=%s", strings.TrimSpace(result.Title)))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (s *Service) CleanupOldPreviews(ctx context.Context, olderThan time.Duration) error {

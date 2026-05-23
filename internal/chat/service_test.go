@@ -160,6 +160,9 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	if updateResult.ItemID != applied.ItemID {
 		t.Fatalf("expected update item id %q, got %q", applied.ItemID, updateResult.ItemID)
 	}
+	if updateResult.PartNumber != "CHAT-001-UPDATED" || updateResult.Title != "Updated via Chat" {
+		t.Fatalf("expected update result field evidence, got %+v", updateResult)
+	}
 
 	var updatedTitle string
 	if err := conn.QueryRowContext(ctx, `SELECT title FROM canonical_items WHERE id = ?`, applied.ItemID).Scan(&updatedTitle); err != nil {
@@ -167,6 +170,21 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	}
 	if updatedTitle != "Updated via Chat" {
 		t.Fatalf("expected updated title, got %q", updatedTitle)
+	}
+	msgs, err = svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after update) error = %v", err)
+	}
+	updateMessage := msgs[len(msgs)-1]
+	if updateMessage.Role != "assistant" ||
+		!strings.Contains(updateMessage.Content, "Applied update_inventory_item") ||
+		!strings.Contains(updateMessage.Content, "part_number=CHAT-001-UPDATED") ||
+		!strings.Contains(updateMessage.Content, "title=Updated via Chat") {
+		t.Fatalf("expected update assistant outcome with changed field evidence, got %+v", updateMessage)
+	}
+	resultContext, _ := updateMessage.Context["action_result"].(map[string]any)
+	if resultContext["part_number"] != "CHAT-001-UPDATED" || resultContext["title"] != "Updated via Chat" {
+		t.Fatalf("expected update action_result context field evidence, got %+v", resultContext)
 	}
 
 	assignPreview, err := svc.PreviewAction(ctx, PreviewActionInput{
