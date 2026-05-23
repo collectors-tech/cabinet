@@ -6,13 +6,20 @@ describe('general/profile-switcher-existing-profile-context', () => {
     cy.contains('button', 'Sign in').click()
   }
 
-  function expectSelectedProfileOn(path: string, expectedName: string) {
+  function expectSelectedProfileOn(
+    path: string,
+    expectedName: string,
+    expectedStatus = 'Database'
+  ) {
     cy.visit(path)
     cy.get('[data-testid="active-profile-name"]', { timeout: 15000 }).should(
       'contain',
       expectedName
     )
-    cy.get('[data-testid="active-profile-status"]').should('contain', 'Database')
+    cy.get('[data-testid="active-profile-status"]').should(
+      'contain',
+      expectedStatus
+    )
   }
 
   it('PROFILES-005 selects an existing database profile across app sections', () => {
@@ -35,11 +42,20 @@ describe('general/profile-switcher-existing-profile-context', () => {
 
     cy.intercept('PUT', '/api/profiles/active').as('activateProfile')
     cy.get('[data-testid="team-switcher-trigger"]').click()
+    cy.get('[data-testid="team-option-primary-db-plan"]').should('contain', 'Database')
+    cy.get('[data-testid="team-option-showcase-db-plan"]').should(
+      'contain',
+      'Showcase sample data'
+    )
     cy.get('[data-testid="team-option-showcase-db"]').click()
     cy.wait('@activateProfile').its('request.body.profile_id').should('be.a', 'string')
     cy.get('[data-testid="active-profile-name"]', { timeout: 20000 }).should(
       'contain',
       'Showcase DB'
+    )
+    cy.get('[data-testid="active-profile-status"]').should(
+      'contain',
+      'Showcase sample data'
     )
 
     cy.request('GET', '/api/profiles/active')
@@ -54,7 +70,7 @@ describe('general/profile-switcher-existing-profile-context', () => {
       '/chats/',
       '/integrations/',
     ].forEach((path) => {
-      expectSelectedProfileOn(path, 'Showcase DB')
+      expectSelectedProfileOn(path, 'Showcase DB', 'Showcase sample data')
     })
   })
 })

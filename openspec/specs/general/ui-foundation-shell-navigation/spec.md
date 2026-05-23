@@ -69,12 +69,13 @@ Selecting a different database profile from switcher MUST change active data con
 - **THEN** runtime MUST switch active profile context and reload data views from selected DB without cross-profile leakage
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-010: App SHALL provide a seeded Showcase DB profile
-Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content.
+Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content and SHALL distinguish it from normal working databases in the shell switcher.
 
 #### Scenario: Open showcase profile
 - **GIVEN** showcase profile is provisioned
 - **WHEN** user switches to `Showcase DB`
 - **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
+- **AND** the switcher MUST label Showcase DB as sample/demo context rather than a generic working database
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
 When user reorders items in nav edit mode through move buttons or a drag handle, edit dialog list order MUST update immediately to match resulting navigation order.

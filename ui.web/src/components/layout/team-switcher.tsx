@@ -25,6 +25,10 @@ type TeamSwitcherProps = {
   }[]
 }
 
+function profilePlanLabel(name: string) {
+  return /showcase|sample|demo/i.test(name) ? 'Showcase sample data' : 'Database'
+}
+
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const { t } = useTranslation('common')
   const { isMobile } = useSidebar()
@@ -67,7 +71,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               id,
               name,
               logo: teams[index]?.logo ?? teams[0]?.logo,
-              plan: 'Database',
+              plan: profilePlanLabel(name),
             }
           })
           .filter((workspace): workspace is { id: string; name: string; logo: React.ElementType; plan: string } => Boolean(workspace))
@@ -183,7 +187,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     const selectedWorkspace = {
       name: created.name?.trim() || profileName,
       logo: teams[availableWorkspaces.length]?.logo ?? teams[0]?.logo,
-      plan: 'Database',
+      plan: profilePlanLabel(created.name?.trim() || profileName),
     }
     setAvailableWorkspaces((workspaces) => [...workspaces, selectedWorkspace])
     setActiveTeam(selectedWorkspace)
@@ -237,7 +241,15 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <div className='flex size-6 items-center justify-center rounded-sm border'>
                   <team.logo className='size-4 shrink-0' />
                 </div>
-                {team.name}
+                <div className='grid flex-1 text-start leading-tight'>
+                  <span>{team.name}</span>
+                  <span
+                    className='text-xs text-muted-foreground'
+                    data-testid={`team-option-${team.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-plan`}
+                  >
+                    {team.plan}
+                  </span>
+                </div>
                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
