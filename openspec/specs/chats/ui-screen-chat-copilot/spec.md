@@ -144,6 +144,13 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **AND** the chat thread history MUST record a canceled outcome message with no-mutation evidence
 - **AND** the chat thread history MUST NOT record an applied outcome message for the canceled mutation
 
+#### Scenario: Canceled collection assignment records target without mutation
+- **GIVEN** user has previewed a collection assignment with an exact item and collection target
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without assigning the item to the collection
+- **AND** the chat thread history MUST record the canceled action, target item, target collection, and no-mutation evidence
+- **AND** the canceled preview MUST reject any later apply attempt
+
 #### Scenario: Thread context change clears pending action state
 - **GIVEN** user has a pending chat action preview, cancellation notice, or apply result in one thread
 - **WHEN** user switches to another chat thread in the same active profile
