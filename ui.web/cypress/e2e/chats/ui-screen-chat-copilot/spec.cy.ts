@@ -26,6 +26,22 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
   }
 
+  function openChatsWithAssistantDefaults(provider: string, model: string) {
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.request('PUT', '/api/profiles/e2e-profile-001/settings', {
+      settings: {
+        assistant_default_provider: provider,
+        assistant_default_model: model,
+      },
+    })
+      .its('status')
+      .should('eq', 200)
+    cy.e2eSetSetupState('present')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', { path: '/chats/' })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
+  }
+
   function openInbox() {
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -134,6 +150,124 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_wishlist_entry')
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews', () => {
+    openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
+    createThread('E2E Copilot Provider Defaults Thread')
+
+    cy.get('[data-testid="chat-assistant-defaults"]').should(
+      'contain',
+      'anthropic / claude-3-7-sonnet'
+    )
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Draft this with the active assistant defaults')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Draft this with the active assistant defaults'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
+    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-012-PROVIDER')
+    cy.get('[data-testid="chat-preview-title"]').clear().type('Provider Default Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]').should(
+      'contain',
+      'anthropic / claude-3-7-sonnet'
+    )
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-summary"]').should(
+      'contain',
+      'assistant=anthropic/claude-3-7-sonnet'
+    )
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply', () => {
+    openChatsWithAssistantDefaults('openai', 'gpt-4.1-mini')
+    createThread('E2E Copilot Collection Preview Thread')
+
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Assign this item to the retail collection')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Assign this item to the retail collection'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select(
+      'assign_collection_item'
+    )
+    cy.get('[data-testid="chat-preview-target-item-id"]')
+      .clear()
+      .type('e2e-item-001')
+    cy.get('[data-testid="chat-preview-part-number"]')
+      .clear()
+      .type('CP-013-COLLECT')
+    cy.get('[data-testid="chat-preview-title"]')
+      .clear()
+      .type('E2E Starter Car')
+    cy.get('[data-testid="chat-preview-collection-name"]')
+      .clear()
+      .type('Store 1')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'assign_collection_item')
+      .and('contain', 'e2e-item-001')
+      .and('contain', 'Store 1')
+      .and('contain', 'openai / gpt-4.1-mini')
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-summary"]')
+      .should('contain', 'Apply assign_collection_item')
+      .and('contain', 'target=e2e-item-001')
+      .and('contain', 'collection=Store 1')
+      .and('contain', 'assistant=openai/gpt-4.1-mini')
+    cy.get('[data-testid="chat-apply-confirm-submit"]').click()
+    cy.get('[data-testid="chat-action-apply-result"]')
+      .should('contain', 'Applied assign_collection_item')
+      .and('contain', 'collection Store 1')
+      .and('contain', 'e2e-item-001')
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Applied assign_collection_item to e2e-item-001 in Store 1.'
+    )
+
+    cy.visit('/collections')
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain',
+      'Store 1'
+    )
+    cy.get(
+      '[data-testid="collections-member-current-e2e-starter-car"]'
+    ).should('contain', 'Store 1')
+  })
+
+  it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {
+    openChats()
+    createThread('E2E Copilot Cancel Apply Thread')
+
+    cy.get('[data-testid="chat-compose-input"]').clear().type('Draft this item only')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should('contain', 'Draft this item only')
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
+    cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-011-CANCEL')
+    cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Cancel Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
+    cy.get('[data-testid="chat-apply-confirm-summary"]').should('contain', 'CP-011-CANCEL')
+    cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
+
+    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
+    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-action-apply-notice"]').should(
+      'contain',
+      'Action apply canceled; preview remains pending.'
+    )
+    cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()
@@ -170,8 +304,7 @@ describe('chats/ui-screen-chat-copilot', () => {
 
   it('UI-SCREEN-CHAT-COPILOT-010 keeps top-level /inbox reachable as a communications surface', () => {
     openInbox()
-    cy.contains('h1', 'Chats').should('be.visible')
-    cy.get('[data-testid="chat-thread-list"]').should('be.visible')
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').should('be.visible')
     cy.contains('404').should('not.exist')
     cy.contains('Oops! Page Not Found!').should('not.exist')
   })

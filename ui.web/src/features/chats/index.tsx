@@ -66,7 +66,13 @@ type ChatApplyResult = {
   action: string
   item_id?: string
   wishlist_id?: string
+  collection_name?: string
   preview_id: string
+}
+
+type AssistantDefaults = {
+  provider: string
+  model: string
 }
 
 function prettyRole(role: ChatMessage['role']) {
@@ -81,6 +87,12 @@ function prettyRole(role: ChatMessage['role']) {
 
 export function Chats() {
   const [activeProfileId, setActiveProfileId] = useState('')
+  const [assistantDefaults, setAssistantDefaults] = useState<AssistantDefaults>(
+    {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+    }
+  )
   const [threads, setThreads] = useState<ChatThread[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -95,13 +107,18 @@ export function Chats() {
   const [actionPartNumber, setActionPartNumber] = useState('CHAT-001')
   const [actionTitle, setActionTitle] = useState('Chat Created Item')
   const [actionMode, setActionMode] = useState<
-    'create_inventory_item' | 'create_wishlist_entry' | 'update_inventory_item'
+    | 'create_inventory_item'
+    | 'create_wishlist_entry'
+    | 'update_inventory_item'
+    | 'assign_collection_item'
   >('create_inventory_item')
   const [actionTargetItemID, setActionTargetItemID] = useState('')
+  const [actionCollectionName, setActionCollectionName] = useState('Store 1')
   const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(
     null
   )
   const [applyResult, setApplyResult] = useState<ChatApplyResult | null>(null)
+  const [applyNotice, setApplyNotice] = useState('')
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false)
 
   const selectedThread = useMemo(
@@ -141,7 +158,11 @@ export function Chats() {
   )
 
   const loadThreads = useCallback(
-    async (profileID: string, preserveSelected = true) => {
+    async (
+      profileID: string,
+      preserveSelected = true,
+      preferredThreadID = ''
+    ) => {
       const response = await fetch(
         `/api/chat/threads?profile_id=${encodeURIComponent(profileID)}`
       )
@@ -151,11 +172,15 @@ export function Chats() {
       const payload = (await response.json()) as { threads?: ChatThread[] }
       const nextThreads = payload.threads ?? []
       setThreads(nextThreads)
+      const requestedThread = preferredThreadID.trim()
       const nextSelected =
-        preserveSelected &&
-        nextThreads.some((thread) => thread.id === selectedThreadId)
-          ? selectedThreadId
-          : (nextThreads[0]?.id ?? '')
+        requestedThread &&
+        nextThreads.some((thread) => thread.id === requestedThread)
+          ? requestedThread
+          : preserveSelected &&
+              nextThreads.some((thread) => thread.id === selectedThreadId)
+            ? selectedThreadId
+            : (nextThreads[0]?.id ?? '')
       setSelectedThreadId(nextSelected)
       await loadMessages(profileID, nextSelected)
     },
@@ -176,7 +201,26 @@ export function Chats() {
         throw new Error('active_profile_missing')
       }
       setActiveProfileId(profileID)
-      await loadThreads(profileID, false)
+      const settingsResponse = await fetch(
+        `/api/profiles/${profileID}/settings`
+      )
+      if (settingsResponse.ok) {
+        const settingsPayload = (await settingsResponse.json()) as {
+          settings?: Record<string, string>
+        }
+        const settings = settingsPayload.settings ?? {}
+        setAssistantDefaults({
+          provider: settings.assistant_default_provider?.trim() || 'openai',
+          model: settings.assistant_default_model?.trim() || 'gpt-4o-mini',
+        })
+      } else {
+        setAssistantDefaults({ provider: 'openai', model: 'gpt-4o-mini' })
+      }
+      const requestedThread =
+        typeof window !== 'undefined'
+          ? (new URLSearchParams(window.location.search).get('thread_id') ?? '')
+          : ''
+      await loadThreads(profileID, false, requestedThread)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'failed_to_bootstrap_chat')
       setThreads([])
@@ -266,6 +310,7 @@ export function Chats() {
     }
     setSendError(null)
     setApplyResult(null)
+    setApplyNotice('')
     const response = await fetch('/api/chat/actions/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -279,10 +324,17 @@ export function Chats() {
           brand: 'AFX',
           category: 'General',
           item_id:
-            actionMode === 'update_inventory_item'
+            actionMode === 'update_inventory_item' ||
+            actionMode === 'assign_collection_item'
               ? actionTargetItemID.trim()
               : '',
+          collection_name:
+            actionMode === 'assign_collection_item'
+              ? actionCollectionName.trim()
+              : '',
           priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
+          assistant_provider: assistantDefaults.provider,
+          assistant_model: assistantDefaults.model,
         },
       }),
     })
@@ -311,11 +363,19 @@ export function Chats() {
     })
     if (!response.ok) {
       setSendError(`chat_action_apply_${response.status}`)
+      setApplyNotice('Action apply failed; preview remains pending.')
       return
     }
     const result = (await response.json()) as ChatApplyResult
     setApplyResult(result)
+    setApplyNotice('')
     setConfirmApplyOpen(false)
+    await loadMessages(activeProfileId, selectedThreadId)
+  }
+
+  const cancelPreviewApply = () => {
+    setConfirmApplyOpen(false)
+    setApplyNotice('Action apply canceled; preview remains pending.')
   }
 
   const applyResultSummary = (() => {
@@ -331,11 +391,56 @@ export function Chats() {
     if (applyResult.wishlist_id) {
       return `${withPart} to wishlist ${applyResult.wishlist_id}`
     }
+    if (applyResult.collection_name && applyResult.item_id) {
+      return `${withPart} to collection ${applyResult.collection_name} for item ${applyResult.item_id}`
+    }
     if (applyResult.item_id) {
       return `${withPart} to item ${applyResult.item_id}`
     }
     return withPart
   })()
+
+  const actionPreviewTargetSummary = (() => {
+    if (!actionPreview) {
+      return ''
+    }
+    const payload = actionPreview.payload ?? {}
+    const targetItem =
+      typeof payload.item_id === 'string' && payload.item_id.trim()
+        ? payload.item_id.trim()
+        : ''
+    const collection =
+      typeof payload.collection_name === 'string' &&
+      payload.collection_name.trim()
+        ? payload.collection_name.trim()
+        : ''
+    const partNumber =
+      typeof payload.part_number === 'string' && payload.part_number.trim()
+        ? payload.part_number.trim()
+        : ''
+    const title =
+      typeof payload.title === 'string' && payload.title.trim()
+        ? payload.title.trim()
+        : ''
+    return [
+      targetItem ? `target=${targetItem}` : '',
+      collection ? `collection=${collection}` : '',
+      partNumber ? `part_number=${partNumber}` : '',
+      title ? `title=${title}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  })()
+
+  const previewDisabled =
+    !selectedThreadId ||
+    messages.length === 0 ||
+    !actionPartNumber.trim() ||
+    !actionTitle.trim() ||
+    ((actionMode === 'update_inventory_item' ||
+      actionMode === 'assign_collection_item') &&
+      !actionTargetItemID.trim()) ||
+    (actionMode === 'assign_collection_item' && !actionCollectionName.trim())
 
   return (
     <>
@@ -537,7 +642,16 @@ export function Chats() {
             </div>
 
             <div className='mt-4 space-y-3 rounded-md border p-3'>
-              <p className='text-sm font-medium'>Action Preview</p>
+              <div className='flex flex-wrap items-start justify-between gap-2'>
+                <p className='text-sm font-medium'>Action Preview</p>
+                <p
+                  className='rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground'
+                  data-testid='chat-assistant-defaults'
+                >
+                  Assistant default: {assistantDefaults.provider} /{' '}
+                  {assistantDefaults.model}
+                </p>
+              </div>
               <label className='grid gap-1 text-sm'>
                 <span>Action Mode</span>
                 <select
@@ -550,6 +664,7 @@ export function Chats() {
                         | 'create_inventory_item'
                         | 'create_wishlist_entry'
                         | 'update_inventory_item'
+                        | 'assign_collection_item'
                     )
                   }
                   disabled={!selectedThreadId}
@@ -563,9 +678,13 @@ export function Chats() {
                   <option value='update_inventory_item'>
                     update_inventory_item
                   </option>
+                  <option value='assign_collection_item'>
+                    assign_collection_item
+                  </option>
                 </select>
               </label>
-              {actionMode === 'update_inventory_item' ? (
+              {actionMode === 'update_inventory_item' ||
+              actionMode === 'assign_collection_item' ? (
                 <Input
                   data-testid='chat-preview-target-item-id'
                   value={actionTargetItemID}
@@ -573,6 +692,17 @@ export function Chats() {
                     setActionTargetItemID(event.target.value)
                   }
                   placeholder='Existing item ID'
+                  disabled={!selectedThreadId}
+                />
+              ) : null}
+              {actionMode === 'assign_collection_item' ? (
+                <Input
+                  data-testid='chat-preview-collection-name'
+                  value={actionCollectionName}
+                  onChange={(event) =>
+                    setActionCollectionName(event.target.value)
+                  }
+                  placeholder='Collection name'
                   disabled={!selectedThreadId}
                 />
               ) : null}
@@ -597,12 +727,7 @@ export function Chats() {
                   type='button'
                   data-testid='chat-preview-action-button'
                   onClick={() => void previewCreateItemAction()}
-                  disabled={
-                    !selectedThreadId ||
-                    messages.length === 0 ||
-                    !actionPartNumber.trim() ||
-                    !actionTitle.trim()
-                  }
+                  disabled={previewDisabled}
                 >
                   Preview Action
                 </Button>
@@ -622,12 +747,30 @@ export function Chats() {
                   className='text-sm text-muted-foreground'
                 >
                   Preview {actionPreview.id}: {actionPreview.action} (
-                  {actionPreview.status})
+                  {actionPreview.status}) via{' '}
+                  {String(
+                    actionPreview.payload?.assistant_provider ?? 'openai'
+                  )}{' '}
+                  /{' '}
+                  {String(
+                    actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
+                  )}
+                  {actionPreviewTargetSummary
+                    ? ` - ${actionPreviewTargetSummary}`
+                    : ''}
                 </p>
               ) : null}
               {applyResult ? (
                 <p data-testid='chat-action-apply-result' className='text-sm'>
                   {applyResultSummary}
+                </p>
+              ) : null}
+              {applyNotice ? (
+                <p
+                  data-testid='chat-action-apply-notice'
+                  className='text-sm text-muted-foreground'
+                >
+                  {applyNotice}
                 </p>
               ) : null}
             </div>
@@ -641,12 +784,15 @@ export function Chats() {
             <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
               {actionPreview
-                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`
+                ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
                 : 'No action preview selected.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid='chat-apply-confirm-cancel'>
+            <AlertDialogCancel
+              data-testid='chat-apply-confirm-cancel'
+              onClick={cancelPreviewApply}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction

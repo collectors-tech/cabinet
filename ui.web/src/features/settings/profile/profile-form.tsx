@@ -1,7 +1,7 @@
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +37,8 @@ const profileFormSchema = z.object({
         : undefined,
   }),
   bio: z.string().max(160).min(4),
+  telegramCaptureSenderId: z.string().max(64).optional(),
+  telegramCaptureChatId: z.string().max(64).optional(),
   urls: z
     .array(
       z.object({
@@ -52,6 +54,8 @@ const defaultValues: Partial<ProfileFormValues> = {
   username: '',
   email: '',
   bio: 'I own a computer.',
+  telegramCaptureSenderId: '',
+  telegramCaptureChatId: '',
   urls: [],
 }
 
@@ -64,8 +68,7 @@ export function ProfileForm() {
     saving,
     saveSettings,
     reload,
-  } =
-    useProfileSettings()
+  } = useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [submitLocked, setSubmitLocked] = useState(false)
@@ -102,6 +105,9 @@ export function ProfileForm() {
       username: settings['profile.username'] ?? '',
       email: settings['profile.email'] ?? 'm@example.com',
       bio: settings['profile.bio'] ?? 'I own a computer.',
+      telegramCaptureSenderId:
+        settings['telegram.catalog_capture.sender_id'] ?? '',
+      telegramCaptureChatId: settings['telegram.catalog_capture.chat_id'] ?? '',
       urls,
     })
   }, [form, loading, settings])
@@ -118,11 +124,17 @@ export function ProfileForm() {
         'profile.username': data.username.trim(),
         'profile.email': data.email.trim(),
         'profile.bio': data.bio.trim(),
+        'telegram.catalog_capture.sender_id':
+          data.telegramCaptureSenderId?.trim() ?? '',
+        'telegram.catalog_capture.chat_id':
+          data.telegramCaptureChatId?.trim() ?? '',
         'profile.urls': JSON.stringify(data.urls ?? []),
       })
       setSaveMessage('Profile settings saved.')
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'failed_to_save_profile')
+      setSaveError(
+        err instanceof Error ? err.message : 'failed_to_save_profile'
+      )
     } finally {
       mutationLockRef.current = false
     }
@@ -150,13 +162,13 @@ export function ProfileForm() {
 
   return (
     <Form {...form}>
-      <form
-        onSubmit={handleFormSubmit}
-        className='space-y-8'
-      >
+      <form onSubmit={handleFormSubmit} className='space-y-8'>
         {error ? (
           profileContextMissing ? (
-            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+            <ProfileContextBlocked
+              error={error}
+              onRetry={() => void reload()}
+            />
           ) : (
             <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
               <p className='font-medium'>Failed to load profile settings.</p>
@@ -186,102 +198,163 @@ export function ProfileForm() {
         {profileContextMissing ? null : (
           <>
             <FormField
-          control={form.control}
-          name='username'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input placeholder='cabinet-user' {...field} />
-              </FormControl>
-              <FormDescription>
-                This is your public display name. It can be your real name or a
-                pseudonym. You can only change this once every 30 days.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='email'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid='settings-profile-email-trigger'>
-                    <SelectValue
-                      placeholder='Select a verified email to display'
-                    />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value='m@example.com'>m@example.com</SelectItem>
-                  <SelectItem value='m@google.com'>m@google.com</SelectItem>
-                  <SelectItem value='m@support.com'>m@support.com</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                This email is shown in your profile and account surfaces.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='bio'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bio</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder='Tell us a little bit about yourself'
-                  className='resize-none'
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                You can <span>@mention</span> other users and organizations to
-                link to them.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div>
-          {fields.map((field, index) => (
-            <FormField
               control={form.control}
-              key={field.id}
-              name={`urls.${index}.value`}
+              name='username'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className={cn(index !== 0 && 'sr-only')}>
-                    URLs
-                  </FormLabel>
-                  <FormDescription className={cn(index !== 0 && 'sr-only')}>
-                    Add links to your website, blog, or social media profiles.
-                  </FormDescription>
-                  <FormControl className={cn(index !== 0 && 'mt-1.5')}>
-                    <Input {...field} />
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input placeholder='cabinet-user' {...field} />
                   </FormControl>
+                  <FormDescription>
+                    This is your public display name. It can be your real name
+                    or a pseudonym. You can only change this once every 30 days.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          ))}
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='mt-2'
-            onClick={() => append({ value: '' })}
-          >
-            Add URL
-          </Button>
-        </div>
+            <FormField
+              control={form.control}
+              name='email'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid='settings-profile-email-trigger'>
+                        <SelectValue placeholder='Select a verified email to display' />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value='m@example.com'>
+                        m@example.com
+                      </SelectItem>
+                      <SelectItem value='m@google.com'>m@google.com</SelectItem>
+                      <SelectItem value='m@support.com'>
+                        m@support.com
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    This email is shown in your profile and account surfaces.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='bio'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Bio</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder='Tell us a little bit about yourself'
+                      className='resize-none'
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    You can <span>@mention</span> other users and organizations
+                    to link to them.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div
+              className='space-y-4 rounded-md border p-4'
+              data-testid='settings-profile-telegram-capture'
+            >
+              <div>
+                <h3 className='text-sm font-medium'>
+                  Telegram catalog capture
+                </h3>
+                <p className='mt-1 text-sm text-muted-foreground'>
+                  Authorize one Telegram sender and chat to create catalog
+                  capture drafts for this profile.
+                </p>
+              </div>
+              <FormField
+                control={form.control}
+                name='telegramCaptureSenderId'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sender ID</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='123456789'
+                        inputMode='numeric'
+                        data-testid='settings-profile-telegram-sender-id'
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Telegram user ID allowed to submit capture messages for
+                      this profile.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='telegramCaptureChatId'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Chat ID</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='-5235769556'
+                        inputMode='numeric'
+                        data-testid='settings-profile-telegram-chat-id'
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Telegram chat ID that must match before Cabinet accepts a
+                      capture.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div>
+              {fields.map((field, index) => (
+                <FormField
+                  control={form.control}
+                  key={field.id}
+                  name={`urls.${index}.value`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn(index !== 0 && 'sr-only')}>
+                        URLs
+                      </FormLabel>
+                      <FormDescription className={cn(index !== 0 && 'sr-only')}>
+                        Add links to your website, blog, or social media
+                        profiles.
+                      </FormDescription>
+                      <FormControl className={cn(index !== 0 && 'mt-1.5')}>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-2'
+                onClick={() => append({ value: '' })}
+              >
+                Add URL
+              </Button>
+            </div>
             <Button
               type='submit'
               disabled={saving || loading || submitLocked}
