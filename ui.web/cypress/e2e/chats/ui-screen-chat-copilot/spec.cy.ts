@@ -349,6 +349,50 @@ describe('chats/ui-screen-chat-copilot', () => {
     })
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes', () => {
+    openChats()
+    createThread('E2E Copilot Thread Context A')
+
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Draft a preview that must stay scoped to this thread')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Draft a preview that must stay scoped to this thread'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select(
+      'create_inventory_item'
+    )
+    cy.get('[data-testid="chat-preview-part-number"]')
+      .clear()
+      .type('CP-015-STALE')
+    cy.get('[data-testid="chat-preview-title"]')
+      .clear()
+      .type('Thread Scoped Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'create_inventory_item')
+      .and('contain', 'CP-015-STALE')
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
+    cy.get('[data-testid="chat-action-apply-notice"]').should(
+      'contain',
+      'Action apply canceled; preview remains pending.'
+    )
+
+    createThread('E2E Copilot Thread Context B')
+    cy.get('[data-testid="chat-thread-title"]').should(
+      'contain',
+      'E2E Copilot Thread Context B'
+    )
+    cy.get('[data-testid="chat-action-preview"]').should('not.exist')
+    cy.get('[data-testid="chat-action-apply-notice"]').should('not.exist')
+    cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
+    cy.get('[data-testid="chat-apply-action-button"]').should('be.disabled')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()

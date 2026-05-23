@@ -235,6 +235,13 @@ export function Chats() {
     void loadBootstrap()
   }, [loadBootstrap])
 
+  useEffect(() => {
+    setActionPreview(null)
+    setApplyResult(null)
+    setApplyNotice('')
+    setConfirmApplyOpen(false)
+  }, [activeProfileId, selectedThreadId])
+
   const createThread = async () => {
     const title = threadTitle.trim()
     if (!activeProfileId || !title) {
