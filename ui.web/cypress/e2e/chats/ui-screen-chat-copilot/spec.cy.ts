@@ -268,6 +268,87 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history', () => {
+    openChats()
+    createThread('E2E Copilot Failed Update Thread')
+
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Try to update a missing inventory item')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Try to update a missing inventory item'
+    )
+
+    cy.request('/api/items?profile_id=e2e-profile-001').then((response) => {
+      expect(response.status).to.eq(200)
+      const items = response.body.items as Array<{
+        id?: string
+        part_number?: string
+      }>
+      expect(
+        items.some(
+          (item) =>
+            item.id === 'missing-chat-update-target' ||
+            item.part_number === 'CP-014-MISSING'
+        )
+      ).to.eq(false)
+    })
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select(
+      'update_inventory_item'
+    )
+    cy.get('[data-testid="chat-preview-target-item-id"]')
+      .clear()
+      .type('missing-chat-update-target')
+    cy.get('[data-testid="chat-preview-part-number"]')
+      .clear()
+      .type('CP-014-MISSING')
+    cy.get('[data-testid="chat-preview-title"]')
+      .clear()
+      .type('Missing Update Target')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'update_inventory_item')
+      .and('contain', 'missing-chat-update-target')
+      .and('contain', 'pending')
+
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-summary"]')
+      .should('contain', 'Apply update_inventory_item')
+      .and('contain', 'target=missing-chat-update-target')
+    cy.get('[data-testid="chat-apply-confirm-submit"]').click()
+
+    cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'update_inventory_item')
+      .and('contain', 'pending')
+    cy.get('[data-testid="chat-action-apply-notice"]').should(
+      'contain',
+      'Action apply failed; preview remains pending.'
+    )
+    cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
+    cy.get('[data-testid="chat-message-list"]').should(
+      'not.contain',
+      'Applied update_inventory_item'
+    )
+    cy.request('/api/items?profile_id=e2e-profile-001').then((response) => {
+      expect(response.status).to.eq(200)
+      const items = response.body.items as Array<{
+        id?: string
+        part_number?: string
+      }>
+      expect(
+        items.some(
+          (item) =>
+            item.id === 'missing-chat-update-target' ||
+            item.part_number === 'CP-014-MISSING'
+        )
+      ).to.eq(false)
+    })
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()

@@ -363,7 +363,9 @@ export function Chats() {
     })
     if (!response.ok) {
       setSendError(`chat_action_apply_${response.status}`)
+      setApplyResult(null)
       setApplyNotice('Action apply failed; preview remains pending.')
+      setConfirmApplyOpen(false)
       return
     }
     const result = (await response.json()) as ChatApplyResult
@@ -431,6 +433,11 @@ export function Chats() {
       .filter(Boolean)
       .join(' ')
   })()
+
+  const actionPreviewStatusLabel =
+    !actionPreview?.status || actionPreview.status === 'previewed'
+      ? 'pending'
+      : actionPreview.status
 
   const previewDisabled =
     !selectedThreadId ||
@@ -747,7 +754,7 @@ export function Chats() {
                   className='text-sm text-muted-foreground'
                 >
                   Preview {actionPreview.id}: {actionPreview.action} (
-                  {actionPreview.status}) via{' '}
+                  {actionPreviewStatusLabel}) via{' '}
                   {String(
                     actionPreview.payload?.assistant_provider ?? 'openai'
                   )}{' '}
