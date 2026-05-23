@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronsUpDown, Plus } from 'lucide-react'
+import { AlertTriangle, ChevronsUpDown, Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   DropdownMenu,
@@ -31,18 +31,21 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const [availableWorkspaces, setAvailableWorkspaces] = React.useState(teams)
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
   const [loading, setLoading] = React.useState(false)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [reloadKey, setReloadKey] = React.useState(0)
 
   React.useEffect(() => {
     let cancelled = false
     async function loadProfiles() {
       setLoading(true)
+      setLoadError(null)
       try {
         const [profilesResp, activeResp] = await Promise.all([
           fetch('/api/profiles'),
           fetch('/api/profiles/active'),
         ])
         if (!profilesResp.ok || !activeResp.ok) {
-          return
+          throw new Error('profile-load-failed')
         }
 
         const profilesPayload = (await profilesResp.json()) as {
@@ -70,7 +73,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
           .filter((workspace): workspace is { id: string; name: string; logo: React.ElementType; plan: string } => Boolean(workspace))
 
         if (!profileWorkspaces.length || cancelled) {
-          return
+          throw new Error('profile-empty')
         }
 
         setAvailableWorkspaces(
@@ -90,6 +93,10 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
           logo: selected.logo,
           plan: selected.plan,
         })
+      } catch {
+        if (!cancelled) {
+          setLoadError('Profile unavailable. Retry loading databases.')
+        }
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -101,7 +108,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     return () => {
       cancelled = true
     }
-  }, [teams])
+  }, [teams, reloadKey])
 
   const switchProfile = async (targetName: string) => {
     const profileResp = await fetch('/api/profiles')
@@ -153,7 +160,9 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                   {activeTeam.name}
                 </span>
                 <span className='truncate text-xs'>
-                  {loading ? 'Loading profiles...' : activeTeam.plan}
+                  <span data-testid='active-profile-status'>
+                    {loadError ?? (loading ? 'Loading profiles...' : activeTeam.plan)}
+                  </span>
                 </span>
               </div>
               <ChevronsUpDown className='ms-auto' />
@@ -184,6 +193,29 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
+            {loadError ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className='gap-2 p-2 text-destructive focus:text-destructive'
+                  data-testid='team-switcher-profile-error'
+                  onSelect={(event) => {
+                    event.preventDefault()
+                  }}
+                >
+                  <AlertTriangle className='size-4 shrink-0' />
+                  <span className='text-xs'>{loadError}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className='gap-2 p-2'
+                  data-testid='team-switcher-retry-profiles'
+                  onClick={() => setReloadKey((key) => key + 1)}
+                >
+                  <RefreshCw className='size-4' />
+                  <div className='font-medium'>Retry profiles</div>
+                </DropdownMenuItem>
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem className='gap-2 p-2'>
               <div className='flex size-6 items-center justify-center rounded-md border bg-background'>
