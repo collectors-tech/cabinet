@@ -260,3 +260,73 @@ func TestServiceActionPreviewRejectsCrossProfileApply(t *testing.T) {
 		t.Fatalf("expected owner preview to remain pending on original thread, got %+v", stillPending)
 	}
 }
+
+func TestServiceUpdatePreviewApplyRejectsMissingTarget(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-update-missing"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Update Missing"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Update Missing Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "update_inventory_item",
+		Payload: map[string]any{
+			"item_id":     "missing-item-id",
+			"title":       "Should Not Apply",
+			"part_number": "MISSING-UPDATE-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(update_inventory_item) error = %v", err)
+	}
+
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "update item target not found") {
+		t.Fatalf("expected missing update target apply to fail, got %v", err)
+	}
+
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM canonical_items WHERE part_number = 'MISSING-UPDATE-001' OR title = 'Should Not Apply'").Scan(&itemCount); err != nil {
+		t.Fatalf("count canonical items after failed update apply: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("expected failed update apply to leave inventory unchanged, got %d matching items", itemCount)
+	}
+
+	stillPending, err := svc.GetActionPreview(ctx, profileID, preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview() error = %v", err)
+	}
+	if stillPending.Status != "previewed" {
+		t.Fatalf("expected failed update apply to keep preview pending, got %+v", stillPending)
+	}
+	msgs, err := svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	for _, msg := range msgs {
+		if msg.Role == "assistant" && strings.Contains(msg.Content, "Applied update_inventory_item") {
+			t.Fatalf("failed update apply must not record applied assistant outcome, got %+v", msg)
+		}
+	}
+}

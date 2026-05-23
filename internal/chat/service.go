@@ -905,7 +905,7 @@ func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload
 	if strings.TrimSpace(category) == "" {
 		category = "General"
 	}
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE canonical_items
 		SET part_number = COALESCE(NULLIF(?, ''), part_number),
 		    title = COALESCE(NULLIF(?, ''), title),
@@ -916,6 +916,13 @@ func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload
 	`, strings.TrimSpace(partNumber), strings.TrimSpace(title), strings.TrimSpace(brand), strings.TrimSpace(category), strings.TrimSpace(itemID), strings.TrimSpace(profileID))
 	if err != nil {
 		return "", fmt.Errorf("update item: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return "", fmt.Errorf("update item rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return "", fmt.Errorf("update item target not found")
 	}
 	return strings.TrimSpace(itemID), nil
 }
