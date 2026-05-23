@@ -193,3 +193,70 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 		t.Fatalf("expected assistant outcome message, got %+v", last)
 	}
 }
+
+func TestServiceActionPreviewRejectsCrossProfileApply(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	for _, profileID := range []string{"profile-a", "profile-b"} {
+		if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, profileID); err != nil {
+			t.Fatalf("insert profile %s: %v", profileID, err)
+		}
+	}
+
+	ownerThread, err := svc.CreateThread(ctx, "profile-a", "Owner Thread", map[string]any{
+		"profile": map[string]any{"id": "profile-a"},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread(owner) error = %v", err)
+	}
+	otherThread, err := svc.CreateThread(ctx, "profile-b", "Other Thread", map[string]any{
+		"profile": map[string]any{"id": "profile-b"},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread(other) error = %v", err)
+	}
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: "profile-a",
+		ThreadID:  ownerThread.ID,
+		Action:    "create_inventory_item",
+		Payload: map[string]any{
+			"part_number": "PROFILE-A-ONLY",
+			"title":       "Profile A Only",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(owner) error = %v", err)
+	}
+
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: "profile-b",
+		ThreadID:  otherThread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "preview not found") {
+		t.Fatalf("expected wrong-profile preview lookup to fail as not found, got %v", err)
+	}
+
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM canonical_items WHERE part_number = 'PROFILE-A-ONLY'").Scan(&itemCount); err != nil {
+		t.Fatalf("count canonical items after rejected apply: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("expected rejected wrong-profile apply to leave inventory unchanged, got %d items", itemCount)
+	}
+
+	stillPending, err := svc.GetActionPreview(ctx, "profile-a", preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview(owner) error = %v", err)
+	}
+	if stillPending.Status != "previewed" || stillPending.ThreadID != ownerThread.ID {
+		t.Fatalf("expected owner preview to remain pending on original thread, got %+v", stillPending)
+	}
+}
