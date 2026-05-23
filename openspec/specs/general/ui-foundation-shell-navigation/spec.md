@@ -139,3 +139,12 @@ The database/profile switcher add action SHALL create a new database profile, ac
 - **THEN** the switcher SHALL call the profile create API with that name
 - **AND** the switcher SHALL activate the created profile through the active profile API
 - **AND** the shell SHALL reload with the created profile label as active database context
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-016: Existing database selection SHALL carry across core app sections
+The shell database/profile switcher SHALL keep an existing selected database profile visible as the active context while the user moves through core authenticated sections.
+
+#### Scenario: Existing database profile selection across sections
+- **GIVEN** the authenticated shell has loaded multiple database profiles
+- **WHEN** the user selects an existing non-active database profile
+- **THEN** the active profile API SHALL report the selected profile
+- **AND** the selected database label SHALL remain visible in Inventory, Wishlist, Collections, Settings, Chats, and Integrations

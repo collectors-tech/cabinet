@@ -37,3 +37,12 @@ The authenticated database/profile switcher SHALL let users create a new databas
 - **THEN** Cabinet SHALL create the profile through the profile API
 - **AND** Cabinet SHALL set the created profile as the active profile before reloading shell data context
 - **AND** the active database label SHALL show the created profile name after reload
+
+### Requirement PROFILES-005: Cabinet SHALL keep existing profile selection app-wide across core sections
+Selecting an existing database profile from the authenticated shell switcher SHALL activate that profile as the app-wide data context for core authenticated sections.
+
+#### Scenario: Select existing database profile across app sections
+- **GIVEN** an authenticated user has at least two database profiles
+- **WHEN** the user selects an existing non-active database profile from the shell switcher
+- **THEN** Cabinet SHALL persist that profile through the active profile API
+- **AND** Inventory, Wishlist, Collections, Settings, Chats, and Integrations SHALL show the selected database profile as the active shell context
