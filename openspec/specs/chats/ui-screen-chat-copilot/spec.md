@@ -178,6 +178,14 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **THEN** Cabinet MUST restore the same pending preview for the active profile and thread
 - **AND** the restored preview MUST remain explicitly pending and applyable only for that same profile/thread context
 
+#### Scenario: Stale thread apply attempts leave state unchanged
+- **GIVEN** user has a pending chat action preview in one thread for the active profile
+- **WHEN** an apply request is attempted from another thread in the same active profile using that preview id
+- **THEN** Cabinet MUST reject the apply as unavailable to that thread
+- **AND** the owning preview MUST remain pending in its original thread
+- **AND** inventory state MUST remain unchanged
+- **AND** neither thread history MUST record an applied assistant outcome for the stale apply attempt
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -241,3 +249,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
 | UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |
