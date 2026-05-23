@@ -367,6 +367,77 @@ func TestServiceUpdatePreviewApplyRejectsMissingTarget(t *testing.T) {
 	}
 }
 
+func TestServiceCollectionAssignmentRejectsMissingTarget(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-collection-missing"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Collection Missing"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Collection Missing Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "assign_collection_item",
+		Payload: map[string]any{
+			"item_id":         "missing-collection-target",
+			"collection_name": "Do Not Create",
+			"part_number":     "MISSING-COLLECTION-001",
+			"title":           "Missing Collection Target",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(assign_collection_item) error = %v", err)
+	}
+
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "collection assignment target not found") {
+		t.Fatalf("expected missing collection target apply to fail, got %v", err)
+	}
+
+	var workspaceSettings int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key = 'collections.workspace.v1'", profileID).Scan(&workspaceSettings); err != nil {
+		t.Fatalf("count workspace collection settings after failed assign: %v", err)
+	}
+	if workspaceSettings != 0 {
+		t.Fatalf("expected failed collection assignment to leave workspace collections unchanged, got %d settings", workspaceSettings)
+	}
+
+	stillPending, err := svc.GetActionPreview(ctx, profileID, preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview() error = %v", err)
+	}
+	if stillPending.Status != "previewed" {
+		t.Fatalf("expected failed collection assignment to keep preview pending, got %+v", stillPending)
+	}
+	msgs, err := svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	for _, msg := range msgs {
+		if msg.Role == "assistant" && strings.Contains(msg.Content, "Applied assign_collection_item") {
+			t.Fatalf("failed collection assignment must not record applied assistant outcome, got %+v", msg)
+		}
+	}
+}
+
 func TestServiceCancelPreviewRecordsOutcomeWithoutMutation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

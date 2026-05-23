@@ -1019,6 +1019,17 @@ func (s *Service) applyAssignCollectionItem(ctx context.Context, profileID strin
 	if itemID == "" || collectionName == "" || collectionName == "All Items" {
 		return "", "", fmt.Errorf("item_id and assignable collection_name are required")
 	}
+	var existingItemID string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM canonical_items
+		WHERE id = ? AND profile_id = ?
+	`, itemID, strings.TrimSpace(profileID)).Scan(&existingItemID); err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", fmt.Errorf("collection assignment target not found")
+		}
+		return "", "", fmt.Errorf("load collection assignment target: %w", err)
+	}
 	if strings.TrimSpace(title) == "" {
 		title = itemID
 	}

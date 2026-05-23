@@ -129,6 +129,13 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **AND** the Collections surface MUST show the item assigned to the requested collection after navigation
 - **AND** the chat thread history MUST record an assistant outcome message with the applied action, target item, and collection
 
+#### Scenario: Failed collection assignment leaves state unchanged
+- **GIVEN** user has previewed a collection assignment for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating workspace collection membership
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
 #### Scenario: Failed inventory update apply leaves state unchanged
 - **GIVEN** user has previewed an inventory update for an item target that is not present in the active profile
 - **WHEN** the user confirms apply from the confirmation dialog
@@ -224,3 +231,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |
 | UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
