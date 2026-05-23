@@ -26,11 +26,6 @@ describe('settings/display', () => {
 
   it('UI-SCREEN-SETTINGS-DISPLAY-002 requires at least one selected display item', () => {
     cy.contains('button', 'Clear selection').click()
-    cy.get('[data-testid^="settings-display-"][data-state="checked"]').each(
-      ($checkbox) => {
-        cy.wrap($checkbox).click()
-      }
-    )
     cy.get('[data-testid^="settings-display-"][data-state="checked"]').should(
       'have.length',
       0
@@ -99,7 +94,8 @@ describe('settings/display', () => {
   it('UI-SCREEN-SETTINGS-DISPLAY-004 updates display with deterministic success feedback', () => {
     cy.intercept('PUT', '/api/profiles/*/settings').as('saveDisplay')
 
-    cy.contains('label', 'Documents').click()
+    cy.contains('button', 'Clear selection').click()
+    cy.get('[data-testid="settings-display-documents"]').click()
     cy.get('[data-testid="settings-display-documents"]').should(
       'have.attr',
       'data-state',
@@ -110,7 +106,7 @@ describe('settings/display', () => {
     cy.wait('@saveDisplay')
       .its('request.body.settings')
       .should('deep.include', {
-        'display.items': 'recents,home,documents',
+        'display.items': 'documents',
       })
     cy.contains('Display settings saved.').should('be.visible')
 
@@ -119,7 +115,7 @@ describe('settings/display', () => {
       expect(profileID).to.not.equal('')
       cy.request(`/api/profiles/${profileID}/settings`).then((settingsResp) => {
         expect(settingsResp.body.settings['display.items']).to.equal(
-          'recents,home,documents'
+          'documents'
         )
       })
     })
