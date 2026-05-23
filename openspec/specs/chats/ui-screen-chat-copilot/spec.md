@@ -91,6 +91,14 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
 
+#### Scenario: Apply without explicit confirmation leaves state unchanged
+- **GIVEN** user has previewed an inventory create action
+- **WHEN** the apply request does not include explicit confirmation
+- **THEN** Cabinet MUST reject the apply with confirmation-required feedback
+- **AND** the preview MUST remain unapplied and available to apply for the same profile/thread
+- **AND** inventory state MUST remain unchanged
+- **AND** chat thread history MUST NOT record an applied assistant outcome
+
 #### Scenario: Wishlist entry apply persists state and records target item
 - **GIVEN** user has previewed a wishlist entry creation with part number and title fields
 - **WHEN** the user confirms apply from the confirmation dialog
@@ -232,3 +240,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
+| UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
