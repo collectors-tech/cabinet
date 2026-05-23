@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/db"
@@ -148,5 +149,47 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	}
 	if updatedTitle != "Updated via Chat" {
 		t.Fatalf("expected updated title, got %q", updatedTitle)
+	}
+
+	assignPreview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "assign_collection_item",
+		Payload: map[string]any{
+			"item_id":         applied.ItemID,
+			"part_number":     "CHAT-001-UPDATED",
+			"title":           "Updated via Chat",
+			"collection_name": "Store 1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(assign_collection_item) error = %v", err)
+	}
+	assignResult, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: assignPreview.ID,
+		Confirm:   true,
+	})
+	if err != nil {
+		t.Fatalf("ApplyAction(assign_collection_item) error = %v", err)
+	}
+	if assignResult.ItemID != applied.ItemID || assignResult.CollectionName != "Store 1" {
+		t.Fatalf("expected collection assignment result for %q Store 1, got %+v", applied.ItemID, assignResult)
+	}
+	var workspaceState string
+	if err := conn.QueryRowContext(ctx, `SELECT value FROM profile_settings WHERE profile_id = ? AND key = 'collections.workspace.v1'`, profileID).Scan(&workspaceState); err != nil {
+		t.Fatalf("load workspace collection setting: %v", err)
+	}
+	if !strings.Contains(workspaceState, applied.ItemID) || !strings.Contains(workspaceState, "Store 1") {
+		t.Fatalf("expected persisted workspace assignment, got %s", workspaceState)
+	}
+	msgs, err = svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after assign) error = %v", err)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" || !strings.Contains(last.Content, "Applied assign_collection_item") {
+		t.Fatalf("expected assistant outcome message, got %+v", last)
 	}
 }

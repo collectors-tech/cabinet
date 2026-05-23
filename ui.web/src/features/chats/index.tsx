@@ -66,6 +66,7 @@ type ChatApplyResult = {
   action: string
   item_id?: string
   wishlist_id?: string
+  collection_name?: string
   preview_id: string
 }
 
@@ -369,6 +370,7 @@ export function Chats() {
     setApplyResult(result)
     setApplyNotice('')
     setConfirmApplyOpen(false)
+    await loadMessages(activeProfileId, selectedThreadId)
   }
 
   const cancelPreviewApply = () => {
@@ -388,6 +390,9 @@ export function Chats() {
     const withPart = previewPart ? `${base} (${previewPart})` : base
     if (applyResult.wishlist_id) {
       return `${withPart} to wishlist ${applyResult.wishlist_id}`
+    }
+    if (applyResult.collection_name && applyResult.item_id) {
+      return `${withPart} to collection ${applyResult.collection_name} for item ${applyResult.item_id}`
     }
     if (applyResult.item_id) {
       return `${withPart} to item ${applyResult.item_id}`

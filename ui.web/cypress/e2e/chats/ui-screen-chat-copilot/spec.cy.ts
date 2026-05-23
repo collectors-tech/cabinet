@@ -198,13 +198,13 @@ describe('chats/ui-screen-chat-copilot', () => {
     )
     cy.get('[data-testid="chat-preview-target-item-id"]')
       .clear()
-      .type('inventory-item-pikachu-shadowless')
+      .type('e2e-item-001')
     cy.get('[data-testid="chat-preview-part-number"]')
       .clear()
       .type('CP-013-COLLECT')
     cy.get('[data-testid="chat-preview-title"]')
       .clear()
-      .type('Shadowless Pikachu')
+      .type('E2E Starter Car')
     cy.get('[data-testid="chat-preview-collection-name"]')
       .clear()
       .type('Store 1')
@@ -212,15 +212,33 @@ describe('chats/ui-screen-chat-copilot', () => {
 
     cy.get('[data-testid="chat-action-preview"]')
       .should('contain', 'assign_collection_item')
-      .and('contain', 'inventory-item-pikachu-shadowless')
+      .and('contain', 'e2e-item-001')
       .and('contain', 'Store 1')
       .and('contain', 'openai / gpt-4.1-mini')
     cy.get('[data-testid="chat-apply-action-button"]').click()
     cy.get('[data-testid="chat-apply-confirm-summary"]')
       .should('contain', 'Apply assign_collection_item')
-      .and('contain', 'target=inventory-item-pikachu-shadowless')
+      .and('contain', 'target=e2e-item-001')
       .and('contain', 'collection=Store 1')
       .and('contain', 'assistant=openai/gpt-4.1-mini')
+    cy.get('[data-testid="chat-apply-confirm-submit"]').click()
+    cy.get('[data-testid="chat-action-apply-result"]')
+      .should('contain', 'Applied assign_collection_item')
+      .and('contain', 'collection Store 1')
+      .and('contain', 'e2e-item-001')
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Applied assign_collection_item to e2e-item-001 in Store 1.'
+    )
+
+    cy.visit('/collections')
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain',
+      'Store 1'
+    )
+    cy.get(
+      '[data-testid="collections-member-current-e2e-starter-car"]'
+    ).should('contain', 'Store 1')
   })
 
   it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {

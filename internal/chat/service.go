@@ -89,11 +89,12 @@ type ApplyActionInput struct {
 }
 
 type ApplyActionResult struct {
-	Applied    bool   `json:"applied"`
-	Action     string `json:"action"`
-	ItemID     string `json:"item_id,omitempty"`
-	WishlistID string `json:"wishlist_id,omitempty"`
-	PreviewID  string `json:"preview_id"`
+	Applied        bool   `json:"applied"`
+	Action         string `json:"action"`
+	ItemID         string `json:"item_id,omitempty"`
+	WishlistID     string `json:"wishlist_id,omitempty"`
+	CollectionName string `json:"collection_name,omitempty"`
+	PreviewID      string `json:"preview_id"`
 }
 
 type WorkflowRun struct {
@@ -726,6 +727,13 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		}
 		result.ItemID = itemID
 		result.WishlistID = wishlistID
+	case "assign_collection_item":
+		itemID, collectionName, err := s.applyAssignCollectionItem(ctx, in.ProfileID, payload)
+		if err != nil {
+			return ApplyActionResult{}, err
+		}
+		result.ItemID = itemID
+		result.CollectionName = collectionName
 	default:
 		return ApplyActionResult{}, fmt.Errorf("unsupported action: %s", preview.Action)
 	}
@@ -737,6 +745,17 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 	if err != nil {
 		return ApplyActionResult{}, fmt.Errorf("mark action applied: %w", err)
 	}
+	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", applyActionMessage(result), map[string]any{
+		"action_result": map[string]any{
+			"preview_id":       result.PreviewID,
+			"action":           result.Action,
+			"item_id":          result.ItemID,
+			"wishlist_id":      result.WishlistID,
+			"collection_name":  result.CollectionName,
+			"confirmation":     "confirmed",
+			"mutation_applied": result.Applied,
+		},
+	})
 	return result, nil
 }
 
@@ -937,6 +956,121 @@ func (s *Service) applyCreateWishlistEntry(ctx context.Context, profileID string
 		return "", "", fmt.Errorf("sync wishlist item: %w", err)
 	}
 	return itemID, wishlistID, nil
+}
+
+type workspaceCollectionsState struct {
+	Collections      []string                  `json:"collections"`
+	ActiveCollection string                    `json:"activeCollection"`
+	Items            []workspaceCollectionItem `json:"items"`
+}
+
+type workspaceCollectionItem struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Detail         string `json:"detail"`
+	CollectionName string `json:"collectionName,omitempty"`
+}
+
+func (s *Service) applyAssignCollectionItem(ctx context.Context, profileID string, payload map[string]any) (string, string, error) {
+	itemID, _ := payload["item_id"].(string)
+	collectionName, _ := payload["collection_name"].(string)
+	title, _ := payload["title"].(string)
+	partNumber, _ := payload["part_number"].(string)
+	itemID = strings.TrimSpace(itemID)
+	collectionName = strings.TrimSpace(collectionName)
+	if itemID == "" || collectionName == "" || collectionName == "All Items" {
+		return "", "", fmt.Errorf("item_id and assignable collection_name are required")
+	}
+	if strings.TrimSpace(title) == "" {
+		title = itemID
+	}
+	detail := strings.TrimSpace(partNumber)
+	if detail == "" {
+		detail = "Assigned by chat copilot"
+	}
+
+	settingsKey := "collections.workspace.v1"
+	state := workspaceCollectionsState{
+		Collections:      []string{"All Items", collectionName},
+		ActiveCollection: collectionName,
+		Items:            []workspaceCollectionItem{},
+	}
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM profile_settings WHERE profile_id = ? AND key = ?`, strings.TrimSpace(profileID), settingsKey).Scan(&raw)
+	if err != nil && err != sql.ErrNoRows {
+		return "", "", fmt.Errorf("load workspace collections: %w", err)
+	}
+	if strings.TrimSpace(raw) != "" {
+		var existing workspaceCollectionsState
+		if err := json.Unmarshal([]byte(raw), &existing); err == nil {
+			state = existing
+		}
+	}
+	state.Collections = ensureCollectionName(state.Collections, "All Items")
+	state.Collections = ensureCollectionName(state.Collections, collectionName)
+	state.ActiveCollection = collectionName
+	updated := false
+	for i := range state.Items {
+		if state.Items[i].ID == itemID {
+			state.Items[i].CollectionName = collectionName
+			if strings.TrimSpace(state.Items[i].Name) == "" {
+				state.Items[i].Name = strings.TrimSpace(title)
+			}
+			if strings.TrimSpace(state.Items[i].Detail) == "" {
+				state.Items[i].Detail = detail
+			}
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		state.Items = append(state.Items, workspaceCollectionItem{
+			ID:             itemID,
+			Name:           strings.TrimSpace(title),
+			Detail:         detail,
+			CollectionName: collectionName,
+		})
+	}
+	nextRaw, err := json.Marshal(state)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal workspace collections: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO profile_settings(profile_id, key, value, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(profile_id, key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, strings.TrimSpace(profileID), settingsKey, string(nextRaw))
+	if err != nil {
+		return "", "", fmt.Errorf("assign collection item: %w", err)
+	}
+	return itemID, collectionName, nil
+}
+
+func ensureCollectionName(collections []string, name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return collections
+	}
+	for _, existing := range collections {
+		if strings.EqualFold(strings.TrimSpace(existing), name) {
+			return collections
+		}
+	}
+	return append(collections, name)
+}
+
+func applyActionMessage(result ApplyActionResult) string {
+	switch result.Action {
+	case "assign_collection_item":
+		return fmt.Sprintf("Applied assign_collection_item to %s in %s.", result.ItemID, result.CollectionName)
+	case "create_wishlist_entry":
+		return fmt.Sprintf("Applied create_wishlist_entry to %s.", result.WishlistID)
+	default:
+		if strings.TrimSpace(result.ItemID) != "" {
+			return fmt.Sprintf("Applied %s to %s.", result.Action, result.ItemID)
+		}
+		return fmt.Sprintf("Applied %s.", result.Action)
+	}
 }
 
 func (s *Service) CleanupOldPreviews(ctx context.Context, olderThan time.Duration) error {
