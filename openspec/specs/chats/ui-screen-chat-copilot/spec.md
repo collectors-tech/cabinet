@@ -80,6 +80,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot proposes field changes
 - **THEN** UI MUST present confirmation summary and only apply changes after explicit confirm action
 
+#### Scenario: Inventory update apply records changed fields
+- **GIVEN** user has previewed an inventory update with exact part number and title changes
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST update the active-profile inventory item with those fields
+- **AND** the apply result and chat thread history MUST record the changed part number and title evidence
+
 #### Scenario: Create new item/wishlist entry via chat
 - **GIVEN** user requests creation of new record in chat
 - **WHEN** copilot returns structured draft payload
@@ -202,3 +208,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
 | UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |
 | UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |

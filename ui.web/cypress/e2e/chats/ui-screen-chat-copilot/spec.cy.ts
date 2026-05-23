@@ -139,6 +139,45 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-confirm-summary"]').should('contain', 'create_inventory_item')
     cy.get('[data-testid="chat-apply-confirm-submit"]').click()
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'create_inventory_item')
+    cy.request('/api/items?profile_id=e2e-profile-001').then((response) => {
+      expect(response.status).to.eq(200)
+      const items = response.body.items as Array<{
+        id?: string
+        part_number?: string
+        title?: string
+      }>
+      const created = items.find((item) => item.part_number === 'CP-007-INV')
+      expect(created, 'created inventory item').to.exist
+
+      cy.get('[data-testid="chat-preview-action-mode"]').select('update_inventory_item')
+      cy.get('[data-testid="chat-preview-target-item-id"]')
+        .clear()
+        .type(created?.id ?? '')
+      cy.get('[data-testid="chat-preview-part-number"]')
+        .clear()
+        .type('CP-007-INV-UPD')
+      cy.get('[data-testid="chat-preview-title"]')
+        .clear()
+        .type('Copilot Inventory Updated')
+      cy.get('[data-testid="chat-preview-action-button"]').click()
+      cy.get('[data-testid="chat-action-preview"]')
+        .should('contain', 'update_inventory_item')
+        .and('contain', 'CP-007-INV-UPD')
+      cy.get('[data-testid="chat-apply-action-button"]').click()
+      cy.get('[data-testid="chat-apply-confirm-summary"]')
+        .should('contain', 'Apply update_inventory_item')
+        .and('contain', 'part_number=CP-007-INV-UPD')
+        .and('contain', 'title=Copilot Inventory Updated')
+      cy.get('[data-testid="chat-apply-confirm-submit"]').click()
+      cy.get('[data-testid="chat-action-apply-result"]')
+        .should('contain', 'update_inventory_item')
+        .and('contain', 'part_number=CP-007-INV-UPD')
+        .and('contain', 'title=Copilot Inventory Updated')
+      cy.get('[data-testid="chat-message-list"]')
+        .should('contain', 'Applied update_inventory_item')
+        .and('contain', 'part_number=CP-007-INV-UPD')
+        .and('contain', 'title=Copilot Inventory Updated')
+    })
 
     cy.get('[data-testid="chat-preview-action-mode"]').select('create_wishlist_entry')
     cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-007-WISH')

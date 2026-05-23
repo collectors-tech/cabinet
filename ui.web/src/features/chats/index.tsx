@@ -67,6 +67,8 @@ type ChatApplyResult = {
   item_id?: string
   wishlist_id?: string
   collection_name?: string
+  part_number?: string
+  title?: string
   preview_id: string
 }
 
@@ -449,6 +451,12 @@ export function Chats() {
         : ''
     const base = `Applied ${applyResult.action}`
     const withPart = previewPart ? `${base} (${previewPart})` : base
+    const changedFields = [
+      applyResult.part_number ? `part_number=${applyResult.part_number}` : '',
+      applyResult.title ? `title=${applyResult.title}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
     if (applyResult.wishlist_id) {
       return `${withPart} to wishlist ${applyResult.wishlist_id}`
     }
@@ -456,7 +464,9 @@ export function Chats() {
       return `${withPart} to collection ${applyResult.collection_name} for item ${applyResult.item_id}`
     }
     if (applyResult.item_id) {
-      return `${withPart} to item ${applyResult.item_id}`
+      return changedFields
+        ? `${withPart} to item ${applyResult.item_id} with ${changedFields}`
+        : `${withPart} to item ${applyResult.item_id}`
     }
     return withPart
   })()
