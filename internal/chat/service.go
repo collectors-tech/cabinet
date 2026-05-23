@@ -789,18 +789,20 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 		return ApplyActionResult{}, fmt.Errorf("mark action cancelled: %w", err)
 	}
 	result := ApplyActionResult{
-		Applied:    false,
-		Action:     preview.Action,
-		PreviewID:  preview.ID,
-		ItemID:     trimPayloadString(payload, "item_id"),
-		PartNumber: trimPayloadString(payload, "part_number"),
-		Title:      trimPayloadString(payload, "title"),
+		Applied:        false,
+		Action:         preview.Action,
+		PreviewID:      preview.ID,
+		ItemID:         trimPayloadString(payload, "item_id"),
+		CollectionName: trimPayloadString(payload, "collection_name"),
+		PartNumber:     trimPayloadString(payload, "part_number"),
+		Title:          trimPayloadString(payload, "title"),
 	}
 	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
 		"action_result": map[string]any{
 			"preview_id":       result.PreviewID,
 			"action":           result.Action,
 			"item_id":          result.ItemID,
+			"collection_name":  result.CollectionName,
 			"part_number":      result.PartNumber,
 			"title":            result.Title,
 			"confirmation":     "cancelled",
@@ -1122,6 +1124,9 @@ func applyActionMessage(result ApplyActionResult) string {
 }
 
 func cancelActionMessage(result ApplyActionResult) string {
+	if result.Action == "assign_collection_item" && strings.TrimSpace(result.ItemID) != "" && strings.TrimSpace(result.CollectionName) != "" {
+		return fmt.Sprintf("Canceled assign_collection_item for %s in %s; no mutation applied.", result.ItemID, result.CollectionName)
+	}
 	fieldSummary := applyActionFieldSummary(result)
 	if strings.TrimSpace(result.ItemID) != "" {
 		if fieldSummary != "" {

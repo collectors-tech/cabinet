@@ -451,3 +451,86 @@ func TestServiceCancelPreviewRecordsOutcomeWithoutMutation(t *testing.T) {
 		t.Fatalf("expected canceled preview to reject later apply, got %v", err)
 	}
 }
+
+func TestServiceCancelCollectionAssignmentRecordsTargetWithoutMutation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-cancel-collection"
+	itemID := "collection-cancel-target"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Cancel Collection"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	if _, err := conn.ExecContext(ctx, "INSERT INTO canonical_items(id, profile_id, part_number, title, brand, category) VALUES (?, ?, ?, ?, ?, ?)", itemID, profileID, "COL-CANCEL-001", "Collection Cancel Item", "AFX", "General"); err != nil {
+		t.Fatalf("insert inventory item: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Cancel Collection Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "assign_collection_item",
+		Payload: map[string]any{
+			"item_id":         itemID,
+			"collection_name": "Do Not Assign",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(assign_collection_item) error = %v", err)
+	}
+
+	result, err := svc.CancelAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+	})
+	if err != nil {
+		t.Fatalf("CancelAction() error = %v", err)
+	}
+	if result.Applied || result.Action != "assign_collection_item" || result.ItemID != itemID || result.CollectionName != "Do Not Assign" {
+		t.Fatalf("expected canceled collection assignment target with no mutation, got %+v", result)
+	}
+
+	var workspaceSettings int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM profile_settings WHERE profile_id = ? AND key = 'collections.workspace.v1' AND value LIKE '%Do Not Assign%'", profileID).Scan(&workspaceSettings); err != nil {
+		t.Fatalf("count workspace collection settings: %v", err)
+	}
+	if workspaceSettings != 0 {
+		t.Fatalf("expected cancel to leave collection membership unchanged, got %d matching workspace settings", workspaceSettings)
+	}
+	msgs, err := svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" ||
+		!strings.Contains(last.Content, "Canceled assign_collection_item") ||
+		!strings.Contains(last.Content, itemID) ||
+		!strings.Contains(last.Content, "Do Not Assign") ||
+		!strings.Contains(last.Content, "no mutation applied") {
+		t.Fatalf("expected collection cancel assistant outcome with target evidence, got %+v", last)
+	}
+	resultContext, _ := last.Context["action_result"].(map[string]any)
+	if resultContext["collection_name"] != "Do Not Assign" || resultContext["mutation_applied"] != false {
+		t.Fatalf("expected canceled collection action_result context, got %+v", resultContext)
+	}
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "preview already applied") {
+		t.Fatalf("expected canceled collection preview to reject later apply, got %v", err)
+	}
+}
