@@ -72,6 +72,29 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	}); err == nil {
 		t.Fatalf("expected confirm-required error")
 	}
+	stillPending, err := svc.GetActionPreview(ctx, profileID, preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview(after confirm-required) error = %v", err)
+	}
+	if stillPending.Status != "previewed" || stillPending.AppliedAt != "" {
+		t.Fatalf("expected non-confirmed apply to keep preview unapplied, got %+v", stillPending)
+	}
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM canonical_items WHERE profile_id = ?`, profileID).Scan(&itemCount); err != nil {
+		t.Fatalf("count canonical items after confirm-required apply: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("expected non-confirmed apply to leave inventory unchanged, got %d items", itemCount)
+	}
+	msgs, err = svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after confirm-required) error = %v", err)
+	}
+	for _, msg := range msgs {
+		if msg.Role == "assistant" && strings.Contains(msg.Content, "Applied create_item_stub") {
+			t.Fatalf("non-confirmed apply must not record applied assistant outcome, got %+v", msg)
+		}
+	}
 
 	applied, err := svc.ApplyAction(ctx, ApplyActionInput{
 		ProfileID: profileID,
