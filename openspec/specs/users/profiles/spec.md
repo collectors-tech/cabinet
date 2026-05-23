@@ -46,3 +46,12 @@ Selecting an existing database profile from the authenticated shell switcher SHA
 - **WHEN** the user selects an existing non-active database profile from the shell switcher
 - **THEN** Cabinet SHALL persist that profile through the active profile API
 - **AND** Inventory, Wishlist, Collections, Settings, Chats, and Integrations SHALL show the selected database profile as the active shell context
+
+### Requirement PROFILES-006: Cabinet SHALL distinguish showcase sample profiles from working profiles
+Showcase, demo, or sample-data profiles SHALL be visibly labelled as sample context anywhere the authenticated shell presents them beside normal working database profiles.
+
+#### Scenario: Showcase profile context is explicit in switcher
+- **GIVEN** an authenticated user can choose between `Primary DB` and `Showcase DB`
+- **WHEN** the user opens the database/profile switcher
+- **THEN** `Primary DB` SHALL be labelled as a normal database
+- **AND** `Showcase DB` SHALL be labelled as showcase sample data before and after selection
