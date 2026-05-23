@@ -320,6 +320,83 @@ func TestServiceActionPreviewRejectsCrossProfileApply(t *testing.T) {
 	}
 }
 
+func TestServiceActionPreviewRejectsCrossThreadApply(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-cross-thread"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Cross Thread"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	ownerThread, err := svc.CreateThread(ctx, profileID, "Owner Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread(owner) error = %v", err)
+	}
+	otherThread, err := svc.CreateThread(ctx, profileID, "Other Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread(other) error = %v", err)
+	}
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  ownerThread.ID,
+		Action:    "create_inventory_item",
+		Payload: map[string]any{
+			"part_number": "THREAD-OWNER-ONLY",
+			"title":       "Owner Thread Only",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(owner) error = %v", err)
+	}
+
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  otherThread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "preview not found") {
+		t.Fatalf("expected wrong-thread preview apply to fail as not found, got %v", err)
+	}
+
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM canonical_items WHERE profile_id = ? AND part_number = 'THREAD-OWNER-ONLY'", profileID).Scan(&itemCount); err != nil {
+		t.Fatalf("count canonical items after rejected thread apply: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("expected rejected wrong-thread apply to leave inventory unchanged, got %d items", itemCount)
+	}
+
+	stillPending, err := svc.GetActionPreview(ctx, profileID, preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview(owner) error = %v", err)
+	}
+	if stillPending.Status != "previewed" || stillPending.ThreadID != ownerThread.ID || stillPending.AppliedAt != "" {
+		t.Fatalf("expected owner preview to remain pending on original thread, got %+v", stillPending)
+	}
+	for _, threadID := range []string{ownerThread.ID, otherThread.ID} {
+		msgs, err := svc.ListMessages(ctx, profileID, threadID)
+		if err != nil {
+			t.Fatalf("ListMessages(%s) error = %v", threadID, err)
+		}
+		for _, msg := range msgs {
+			if msg.Role == "assistant" && strings.Contains(msg.Content, "Applied create_inventory_item") {
+				t.Fatalf("wrong-thread apply must not record applied assistant outcome in thread %s, got %+v", threadID, msg)
+			}
+		}
+	}
+}
+
 func TestServiceUpdatePreviewApplyRejectsMissingTarget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
