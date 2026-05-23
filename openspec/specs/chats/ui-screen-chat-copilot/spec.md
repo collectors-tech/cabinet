@@ -116,6 +116,13 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **AND** the Collections surface MUST show the item assigned to the requested collection after navigation
 - **AND** the chat thread history MUST record an assistant outcome message with the applied action, target item, and collection
 
+#### Scenario: Failed inventory update apply leaves state unchanged
+- **GIVEN** user has previewed an inventory update for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating or updating inventory records
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -172,3 +179,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-12 | Provider defaults in preview | Preview and confirm summary preserve active assistant provider/model defaults | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews` |
 | UC-CHAT-13 | Collection assignment preview/apply | Preview and confirm summary preserve target item, collection name, and assistant defaults before apply; confirmed apply persists collection membership and records thread outcome | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-14 | Wrong-profile preview apply | Preview apply is scoped to the owning profile/thread and rejected stale profile attempts leave inventory unchanged | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossProfileApply` |
+| UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
