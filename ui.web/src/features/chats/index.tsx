@@ -436,9 +436,40 @@ export function Chats() {
     await loadMessages(activeProfileId, selectedThreadId)
   }
 
-  const cancelPreviewApply = () => {
+  const cancelPreviewApply = async () => {
+    if (!activeProfileId || !selectedThreadId || !actionPreview?.id) {
+      setConfirmApplyOpen(false)
+      return
+    }
+    setSendError(null)
+    const response = await fetch('/api/chat/actions/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: activeProfileId,
+        thread_id: selectedThreadId,
+        preview_id: actionPreview.id,
+      }),
+    })
+    if (!response.ok) {
+      setSendError(`chat_action_cancel_${response.status}`)
+      setApplyNotice('Action cancel failed; preview remains pending.')
+      setConfirmApplyOpen(false)
+      return
+    }
+    const result = (await response.json()) as ChatApplyResult
     setConfirmApplyOpen(false)
-    setApplyNotice('Action apply canceled; preview remains pending.')
+    setApplyResult(null)
+    setActionPreview((current) =>
+      current ? { ...current, status: 'cancelled' } : current
+    )
+    clearStoredActionPreview(selectedActionPreviewStorageKey)
+    setApplyNotice(
+      result.applied
+        ? 'Action cancel returned an unexpected applied result.'
+        : 'Action apply canceled; no mutation applied.'
+    )
+    await loadMessages(activeProfileId, selectedThreadId)
   }
 
   const applyResultSummary = (() => {
@@ -812,7 +843,11 @@ export function Chats() {
                   variant='outline'
                   data-testid='chat-apply-action-button'
                   onClick={() => setConfirmApplyOpen(true)}
-                  disabled={!selectedThreadId || !actionPreview?.id}
+                  disabled={
+                    !selectedThreadId ||
+                    !actionPreview?.id ||
+                    actionPreviewStatusLabel !== 'pending'
+                  }
                 >
                   Apply Action
                 </Button>
@@ -867,7 +902,7 @@ export function Chats() {
           <AlertDialogFooter>
             <AlertDialogCancel
               data-testid='chat-apply-confirm-cancel'
-              onClick={cancelPreviewApply}
+              onClick={() => void cancelPreviewApply()}
             >
               Cancel
             </AlertDialogCancel>

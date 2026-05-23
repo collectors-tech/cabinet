@@ -139,6 +139,38 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if !strings.Contains(strings.ToLower(itemsAfter.Body.String()), "chat-001") {
 		t.Fatalf("expected item created after apply, body=%s", itemsAfter.Body.String())
 	}
+
+	cancelPreviewResp := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","action":"update_inventory_item","payload":{"item_id":"cancel-target","part_number":"CHAT-CANCEL-001","title":"Canceled Chat Update"}}`), map[string]string{"Content-Type": "application/json"})
+	if cancelPreviewResp.Code != http.StatusOK {
+		t.Fatalf("cancel preview status=%d body=%s", cancelPreviewResp.Code, cancelPreviewResp.Body.String())
+	}
+	var cancelPreview struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(cancelPreviewResp.Body).Decode(&cancelPreview); err != nil {
+		t.Fatalf("decode cancel preview: %v", err)
+	}
+	cancelResp := doRequest(t, a, http.MethodPost, "/api/chat/actions/cancel", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+cancelPreview.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if cancelResp.Code != http.StatusOK {
+		t.Fatalf("cancel status=%d body=%s", cancelResp.Code, cancelResp.Body.String())
+	}
+	if !strings.Contains(cancelResp.Body.String(), `"applied":false`) || !strings.Contains(cancelResp.Body.String(), `"preview_id":"`+cancelPreview.ID+`"`) {
+		t.Fatalf("expected cancel result with applied=false and preview id, body=%s", cancelResp.Body.String())
+	}
+	itemsAfterCancel := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if itemsAfterCancel.Code != http.StatusOK {
+		t.Fatalf("items after cancel status=%d body=%s", itemsAfterCancel.Code, itemsAfterCancel.Body.String())
+	}
+	if strings.Contains(strings.ToLower(itemsAfterCancel.Body.String()), "chat-cancel-001") {
+		t.Fatalf("canceled preview should not mutate inventory, body=%s", itemsAfterCancel.Body.String())
+	}
+	messagesAfterCancel := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if messagesAfterCancel.Code != http.StatusOK {
+		t.Fatalf("messages after cancel status=%d body=%s", messagesAfterCancel.Code, messagesAfterCancel.Body.String())
+	}
+	if !strings.Contains(messagesAfterCancel.Body.String(), "Canceled update_inventory_item") || !strings.Contains(messagesAfterCancel.Body.String(), "no mutation applied") {
+		t.Fatalf("expected canceled assistant history outcome, body=%s", messagesAfterCancel.Body.String())
+	}
 }
 
 func TestChatInboxItemStatusLifecycle(t *testing.T) {

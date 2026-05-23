@@ -1848,6 +1848,33 @@ paths:
                 type: object
         "400":
           $ref: "#/components/responses/Error"
+  /api/chat/actions/cancel:
+    post:
+      tags: [Chat]
+      summary: Cancel previously previewed chat action without mutation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, thread_id, preview_id]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                preview_id:
+                  type: string
+      responses:
+        "200":
+          description: Action cancel result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/export/json:
     get:
       tags: [Data]

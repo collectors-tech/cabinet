@@ -776,7 +776,7 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 	if in.ProfileID == "" || in.ThreadID == "" || in.PreviewID == "" {
 		return ApplyActionResult{}, fmt.Errorf("profile_id, thread_id and preview_id are required")
 	}
-	preview, _, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
+	preview, payload, err := s.lookupPendingPreview(ctx, in.ProfileID, in.ThreadID, in.PreviewID)
 	if err != nil {
 		return ApplyActionResult{}, err
 	}
@@ -788,7 +788,26 @@ func (s *Service) CancelAction(ctx context.Context, in ApplyActionInput) (ApplyA
 	if err != nil {
 		return ApplyActionResult{}, fmt.Errorf("mark action cancelled: %w", err)
 	}
-	return ApplyActionResult{Applied: false, Action: preview.Action, PreviewID: preview.ID}, nil
+	result := ApplyActionResult{
+		Applied:    false,
+		Action:     preview.Action,
+		PreviewID:  preview.ID,
+		ItemID:     trimPayloadString(payload, "item_id"),
+		PartNumber: trimPayloadString(payload, "part_number"),
+		Title:      trimPayloadString(payload, "title"),
+	}
+	_, _ = s.CreateMessage(ctx, in.ProfileID, in.ThreadID, "assistant", cancelActionMessage(result), map[string]any{
+		"action_result": map[string]any{
+			"preview_id":       result.PreviewID,
+			"action":           result.Action,
+			"item_id":          result.ItemID,
+			"part_number":      result.PartNumber,
+			"title":            result.Title,
+			"confirmation":     "cancelled",
+			"mutation_applied": false,
+		},
+	})
+	return result, nil
 }
 
 func (s *Service) lookupPendingPreview(ctx context.Context, profileID, threadID, previewID string) (ActionPreview, map[string]any, error) {
@@ -1100,6 +1119,20 @@ func applyActionMessage(result ApplyActionResult) string {
 		}
 		return fmt.Sprintf("Applied %s.", result.Action)
 	}
+}
+
+func cancelActionMessage(result ApplyActionResult) string {
+	fieldSummary := applyActionFieldSummary(result)
+	if strings.TrimSpace(result.ItemID) != "" {
+		if fieldSummary != "" {
+			return fmt.Sprintf("Canceled %s for %s with %s; no mutation applied.", result.Action, result.ItemID, fieldSummary)
+		}
+		return fmt.Sprintf("Canceled %s for %s; no mutation applied.", result.Action, result.ItemID)
+	}
+	if fieldSummary != "" {
+		return fmt.Sprintf("Canceled %s with %s; no mutation applied.", result.Action, fieldSummary)
+	}
+	return fmt.Sprintf("Canceled %s; no mutation applied.", result.Action)
 }
 
 func applyActionFieldSummary(result ApplyActionResult) string {
