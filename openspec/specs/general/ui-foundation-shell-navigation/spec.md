@@ -120,3 +120,12 @@ Authenticated shell routes SHALL keep `document.title` in the format `Cabinet - 
 - **WHEN** the active route changes
 - **THEN** the browser title MUST update to `Cabinet - <Page Title>` for that route
 - **AND** the title MUST NOT be blank or leak raw route ids/translation keys
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-014: Database switcher SHALL recover from active profile load failure
+The database/profile switcher SHALL make active profile load failures visible and SHALL provide a retry action that restores the active database label when the profile endpoint recovers.
+
+#### Scenario: Retry profile loading from shell switcher
+- **GIVEN** the authenticated shell cannot load the active profile/database context
+- **WHEN** the user opens the database switcher and retries profile loading
+- **THEN** the shell SHALL show the profile load failure before retry
+- **AND** the recovered active database label SHALL replace the failure guidance after retry succeeds
