@@ -990,7 +990,30 @@ export function SignIn() {
             log into your account
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='space-y-4'>
+          <div
+            className='rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground'
+            data-testid='sign-in-profile-guidance'
+          >
+            <p className='font-medium text-foreground'>
+              Sign in to unlock your Cabinet workspace.
+            </p>
+            <p>
+              Your active database/profile controls Inventory, Wishlist,
+              Collections, Settings, Chats, and Integrations after sign-in;
+              collections live inside that profile.
+            </p>
+            <p>
+              New here?{' '}
+              <Link
+                to='/sign-up'
+                className='underline underline-offset-4 hover:text-primary'
+              >
+                Create account
+              </Link>{' '}
+              first, then choose or create the profile you want to work in.
+            </p>
+          </div>
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>
