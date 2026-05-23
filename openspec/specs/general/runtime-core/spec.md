@@ -175,3 +175,12 @@ If the supplied runtime context is already canceled before run-loop startup begi
 - **WHEN** run-loop startup begins
 - **THEN** runtime MUST return quickly without binding a listener or writing startup lifecycle artifacts
 - **AND** local NFR/startup checks MUST observe the fast-exit behavior rather than an unnecessary shutdown timeout path
+
+### Requirement RUNTIME-CORE-017: E2E reset hooks SHALL tolerate legacy/shared schema drift
+E2E-only reset hooks MUST clear supported runtime data without failing solely because a known reset table is absent from a legacy or shared managed test database.
+
+#### Scenario: Reset with missing known table
+- **GIVEN** an E2E-enabled managed runtime uses a database where a known reset table is absent
+- **WHEN** `/api/test/reset` or the reset hook clears E2E state
+- **THEN** reset MUST skip the absent table and continue clearing present reset tables
+- **AND** reset MUST still fail on real delete/query errors for tables that exist

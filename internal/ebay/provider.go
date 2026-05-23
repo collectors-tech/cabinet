@@ -27,6 +27,25 @@ type Provider struct {
 	client      *http.Client
 }
 
+type ProviderError struct {
+	StatusCode int
+	ErrorCode  string
+	Message    string
+}
+
+func (e *ProviderError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if strings.TrimSpace(e.Message) != "" {
+		return e.Message
+	}
+	if strings.TrimSpace(e.ErrorCode) != "" {
+		return e.ErrorCode
+	}
+	return "ebay provider error"
+}
+
 func NewProvider(cfg ProviderConfig) *Provider {
 	base := strings.TrimSpace(cfg.BaseURL)
 	if base == "" {
@@ -46,7 +65,7 @@ func NewProvider(cfg ProviderConfig) *Provider {
 
 func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.CandidateInput, error) {
 	if p.bearerToken == "" {
-		return nil, fmt.Errorf("missing ebay bearer token")
+		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_MISSING", Message: "missing ebay bearer token"}
 	}
 	terms := strings.Join(q.Keywords, " ")
 	if terms == "" {
@@ -74,8 +93,11 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		return nil, fmt.Errorf("request ebay: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_INVALID", Message: fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)}
+	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("ebay search status: %d", resp.StatusCode)
+		return nil, &ProviderError{StatusCode: resp.StatusCode, ErrorCode: "PROVIDER_SEARCH_FAILED", Message: fmt.Sprintf("ebay search status: %d", resp.StatusCode)}
 	}
 
 	var payload struct {
@@ -83,7 +105,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			ItemID string `json:"itemId"`
 			Title  string `json:"title"`
 			Price  struct {
-				Value string `json:"value"`
+				Value    string `json:"value"`
+				Currency string `json:"currency"`
 			} `json:"price"`
 			ItemWebURL string `json:"itemWebUrl"`
 			Image      struct {
@@ -92,6 +115,10 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Seller struct {
 				Username string `json:"username"`
 			} `json:"seller"`
+			EstimatedAvailabilities []struct {
+				Status   string `json:"estimatedAvailabilityStatus"`
+				Quantity int    `json:"estimatedAvailableQuantity"`
+			} `json:"estimatedAvailabilities"`
 		} `json:"itemSummaries"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -101,15 +128,48 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	for _, it := range payload.ItemSummaries {
 		price, _ := strconv.ParseFloat(it.Price.Value, 64)
+		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
-			ListingID: it.ItemID,
-			Title:     it.Title,
-			Price:     price,
-			URL:       it.ItemWebURL,
-			Image:     it.Image.ImageURL,
-			Seller:    it.Seller.Username,
-			Source:    "ebay",
+			ListingID:  it.ItemID,
+			Title:      it.Title,
+			Price:      price,
+			Currency:   strings.ToUpper(strings.TrimSpace(it.Price.Currency)),
+			URL:        it.ItemWebURL,
+			Image:      it.Image.ImageURL,
+			Seller:     it.Seller.Username,
+			Source:     "ebay",
+			StockState: stockState,
+			StockCount: stockCount,
 		})
 	}
 	return out, nil
+}
+
+func normalizeAvailability(items []struct {
+	Status   string `json:"estimatedAvailabilityStatus"`
+	Quantity int    `json:"estimatedAvailableQuantity"`
+}) (string, int) {
+	if len(items) == 0 {
+		return "", -1
+	}
+	first := items[0]
+	status := strings.ToUpper(strings.TrimSpace(first.Status))
+	count := first.Quantity
+	switch status {
+	case "IN_STOCK", "AVAILABLE", "LIMITED_STOCK":
+		if count == 0 {
+			return "in_stock", -1
+		}
+		if count > 0 && count <= 3 {
+			return "low_stock", count
+		}
+		return "in_stock", count
+	case "OUT_OF_STOCK", "SOLD_OUT":
+		return "out_of_stock", 0
+	default:
+		if count > 0 {
+			return "in_stock", count
+		}
+		return "unknown", -1
+	}
 }

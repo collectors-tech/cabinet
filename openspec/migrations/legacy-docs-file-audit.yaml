@@ -72,6 +72,12 @@ files:
       - openspec/specs/integrations/provider-au-webshops/spec.md
       - openspec/specs/settings/spec.md
       - openspec/specs/integrations/scanner/spec.md
+  - source: docs/assistant-openai-workflow-plan.md
+    status: migrated
+    requirement_markers: 0
+    targets:
+      - openspec/migration/assistant-openai-workflow-plan.md
+      - openspec/specs/chats/assistant-execution-surfaces/spec.md
   - source: docs/SPEC.md
     status: migrated
     requirement_markers: 0
