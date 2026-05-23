@@ -129,3 +129,13 @@ The database/profile switcher SHALL make active profile load failures visible an
 - **WHEN** the user opens the database switcher and retries profile loading
 - **THEN** the shell SHALL show the profile load failure before retry
 - **AND** the recovered active database label SHALL replace the failure guidance after retry succeeds
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-015: Database switcher SHALL create and activate profiles
+The database/profile switcher add action SHALL create a new database profile, activate it, and refresh the shell against that profile context.
+
+#### Scenario: Add database profile from switcher
+- **GIVEN** the authenticated shell database switcher is visible
+- **WHEN** the user chooses Add Database and supplies a profile name
+- **THEN** the switcher SHALL call the profile create API with that name
+- **AND** the switcher SHALL activate the created profile through the active profile API
+- **AND** the shell SHALL reload with the created profile label as active database context

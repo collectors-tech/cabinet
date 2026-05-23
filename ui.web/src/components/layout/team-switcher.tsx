@@ -142,6 +142,54 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     }
   }
 
+  const createProfileFromSwitcher = async () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const profileName = window.prompt('New database name')?.trim()
+    if (!profileName) {
+      return
+    }
+
+    setLoadError(null)
+    const createResp = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: profileName }),
+    })
+    if (!createResp.ok) {
+      setLoadError('Profile unavailable. Retry loading databases.')
+      return
+    }
+
+    const created = (await createResp.json()) as { id?: string; name?: string }
+    const profileID = created.id?.trim()
+    if (!profileID) {
+      setLoadError('Profile unavailable. Retry loading databases.')
+      return
+    }
+
+    const setActiveResp = await fetch('/api/profiles/active', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_id: profileID }),
+    })
+    if (!setActiveResp.ok) {
+      setLoadError('Profile unavailable. Retry loading databases.')
+      return
+    }
+
+    const selectedWorkspace = {
+      name: created.name?.trim() || profileName,
+      logo: teams[availableWorkspaces.length]?.logo ?? teams[0]?.logo,
+      plan: 'Database',
+    }
+    setAvailableWorkspaces((workspaces) => [...workspaces, selectedWorkspace])
+    setActiveTeam(selectedWorkspace)
+    window.location.reload()
+  }
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -217,7 +265,13 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               </>
             ) : null}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className='gap-2 p-2'>
+            <DropdownMenuItem
+              className='gap-2 p-2'
+              data-testid='team-switcher-add-profile'
+              onClick={() => {
+                void createProfileFromSwitcher()
+              }}
+            >
               <div className='flex size-6 items-center justify-center rounded-md border bg-background'>
                 <Plus className='size-4' />
               </div>
