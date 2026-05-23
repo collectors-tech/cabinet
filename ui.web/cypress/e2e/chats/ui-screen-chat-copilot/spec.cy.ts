@@ -180,6 +180,49 @@ describe('chats/ui-screen-chat-copilot', () => {
     )
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply', () => {
+    openChatsWithAssistantDefaults('openai', 'gpt-4.1-mini')
+    createThread('E2E Copilot Collection Preview Thread')
+
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Assign this item to the retail collection')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Assign this item to the retail collection'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select(
+      'assign_collection_item'
+    )
+    cy.get('[data-testid="chat-preview-target-item-id"]')
+      .clear()
+      .type('inventory-item-pikachu-shadowless')
+    cy.get('[data-testid="chat-preview-part-number"]')
+      .clear()
+      .type('CP-013-COLLECT')
+    cy.get('[data-testid="chat-preview-title"]')
+      .clear()
+      .type('Shadowless Pikachu')
+    cy.get('[data-testid="chat-preview-collection-name"]')
+      .clear()
+      .type('Store 1')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'assign_collection_item')
+      .and('contain', 'inventory-item-pikachu-shadowless')
+      .and('contain', 'Store 1')
+      .and('contain', 'openai / gpt-4.1-mini')
+    cy.get('[data-testid="chat-apply-action-button"]').click()
+    cy.get('[data-testid="chat-apply-confirm-summary"]')
+      .should('contain', 'Apply assign_collection_item')
+      .and('contain', 'target=inventory-item-pikachu-shadowless')
+      .and('contain', 'collection=Store 1')
+      .and('contain', 'assistant=openai/gpt-4.1-mini')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {
     openChats()
     createThread('E2E Copilot Cancel Apply Thread')
