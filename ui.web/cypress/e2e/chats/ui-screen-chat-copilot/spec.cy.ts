@@ -393,6 +393,61 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-action-button"]').should('be.disabled')
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload', () => {
+    openChats()
+    createThread('E2E Copilot Route Return Thread')
+
+    cy.get('[data-testid="chat-compose-input"]')
+      .clear()
+      .type('Keep this pending preview available while I check another route')
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.get('[data-testid="chat-message-list"]').should(
+      'contain',
+      'Keep this pending preview available while I check another route'
+    )
+
+    cy.get('[data-testid="chat-preview-action-mode"]').select(
+      'create_inventory_item'
+    )
+    cy.get('[data-testid="chat-preview-part-number"]')
+      .clear()
+      .type('CP-016-RETURN')
+    cy.get('[data-testid="chat-preview-title"]')
+      .clear()
+      .type('Route Return Preview')
+    cy.get('[data-testid="chat-preview-action-button"]').click()
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'create_inventory_item')
+      .and('contain', 'CP-016-RETURN')
+      .and('contain', 'pending')
+
+    cy.visit('/inventory')
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/inventory\/?$/
+    )
+    cy.visit('/chats')
+    cy.get('[data-testid="chat-thread-title"]').should(
+      'contain',
+      'E2E Copilot Route Return Thread'
+    )
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'create_inventory_item')
+      .and('contain', 'CP-016-RETURN')
+      .and('contain', 'pending')
+
+    cy.reload()
+    cy.get('[data-testid="chat-thread-title"]').should(
+      'contain',
+      'E2E Copilot Route Return Thread'
+    )
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'create_inventory_item')
+      .and('contain', 'CP-016-RETURN')
+      .and('contain', 'pending')
+    cy.get('[data-testid="chat-apply-action-button"]').should('not.be.disabled')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow once message context exists', () => {
     cy.viewport(390, 844)
     openChats()
