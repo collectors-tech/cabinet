@@ -23,6 +23,7 @@ tags:
   - name: Licensing
   - name: AI
   - name: Chat
+  - name: Telegram
   - name: Logs
   - name: Data
   - name: Backup
@@ -39,6 +40,8 @@ paths:
             text/plain:
               schema:
                 type: string
+        "400":
+          $ref: "#/components/responses/Error"
   /api/runtime:
     get:
       tags: [Runtime]
@@ -55,6 +58,8 @@ paths:
                     type: string
                   update_public_key_configured:
                     type: boolean
+        "400":
+          $ref: "#/components/responses/Error"
   /api/runtime/recovery:
     get:
       tags: [Runtime]
@@ -69,6 +74,8 @@ paths:
                 properties:
                   recovery_required:
                     type: boolean
+        "400":
+          $ref: "#/components/responses/Error"
   /api/profiles:
     get:
       tags: [Profiles]
@@ -85,6 +92,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Profiles]
       summary: Create profile
@@ -118,6 +127,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
     put:
       tags: [Profiles]
       summary: Set active profile
@@ -158,6 +169,8 @@ paths:
                     type: object
                     additionalProperties:
                       type: string
+        "400":
+          $ref: "#/components/responses/Error"
     put:
       tags: [Profiles]
       summary: Update profile settings
@@ -253,6 +266,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Collection]
       summary: Create canonical item
@@ -338,6 +353,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Instance"
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Collection]
       summary: Create instance for item
@@ -425,6 +442,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/scanner/query-sets:
     get:
       tags: [Scanner]
@@ -441,6 +460,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/ScannerQuerySet"
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Scanner]
       summary: Create scanner query set
@@ -457,6 +478,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScannerQuerySet"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/scanner/query-sets/{querySetID}:
     put:
       tags: [Scanner]
@@ -546,6 +569,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Candidate"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/matching/run:
     post:
       tags: [Matching]
@@ -557,6 +582,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/matching/results:
     get:
       tags: [Matching]
@@ -573,6 +600,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MatchResult"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/discovery/not-in-collection:
     get:
       tags: [Discovery]
@@ -599,6 +628,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/DiscoveryItem"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/discovery/action:
     post:
       tags: [Discovery]
@@ -626,6 +657,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/wishlist:
     get:
       tags: [Wishlist]
@@ -642,6 +675,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/WishlistEntry"
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Wishlist]
       summary: Create wishlist entry
@@ -658,6 +693,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WishlistEntry"
+        "400":
+          $ref: "#/components/responses/Error"
     put:
       tags: [Wishlist]
       summary: Update wishlist entry
@@ -674,6 +711,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
     delete:
       tags: [Wishlist]
       summary: Delete wishlist entry
@@ -686,6 +725,8 @@ paths:
       responses:
         "204":
           description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/wishlist/convert-owned:
     post:
       tags: [Wishlist]
@@ -730,6 +771,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/history:
     get:
       tags: [Pricing]
@@ -752,6 +795,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/PriceSnapshot"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/dashboard:
     get:
       tags: [Dashboard]
@@ -763,6 +808,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/license/import:
     post:
       tags: [Licensing]
@@ -821,6 +868,8 @@ paths:
                     items: { type: string }
                   expires_at:
                     type: string
+        "400":
+          $ref: "#/components/responses/Error"
   /api/ai/test:
     post:
       tags: [AI]
@@ -842,6 +891,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/ai/suggest/title:
     post:
       tags: [AI]
@@ -865,6 +916,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AISuggestion"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/logs/activity:
     get:
       tags: [Logs]
@@ -886,6 +939,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/LogEntry"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/logs/export:
     get:
       tags: [Logs]
@@ -897,6 +952,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/onboarding/sample-data:
     post:
       tags: [Onboarding]
@@ -936,6 +993,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/scanner/failures:
     get:
       tags: [Scanner]
@@ -947,6 +1006,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/scanner/failures/retry:
     post:
       tags: [Scanner]
@@ -985,6 +1046,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/settings/reset-ignore-rules:
     post:
       tags: [Discovery]
@@ -996,6 +1059,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/wishlist/hits:
     get:
       tags: [Wishlist]
@@ -1007,6 +1072,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/snapshot/run:
     post:
       tags: [Pricing]
@@ -1018,6 +1085,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/graph:
     get:
       tags: [Pricing]
@@ -1029,6 +1098,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/by-source:
     get:
       tags: [Pricing]
@@ -1040,6 +1111,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/stats:
     get:
       tags: [Pricing]
@@ -1051,6 +1124,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/trend:
     get:
       tags: [Pricing]
@@ -1062,6 +1137,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/pricing/history/export:
     get:
       tags: [Pricing]
@@ -1073,6 +1150,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/logs/debug:
     post:
       tags: [Logs]
@@ -1084,6 +1163,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/ai/toggle:
     post:
       tags: [AI]
@@ -1095,6 +1176,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/ai/suggest/photo:
     post:
       tags: [AI]
@@ -1106,6 +1189,474 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AISuggestion"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/integrations/ebay/purchase-inbox/reviews:
+    post:
+      tags: [Integrations]
+      summary: Prepare eBay Purchase Inbox review records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cards]
+              properties:
+                cards:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Purchase Inbox review records grouped by order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  source:
+                    type: string
+                    enum: [ebay_purchase_capture]
+                  reviews:
+                    type: array
+                    items:
+                      type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/integrations/ebay/purchase-inbox/actions:
+    post:
+      tags: [Integrations]
+      summary: Apply a confirmed eBay Purchase Inbox link or convert action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_id, target_key, confirmed, card]
+              properties:
+                action_id:
+                  type: string
+                  enum: [link_existing_inventory_item, convert_to_inventory_item]
+                target_key:
+                  type: string
+                confirmed:
+                  type: boolean
+                existing_item_id:
+                  type: string
+                card:
+                  type: object
+      responses:
+        "200":
+          description: Confirmed Purchase Inbox action result with audit metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  action_id:
+                    type: string
+                  target_key:
+                    type: string
+                  profile_id:
+                    type: string
+                  audit:
+                    type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/telegram/catalog-captures:
+    post:
+      tags: [Telegram]
+      summary: Ingest an authorized Telegram catalog capture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, sender_id, chat_id]
+              properties:
+                profile_id:
+                  type: string
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                message_id:
+                  type: string
+                text:
+                  type: string
+                barcode:
+                  type: string
+                grouping_hint:
+                  type: string
+                draft:
+                  type: object
+                  properties:
+                    part_number:
+                      type: string
+                    title:
+                      type: string
+                    brand:
+                      type: string
+                    category:
+                      type: string
+                    lookup_source:
+                      type: string
+                    lookup_url:
+                      type: string
+                    lookup_confidence:
+                      type: string
+                media:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      file_id:
+                        type: string
+                      filename:
+                        type: string
+                      mime_type:
+                        type: string
+                      kind:
+                        type: string
+                      content_base64:
+                        type: string
+                source_metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "201":
+          description: Capture accepted and queued for preview confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  thread:
+                    type: object
+                  message:
+                    type: object
+                  attachments:
+                    type: array
+                    items:
+                      type: object
+                  preview:
+                    type: object
+                  inbox_item:
+                    type: object
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
+                            url:
+                              type: string
+                            callback_data:
+                              type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          description: Capture needs Telegram-visible follow-up before preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [telegram_capture_needs_follow_up]
+                  reason:
+                    type: string
+                  missing_fields:
+                    type: array
+                    items:
+                      type: string
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
+  /api/telegram/catalog-capture-callbacks:
+    post:
+      tags: [Telegram]
+      summary: Handle an authorized Telegram catalog capture callback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sender_id, chat_id, callback_data]
+              properties:
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                callback_data:
+                  type: string
+                  example: cabinet:catalog_capture:confirm:preview-id
+      responses:
+        "200":
+          description: Callback accepted and preview confirmed or cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  preview_id:
+                    type: string
+                  thread_id:
+                    type: string
+                  action:
+                    type: string
+                    enum: [confirm, cancel]
+                  apply_result:
+                    type: object
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                        enum: [confirmed, cancelled]
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/telegram/webhook/catalog-captures:
+    post:
+      tags: [Telegram]
+      summary: Ingest a raw Telegram webhook update as an authorized catalog capture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [update_id, message]
+              properties:
+                update_id:
+                  type: integer
+                  format: int64
+                message:
+                  type: object
+                  required: [message_id, from, chat]
+                  properties:
+                    message_id:
+                      type: integer
+                      format: int64
+                    date:
+                      type: integer
+                      format: int64
+                    from:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          format: int64
+                    chat:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          format: int64
+                    text:
+                      type: string
+                    caption:
+                      type: string
+                    media_group_id:
+                      type: string
+                    photo:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          file_id:
+                            type: string
+                          file_unique_id:
+                            type: string
+                          width:
+                            type: integer
+                          height:
+                            type: integer
+                          file_size:
+                            type: integer
+                    document:
+                      type: object
+                      properties:
+                        file_id:
+                          type: string
+                        file_unique_id:
+                          type: string
+                        file_name:
+                          type: string
+                        mime_type:
+                          type: string
+                        file_size:
+                          type: integer
+      responses:
+        "201":
+          description: Webhook capture accepted and queued for preview confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile_id:
+                    type: string
+                  thread:
+                    type: object
+                  message:
+                    type: object
+                  attachments:
+                    type: array
+                    items:
+                      type: object
+                  preview:
+                    type: object
+                  inbox_item:
+                    type: object
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      review_url:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
+                            url:
+                              type: string
+                            callback_data:
+                              type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          description: Webhook capture needs Telegram-visible follow-up before preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [telegram_capture_needs_follow_up]
+                  reason:
+                    type: string
+                  missing_fields:
+                    type: array
+                    items:
+                      type: string
+                  telegram_reply:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      confirmation_state:
+                        type: string
+                      actions:
+                        type: array
+                        items:
+                          type: string
+                      action_buttons:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            kind:
+                              type: string
+                              enum: [url, callback, reply]
+                            action:
+                              type: string
   /api/chat/threads:
     get:
       tags: [Chat]
@@ -1128,6 +1679,8 @@ paths:
                     type: array
                     items:
                       type: object
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Chat]
       summary: Create chat thread
@@ -1150,6 +1703,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/chat/messages:
     get:
       tags: [Chat]
@@ -1177,6 +1732,8 @@ paths:
                     type: array
                     items:
                       type: object
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Chat]
       summary: Create chat message
@@ -1203,6 +1760,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/chat/attachments:
     post:
       tags: [Chat]
@@ -1229,6 +1788,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/chat/actions/preview:
     post:
       tags: [Chat]
@@ -1256,6 +1817,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/chat/actions/apply:
     post:
       tags: [Chat]
@@ -1283,6 +1846,35 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/chat/actions/cancel:
+    post:
+      tags: [Chat]
+      summary: Cancel previously previewed chat action without mutation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, thread_id, preview_id]
+              properties:
+                profile_id:
+                  type: string
+                thread_id:
+                  type: string
+                preview_id:
+                  type: string
+      responses:
+        "200":
+          description: Action cancel result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/export/json:
     get:
       tags: [Data]
@@ -1294,6 +1886,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/export/csv/items:
     get:
       tags: [Data]
@@ -1305,6 +1899,8 @@ paths:
             text/csv:
               schema:
                 type: string
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/import/json/dry-run:
     post:
       tags: [Data]
@@ -1316,6 +1912,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/import/json/apply:
     post:
       tags: [Data]
@@ -1327,6 +1925,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/import/csv/dry-run:
     post:
       tags: [Data]
@@ -1338,6 +1938,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/import/csv/apply:
     post:
       tags: [Data]
@@ -1349,6 +1951,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/reindex:
     post:
       tags: [Data]
@@ -1360,6 +1964,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/rebuild-thumbnails:
     post:
       tags: [Data]
@@ -1378,6 +1984,8 @@ paths:
                     type: integer
                   rebuilt_photos:
                     type: integer
+        "400":
+          $ref: "#/components/responses/Error"
   /api/data/repair:
     post:
       tags: [Data]
@@ -1389,6 +1997,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/backup/run:
     post:
       tags: [Backup]
@@ -1400,6 +2010,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/backup/list:
     get:
       tags: [Backup]
@@ -1411,6 +2023,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/backup/restore:
     post:
       tags: [Backup]
@@ -1422,6 +2036,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/begin:
     post:
       tags: [Auth]
@@ -1433,6 +2049,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/finish:
     post:
       tags: [Auth]
@@ -1444,6 +2062,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/requirements:
     get:
       tags: [Auth]
@@ -1455,6 +2075,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/recovery/passphrase:
     post:
       tags: [Auth]
@@ -1466,6 +2088,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/recovery/reset/begin:
     post:
       tags: [Auth]
@@ -1477,6 +2101,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/webauthn/login/begin:
     post:
       tags: [Auth]
@@ -1488,6 +2114,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/webauthn/login/finish:
     post:
       tags: [Auth]
@@ -1499,6 +2127,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/session/validate:
     post:
       tags: [Auth]
@@ -1510,6 +2140,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/auth/session/lock:
     post:
       tags: [Auth]
@@ -1521,6 +2153,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/profiles/{profileID}/saved-filters:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
@@ -1534,6 +2168,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Profiles]
       summary: Create saved filter
@@ -1544,6 +2180,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     put:
       tags: [Profiles]
       summary: Update saved filter
@@ -1554,12 +2192,16 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     delete:
       tags: [Profiles]
       summary: Delete saved filter
       responses:
         "204":
           description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/profiles/{profileID}/storage:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
@@ -1573,6 +2215,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/profiles/{profileID}/license:
     parameters:
       - $ref: "#/components/parameters/ProfileID"
@@ -1586,6 +2230,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     put:
       tags: [Profiles]
       summary: Upsert profile license JSON
@@ -1596,6 +2242,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/barcodes:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1609,6 +2257,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Collection]
       summary: Add item barcode
@@ -1619,6 +2269,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1632,6 +2284,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
     post:
       tags: [Collection]
       summary: Upload item photo
@@ -1642,6 +2296,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/reorder:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1681,6 +2337,8 @@ paths:
       responses:
         "204":
           description: Photo deleted
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/{photoID}/primary:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1694,6 +2352,8 @@ paths:
       responses:
         "204":
           description: Primary set
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos/{photoID}/rotate:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1742,6 +2402,8 @@ paths:
               schema:
                 type: string
                 format: binary
+        "400":
+          $ref: "#/components/responses/Error"
   /api/items/{itemID}/photos-rebuild:
     parameters:
       - $ref: "#/components/parameters/ItemID"
@@ -1755,6 +2417,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/barcodes/{barcode}:
     parameters:
       - in: path
@@ -1771,6 +2435,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/barcodes/{barcode}/external-search:
     parameters:
       - in: path
@@ -1794,6 +2460,8 @@ paths:
             application/json:
               schema:
                 type: object
+        "400":
+          $ref: "#/components/responses/Error"
 components:
   parameters:
     ProfileID:

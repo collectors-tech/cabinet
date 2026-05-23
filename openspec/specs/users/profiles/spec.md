@@ -27,4 +27,3 @@ The authenticated shell SHALL show actionable guidance when active profile/datab
 - **WHEN** the user opens the database switcher
 - **THEN** the shell SHALL show profile-unavailable guidance with a retry action
 - **AND** retrying after the active profile endpoint recovers SHALL restore the active database label
-

@@ -80,16 +80,111 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot proposes field changes
 - **THEN** UI MUST present confirmation summary and only apply changes after explicit confirm action
 
+#### Scenario: Inventory update apply records changed fields
+- **GIVEN** user has previewed an inventory update with exact part number and title changes
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST update the active-profile inventory item with those fields
+- **AND** the apply result and chat thread history MUST record the changed part number and title evidence
+
 #### Scenario: Create new item/wishlist entry via chat
 - **GIVEN** user requests creation of new record in chat
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
+
+#### Scenario: Apply without explicit confirmation leaves state unchanged
+- **GIVEN** user has previewed an inventory create action
+- **WHEN** the apply request does not include explicit confirmation
+- **THEN** Cabinet MUST reject the apply with confirmation-required feedback
+- **AND** the preview MUST remain unapplied and available to apply for the same profile/thread
+- **AND** inventory state MUST remain unchanged
+- **AND** chat thread history MUST NOT record an applied assistant outcome
+
+#### Scenario: Wishlist entry apply persists state and records target item
+- **GIVEN** user has previewed a wishlist entry creation with part number and title fields
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST create a wishlist entry and backing inventory item in the active profile
+- **AND** the resulting inventory item MUST appear through the wishlist item API/surface with wishlist status
+- **AND** the chat thread history MUST record an assistant outcome message that links the wishlist entry to the created item
+
+#### Scenario: Cancel apply keeps preview pending
+- **GIVEN** user has a previewed chat action and the confirm-before-apply dialog is open
+- **WHEN** user cancels the apply confirmation
+- **THEN** Cabinet MUST close the confirmation dialog without applying the action
+- **AND** the pending preview MUST remain visible with actionable cancellation feedback
 
 #### Scenario: Empty thread cannot preview actions without source context
 - **GIVEN** a chat thread has no messages and no uploaded attachment context
 - **WHEN** the user opens Action Preview controls
 - **THEN** `Preview Action` MUST remain disabled until source conversation context exists
 - **AND** the UI MUST NOT generate preview artifacts from seeded defaults alone
+
+#### Scenario: Provider defaults are visible on previewed chat actions
+- **GIVEN** the active profile has assistant provider/model defaults configured
+- **WHEN** the user previews a structured chat action
+- **THEN** the chat action surface MUST show the active assistant provider/model defaults before apply
+- **AND** the preview and confirm-before-apply summary MUST preserve the same provider/model context
+
+#### Scenario: Collection assignment previews show exact target boundaries
+- **GIVEN** user asks copilot to assign an inventory item to a workspace collection
+- **WHEN** the user previews the collection assignment action
+- **THEN** the preview MUST show the target inventory item and collection name before apply
+- **AND** the confirm-before-apply summary MUST preserve the same target item, collection, and assistant provider/model context
+
+#### Scenario: Collection assignment apply persists state and records outcome
+- **GIVEN** user has previewed a collection assignment with an exact item and collection target
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST persist the item membership in the active profile workspace collections state
+- **AND** the Collections surface MUST show the item assigned to the requested collection after navigation
+- **AND** the chat thread history MUST record an assistant outcome message with the applied action, target item, and collection
+
+#### Scenario: Failed collection assignment leaves state unchanged
+- **GIVEN** user has previewed a collection assignment for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating workspace collection membership
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
+#### Scenario: Failed inventory update apply leaves state unchanged
+- **GIVEN** user has previewed an inventory update for an item target that is not present in the active profile
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST reject the apply without creating or updating inventory records
+- **AND** the preview MUST remain pending for correction or cancellation
+- **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
+
+#### Scenario: Canceled inventory update apply leaves state unchanged and records outcome
+- **GIVEN** user has previewed an inventory update with exact target item and changed field values
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without applying the changed fields to inventory
+- **AND** the apply action MUST no longer be enabled for that canceled preview
+- **AND** the chat thread history MUST record a canceled outcome message with no-mutation evidence
+- **AND** the chat thread history MUST NOT record an applied outcome message for the canceled mutation
+
+#### Scenario: Canceled collection assignment records target without mutation
+- **GIVEN** user has previewed a collection assignment with an exact item and collection target
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without assigning the item to the collection
+- **AND** the chat thread history MUST record the canceled action, target item, target collection, and no-mutation evidence
+- **AND** the canceled preview MUST reject any later apply attempt
+
+#### Scenario: Thread context change clears pending action state
+- **GIVEN** user has a pending chat action preview, cancellation notice, or apply result in one thread
+- **WHEN** user switches to another chat thread in the same active profile
+- **THEN** Cabinet MUST clear the pending preview, apply notice, apply result, and confirmation dialog
+- **AND** the next thread MUST NOT expose an enabled apply action for the previous thread preview
+
+#### Scenario: Pending action preview resumes after route return and reload
+- **GIVEN** user has a pending chat action preview in the selected chat thread
+- **WHEN** user navigates to another route, returns to Chats, or reloads the Chats route in the same browser session
+- **THEN** Cabinet MUST restore the same pending preview for the active profile and thread
+- **AND** the restored preview MUST remain explicitly pending and applyable only for that same profile/thread context
+
+#### Scenario: Stale thread apply attempts leave state unchanged
+- **GIVEN** user has a pending chat action preview in one thread for the active profile
+- **WHEN** an apply request is attempted from another thread in the same active profile using that preview id
+- **THEN** Cabinet MUST reject the apply as unavailable to that thread
+- **AND** the owning preview MUST remain pending in its original thread
+- **AND** inventory state MUST remain unchanged
+- **AND** neither thread history MUST record an applied assistant outcome for the stale apply attempt
 
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
@@ -143,3 +238,15 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-08 | Preview action | `Preview Action` renders dry-run output before apply | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations` |
 | UC-CHAT-09 | Mobile image attachment flow | image attachment supports confirm-before-apply workflow | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-009 supports mobile image attachment and confirm-before-apply flow` |
 | UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |
+| UC-CHAT-11 | Cancel preview apply | Preview remains pending and no applied result is shown | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action` |
+| UC-CHAT-12 | Provider defaults in preview | Preview and confirm summary preserve active assistant provider/model defaults | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews` |
+| UC-CHAT-13 | Collection assignment preview/apply | Preview and confirm summary preserve target item, collection name, and assistant defaults before apply; confirmed apply persists collection membership and records thread outcome | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-14 | Wrong-profile preview apply | Preview apply is scoped to the owning profile/thread and rejected stale profile attempts leave inventory unchanged | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossProfileApply` |
+| UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history`; `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
+| UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
+| UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |
+| UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-19 | Inventory update apply outcome | Confirmed inventory updates persist changed fields and record part/title evidence in UI and thread history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
+| UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
+| UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |

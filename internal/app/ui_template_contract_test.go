@@ -565,6 +565,55 @@ func TestIntegrationsEditPersistenceContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"<Label htmlFor='provider-base-url'>Base URL</Label>",
+		"id='provider-base-url'",
+		"<Label htmlFor='provider-marketplace'>Marketplace / Region</Label>",
+		"id='provider-marketplace'",
+		"<Label htmlFor='provider-items-per-page'>Items per page</Label>",
+		"id='provider-items-per-page'",
+		"<Label htmlFor='provider-token'>New token / API key</Label>",
+		"id='provider-token'",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations provider input label contract missing token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"/api/provider/health?provider=",
+		"const checkedAt = payload.updated_at ?? new Date().toISOString()",
+		"health: nextProvider.health",
+		"last_run: nextProvider.last_run",
+		"{actionMessage ? <p>{actionMessage}</p> : null}",
+		"Validated ${editingProvider.display_name} health: ${healthStatus}.",
+		"Validating...",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations validate health reconciliation missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
