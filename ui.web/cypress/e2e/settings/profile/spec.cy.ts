@@ -27,6 +27,8 @@ describe('settings/profile', () => {
     cy.get('textarea[name="bio"]')
       .clear()
       .type('Collector profile bio for e2e.')
+    cy.contains('button', 'Add URL').click()
+    cy.get('input[name="urls.0.value"]').type('https://collector.example/profile')
     cy.get('[data-testid="settings-profile-telegram-capture"]').should(
       'be.visible'
     )
@@ -48,6 +50,10 @@ describe('settings/profile', () => {
     cy.get('[data-testid="settings-profile-email-trigger"]').should(
       'contain.text',
       'm@support.com'
+    )
+    cy.get('input[name="urls.0.value"]').should(
+      'have.value',
+      'https://collector.example/profile'
     )
     cy.get('[data-testid="settings-profile-telegram-sender-id"]').should(
       'have.value',
@@ -77,6 +83,51 @@ describe('settings/profile', () => {
     cy.get('textarea[name="bio"]').should(
       'have.value',
       'This value must remain after failure.'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-PROFILE-003 retries profile settings load failure without route reload', () => {
+    let settingsAttempt = 0
+    cy.intercept('GET', '/api/profiles/*/settings', (req) => {
+      settingsAttempt += 1
+      if (settingsAttempt === 1) {
+        req.reply({
+          statusCode: 503,
+          body: { error: 'profile_settings_unavailable' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: {
+          settings: {
+            'profile.username': 'retry-profile',
+            'profile.email': 'm@example.com',
+            'profile.bio': 'Retry recovered profile settings.',
+            'profile.urls': JSON.stringify([
+              { value: 'https://collector.example/recovered' },
+            ]),
+          },
+        },
+      })
+    }).as('profileSettings')
+
+    cy.reload()
+    cy.wait('@profileSettings')
+    cy.contains('Failed to load profile settings.').should('be.visible')
+    cy.contains('button', 'Retry').click()
+    cy.wait('@profileSettings')
+
+    cy.location('pathname').should('match', /^\/settings\/profile\/?$/)
+    cy.contains('Failed to load profile settings.').should('not.exist')
+    cy.get('input[name="username"]').should('have.value', 'retry-profile')
+    cy.get('textarea[name="bio"]').should(
+      'have.value',
+      'Retry recovered profile settings.'
+    )
+    cy.get('input[name="urls.0.value"]').should(
+      'have.value',
+      'https://collector.example/recovered'
     )
   })
 })

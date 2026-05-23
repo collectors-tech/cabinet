@@ -31,5 +31,5 @@ Define Notifications settings screen behavior.
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | planned: `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` `settings-notifications-retry` |
-| UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | planned: `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` `settings-notifications-update` |
+| UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 retries notifications settings load failure without route reload`) |
+| UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 updates notifications with deterministic success feedback`) |
