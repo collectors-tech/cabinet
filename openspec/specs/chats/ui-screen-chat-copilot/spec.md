@@ -136,6 +136,14 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **AND** the preview MUST remain pending for correction or cancellation
 - **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
 
+#### Scenario: Canceled inventory update apply leaves state unchanged and records outcome
+- **GIVEN** user has previewed an inventory update with exact target item and changed field values
+- **WHEN** the user cancels from the confirmation dialog
+- **THEN** Cabinet MUST mark the preview canceled without applying the changed fields to inventory
+- **AND** the apply action MUST no longer be enabled for that canceled preview
+- **AND** the chat thread history MUST record a canceled outcome message with no-mutation evidence
+- **AND** the chat thread history MUST NOT record an applied outcome message for the canceled mutation
+
 #### Scenario: Thread context change clears pending action state
 - **GIVEN** user has a pending chat action preview, cancellation notice, or apply result in one thread
 - **WHEN** user switches to another chat thread in the same active profile

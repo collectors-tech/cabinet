@@ -366,3 +366,88 @@ func TestServiceUpdatePreviewApplyRejectsMissingTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceCancelPreviewRecordsOutcomeWithoutMutation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	conn, err := db.OpenAndMigrate(ctx, filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn, filepath.Join(t.TempDir(), "attachments"))
+	profileID := "profile-cancel-preview"
+	if _, err := conn.ExecContext(ctx, "INSERT INTO profiles(id, name) VALUES (?, ?)", profileID, "Cancel Preview"); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	thread, err := svc.CreateThread(ctx, profileID, "Cancel Preview Thread", map[string]any{
+		"profile": map[string]any{"id": profileID},
+	})
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+
+	preview, err := svc.PreviewAction(ctx, PreviewActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		Action:    "update_inventory_item",
+		Payload: map[string]any{
+			"item_id":     "cancel-target-item",
+			"part_number": "CANCEL-SHOULD-NOT-APPLY",
+			"title":       "Canceled Update Title",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewAction(update_inventory_item) error = %v", err)
+	}
+
+	result, err := svc.CancelAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+	})
+	if err != nil {
+		t.Fatalf("CancelAction() error = %v", err)
+	}
+	if result.Applied || result.Action != "update_inventory_item" || result.ItemID != "cancel-target-item" {
+		t.Fatalf("expected canceled update result with target and no mutation, got %+v", result)
+	}
+	var itemCount int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM canonical_items WHERE id = 'cancel-target-item' OR part_number = 'CANCEL-SHOULD-NOT-APPLY' OR title = 'Canceled Update Title'").Scan(&itemCount); err != nil {
+		t.Fatalf("count canonical items after cancel: %v", err)
+	}
+	if itemCount != 0 {
+		t.Fatalf("expected cancel to leave inventory unchanged, got %d matching items", itemCount)
+	}
+	cancelled, err := svc.GetActionPreview(ctx, profileID, preview.ID)
+	if err != nil {
+		t.Fatalf("GetActionPreview() error = %v", err)
+	}
+	if cancelled.Status != "cancelled" {
+		t.Fatalf("expected preview status cancelled, got %+v", cancelled)
+	}
+	msgs, err := svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" ||
+		!strings.Contains(last.Content, "Canceled update_inventory_item") ||
+		!strings.Contains(last.Content, "no mutation applied") ||
+		strings.Contains(last.Content, "Applied update_inventory_item") {
+		t.Fatalf("expected canceled assistant outcome without applied wording, got %+v", last)
+	}
+	resultContext, _ := last.Context["action_result"].(map[string]any)
+	if resultContext["confirmation"] != "cancelled" || resultContext["mutation_applied"] != false {
+		t.Fatalf("expected canceled action_result context, got %+v", resultContext)
+	}
+	if _, err := svc.ApplyAction(ctx, ApplyActionInput{
+		ProfileID: profileID,
+		ThreadID:  thread.ID,
+		PreviewID: preview.ID,
+		Confirm:   true,
+	}); err == nil || !strings.Contains(err.Error(), "preview already applied") {
+		t.Fatalf("expected canceled preview to reject later apply, got %v", err)
+	}
+}

@@ -4123,6 +4123,24 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/chat/actions/cancel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req chat.ApplyActionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := chatSvc.CancelAction(r.Context(), req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_cancel_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {

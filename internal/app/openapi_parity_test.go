@@ -42,6 +42,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/chat/attachments",
 		"/api/chat/actions/preview",
 		"/api/chat/actions/apply",
+		"/api/chat/actions/cancel",
 		"/api/data/export/json",
 		"/api/data/export/csv/items",
 		"/api/data/import/json/dry-run",

@@ -322,7 +322,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     ).should('contain', 'Store 1')
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action', () => {
+  it('UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating inventory and records history', () => {
     openChats()
     createThread('E2E Copilot Cancel Apply Thread')
 
@@ -330,23 +330,49 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-send-button"]').click()
     cy.get('[data-testid="chat-message-list"]').should('contain', 'Draft this item only')
 
-    cy.get('[data-testid="chat-preview-action-mode"]').select('create_inventory_item')
+    cy.get('[data-testid="chat-preview-action-mode"]').select('update_inventory_item')
+    cy.get('[data-testid="chat-preview-target-item-id"]')
+      .clear()
+      .type('e2e-item-001')
     cy.get('[data-testid="chat-preview-part-number"]').clear().type('CP-011-CANCEL')
     cy.get('[data-testid="chat-preview-title"]').clear().type('Copilot Cancel Preview')
     cy.get('[data-testid="chat-preview-action-button"]').click()
-    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'update_inventory_item')
+      .and('contain', 'pending')
     cy.get('[data-testid="chat-apply-action-button"]').click()
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('be.visible')
-    cy.get('[data-testid="chat-apply-confirm-summary"]').should('contain', 'CP-011-CANCEL')
+    cy.get('[data-testid="chat-apply-confirm-summary"]')
+      .should('contain', 'target=e2e-item-001')
+      .and('contain', 'CP-011-CANCEL')
     cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
 
     cy.get('[data-testid="chat-apply-confirm-dialog"]').should('not.exist')
-    cy.get('[data-testid="chat-action-preview"]').should('contain', 'create_inventory_item')
+    cy.get('[data-testid="chat-action-preview"]')
+      .should('contain', 'update_inventory_item')
+      .and('contain', 'cancelled')
+    cy.get('[data-testid="chat-apply-action-button"]').should('be.disabled')
     cy.get('[data-testid="chat-action-apply-notice"]').should(
       'contain',
-      'Action apply canceled; preview remains pending.'
+      'Action apply canceled; no mutation applied.'
     )
     cy.get('[data-testid="chat-action-apply-result"]').should('not.exist')
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'Canceled update_inventory_item')
+      .and('contain', 'no mutation applied')
+      .and('not.contain', 'Applied update_inventory_item')
+    cy.request('/api/items?profile_id=e2e-profile-001').then((response) => {
+      expect(response.status).to.eq(200)
+      const items = response.body.items as Array<{
+        id?: string
+        part_number?: string
+        title?: string
+      }>
+      const target = items.find((item) => item.id === 'e2e-item-001')
+      expect(target, 'existing target item').to.exist
+      expect(target?.part_number).to.not.eq('CP-011-CANCEL')
+      expect(target?.title).to.not.eq('Copilot Cancel Preview')
+    })
   })
 
   it('UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history', () => {
@@ -460,7 +486,7 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-apply-confirm-cancel"]').click()
     cy.get('[data-testid="chat-action-apply-notice"]').should(
       'contain',
-      'Action apply canceled; preview remains pending.'
+      'Action apply canceled; no mutation applied.'
     )
 
     createThread('E2E Copilot Thread Context B')
