@@ -72,6 +72,7 @@ export function DisplayForm() {
     resolver: zodResolver(displayFormSchema),
     defaultValues,
   })
+  const selectedItems = form.watch('items') ?? []
 
   useEffect(() => {
     if (loading) {
@@ -177,12 +178,13 @@ export function DisplayForm() {
                         <FormControl>
                           <Checkbox
                             data-testid={`settings-display-${item.id}`}
-                            checked={field.value?.includes(item.id)}
+                            checked={selectedItems.includes(item.id)}
                             onCheckedChange={(checked) => {
+                              const currentItems = form.getValues('items') ?? []
                               return checked
-                                ? field.onChange([...field.value, item.id])
+                                ? field.onChange([...currentItems, item.id])
                                 : field.onChange(
-                                    field.value?.filter(
+                                    currentItems.filter(
                                       (value) => value !== item.id
                                     )
                                   )
@@ -202,7 +204,15 @@ export function DisplayForm() {
                 variant='outline'
                 size='sm'
                 className='mt-3'
-                onClick={() => form.reset({ items: [] })}
+                disabled={loading}
+                onClick={() => {
+                  form.resetField('items', { defaultValue: [] })
+                  form.setValue('items', [], {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: false,
+                  })
+                }}
               >
                 Clear selection
               </Button>
