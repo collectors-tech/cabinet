@@ -85,6 +85,13 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **WHEN** copilot returns structured draft payload
 - **THEN** user MUST be able to confirm creation and resulting record MUST be linked in chat outcome
 
+#### Scenario: Wishlist entry apply persists state and records target item
+- **GIVEN** user has previewed a wishlist entry creation with part number and title fields
+- **WHEN** the user confirms apply from the confirmation dialog
+- **THEN** Cabinet MUST create a wishlist entry and backing inventory item in the active profile
+- **AND** the resulting inventory item MUST appear through the wishlist item API/surface with wishlist status
+- **AND** the chat thread history MUST record an assistant outcome message that links the wishlist entry to the created item
+
 #### Scenario: Cancel apply keeps preview pending
 - **GIVEN** user has a previewed chat action and the confirm-before-apply dialog is open
 - **WHEN** user cancels the apply confirmation
@@ -194,3 +201,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history`; `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
 | UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
 | UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |
+| UC-CHAT-18 | Wishlist apply outcome | Confirmed wishlist creation persists the wishlist item and records entry/item linkage in chat history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |

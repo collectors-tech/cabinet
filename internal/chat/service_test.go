@@ -116,6 +116,24 @@ func TestServiceThreadMessagePreviewApplyLifecycle(t *testing.T) {
 	if wishlistResult.WishlistID == "" || wishlistResult.ItemID == "" {
 		t.Fatalf("expected wishlist and item ids, got wishlist=%q item=%q", wishlistResult.WishlistID, wishlistResult.ItemID)
 	}
+	var wishlistItemID string
+	if err := conn.QueryRowContext(ctx, `SELECT item_id FROM wishlist_entries WHERE id = ? AND profile_id = ?`, wishlistResult.WishlistID, profileID).Scan(&wishlistItemID); err != nil {
+		t.Fatalf("load created wishlist entry: %v", err)
+	}
+	if wishlistItemID != wishlistResult.ItemID {
+		t.Fatalf("expected wishlist entry to reference created item %q, got %q", wishlistResult.ItemID, wishlistItemID)
+	}
+	msgs, err = svc.ListMessages(ctx, profileID, thread.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after wishlist) error = %v", err)
+	}
+	wishlistMessage := msgs[len(msgs)-1]
+	if wishlistMessage.Role != "assistant" ||
+		!strings.Contains(wishlistMessage.Content, "Applied create_wishlist_entry to wishlist") ||
+		!strings.Contains(wishlistMessage.Content, wishlistResult.WishlistID) ||
+		!strings.Contains(wishlistMessage.Content, wishlistResult.ItemID) {
+		t.Fatalf("expected wishlist assistant outcome with entry and item ids, got %+v", wishlistMessage)
+	}
 
 	updatePreview, err := svc.PreviewAction(ctx, PreviewActionInput{
 		ProfileID: profileID,
