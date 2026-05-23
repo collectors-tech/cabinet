@@ -826,6 +826,13 @@ func validateActionPayload(action string, payload map[string]any) error {
 			return fmt.Errorf("part_number and title are required")
 		}
 		return nil
+	case "assign_collection_item":
+		itemID, _ := payload["item_id"].(string)
+		collectionName, _ := payload["collection_name"].(string)
+		if strings.TrimSpace(itemID) == "" || strings.TrimSpace(collectionName) == "" {
+			return fmt.Errorf("item_id and collection_name are required")
+		}
+		return nil
 	case "update_inventory_item":
 		itemID, _ := payload["item_id"].(string)
 		partNumber, _ := payload["part_number"].(string)

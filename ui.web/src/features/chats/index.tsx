@@ -106,9 +106,13 @@ export function Chats() {
   const [actionPartNumber, setActionPartNumber] = useState('CHAT-001')
   const [actionTitle, setActionTitle] = useState('Chat Created Item')
   const [actionMode, setActionMode] = useState<
-    'create_inventory_item' | 'create_wishlist_entry' | 'update_inventory_item'
+    | 'create_inventory_item'
+    | 'create_wishlist_entry'
+    | 'update_inventory_item'
+    | 'assign_collection_item'
   >('create_inventory_item')
   const [actionTargetItemID, setActionTargetItemID] = useState('')
+  const [actionCollectionName, setActionCollectionName] = useState('Store 1')
   const [actionPreview, setActionPreview] = useState<ChatActionPreview | null>(
     null
   )
@@ -319,8 +323,13 @@ export function Chats() {
           brand: 'AFX',
           category: 'General',
           item_id:
-            actionMode === 'update_inventory_item'
+            actionMode === 'update_inventory_item' ||
+            actionMode === 'assign_collection_item'
               ? actionTargetItemID.trim()
+              : '',
+          collection_name:
+            actionMode === 'assign_collection_item'
+              ? actionCollectionName.trim()
               : '',
           priority: actionMode === 'create_wishlist_entry' ? 'medium' : '',
           assistant_provider: assistantDefaults.provider,
@@ -385,6 +394,48 @@ export function Chats() {
     }
     return withPart
   })()
+
+  const actionPreviewTargetSummary = (() => {
+    if (!actionPreview) {
+      return ''
+    }
+    const payload = actionPreview.payload ?? {}
+    const targetItem =
+      typeof payload.item_id === 'string' && payload.item_id.trim()
+        ? payload.item_id.trim()
+        : ''
+    const collection =
+      typeof payload.collection_name === 'string' &&
+      payload.collection_name.trim()
+        ? payload.collection_name.trim()
+        : ''
+    const partNumber =
+      typeof payload.part_number === 'string' && payload.part_number.trim()
+        ? payload.part_number.trim()
+        : ''
+    const title =
+      typeof payload.title === 'string' && payload.title.trim()
+        ? payload.title.trim()
+        : ''
+    return [
+      targetItem ? `target=${targetItem}` : '',
+      collection ? `collection=${collection}` : '',
+      partNumber ? `part_number=${partNumber}` : '',
+      title ? `title=${title}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  })()
+
+  const previewDisabled =
+    !selectedThreadId ||
+    messages.length === 0 ||
+    !actionPartNumber.trim() ||
+    !actionTitle.trim() ||
+    ((actionMode === 'update_inventory_item' ||
+      actionMode === 'assign_collection_item') &&
+      !actionTargetItemID.trim()) ||
+    (actionMode === 'assign_collection_item' && !actionCollectionName.trim())
 
   return (
     <>
@@ -608,6 +659,7 @@ export function Chats() {
                         | 'create_inventory_item'
                         | 'create_wishlist_entry'
                         | 'update_inventory_item'
+                        | 'assign_collection_item'
                     )
                   }
                   disabled={!selectedThreadId}
@@ -621,9 +673,13 @@ export function Chats() {
                   <option value='update_inventory_item'>
                     update_inventory_item
                   </option>
+                  <option value='assign_collection_item'>
+                    assign_collection_item
+                  </option>
                 </select>
               </label>
-              {actionMode === 'update_inventory_item' ? (
+              {actionMode === 'update_inventory_item' ||
+              actionMode === 'assign_collection_item' ? (
                 <Input
                   data-testid='chat-preview-target-item-id'
                   value={actionTargetItemID}
@@ -631,6 +687,17 @@ export function Chats() {
                     setActionTargetItemID(event.target.value)
                   }
                   placeholder='Existing item ID'
+                  disabled={!selectedThreadId}
+                />
+              ) : null}
+              {actionMode === 'assign_collection_item' ? (
+                <Input
+                  data-testid='chat-preview-collection-name'
+                  value={actionCollectionName}
+                  onChange={(event) =>
+                    setActionCollectionName(event.target.value)
+                  }
+                  placeholder='Collection name'
                   disabled={!selectedThreadId}
                 />
               ) : null}
@@ -655,12 +722,7 @@ export function Chats() {
                   type='button'
                   data-testid='chat-preview-action-button'
                   onClick={() => void previewCreateItemAction()}
-                  disabled={
-                    !selectedThreadId ||
-                    messages.length === 0 ||
-                    !actionPartNumber.trim() ||
-                    !actionTitle.trim()
-                  }
+                  disabled={previewDisabled}
                 >
                   Preview Action
                 </Button>
@@ -688,6 +750,9 @@ export function Chats() {
                   {String(
                     actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
                   )}
+                  {actionPreviewTargetSummary
+                    ? ` - ${actionPreviewTargetSummary}`
+                    : ''}
                 </p>
               ) : null}
               {applyResult ? (
@@ -714,7 +779,7 @@ export function Chats() {
             <AlertDialogTitle>Confirm Copilot Action</AlertDialogTitle>
             <AlertDialogDescription data-testid='chat-apply-confirm-summary'>
               {actionPreview
-                ? `Apply ${actionPreview.action} with part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
+                ? `Apply ${actionPreview.action} with ${actionPreviewTargetSummary || `part_number=${String(actionPreview.payload?.part_number ?? 'n/a')} title=${String(actionPreview.payload?.title ?? 'n/a')}`} assistant=${String(actionPreview.payload?.assistant_provider ?? 'openai')}/${String(actionPreview.payload?.assistant_model ?? 'gpt-4o-mini')}`
                 : 'No action preview selected.'}
             </AlertDialogDescription>
           </AlertDialogHeader>

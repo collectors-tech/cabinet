@@ -103,6 +103,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **THEN** the chat action surface MUST show the active assistant provider/model defaults before apply
 - **AND** the preview and confirm-before-apply summary MUST preserve the same provider/model context
 
+#### Scenario: Collection assignment previews show exact target boundaries
+- **GIVEN** user asks copilot to assign an inventory item to a workspace collection
+- **WHEN** the user previews the collection assignment action
+- **THEN** the preview MUST show the target inventory item and collection name before apply
+- **AND** the confirm-before-apply summary MUST preserve the same target item, collection, and assistant provider/model context
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -157,3 +163,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-10 | Unavailable bootstrap state | Thread creation controls stay disabled until chat context recovers | planned: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `chat-unavailable-disables-thread-create` |
 | UC-CHAT-11 | Cancel preview apply | Preview remains pending and no applied result is shown | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-011 cancels preview apply without mutating the pending action` |
 | UC-CHAT-12 | Provider defaults in preview | Preview and confirm summary preserve active assistant provider/model defaults | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-012 reflects assistant provider defaults in chat action previews` |
+| UC-CHAT-13 | Collection assignment preview | Preview and confirm summary preserve target item, collection name, and assistant defaults before apply | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply` |
