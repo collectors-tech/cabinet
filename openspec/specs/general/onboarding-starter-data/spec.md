@@ -32,3 +32,12 @@ Cabinet SHALL provide import-existing-collection option as an alternative to sam
 - **GIVEN** setup wizard has completed and starter setup flow is active
 - **WHEN** user selects `Import Existing Collection`
 - **THEN** flow MUST route to import path without auto-seeding sample data
+
+### Requirement ONBOARDING-STARTER-DATA-004: Sample data SHALL be explicitly identified as showcase data
+Cabinet SHALL mark seeded onboarding sample data as showcase/example records in the API result and active profile settings so the dataset cannot be confused with a real working collection.
+
+#### Scenario: Sample seed provenance
+- **GIVEN** an active profile has no prior onboarding sample dataset
+- **WHEN** runtime seeds onboarding sample data
+- **THEN** the seed response MUST include `dataset_kind=sample_showcase`, a sample-oriented dataset label, and an explicit sample-data disclosure
+- **AND** the active profile settings MUST persist the sample dataset kind and disclosure for downstream profile/database context surfaces
