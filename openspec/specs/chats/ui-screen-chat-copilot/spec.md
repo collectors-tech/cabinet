@@ -123,6 +123,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **AND** the preview MUST remain pending for correction or cancellation
 - **AND** the chat thread history MUST NOT record an applied outcome message for the failed mutation
 
+#### Scenario: Thread context change clears pending action state
+- **GIVEN** user has a pending chat action preview, cancellation notice, or apply result in one thread
+- **WHEN** user switches to another chat thread in the same active profile
+- **THEN** Cabinet MUST clear the pending preview, apply notice, apply result, and confirmation dialog
+- **AND** the next thread MUST NOT expose an enabled apply action for the previous thread preview
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -180,3 +186,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-13 | Collection assignment preview/apply | Preview and confirm summary preserve target item, collection name, and assistant defaults before apply; confirmed apply persists collection membership and records thread outcome | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-013 previews structured collection assignment targets before apply`; `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-14 | Wrong-profile preview apply | Preview apply is scoped to the owning profile/thread and rejected stale profile attempts leave inventory unchanged | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossProfileApply` |
 | UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history`; `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
+| UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
