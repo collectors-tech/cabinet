@@ -129,6 +129,12 @@ Copilot SHALL assist with creating/updating inventory and wishlist records, but 
 - **THEN** Cabinet MUST clear the pending preview, apply notice, apply result, and confirmation dialog
 - **AND** the next thread MUST NOT expose an enabled apply action for the previous thread preview
 
+#### Scenario: Pending action preview resumes after route return and reload
+- **GIVEN** user has a pending chat action preview in the selected chat thread
+- **WHEN** user navigates to another route, returns to Chats, or reloads the Chats route in the same browser session
+- **THEN** Cabinet MUST restore the same pending preview for the active profile and thread
+- **AND** the restored preview MUST remain explicitly pending and applyable only for that same profile/thread context
+
 ### Requirement UI-SCREEN-CHAT-COPILOT-008: Mobile chat SHALL support image attachment for analysis and record creation workflows
 Mobile chat flow SHALL allow attaching or capturing images, sending them to copilot, and using results to create/update inventory or wishlist entries.
 
@@ -187,3 +193,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-14 | Wrong-profile preview apply | Preview apply is scoped to the owning profile/thread and rejected stale profile attempts leave inventory unchanged | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossProfileApply` |
 | UC-CHAT-15 | Failed update apply | Missing inventory target rejects apply, keeps the preview pending, leaves inventory unchanged, and avoids false assistant applied history | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-014 keeps failed update apply pending without false history`; `internal/chat/service_test.go` `TestServiceUpdatePreviewApplyRejectsMissingTarget` |
 | UC-CHAT-16 | Thread context reset | Pending preview/apply UI state is cleared when switching chat threads | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-015 clears pending action state when thread context changes` |
+| UC-CHAT-17 | Pending preview route return/reload | Pending action preview restores for the same active profile/thread after route return and reload while remaining scoped to that context | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-016 restores pending action preview after route return and reload` |

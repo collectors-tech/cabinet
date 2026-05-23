@@ -75,6 +75,42 @@ type AssistantDefaults = {
   model: string
 }
 
+function actionPreviewStorageKey(profileID: string, threadID: string) {
+  if (!profileID || !threadID) {
+    return ''
+  }
+  return `cabinet.chat.action-preview.${profileID}.${threadID}`
+}
+
+function readStoredActionPreview(key: string) {
+  if (!key || typeof window === 'undefined') {
+    return null
+  }
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    if (!raw) {
+      return null
+    }
+    return JSON.parse(raw) as ChatActionPreview
+  } catch {
+    return null
+  }
+}
+
+function writeStoredActionPreview(key: string, preview: ChatActionPreview) {
+  if (!key || typeof window === 'undefined') {
+    return
+  }
+  window.sessionStorage.setItem(key, JSON.stringify(preview))
+}
+
+function clearStoredActionPreview(key: string) {
+  if (!key || typeof window === 'undefined') {
+    return
+  }
+  window.sessionStorage.removeItem(key)
+}
+
 function prettyRole(role: ChatMessage['role']) {
   if (role === 'assistant') {
     return 'Assistant'
@@ -124,6 +160,10 @@ export function Chats() {
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
     [selectedThreadId, threads]
+  )
+  const selectedActionPreviewStorageKey = useMemo(
+    () => actionPreviewStorageKey(activeProfileId, selectedThreadId),
+    [activeProfileId, selectedThreadId]
   )
 
   const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
@@ -236,11 +276,21 @@ export function Chats() {
   }, [loadBootstrap])
 
   useEffect(() => {
-    setActionPreview(null)
     setApplyResult(null)
     setApplyNotice('')
     setConfirmApplyOpen(false)
-  }, [activeProfileId, selectedThreadId])
+    const storedPreview = readStoredActionPreview(selectedActionPreviewStorageKey)
+    if (
+      storedPreview?.profile_id === activeProfileId &&
+      storedPreview.thread_id === selectedThreadId &&
+      (!storedPreview.status || storedPreview.status === 'previewed')
+    ) {
+      setActionPreview(storedPreview)
+      return
+    }
+    setActionPreview(null)
+    clearStoredActionPreview(selectedActionPreviewStorageKey)
+  }, [activeProfileId, selectedThreadId, selectedActionPreviewStorageKey])
 
   const createThread = async () => {
     const title = threadTitle.trim()
@@ -351,6 +401,7 @@ export function Chats() {
     }
     const preview = (await response.json()) as ChatActionPreview
     setActionPreview(preview)
+    writeStoredActionPreview(selectedActionPreviewStorageKey, preview)
   }
 
   const applyPreviewAction = async () => {
@@ -379,6 +430,7 @@ export function Chats() {
     setApplyResult(result)
     setApplyNotice('')
     setConfirmApplyOpen(false)
+    clearStoredActionPreview(selectedActionPreviewStorageKey)
     await loadMessages(activeProfileId, selectedThreadId)
   }
 
