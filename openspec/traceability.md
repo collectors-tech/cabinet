@@ -474,6 +474,8 @@
 
 | PROVIDER-WORKFLOW-FULL-ASSESSMENT | openspec/migration/provider-workflow-full-assessment.md | cross-provider workflow completeness | planned: execution issues per provider + stage evidence | partial |
 
+| INTEGRATION-028 | openspec/specs/integrations/provider-ebay/spec.md | eBay seller listing lifecycle draft/publish/revise/end/relist safety-gated command contract (#841) | `TestPreviewSellerListingLifecycleCommandsGateRemoteWrites`; `TestExecuteSellerListingLifecycleCommandUsesMockedEbayResponses`; `TestExecuteSellerListingLifecycleCommandBlocksUnconfirmedWrites` (`internal/ebay/listing_lifecycle_test.go`) | implemented |
+
 | AUTH-PERM-001 | openspec/specs/general/auth-permissions-test-matrix/spec.md | Clerk auth mode initialization | `TestAuthProviderOptionsReturnsIdentityModeAndProviders`, `TestAuthProviderOptionsRespectsAppStateOverrides` (`internal/app/auth_provider_options_api_test.go`) | implemented |
 | AUTH-PERM-002 | openspec/specs/general/auth-permissions-test-matrix/spec.md | plan->capability resolution | `TestAuthPermissionsPlanCapabilityMatrix` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |
 | AUTH-PERM-003 | openspec/specs/general/auth-permissions-test-matrix/spec.md | seeded multi-plan account matrix | `TestAuthPermissionsPlanCapabilityMatrix` (`internal/app/auth_permissions_matrix_api_test.go`) | implemented |

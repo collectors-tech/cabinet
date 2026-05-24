@@ -124,3 +124,30 @@ Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment,
 - **AND** the response MUST include a per-operation local read result model for messages, notifications, sold orders, fulfilment, or offers with records and summary counts.
 - **AND** confirmed remote-write seller operations MUST remain blocked with an adapter-not-configured blocker until a real eBay write adapter is wired.
 - **AND** the integration UI MUST display the execute status separately from preview status so local sync completion is not confused with an external eBay write.
+
+### Requirement INTEGRATION-028: eBay seller listing lifecycle commands MUST be safety gated
+Cabinet SHALL model eBay seller listing draft, publish, revise, end, and relist commands separately so local draft creation is not confused with external marketplace writes.
+
+#### Scenario: Listing draft creation stays local-only
+- **GIVEN** Cabinet is creating an eBay listing draft from a Cabinet item with a title
+- **WHEN** the seller listing lifecycle command is previewed or executed with draft-only capability
+- **THEN** the draft command MAY be allowed as a local-only action
+- **AND** the command MUST report `remote_write=false`.
+
+#### Scenario: Publish, revise, end, and relist require confirmed API capability
+- **GIVEN** Cabinet previews an eBay seller listing publish, revise, end, or relist command
+- **WHEN** the active account has no verified confirmed eBay API write capability
+- **THEN** the command MUST be blocked with a write-capability-not-verified reason
+- **AND** Cabinet MUST NOT call the eBay lifecycle adapter.
+
+#### Scenario: Confirmed lifecycle writes use mocked eBay responses in tests
+- **GIVEN** Cabinet has verified confirmed eBay API lifecycle capability in the command contract
+- **WHEN** publish, revise, end, or relist is executed with explicit confirmation
+- **THEN** Cabinet MAY call the lifecycle client
+- **AND** backend tests MUST prove the command consumes mocked eBay responses instead of relying on live marketplace writes.
+
+#### Scenario: Unconfirmed lifecycle writes remain blocked
+- **GIVEN** Cabinet has verified confirmed eBay API lifecycle capability
+- **WHEN** publish, revise, end, or relist is requested without explicit confirmation
+- **THEN** the command MUST remain blocked with a confirmation-required reason
+- **AND** the eBay lifecycle adapter MUST NOT be called.
