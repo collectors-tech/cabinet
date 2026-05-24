@@ -2065,7 +2065,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                type: object
+                properties:
+                  backup:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      file_name:
+                        type: string
+                      size_bytes:
+                        type: integer
+                      created_at:
+                        type: string
+                      integrity_check:
+                        type: string
         "400":
           $ref: "#/components/responses/Error"
   /api/backup/list:
@@ -2079,19 +2093,55 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  backups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        file_name:
+                          type: string
+                        size_bytes:
+                          type: integer
+                        created_at:
+                          type: string
         "400":
           $ref: "#/components/responses/Error"
   /api/backup/restore:
     post:
       tags: [Backup]
       summary: Restore from backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backup_path, confirm_restore]
+              properties:
+                backup_path:
+                  type: string
+                confirm_restore:
+                  type: boolean
       responses:
         "200":
           description: Restore result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                type: object
+                properties:
+                  restore:
+                    type: object
+                    properties:
+                      restored_path:
+                        type: string
+                      restored_at:
+                        type: string
+                      integrity_check:
+                        type: string
         "400":
           $ref: "#/components/responses/Error"
   /api/auth/webauthn/register/begin:

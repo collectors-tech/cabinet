@@ -4454,12 +4454,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		path, err := backupSvc.CreateBackup(r.Context())
+		result, err := backupSvc.CreateBackup(r.Context())
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_create_backup"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"backup_path": path})
+		_ = json.NewEncoder(w).Encode(map[string]any{"backup": result})
 	})
 	mux.HandleFunc("/api/backup/list", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4481,17 +4481,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			BackupPath string `json:"backup_path"`
+			BackupPath     string `json:"backup_path"`
+			ConfirmRestore bool   `json:"confirm_restore"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := backupSvc.RestoreBackup(req.BackupPath); err != nil {
+		if !req.ConfirmRestore {
+			http.Error(w, `{"error":"restore_confirmation_required","recovery":"set confirm_restore to true after reviewing the selected backup"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := backupSvc.RestoreBackup(req.BackupPath)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_restore_backup"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"restore": result})
 	})
 	mux.HandleFunc("/api/items/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
