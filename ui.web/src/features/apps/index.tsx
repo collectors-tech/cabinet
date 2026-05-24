@@ -1539,9 +1539,7 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-marketplace'>
-                      Marketplace / Region
-                    </Label>
+                    <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
                     <Input
                       id='provider-marketplace'
                       placeholder='Marketplace / Region'
@@ -1555,9 +1553,7 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-items-per-page'>
-                      Items per page
-                    </Label>
+                    <Label htmlFor='provider-items-per-page'>Items per page</Label>
                     <Input
                       id='provider-items-per-page'
                       type='number'
@@ -1594,9 +1590,7 @@ export function Apps({
                         </div>
                       ) : (
                         <div className='space-y-2'>
-                          <Label htmlFor='provider-token'>
-                            New token / API key
-                          </Label>
+                          <Label htmlFor='provider-token'>New token / API key</Label>
                           <Input
                             id='provider-token'
                             type='password'
