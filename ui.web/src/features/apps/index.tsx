@@ -100,6 +100,7 @@ type ProviderRecord = {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
     finished_at?: string | null
   }
+  seller_operations?: SellerOperationStatus[]
 }
 
 type IntegrationForm = {
@@ -136,6 +137,15 @@ type BuyerInterestSyncResult = {
     write_back_allowed?: boolean
     write_back_blocker?: string
   }>
+}
+
+type SellerOperationStatus = {
+  operation: string
+  capability: string
+  read_available: boolean
+  write_available: boolean
+  confirmation_required: boolean
+  blocker?: string
 }
 
 type ProfileOption = {
@@ -175,6 +185,27 @@ const defaultBuyerInterestPayload = JSON.stringify(
   null,
   2
 )
+
+function sellerOperationLabel(operation: string) {
+  const labels: Record<string, string> = {
+    messages: 'Messages',
+    notifications: 'Notifications',
+    sold_orders: 'Sold orders',
+    fulfillment: 'Fulfilment',
+    offers: 'Offers',
+  }
+  return labels[operation] ?? operation
+}
+
+function sellerOperationState(status: SellerOperationStatus) {
+  if (status.write_available) {
+    return status.confirmation_required ? 'Write confirmed' : 'Writable'
+  }
+  if (status.read_available) {
+    return 'Read-only'
+  }
+  return 'Blocked'
+}
 
 function providerSettingsKeys(providerID: string) {
   if (providerID === 'ebay') {
@@ -1609,13 +1640,64 @@ export function Apps({
                     </div>
                   ) : null}
                   {editingProvider.provider_id === 'ebay' ? (
-                    <details
-                      className='rounded-md border p-3'
-                      data-testid='ebay-buyer-interest-sync-panel'
-                    >
-                      <summary className='cursor-pointer text-sm font-medium'>
-                        Buyer Interest Sync
-                      </summary>
+                    <div className='space-y-3'>
+                      <section
+                        className='rounded-md border p-3'
+                        data-testid='ebay-seller-operations-panel'
+                      >
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <p className='font-medium'>Seller Operations</p>
+                            <p className='text-xs text-muted-foreground'>
+                              Messages, notifications, sold orders, fulfilment,
+                              and offers stay blocked until exact eBay API
+                              support is verified.
+                            </p>
+                          </div>
+                          <span
+                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                            data-testid='ebay-seller-operations-safe-mode'
+                          >
+                            External writes require confirmation
+                          </span>
+                        </div>
+                        <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                          {(editingProvider.seller_operations ?? []).map(
+                            (status) => (
+                              <div
+                                key={status.operation}
+                                className='rounded-md bg-muted/40 p-3 text-xs'
+                                data-testid={`ebay-seller-operation-${status.operation}`}
+                              >
+                                <div className='flex items-center justify-between gap-2'>
+                                  <span className='font-medium'>
+                                    {sellerOperationLabel(status.operation)}
+                                  </span>
+                                  <span>{sellerOperationState(status)}</span>
+                                </div>
+                                <p className='mt-1 text-muted-foreground'>
+                                  Read: {status.read_available ? 'yes' : 'no'} /
+                                  Write:{' '}
+                                  {status.write_available ? 'yes' : 'no'}
+                                </p>
+                                <p className='mt-1 text-muted-foreground'>
+                                  {status.blocker ??
+                                    (status.confirmation_required
+                                      ? 'confirmation_required'
+                                      : 'available')}
+                                </p>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </section>
+                      <details
+                        className='rounded-md border p-3'
+                        data-testid='ebay-buyer-interest-sync-panel'
+                      >
+                        <summary className='cursor-pointer text-sm font-medium'>
+                          Buyer Interest Sync
+                        </summary>
                       <div className='mt-3 space-y-3'>
                         <div className='flex flex-wrap items-start justify-between gap-3'>
                           <div>
@@ -1717,7 +1799,8 @@ export function Apps({
                           </div>
                         ) : null}
                       </div>
-                    </details>
+                      </details>
+                    </div>
                   ) : null}
                 </>
               )}
