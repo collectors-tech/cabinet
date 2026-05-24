@@ -59,6 +59,6 @@ describe('profile-context-recovery', () => {
     cy.wait('@activeProfile')
 
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
-    visibleByTestId('active-profile-status').should('have.text', 'Database')
+    visibleByTestId('active-profile-status').should('have.text', 'Showcase sample data')
   })
 })
