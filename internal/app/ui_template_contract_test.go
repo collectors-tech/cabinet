@@ -626,6 +626,10 @@ func TestIntegrationsEbaySellerOperationsPanelContract(t *testing.T) {
 		"data-testid='ebay-seller-operations-panel'",
 		"editingProvider.seller_operations",
 		"ebay-seller-operation-",
+		"previewSellerOperation",
+		"/api/providers/ebay/seller-operations/preview",
+		"ebay-seller-operation-preview-result",
+		"sellerOperationResult.preview.remote_write",
 		"External writes require confirmation",
 		"status.blocker",
 	}

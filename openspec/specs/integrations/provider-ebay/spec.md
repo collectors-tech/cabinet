@@ -108,3 +108,10 @@ Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment,
 - **THEN** the preview MUST report the action as not allowed for remote write with a capability blocker.
 - **AND** read-only sync actions MAY be allowed only when read availability is true and MUST NOT report a remote write.
 - **AND** confirmed API write capabilities MUST still require explicit confirmation before the preview reports a remote write as allowed.
+
+#### Scenario: Seller operation preview actions are available from the integration UI
+- **GIVEN** the eBay integration dialog shows seller operation statuses
+- **WHEN** the operator previews a supported read-only sync or confirmed seller-operation action from the dialog
+- **THEN** Cabinet MUST call the seller operation preview API before showing an allowed action outcome.
+- **AND** the UI MUST display whether the preview is allowed and whether it would perform a remote write.
+- **AND** unsupported seller operations MUST keep preview controls disabled instead of presenting a runnable workflow.
