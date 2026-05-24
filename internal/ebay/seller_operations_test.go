@@ -64,6 +64,73 @@ func TestSellerOperationStatusesRequireConfirmationForConfirmedWrites(t *testing
 	}
 }
 
+func TestPreviewSellerOperationActionBlocksReadOnlyWrites(t *testing.T) {
+	t.Parallel()
+
+	preview := PreviewSellerOperationAction(SellerOperationActionRequest{
+		Operation:  "messages",
+		Capability: SellerCapabilityReadOnlySync,
+		Action:     "reply",
+		Confirmed:  true,
+	})
+
+	if preview.Allowed || preview.RemoteWrite {
+		t.Fatalf("read-only seller operation must not allow remote writes: %+v", preview)
+	}
+	if !preview.ReadAvailable || preview.WriteAvailable || preview.Blocker != "ebay_write_capability_not_verified" {
+		t.Fatalf("read-only write preview should preserve truthful capability blocker, got %+v", preview)
+	}
+	if preview.Action != "reply" || preview.Operation != SellerOperationMessages {
+		t.Fatalf("preview did not normalize operation/action: %+v", preview)
+	}
+}
+
+func TestPreviewSellerOperationActionRequiresConfirmationForConfirmedWrites(t *testing.T) {
+	t.Parallel()
+
+	unconfirmed := PreviewSellerOperationAction(SellerOperationActionRequest{
+		Operation:    "fulfilment",
+		Capability:   SellerCapabilityConfirmedAPI,
+		Action:       "ship",
+		ReferenceID:  "order-123",
+		DraftPayload: "{\"tracking_number\":\"TRACK-1\"}",
+	})
+	if unconfirmed.Allowed || unconfirmed.RemoteWrite || unconfirmed.Blocker != "ebay_seller_action_confirmation_required" {
+		t.Fatalf("confirmed API write must still require explicit confirmation, got %+v", unconfirmed)
+	}
+
+	confirmed := PreviewSellerOperationAction(SellerOperationActionRequest{
+		Operation:   "fulfilment",
+		Capability:  SellerCapabilityConfirmedAPI,
+		Action:      "ship",
+		Confirmed:   true,
+		ReferenceID: "order-123",
+	})
+	if !confirmed.Allowed || !confirmed.RemoteWrite || !confirmed.ConfirmationRequired || confirmed.Blocker != "" {
+		t.Fatalf("confirmed seller operation write should be allowed only after confirmation, got %+v", confirmed)
+	}
+	if confirmed.Operation != SellerOperationFulfillment || confirmed.Action != "fulfill" || confirmed.ReferenceID != "order-123" {
+		t.Fatalf("confirmed preview did not normalize expected fields: %+v", confirmed)
+	}
+}
+
+func TestPreviewSellerOperationActionAllowsReadOnlySyncWithoutRemoteWrite(t *testing.T) {
+	t.Parallel()
+
+	preview := PreviewSellerOperationAction(SellerOperationActionRequest{
+		Operation:  "sold_order",
+		Capability: SellerCapabilityReadOnlySync,
+		Action:     "refresh",
+	})
+
+	if !preview.Allowed || preview.RemoteWrite || preview.Blocker != "" {
+		t.Fatalf("read-only sync should be allowed without a remote write, got %+v", preview)
+	}
+	if preview.Operation != SellerOperationSoldOrders || preview.Action != "sync" {
+		t.Fatalf("sync preview did not normalize operation/action: %+v", preview)
+	}
+}
+
 func sellerStatusesByOperation(statuses []SellerOperationCapabilityStatus) map[string]SellerOperationCapabilityStatus {
 	out := map[string]SellerOperationCapabilityStatus{}
 	for _, status := range statuses {
