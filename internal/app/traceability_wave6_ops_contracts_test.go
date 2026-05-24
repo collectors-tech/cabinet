@@ -248,12 +248,15 @@ func TestWave6DataImportDryRunAndMaintenanceContracts(t *testing.T) {
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())
 	}
+	if !strings.Contains(reindex.Body.String(), `"operation":"reindex_search"`) || !strings.Contains(reindex.Body.String(), `"rebuilt_search_index":true`) {
+		t.Fatalf("reindex response missing operation metadata: %s", reindex.Body.String())
+	}
 	repair := doRequest(t, a, http.MethodPost, "/api/data/repair", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if repair.Code != http.StatusOK {
 		t.Fatalf("repair status=%d body=%s", repair.Code, repair.Body.String())
 	}
-	if !strings.Contains(repair.Body.String(), `"integrity_check"`) {
-		t.Fatalf("repair response missing integrity_check: %s", repair.Body.String())
+	if !strings.Contains(repair.Body.String(), `"operation":"integrity_check"`) || !strings.Contains(repair.Body.String(), `"integrity_check":"ok"`) {
+		t.Fatalf("repair response missing integrity metadata: %s", repair.Body.String())
 	}
 }
 

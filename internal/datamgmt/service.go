@@ -76,6 +76,20 @@ type CSVImportRequest struct {
 	Mapping map[string]string `json:"mapping"`
 }
 
+type ReindexSummary struct {
+	OK                 bool   `json:"ok"`
+	Operation          string `json:"operation"`
+	RebuiltSearchIndex bool   `json:"rebuilt_search_index"`
+	CompletedAt        string `json:"completed_at"`
+}
+
+type RepairSummary struct {
+	OK             bool   `json:"ok"`
+	Operation      string `json:"operation"`
+	IntegrityCheck string `json:"integrity_check"`
+	CompletedAt    string `json:"completed_at"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -369,19 +383,29 @@ func failedApplySummary(sum ApplySummary) ApplySummary {
 	return sum
 }
 
-func (s *Service) Reindex(ctx context.Context) error {
+func (s *Service) Reindex(ctx context.Context) (ReindexSummary, error) {
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO canonical_items_fts(canonical_items_fts) VALUES('rebuild')`); err != nil {
-		return fmt.Errorf("reindex fts: %w", err)
+		return ReindexSummary{}, fmt.Errorf("reindex fts: %w", err)
 	}
-	return nil
+	return ReindexSummary{
+		OK:                 true,
+		Operation:          "reindex_search",
+		RebuiltSearchIndex: true,
+		CompletedAt:        time.Now().UTC().Format(time.RFC3339),
+	}, nil
 }
 
-func (s *Service) Repair(ctx context.Context) (string, error) {
+func (s *Service) Repair(ctx context.Context) (RepairSummary, error) {
 	var result string
 	if err := s.db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&result); err != nil {
-		return "", fmt.Errorf("integrity check: %w", err)
+		return RepairSummary{}, fmt.Errorf("integrity check: %w", err)
 	}
-	return result, nil
+	return RepairSummary{
+		OK:             strings.EqualFold(strings.TrimSpace(result), "ok"),
+		Operation:      "integrity_check",
+		IntegrityCheck: result,
+		CompletedAt:    time.Now().UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) loadBarcodes(ctx context.Context, itemID string) ([]string, error) {

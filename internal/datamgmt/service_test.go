@@ -3,6 +3,7 @@ package datamgmt
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/db"
@@ -157,5 +158,33 @@ func TestParseCSVToSnapshotWithMappingAndMissingOptionalColumns(t *testing.T) {
 	}
 	if snap.Items[0].Make != "" || snap.Items[0].Description != "" {
 		t.Fatalf("optional fields should be empty when not present: %#v", snap.Items[0])
+	}
+}
+
+func TestMaintenanceSummaries(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	reindex, err := svc.Reindex(context.Background())
+	if err != nil {
+		t.Fatalf("Reindex() error = %v", err)
+	}
+	if !reindex.OK || reindex.Operation != "reindex_search" || !reindex.RebuiltSearchIndex || strings.TrimSpace(reindex.CompletedAt) == "" {
+		t.Fatalf("unexpected reindex summary: %#v", reindex)
+	}
+
+	repair, err := svc.Repair(context.Background())
+	if err != nil {
+		t.Fatalf("Repair() error = %v", err)
+	}
+	if !repair.OK || repair.Operation != "integrity_check" || repair.IntegrityCheck != "ok" || strings.TrimSpace(repair.CompletedAt) == "" {
+		t.Fatalf("unexpected repair summary: %#v", repair)
 	}
 }
