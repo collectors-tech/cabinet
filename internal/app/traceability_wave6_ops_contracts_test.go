@@ -222,6 +222,28 @@ func TestWave6DataImportDryRunAndMaintenanceContracts(t *testing.T) {
 		t.Fatalf("unexpected apply summary: %+v body=%s", applyPayload, apply.Body.String())
 	}
 
+	jsonExport := doRequest(t, a, http.MethodGet, "/api/data/export/json", nil, nil)
+	if jsonExport.Code != http.StatusOK {
+		t.Fatalf("json export status=%d body=%s", jsonExport.Code, jsonExport.Body.String())
+	}
+	if got := jsonExport.Header().Get("Content-Disposition"); !strings.Contains(got, "cabinet-data-snapshot.json") {
+		t.Fatalf("json export missing download filename, got %q", got)
+	}
+	if !strings.Contains(jsonExport.Body.String(), "W6-DATA-NEW") {
+		t.Fatalf("json export missing applied item evidence: %s", jsonExport.Body.String())
+	}
+
+	csvExport := doRequest(t, a, http.MethodGet, "/api/data/export/csv/items", nil, nil)
+	if csvExport.Code != http.StatusOK {
+		t.Fatalf("csv export status=%d body=%s", csvExport.Code, csvExport.Body.String())
+	}
+	if got := csvExport.Header().Get("Content-Disposition"); !strings.Contains(got, "cabinet-items.csv") {
+		t.Fatalf("csv export missing download filename, got %q", got)
+	}
+	if !strings.Contains(csvExport.Body.String(), "W6-DATA-NEW") {
+		t.Fatalf("csv export missing applied item evidence: %s", csvExport.Body.String())
+	}
+
 	reindex := doRequest(t, a, http.MethodPost, "/api/data/reindex", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())

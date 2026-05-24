@@ -4300,6 +4300,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_export_snapshot"}`, http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-data-snapshot.json"`)
 		_ = json.NewEncoder(w).Encode(snap)
 	})
 	mux.HandleFunc("/api/data/export/csv/items", func(w http.ResponseWriter, r *http.Request) {
@@ -4313,6 +4314,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-items.csv"`)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(csvText))
 	})

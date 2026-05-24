@@ -205,7 +205,15 @@ describe('settings/storage', () => {
   })
 
   it('UI-SCREEN-SETTINGS-STORAGE-007 creates, lists, and restores backups from Settings Storage', () => {
-    const backups = ['C:/cabinet/backups/cabinet-2026-04-21-120000.db']
+    const backups = [
+      {
+        path: 'C:/cabinet/backups/cabinet-2026-04-21-120000.db',
+        file_name: 'cabinet-2026-04-21-120000.db',
+        size_bytes: 2048,
+        created_at: '2026-04-21T12:00:00Z',
+        integrity_check: 'ok',
+      },
+    ]
 
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -225,19 +233,32 @@ describe('settings/storage', () => {
       })
     }).as('backupList')
     cy.intercept('POST', '/api/backup/run', (req) => {
-      backups.unshift('C:/cabinet/backups/cabinet-2026-04-21-130000.db')
+      backups.unshift({
+        path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+        file_name: 'cabinet-2026-04-21-130000.db',
+        size_bytes: 4096,
+        created_at: '2026-04-21T13:00:00Z',
+        integrity_check: 'ok',
+      })
       req.reply({
         statusCode: 200,
-        body: { backup_path: backups[0] },
+        body: { backup: backups[0] },
       })
     }).as('backupRun')
     cy.intercept('POST', '/api/backup/restore', (req) => {
       expect(req.body).to.deep.equal({
         backup_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+        confirm_restore: true,
       })
       req.reply({
         statusCode: 200,
-        body: { ok: true },
+        body: {
+          restore: {
+            restored_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+            restored_at: '2026-04-21T13:05:00Z',
+            integrity_check: 'ok',
+          },
+        },
       })
     }).as('backupRestore')
 
@@ -287,7 +308,17 @@ describe('settings/storage', () => {
     }).as('storageInfo')
     cy.intercept('GET', '/api/backup/list', {
       statusCode: 200,
-      body: { backups: ['C:/cabinet/backups/cabinet-2026-04-21-090000.db'] },
+      body: {
+        backups: [
+          {
+            path: 'C:/cabinet/backups/cabinet-2026-04-21-090000.db',
+            file_name: 'cabinet-2026-04-21-090000.db',
+            size_bytes: 1024,
+            created_at: '2026-04-21T09:00:00Z',
+            integrity_check: 'ok',
+          },
+        ],
+      },
     }).as('backupList')
     cy.intercept('POST', '/api/backup/restore', {
       statusCode: 400,
@@ -385,4 +416,5 @@ describe('settings/storage', () => {
       'Database integrity check failed.'
     )
   })
+
 })
