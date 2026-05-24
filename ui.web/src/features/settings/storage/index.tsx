@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Download } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
 import { Button } from '@/components/ui/button'
 import {
@@ -386,6 +386,51 @@ export function SettingsStorage() {
               {actionStatus}
             </p>
           ) : null}
+          <div className='rounded-md border p-3 space-y-3'>
+            <div>
+              <p className='font-medium'>Data exports</p>
+              <p className='text-xs text-muted-foreground'>
+                Download the active profile as a JSON snapshot or item CSV.
+              </p>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {actionsDisabled ? (
+                <>
+                  <Button variant='outline' size='sm' disabled>
+                    <Download className='mr-2 h-4 w-4' />
+                    JSON Snapshot
+                  </Button>
+                  <Button variant='outline' size='sm' disabled>
+                    <Download className='mr-2 h-4 w-4' />
+                    Item CSV
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant='outline' size='sm'>
+                    <a
+                      data-testid='settings-storage-export-json'
+                      href='/api/data/export/json'
+                      download='cabinet-data-snapshot.json'
+                    >
+                      <Download className='mr-2 h-4 w-4' />
+                      JSON Snapshot
+                    </a>
+                  </Button>
+                  <Button asChild variant='outline' size='sm'>
+                    <a
+                      data-testid='settings-storage-export-csv'
+                      href='/api/data/export/csv/items'
+                      download='cabinet-items.csv'
+                    >
+                      <Download className='mr-2 h-4 w-4' />
+                      Item CSV
+                    </a>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
           <div className='rounded-md border p-3 space-y-3'>
             <div className='flex items-start justify-between gap-3'>
               <div>

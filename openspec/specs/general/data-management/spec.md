@@ -35,3 +35,12 @@ Cabinet SHALL require explicit restore confirmation and SHALL return readable ba
 - **WHEN** Cabinet runs backup, lists backups, or restores a confirmed backup
 - **THEN** responses SHALL include user-verifiable backup or restore metadata
 - **AND** restore SHALL fail without explicit confirmation before replacing the active database
+
+### Requirement DATA-MANAGEMENT-005: Data export SHALL expose explicit download affordances
+Cabinet SHALL expose profile-scoped JSON snapshot and CSV item exports as user-downloadable actions with deterministic download filenames.
+
+#### Scenario: Export snapshot and item CSV
+- **GIVEN** a user is reviewing Settings Storage for the active profile
+- **WHEN** Cabinet offers JSON snapshot and CSV item exports
+- **THEN** the UI SHALL provide clear download actions for both formats
+- **AND** the export endpoints SHALL return attachment filenames that identify the Cabinet snapshot or item CSV export
