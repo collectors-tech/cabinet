@@ -602,6 +602,62 @@ paths:
                       $ref: "#/components/schemas/MatchResult"
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/ebay/buyer-interest/import:
+    post:
+      tags: [Integrations]
+      summary: Import eBay buyer-interest state into Wishlist and Discoveries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                source_account:
+                  type: string
+                write_back_capability:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [listing_id]
+                    properties:
+                      listing_id:
+                        type: string
+                      title:
+                        type: string
+                      url:
+                        type: string
+                      state:
+                        type: string
+                      source_account:
+                        type: string
+                      observed_at:
+                        type: string
+                      write_back_capability:
+                        type: string
+      responses:
+        "200":
+          description: Import result with persisted Wishlist/Discovery identifiers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider:
+                    type: string
+                  mode:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      type: object
+                  summary:
+                    type: object
+        "400":
+          $ref: "#/components/responses/Error"
   /api/discovery/not-in-collection:
     get:
       tags: [Discovery]

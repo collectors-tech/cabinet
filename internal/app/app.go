@@ -2164,6 +2164,7 @@ func New(cfg config.Config) (*App, error) {
 			"summary":  summary,
 		})
 	})
+	registerEbayBuyerInterestImportRoute(mux, conn, profiles)
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
