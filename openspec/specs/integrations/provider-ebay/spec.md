@@ -47,7 +47,7 @@ Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest st
 
 #### Scenario: Import eBay buyer-interest state
 - **GIVEN** an eBay account sync returns listing interest state `watched`, `saved`, `liked`, or `cart_like`
-- **WHEN** Cabinet maps the listing into its buyer-interest intake model or through `POST /api/providers/ebay/buyer-interest/preview`
+- **WHEN** Cabinet maps the listing into its buyer-interest intake model, previews it through `POST /api/providers/ebay/buyer-interest/preview`, or persists it through `POST /api/providers/ebay/buyer-interest/import`
 - **THEN** the mapped record MUST include:
   - source provider `ebay`
   - source account identifier when available
@@ -56,12 +56,13 @@ Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest st
   - deterministic provenance key
   - owned inventory flag set to false
 - **AND** watched/saved states MUST target Wishlist while liked/cart-like states MUST target Discoveries unless a later user action promotes the item.
+- **AND** persisted imports MUST retain the deterministic provenance key in the saved Wishlist entry or Discovery candidate action.
 
 ### Requirement INTEGRATION-026: eBay buyer-interest write-back MUST be capability gated
 Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay API capability has been verified for the active account and marketplace.
 
 #### Scenario: Unsupported eBay write-back stays blocked
 - **GIVEN** Cabinet has imported eBay buyer-interest state but has no verified write-back capability
-- **WHEN** a write-back action is evaluated or previewed through `POST /api/providers/ebay/buyer-interest/preview`
+- **WHEN** a write-back action is evaluated, previewed through `POST /api/providers/ebay/buyer-interest/preview`, or persisted through `POST /api/providers/ebay/buyer-interest/import`
 - **THEN** Cabinet MUST report write-back as blocked with a capability-not-verified reason
 - **AND** it MUST NOT imply the remote eBay watch, saved, liked, or cart-like state was changed.
