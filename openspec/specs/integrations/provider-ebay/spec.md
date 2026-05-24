@@ -72,3 +72,26 @@ Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay A
 - **WHEN** a write-back action is evaluated, previewed through `POST /api/providers/ebay/buyer-interest/preview`, or persisted through `POST /api/providers/ebay/buyer-interest/import`
 - **THEN** Cabinet MUST report write-back as blocked with a capability-not-verified reason
 - **AND** it MUST NOT imply the remote eBay watch, saved, liked, or cart-like state was changed.
+
+### Requirement INTEGRATION-027: eBay seller operations MUST expose truthful capability-gated states
+Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment, and offers as separate eBay seller operation capabilities so unavailable or read-only API support is not presented as a writable workflow.
+
+#### Scenario: Unsupported seller operation capabilities stay blocked
+- **GIVEN** Cabinet has no verified eBay seller operation capability for messages, notifications, sold orders, fulfilment, or offers
+- **WHEN** seller operation statuses are evaluated
+- **THEN** each operation MUST report read availability as false
+- **AND** each operation MUST report write availability as false
+- **AND** each operation MUST expose a capability-not-verified blocker instead of showing a usable workflow.
+
+#### Scenario: Read-only seller operation sync does not imply write availability
+- **GIVEN** Cabinet has read-only eBay API support for seller messages or sold orders
+- **WHEN** seller operation statuses are evaluated
+- **THEN** the matching operations MAY report read availability as true
+- **AND** write availability MUST remain false with a write-capability-not-verified blocker
+- **AND** Cabinet MUST NOT imply replies, fulfilment updates, or offer sends were executed remotely.
+
+#### Scenario: Confirmed seller operation writes require explicit confirmation
+- **GIVEN** Cabinet has verified API support for a seller notification, fulfilment, or offer write workflow
+- **WHEN** the matching seller operation status is evaluated
+- **THEN** read and write availability MAY be true
+- **AND** the status MUST mark confirmation as required before any external eBay write is executed.
