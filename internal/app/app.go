@@ -6536,6 +6536,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"pricing":           true,
 				"health":            true,
 			},
+			"seller_operations":  ebay.SellerOperationStatuses(nil),
 			"state":              "ready",
 			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
 		},

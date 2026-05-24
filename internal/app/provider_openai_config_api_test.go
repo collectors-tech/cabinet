@@ -104,6 +104,45 @@ func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t 
 	}
 }
 
+func TestEbayRegistryExposesSellerOperationCapabilityStatuses(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	ebay := findRegistryProvider(payload.Providers, "ebay")
+	if ebay == nil {
+		t.Fatalf("expected ebay provider in registry payload: %+v", payload.Providers)
+	}
+	statuses, ok := ebay["seller_operations"].([]any)
+	if !ok {
+		t.Fatalf("expected seller_operations array, got %#v", ebay["seller_operations"])
+	}
+	if len(statuses) != 5 {
+		t.Fatalf("expected five seller operation statuses, got %d: %+v", len(statuses), statuses)
+	}
+	for _, raw := range statuses {
+		status, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("expected seller operation status object, got %#v", raw)
+		}
+		if status["read_available"].(bool) || status["write_available"].(bool) || status["confirmation_required"].(bool) {
+			t.Fatalf("default registry status must not expose unverified seller operation availability: %+v", status)
+		}
+		if got := fmt.Sprintf("%v", status["blocker"]); got != "ebay_api_capability_not_verified" {
+			t.Fatalf("expected capability-not-verified blocker, got %+v", status)
+		}
+	}
+}
+
 func findRegistryProvider(providers []map[string]any, id string) map[string]any {
 	for _, provider := range providers {
 		if fmt.Sprintf("%v", provider["provider_id"]) == id {

@@ -95,3 +95,9 @@ Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment,
 - **WHEN** the matching seller operation status is evaluated
 - **THEN** read and write availability MAY be true
 - **AND** the status MUST mark confirmation as required before any external eBay write is executed.
+
+#### Scenario: Seller operation statuses are visible through the integration surface
+- **GIVEN** the eBay provider registry payload is loaded by the Integrations screen
+- **WHEN** Cabinet renders the eBay integration dialog
+- **THEN** seller messages, notifications, sold orders, fulfilment, and offers MUST each display read availability, write availability, and any blocker reason
+- **AND** unavailable seller operation workflows MUST remain visibly blocked rather than appearing as executable actions.

@@ -614,6 +614,28 @@ func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) 
 	}
 }
 
+func TestIntegrationsEbaySellerOperationsPanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-seller-operations-panel'",
+		"editingProvider.seller_operations",
+		"ebay-seller-operation-",
+		"External writes require confirmation",
+		"status.blocker",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay seller operations panel contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
