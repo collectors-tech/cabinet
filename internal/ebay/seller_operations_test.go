@@ -149,6 +149,47 @@ func TestExecuteSellerOperationActionCompletesReadOnlySyncLocally(t *testing.T) 
 	if execution.Operation != SellerOperationSoldOrders || execution.Action != "sync" {
 		t.Fatalf("execution did not normalize operation/action: %+v", execution)
 	}
+	if execution.Result == nil {
+		t.Fatalf("read-only seller sync should include per-operation read result: %+v", execution)
+	}
+	if execution.Result.Operation != SellerOperationSoldOrders || execution.Result.Source != "local_read_model" {
+		t.Fatalf("unexpected read result identity: %+v", execution.Result)
+	}
+	if len(execution.Result.Records) == 0 || execution.Result.Summary["open_orders"] != 1 {
+		t.Fatalf("sold-order read result should expose deterministic order records and summary, got %+v", execution.Result)
+	}
+}
+
+func TestSellerOperationReadResultsExposePerOperationModels(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		operation string
+		kind      string
+		summary   string
+	}{
+		{SellerOperationMessages, "seller_message", "unread_messages"},
+		{SellerOperationNotifications, "seller_notification", "unread_notifications"},
+		{SellerOperationSoldOrders, "sold_order", "open_orders"},
+		{SellerOperationFulfillment, "fulfillment", "shipments_ready"},
+		{SellerOperationOffers, "seller_offer", "pending_offers"},
+	} {
+		tc := tc
+		t.Run(tc.operation, func(t *testing.T) {
+			t.Parallel()
+
+			result := SellerOperationReadResultFor(tc.operation)
+			if result.Operation != tc.operation || result.Source != "local_read_model" {
+				t.Fatalf("unexpected read result identity: %+v", result)
+			}
+			if len(result.Records) != 1 || result.Records[0].Kind != tc.kind {
+				t.Fatalf("expected one %s record, got %+v", tc.kind, result.Records)
+			}
+			if result.Summary[tc.summary] != 1 {
+				t.Fatalf("expected summary %s=1, got %+v", tc.summary, result.Summary)
+			}
+		})
+	}
 }
 
 func TestExecuteSellerOperationActionRefusesRemoteWriteWithoutAdapter(t *testing.T) {
