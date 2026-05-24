@@ -2115,6 +2115,55 @@ func New(cfg config.Config) (*App, error) {
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
+	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SourceAccount       string                    `json:"source_account"`
+			WriteBackCapability string                    `json:"write_back_capability"`
+			Items               []ebay.BuyerInterestInput `json:"items"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if len(req.Items) == 0 {
+			http.Error(w, `{"error":"missing_items"}`, http.StatusBadRequest)
+			return
+		}
+		mappings := make([]ebay.BuyerInterestMapping, 0, len(req.Items))
+		summary := map[string]int{
+			ebay.InterestDestinationWishlist:  0,
+			ebay.InterestDestinationDiscovery: 0,
+			"write_back_allowed":              0,
+			"write_back_blocked":              0,
+		}
+		for _, item := range req.Items {
+			if strings.TrimSpace(item.SourceAccount) == "" {
+				item.SourceAccount = req.SourceAccount
+			}
+			if strings.TrimSpace(item.WriteBackCapability) == "" {
+				item.WriteBackCapability = req.WriteBackCapability
+			}
+			mapped := ebay.MapBuyerInterest(item)
+			mappings = append(mappings, mapped)
+			summary[mapped.Destination]++
+			if mapped.WriteBackAllowed {
+				summary["write_back_allowed"]++
+			} else {
+				summary["write_back_blocked"]++
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "preview",
+			"items":    mappings,
+			"summary":  summary,
+		})
+	})
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

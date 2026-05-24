@@ -47,7 +47,7 @@ Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest st
 
 #### Scenario: Import eBay buyer-interest state
 - **GIVEN** an eBay account sync returns listing interest state `watched`, `saved`, `liked`, or `cart_like`
-- **WHEN** Cabinet maps the listing into its buyer-interest intake model
+- **WHEN** Cabinet maps the listing into its buyer-interest intake model or through `POST /api/providers/ebay/buyer-interest/preview`
 - **THEN** the mapped record MUST include:
   - source provider `ebay`
   - source account identifier when available
@@ -62,6 +62,6 @@ Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay A
 
 #### Scenario: Unsupported eBay write-back stays blocked
 - **GIVEN** Cabinet has imported eBay buyer-interest state but has no verified write-back capability
-- **WHEN** a write-back action is evaluated
+- **WHEN** a write-back action is evaluated or previewed through `POST /api/providers/ebay/buyer-interest/preview`
 - **THEN** Cabinet MUST report write-back as blocked with a capability-not-verified reason
 - **AND** it MUST NOT imply the remote eBay watch, saved, liked, or cart-like state was changed.
