@@ -2213,6 +2213,55 @@ func New(cfg config.Config) (*App, error) {
 			"execution": execution,
 		})
 	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview := ebay.PreviewSellerListingLifecycleCommand(req)
+		if preview.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "listing_lifecycle_preview",
+			"preview":  preview,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerListingLifecycleCommand(req, nil)
+		if execution.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "listing_lifecycle_execute",
+			"execution": execution,
+		})
+	})
 	registerEbayBuyerInterestImportRoute(mux, conn, profiles)
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
