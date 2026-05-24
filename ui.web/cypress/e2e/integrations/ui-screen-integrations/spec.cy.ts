@@ -291,6 +291,178 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'ebay_api_capability_not_verified')
   })
 
+  it('INTEGRATION-028: previews listing lifecycle commands and executes local drafts without remote write claims', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            seller_operations: [],
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    })
+    cy.intercept('POST', '/api/providers/ebay/listing-lifecycle/preview', (req) => {
+      if (req.body.command === 'draft') {
+        expect(req.body.capability).to.eq('draft_only')
+        expect(req.body.confirmed).to.eq(false)
+        req.reply({
+          statusCode: 200,
+          body: {
+            provider: 'ebay',
+            mode: 'listing_lifecycle_preview',
+            preview: {
+              command: 'draft',
+              capability: 'draft_only',
+              allowed: true,
+              local_only: true,
+              remote_write: false,
+              confirmation_required: false,
+            },
+          },
+        })
+        return
+      }
+
+      expect(req.body.command).to.eq('publish')
+      expect(req.body.capability).to.eq('confirmed_api')
+      expect(req.body.confirmed).to.eq(false)
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          mode: 'listing_lifecycle_preview',
+          preview: {
+            command: 'publish',
+            capability: 'confirmed_api',
+            allowed: false,
+            local_only: false,
+            remote_write: true,
+            confirmation_required: true,
+            blocker: 'ebay_listing_lifecycle_confirmation_required',
+          },
+        },
+      })
+    }).as('listingLifecyclePreview')
+    cy.intercept('POST', '/api/providers/ebay/listing-lifecycle/execute', (req) => {
+      if (req.body.command === 'draft') {
+        expect(req.body.capability).to.eq('draft_only')
+        req.reply({
+          statusCode: 200,
+          body: {
+            provider: 'ebay',
+            mode: 'listing_lifecycle_execute',
+            execution: {
+              command: 'draft',
+              capability: 'draft_only',
+              allowed: true,
+              local_only: true,
+              remote_write: false,
+              executed: true,
+              status: 'local_draft_ready',
+              response: {
+                provider: 'cabinet',
+                command: 'draft',
+                draft_id: 'draft-local-item-local-1',
+                status: 'local_draft_ready',
+              },
+            },
+          },
+        })
+        return
+      }
+
+      expect(req.body.command).to.eq('publish')
+      expect(req.body.confirmed).to.eq(true)
+      req.reply({
+        statusCode: 409,
+        body: {
+          provider: 'ebay',
+          mode: 'listing_lifecycle_execute',
+          execution: {
+            command: 'publish',
+            capability: 'confirmed_api',
+            allowed: false,
+            local_only: false,
+            remote_write: true,
+            executed: false,
+            status: 'blocked',
+            blocker: 'ebay_listing_lifecycle_adapter_required',
+          },
+        },
+      })
+    }).as('listingLifecycleExecute')
+
+    signIn()
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="ebay-listing-lifecycle-panel"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('contain', 'Publish, revise, end, and relist require confirmation')
+
+    cy.get('[data-testid="ebay-listing-lifecycle-preview-draft"]').click()
+    cy.wait('@listingLifecyclePreview')
+    cy.contains('Listing lifecycle preview completed without remote write.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="ebay-listing-lifecycle-preview-result"]')
+      .should('contain', 'Preview: Create draft')
+      .and('contain', 'Allowed: yes / Local only: yes / Remote write: no')
+
+    cy.get('[data-testid="ebay-listing-lifecycle-execute-draft"]').click()
+    cy.wait('@listingLifecycleExecute')
+    cy.contains('Listing draft was created locally without eBay remote write.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="ebay-listing-lifecycle-execute-result"]')
+      .should('contain', 'Execute: Create draft')
+      .and('contain', 'Executed: yes / Local only: yes / Remote write: no')
+      .and('contain', 'draft-local-item-local-1')
+
+    cy.get('[data-testid="ebay-listing-lifecycle-preview-publish"]').click()
+    cy.wait('@listingLifecyclePreview')
+    cy.get('[data-testid="ebay-listing-lifecycle-preview-result"]')
+      .should('contain', 'Preview: Publish')
+      .and('contain', 'Allowed: no / Local only: no / Remote write: yes')
+      .and('contain', 'ebay_listing_lifecycle_confirmation_required')
+
+    cy.get('[data-testid="ebay-listing-lifecycle-confirm-execute-publish"]').click()
+    cy.wait('@listingLifecycleExecute')
+    cy.get('[data-testid="ebay-listing-lifecycle-error"]').should(
+      'contain',
+      'ebay_listing_lifecycle_adapter_required'
+    )
+    cy.get('[data-testid="ebay-listing-lifecycle-execute-result"]')
+      .should('contain', 'Execute: Publish')
+      .and('contain', 'Executed: no / Local only: no / Remote write: yes')
+      .and('contain', 'blocked')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -363,16 +535,18 @@ describe('ui-screen-integrations', () => {
     cy.contains('input[placeholder="New token / API key"]').should('not.exist')
     cy.get('[data-testid="replace-token"]').click()
     cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
-    cy.contains('Health: unknown').should('be.visible')
-    cy.contains('Last run: never').should('be.visible')
-    cy.contains('Last checked: n/a').should('be.visible')
+    cy.contains('Health: unknown').scrollIntoView().should('be.visible')
+    cy.contains('Last run: never').scrollIntoView().should('be.visible')
+    cy.contains('Last checked: n/a').scrollIntoView().should('be.visible')
     cy.contains('button', 'Validate').click()
     cy.contains('button', 'Validating...').should('be.visible')
     cy.wait('@validate')
-    cy.contains('Validated eBay health: ok.').should('be.visible')
-    cy.contains('Health: ok').should('be.visible')
-    cy.contains('Last run: success').should('be.visible')
-    cy.contains('Last checked: 2026-03-01T00:01:00Z').should('be.visible')
+    cy.contains('Validated eBay health: ok.').scrollIntoView().should('be.visible')
+    cy.contains('Health: ok').scrollIntoView().should('be.visible')
+    cy.contains('Last run: success').scrollIntoView().should('be.visible')
+    cy.contains('Last checked: 2026-03-01T00:01:00Z')
+      .scrollIntoView()
+      .should('be.visible')
     cy.contains('button', 'Cancel').click()
     cy.contains('[data-testid="provider-card-ebay"]', 'Health: ok').should('be.visible')
     cy.contains('[data-testid="provider-card-ebay"]', 'Last run: success').should('be.visible')
@@ -381,7 +555,7 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
     cy.contains('button', 'Save Integration').click()
     cy.wait('@saveSettings')
-    cy.contains('Provider configuration saved.').should('be.visible')
+    cy.contains('Provider configuration saved.').scrollIntoView().should('be.visible')
   })
 
   it('UI-SCREEN-INTEGRATIONS-005: renders deterministic bootstrap error with retry control', () => {
