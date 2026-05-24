@@ -53,3 +53,13 @@ Cabinet SHALL show created, merged, skipped, and failed counts after a confirmed
 - **WHEN** the apply request succeeds
 - **THEN** the UI SHALL report total item, created, merged, skipped, and failed counts returned by the API
 - **AND** the user SHALL remain on the import operations screen for follow-up review
+
+### Requirement DATA-MANAGEMENT-007: Maintenance endpoints SHALL report operation metadata
+Cabinet SHALL return explicit operation metadata for maintenance actions so users and diagnostics can verify what ran, whether it completed, and when it completed.
+
+#### Scenario: Reindex and repair maintenance
+- **GIVEN** a user triggers search reindex or database integrity check maintenance
+- **WHEN** Cabinet completes the requested operation
+- **THEN** the response SHALL include `ok`, `operation`, and `completed_at` metadata
+- **AND** reindex SHALL report that the search index was rebuilt
+- **AND** repair SHALL report the integrity-check result

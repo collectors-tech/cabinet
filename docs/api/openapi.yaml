@@ -2029,7 +2029,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  operation:
+                    type: string
+                    example: reindex_search
+                  rebuilt_search_index:
+                    type: boolean
+                  completed_at:
+                    type: string
         "400":
           $ref: "#/components/responses/Error"
   /api/data/rebuild-thumbnails:
@@ -2062,7 +2072,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  operation:
+                    type: string
+                    example: integrity_check
+                  integrity_check:
+                    type: string
+                    example: ok
+                  completed_at:
+                    type: string
         "400":
           $ref: "#/components/responses/Error"
   /api/backup/run:

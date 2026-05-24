@@ -4414,11 +4414,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		if err := dataService.Reindex(r.Context()); err != nil {
+		result, err := dataService.Reindex(r.Context())
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_reindex"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/data/rebuild-thumbnails", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4448,7 +4449,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_repair_check"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"integrity_check": result})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/backup/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
