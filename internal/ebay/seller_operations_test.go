@@ -131,6 +131,45 @@ func TestPreviewSellerOperationActionAllowsReadOnlySyncWithoutRemoteWrite(t *tes
 	}
 }
 
+func TestExecuteSellerOperationActionCompletesReadOnlySyncLocally(t *testing.T) {
+	t.Parallel()
+
+	execution := ExecuteSellerOperationAction(SellerOperationActionRequest{
+		Operation:  "sold_order",
+		Capability: SellerCapabilityReadOnlySync,
+		Action:     "refresh",
+	})
+
+	if !execution.Allowed || !execution.Executed || !execution.LocalOnly || execution.RemoteWrite {
+		t.Fatalf("read-only seller sync should execute locally without remote write, got %+v", execution)
+	}
+	if execution.Status != "read_only_sync_ready" || execution.Blocker != "" {
+		t.Fatalf("read-only seller sync execution should have ready status and no blocker, got %+v", execution)
+	}
+	if execution.Operation != SellerOperationSoldOrders || execution.Action != "sync" {
+		t.Fatalf("execution did not normalize operation/action: %+v", execution)
+	}
+}
+
+func TestExecuteSellerOperationActionRefusesRemoteWriteWithoutAdapter(t *testing.T) {
+	t.Parallel()
+
+	execution := ExecuteSellerOperationAction(SellerOperationActionRequest{
+		Operation:   "fulfilment",
+		Capability:  SellerCapabilityConfirmedAPI,
+		Action:      "ship",
+		Confirmed:   true,
+		ReferenceID: "order-123",
+	})
+
+	if execution.Allowed || execution.Executed || execution.LocalOnly || !execution.RemoteWrite {
+		t.Fatalf("remote seller write execution must not claim completion without adapter, got %+v", execution)
+	}
+	if execution.Blocker != "ebay_seller_remote_write_execution_not_configured" || execution.Status != "blocked" {
+		t.Fatalf("remote seller write execution should expose adapter blocker, got %+v", execution)
+	}
+}
+
 func sellerStatusesByOperation(statuses []SellerOperationCapabilityStatus) map[string]SellerOperationCapabilityStatus {
 	out := map[string]SellerOperationCapabilityStatus{}
 	for _, status := range statuses {
