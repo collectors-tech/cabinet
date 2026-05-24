@@ -111,6 +111,10 @@ type IntegrationForm = {
   openAiModel: string
   openAiTestPrompt: string
   buyerInterestPayload: string
+  listingLifecycleItemId: string
+  listingLifecycleDraftId: string
+  listingLifecycleListingId: string
+  listingLifecycleTitle: string
 }
 
 type BuyerInterestSyncResult = {
@@ -185,6 +189,52 @@ type SellerOperationExecuteResult = {
   }
 }
 
+type SellerListingLifecycleCommand =
+  | 'draft'
+  | 'publish'
+  | 'revise'
+  | 'end'
+  | 'relist'
+
+type SellerListingLifecyclePreviewResult = {
+  provider?: string
+  mode?: string
+  preview?: {
+    command?: string
+    capability?: string
+    confirmed?: boolean
+    allowed?: boolean
+    local_only?: boolean
+    remote_write?: boolean
+    confirmation_required?: boolean
+    blocker?: string
+  }
+}
+
+type SellerListingLifecycleExecuteResult = {
+  provider?: string
+  mode?: string
+  execution?: {
+    command?: string
+    capability?: string
+    confirmed?: boolean
+    allowed?: boolean
+    local_only?: boolean
+    remote_write?: boolean
+    confirmation_required?: boolean
+    blocker?: string
+    executed?: boolean
+    status?: string
+    response?: {
+      provider?: string
+      command?: string
+      draft_id?: string
+      listing_id?: string
+      status?: string
+    }
+  }
+}
+
 type ProfileOption = {
   id: string
   name: string
@@ -222,6 +272,25 @@ const defaultBuyerInterestPayload = JSON.stringify(
   null,
   2
 )
+
+const listingLifecycleCommands: SellerListingLifecycleCommand[] = [
+  'draft',
+  'publish',
+  'revise',
+  'end',
+  'relist',
+]
+
+function sellerListingLifecycleLabel(command: string) {
+  const labels: Record<string, string> = {
+    draft: 'Create draft',
+    publish: 'Publish',
+    revise: 'Revise',
+    end: 'End',
+    relist: 'Relist',
+  }
+  return labels[command] ?? command
+}
 
 function sellerOperationLabel(operation: string) {
   const labels: Record<string, string> = {
@@ -377,6 +446,10 @@ export function Apps({
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
     buyerInterestPayload: defaultBuyerInterestPayload,
+    listingLifecycleItemId: 'item-local-1',
+    listingLifecycleDraftId: 'draft-local-1',
+    listingLifecycleListingId: 'listing-live-1',
+    listingLifecycleTitle: 'Cabinet eBay listing draft',
   })
   const [buyerInterestWorking, setBuyerInterestWorking] = useState(false)
   const [buyerInterestError, setBuyerInterestError] = useState<string | null>(
@@ -394,6 +467,16 @@ export function Apps({
     useState<SellerOperationPreviewResult | null>(null)
   const [sellerOperationExecution, setSellerOperationExecution] =
     useState<SellerOperationExecuteResult | null>(null)
+  const [listingLifecycleWorking, setListingLifecycleWorking] = useState<
+    string | null
+  >(null)
+  const [listingLifecycleError, setListingLifecycleError] = useState<
+    string | null
+  >(null)
+  const [listingLifecycleResult, setListingLifecycleResult] =
+    useState<SellerListingLifecyclePreviewResult | null>(null)
+  const [listingLifecycleExecution, setListingLifecycleExecution] =
+    useState<SellerListingLifecycleExecuteResult | null>(null)
 
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
@@ -608,6 +691,10 @@ export function Apps({
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
       buyerInterestPayload: defaultBuyerInterestPayload,
+      listingLifecycleItemId: 'item-local-1',
+      listingLifecycleDraftId: 'draft-local-1',
+      listingLifecycleListingId: 'listing-live-1',
+      listingLifecycleTitle: 'Cabinet eBay listing draft',
     })
     setBuyerInterestError(null)
     setBuyerInterestResult(null)
@@ -615,6 +702,10 @@ export function Apps({
     setSellerOperationResult(null)
     setSellerOperationExecution(null)
     setSellerOperationWorking(null)
+    setListingLifecycleError(null)
+    setListingLifecycleResult(null)
+    setListingLifecycleExecution(null)
+    setListingLifecycleWorking(null)
     setReplaceToken(!provider.has_token)
   }
 
@@ -694,6 +785,10 @@ export function Apps({
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
       buyerInterestPayload: defaultBuyerInterestPayload,
+      listingLifecycleItemId: 'item-local-1',
+      listingLifecycleDraftId: 'draft-local-1',
+      listingLifecycleListingId: 'listing-live-1',
+      listingLifecycleTitle: 'Cabinet eBay listing draft',
     })
     setBuyerInterestError(null)
     setBuyerInterestResult(null)
@@ -701,6 +796,10 @@ export function Apps({
     setSellerOperationResult(null)
     setSellerOperationExecution(null)
     setSellerOperationWorking(null)
+    setListingLifecycleError(null)
+    setListingLifecycleResult(null)
+    setListingLifecycleExecution(null)
+    setListingLifecycleWorking(null)
   }
 
   useEffect(() => {
@@ -1077,6 +1176,111 @@ export function Apps({
       )
     } finally {
       setSellerOperationWorking(null)
+    }
+  }
+
+  const listingLifecycleRequest = (
+    command: SellerListingLifecycleCommand,
+    confirmed: boolean
+  ) => ({
+    command,
+    capability: command === 'draft' ? 'draft_only' : 'confirmed_api',
+    confirmed,
+    item_id: form.listingLifecycleItemId,
+    draft_id: form.listingLifecycleDraftId,
+    listing_id: form.listingLifecycleListingId,
+    title: form.listingLifecycleTitle,
+  })
+
+  const previewListingLifecycle = async (
+    command: SellerListingLifecycleCommand,
+    confirmed: boolean
+  ) => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    const workingKey = `${command}-${confirmed ? 'confirmed-preview' : 'preview'}`
+    setListingLifecycleWorking(workingKey)
+    setListingLifecycleError(null)
+    setListingLifecycleResult(null)
+    setListingLifecycleExecution(null)
+    try {
+      const response = await fetch(
+        '/api/providers/ebay/listing-lifecycle/preview',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(listingLifecycleRequest(command, confirmed)),
+        }
+      )
+      const payload =
+        (await response.json()) as SellerListingLifecyclePreviewResult
+      setListingLifecycleResult(payload)
+      if (!response.ok) {
+        throw new Error(
+          payload.preview?.blocker ??
+            `listing_lifecycle_preview_failed_${response.status}`
+        )
+      }
+      setActionMessage(
+        payload.preview?.remote_write
+          ? 'Listing lifecycle preview requires explicit confirmation before any eBay write.'
+          : 'Listing lifecycle preview completed without remote write.'
+      )
+    } catch (error) {
+      setListingLifecycleError(
+        error instanceof Error
+          ? error.message
+          : 'listing_lifecycle_preview_failed'
+      )
+    } finally {
+      setListingLifecycleWorking(null)
+    }
+  }
+
+  const executeListingLifecycle = async (
+    command: SellerListingLifecycleCommand,
+    confirmed: boolean
+  ) => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    const workingKey = `${command}-${confirmed ? 'confirmed-execute' : 'execute'}`
+    setListingLifecycleWorking(workingKey)
+    setListingLifecycleError(null)
+    setListingLifecycleResult(null)
+    setListingLifecycleExecution(null)
+    try {
+      const response = await fetch(
+        '/api/providers/ebay/listing-lifecycle/execute',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(listingLifecycleRequest(command, confirmed)),
+        }
+      )
+      const payload =
+        (await response.json()) as SellerListingLifecycleExecuteResult
+      setListingLifecycleExecution(payload)
+      if (!response.ok) {
+        throw new Error(
+          payload.execution?.blocker ??
+            `listing_lifecycle_execute_failed_${response.status}`
+        )
+      }
+      setActionMessage(
+        payload.execution?.local_only
+          ? 'Listing draft was created locally without eBay remote write.'
+          : 'Listing lifecycle execute request returned without remote completion.'
+      )
+    } catch (error) {
+      setListingLifecycleError(
+        error instanceof Error
+          ? error.message
+          : 'listing_lifecycle_execute_failed'
+      )
+    } finally {
+      setListingLifecycleWorking(null)
     }
   }
 
@@ -1728,7 +1932,9 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
+                    <Label htmlFor='provider-marketplace'>
+                      Marketplace / Region
+                    </Label>
                     <Input
                       id='provider-marketplace'
                       placeholder='Marketplace / Region'
@@ -1742,7 +1948,9 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-items-per-page'>Items per page</Label>
+                    <Label htmlFor='provider-items-per-page'>
+                      Items per page
+                    </Label>
                     <Input
                       id='provider-items-per-page'
                       type='number'
@@ -1779,7 +1987,9 @@ export function Apps({
                         </div>
                       ) : (
                         <div className='space-y-2'>
-                          <Label htmlFor='provider-token'>New token / API key</Label>
+                          <Label htmlFor='provider-token'>
+                            New token / API key
+                          </Label>
                           <Input
                             id='provider-token'
                             type='password'
@@ -1835,8 +2045,7 @@ export function Apps({
                                 </div>
                                 <p className='mt-1 text-muted-foreground'>
                                   Read: {status.read_available ? 'yes' : 'no'} /
-                                  Write:{' '}
-                                  {status.write_available ? 'yes' : 'no'}
+                                  Write: {status.write_available ? 'yes' : 'no'}
                                 </p>
                                 <p className='mt-1 text-muted-foreground'>
                                   {status.blocker ??
@@ -1982,6 +2191,250 @@ export function Apps({
                           </div>
                         ) : null}
                       </section>
+                      <section
+                        className='rounded-md border p-3'
+                        data-testid='ebay-listing-lifecycle-panel'
+                      >
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <p className='font-medium'>Listing Lifecycle</p>
+                            <p className='text-xs text-muted-foreground'>
+                              Create Cabinet-local drafts and preview publish,
+                              revise, end, or relist commands before any eBay
+                              write is confirmed.
+                            </p>
+                            <p className='text-xs text-muted-foreground'>
+                              Confirmed remote writes remain blocked with
+                              ebay_listing_lifecycle_adapter_required until the
+                              eBay lifecycle adapter is configured.
+                            </p>
+                          </div>
+                          <span
+                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                            data-testid='ebay-listing-lifecycle-safe-mode'
+                          >
+                            Publish, revise, end, and relist require
+                            confirmation
+                          </span>
+                        </div>
+                        <div className='mt-3 grid gap-2 md:grid-cols-2'>
+                          <div className='space-y-2'>
+                            <Label htmlFor='ebay-listing-lifecycle-item-id'>
+                              Item ID
+                            </Label>
+                            <Input
+                              id='ebay-listing-lifecycle-item-id'
+                              data-testid='ebay-listing-lifecycle-item-id'
+                              value={form.listingLifecycleItemId}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  listingLifecycleItemId: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <Label htmlFor='ebay-listing-lifecycle-title'>
+                              Draft title
+                            </Label>
+                            <Input
+                              id='ebay-listing-lifecycle-title'
+                              data-testid='ebay-listing-lifecycle-title'
+                              value={form.listingLifecycleTitle}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  listingLifecycleTitle: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <Label htmlFor='ebay-listing-lifecycle-draft-id'>
+                              Draft ID
+                            </Label>
+                            <Input
+                              id='ebay-listing-lifecycle-draft-id'
+                              data-testid='ebay-listing-lifecycle-draft-id'
+                              value={form.listingLifecycleDraftId}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  listingLifecycleDraftId: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <Label htmlFor='ebay-listing-lifecycle-listing-id'>
+                              Listing ID
+                            </Label>
+                            <Input
+                              id='ebay-listing-lifecycle-listing-id'
+                              data-testid='ebay-listing-lifecycle-listing-id'
+                              value={form.listingLifecycleListingId}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  listingLifecycleListingId: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className='mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5'>
+                          {listingLifecycleCommands.map((command) => (
+                            <div
+                              key={command}
+                              className='rounded-md bg-muted/40 p-3 text-xs'
+                              data-testid={`ebay-listing-lifecycle-${command}`}
+                            >
+                              <p className='font-medium'>
+                                {sellerListingLifecycleLabel(command)}
+                              </p>
+                              <p className='mt-1 text-muted-foreground'>
+                                {command === 'draft'
+                                  ? 'Local draft only'
+                                  : 'Confirmed eBay write gate'}
+                              </p>
+                              <div className='mt-3 flex flex-wrap gap-2'>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid={`ebay-listing-lifecycle-preview-${command}`}
+                                  disabled={listingLifecycleWorking !== null}
+                                  onClick={() =>
+                                    void previewListingLifecycle(command, false)
+                                  }
+                                >
+                                  Preview
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid={`ebay-listing-lifecycle-confirm-preview-${command}`}
+                                  disabled={
+                                    listingLifecycleWorking !== null ||
+                                    command === 'draft'
+                                  }
+                                  onClick={() =>
+                                    void previewListingLifecycle(command, true)
+                                  }
+                                >
+                                  Confirm Preview
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid={`ebay-listing-lifecycle-execute-${command}`}
+                                  disabled={
+                                    listingLifecycleWorking !== null ||
+                                    command !== 'draft'
+                                  }
+                                  onClick={() =>
+                                    void executeListingLifecycle(command, false)
+                                  }
+                                >
+                                  Execute
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid={`ebay-listing-lifecycle-confirm-execute-${command}`}
+                                  disabled={
+                                    listingLifecycleWorking !== null ||
+                                    command === 'draft'
+                                  }
+                                  onClick={() =>
+                                    void executeListingLifecycle(command, true)
+                                  }
+                                >
+                                  Confirm Execute
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {listingLifecycleError ? (
+                          <p
+                            className='mt-3 text-xs text-destructive'
+                            data-testid='ebay-listing-lifecycle-error'
+                          >
+                            {listingLifecycleError}
+                          </p>
+                        ) : null}
+                        {listingLifecycleResult?.preview ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-listing-lifecycle-preview-result'
+                          >
+                            <p className='font-medium'>
+                              Preview:{' '}
+                              {sellerListingLifecycleLabel(
+                                listingLifecycleResult.preview.command ?? ''
+                              )}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              Allowed:{' '}
+                              {listingLifecycleResult.preview.allowed
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Local only:{' '}
+                              {listingLifecycleResult.preview.local_only
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Remote write:{' '}
+                              {listingLifecycleResult.preview.remote_write
+                                ? 'yes'
+                                : 'no'}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              {listingLifecycleResult.preview.blocker ??
+                                'No blocker'}
+                            </p>
+                          </div>
+                        ) : null}
+                        {listingLifecycleExecution?.execution ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-listing-lifecycle-execute-result'
+                          >
+                            <p className='font-medium'>
+                              Execute:{' '}
+                              {sellerListingLifecycleLabel(
+                                listingLifecycleExecution.execution.command ??
+                                  ''
+                              )}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              Executed:{' '}
+                              {listingLifecycleExecution.execution.executed
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Local only:{' '}
+                              {listingLifecycleExecution.execution.local_only
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Remote write:{' '}
+                              {listingLifecycleExecution.execution.remote_write
+                                ? 'yes'
+                                : 'no'}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              {listingLifecycleExecution.execution.response
+                                ?.draft_id ??
+                                listingLifecycleExecution.execution.status ??
+                                listingLifecycleExecution.execution.blocker ??
+                                'No status'}
+                            </p>
+                          </div>
+                        ) : null}
+                      </section>
                       <details
                         className='rounded-md border p-3'
                         data-testid='ebay-buyer-interest-sync-panel'
@@ -1989,107 +2442,112 @@ export function Apps({
                         <summary className='cursor-pointer text-sm font-medium'>
                           Buyer Interest Sync
                         </summary>
-                      <div className='mt-3 space-y-3'>
-                        <div className='flex flex-wrap items-start justify-between gap-3'>
-                          <div>
-                            <p className='font-medium'>Buyer Interest Sync</p>
-                            <p className='text-xs text-muted-foreground'>
-                              Preview or import watched, saved, liked, and
-                              cart-like listings into local Wishlist and
-                              Discoveries.
-                            </p>
+                        <div className='mt-3 space-y-3'>
+                          <div className='flex flex-wrap items-start justify-between gap-3'>
+                            <div>
+                              <p className='font-medium'>Buyer Interest Sync</p>
+                              <p className='text-xs text-muted-foreground'>
+                                Preview or import watched, saved, liked, and
+                                cart-like listings into local Wishlist and
+                                Discoveries.
+                              </p>
+                            </div>
+                            <span
+                              className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                              data-testid='ebay-buyer-interest-writeback-status'
+                            >
+                              Write-back blocked until eBay capability is
+                              verified
+                            </span>
                           </div>
-                          <span
-                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
-                            data-testid='ebay-buyer-interest-writeback-status'
+                          <Label
+                            className='mt-3 block'
+                            htmlFor='ebay-buyer-interest-payload'
                           >
-                            Write-back blocked until eBay capability is verified
-                          </span>
-                        </div>
-                        <Label
-                          className='mt-3 block'
-                          htmlFor='ebay-buyer-interest-payload'
-                        >
-                          Sync payload
-                        </Label>
-                        <textarea
-                          id='ebay-buyer-interest-payload'
-                          className='mt-2 min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs'
-                          data-testid='ebay-buyer-interest-payload'
-                          value={form.buyerInterestPayload}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              buyerInterestPayload: e.target.value,
-                            }))
-                          }
-                        />
-                        <div className='mt-3 flex flex-wrap gap-2'>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            data-testid='ebay-buyer-interest-preview'
-                            disabled={buyerInterestWorking}
-                            onClick={() => void runBuyerInterestSync('preview')}
-                          >
-                            <SearchCheck className='mr-2 size-4' />
-                            Preview
-                          </Button>
-                          <Button
-                            type='button'
-                            size='sm'
-                            data-testid='ebay-buyer-interest-import'
-                            disabled={buyerInterestWorking}
-                            onClick={() => void runBuyerInterestSync('import')}
-                          >
-                            <Download className='mr-2 size-4' />
-                            Import
-                          </Button>
-                        </div>
-                        {buyerInterestError ? (
-                          <p className='mt-2 text-xs text-destructive'>
-                            {buyerInterestError}
-                          </p>
-                        ) : null}
-                        {buyerInterestResult ? (
-                          <div
-                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
-                            data-testid='ebay-buyer-interest-result'
-                          >
-                            <p>
-                              Mode: {buyerInterestResult.mode ?? 'unknown'} /
-                              Total: {buyerInterestResult.total ?? 0}
-                            </p>
-                            <p>
-                              Wishlist:{' '}
-                              {buyerInterestResult.counts?.wishlist ?? 0} /
-                              Discoveries:{' '}
-                              {buyerInterestResult.counts?.discovery ?? 0}
-                            </p>
-                            <ul className='mt-2 space-y-1'>
-                              {(
-                                buyerInterestResult.results ??
-                                buyerInterestResult.mappings ??
-                                []
-                              ).map((entry, index) => (
-                                <li
-                                  key={`${entry.listing_id ?? 'entry'}-${index}`}
-                                >
-                                  {entry.title ??
-                                    entry.listing_id ??
-                                    'Untitled'}
-                                  {' -> '}
-                                  {entry.destination ?? 'unknown'}; write-back{' '}
-                                  {entry.write_back_allowed
-                                    ? 'allowed'
-                                    : (entry.write_back_blocker ?? 'blocked')}
-                                </li>
-                              ))}
-                            </ul>
+                            Sync payload
+                          </Label>
+                          <textarea
+                            id='ebay-buyer-interest-payload'
+                            className='mt-2 min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs'
+                            data-testid='ebay-buyer-interest-payload'
+                            value={form.buyerInterestPayload}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                buyerInterestPayload: e.target.value,
+                              }))
+                            }
+                          />
+                          <div className='mt-3 flex flex-wrap gap-2'>
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              data-testid='ebay-buyer-interest-preview'
+                              disabled={buyerInterestWorking}
+                              onClick={() =>
+                                void runBuyerInterestSync('preview')
+                              }
+                            >
+                              <SearchCheck className='mr-2 size-4' />
+                              Preview
+                            </Button>
+                            <Button
+                              type='button'
+                              size='sm'
+                              data-testid='ebay-buyer-interest-import'
+                              disabled={buyerInterestWorking}
+                              onClick={() =>
+                                void runBuyerInterestSync('import')
+                              }
+                            >
+                              <Download className='mr-2 size-4' />
+                              Import
+                            </Button>
                           </div>
-                        ) : null}
-                      </div>
+                          {buyerInterestError ? (
+                            <p className='mt-2 text-xs text-destructive'>
+                              {buyerInterestError}
+                            </p>
+                          ) : null}
+                          {buyerInterestResult ? (
+                            <div
+                              className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                              data-testid='ebay-buyer-interest-result'
+                            >
+                              <p>
+                                Mode: {buyerInterestResult.mode ?? 'unknown'} /
+                                Total: {buyerInterestResult.total ?? 0}
+                              </p>
+                              <p>
+                                Wishlist:{' '}
+                                {buyerInterestResult.counts?.wishlist ?? 0} /
+                                Discoveries:{' '}
+                                {buyerInterestResult.counts?.discovery ?? 0}
+                              </p>
+                              <ul className='mt-2 space-y-1'>
+                                {(
+                                  buyerInterestResult.results ??
+                                  buyerInterestResult.mappings ??
+                                  []
+                                ).map((entry, index) => (
+                                  <li
+                                    key={`${entry.listing_id ?? 'entry'}-${index}`}
+                                  >
+                                    {entry.title ??
+                                      entry.listing_id ??
+                                      'Untitled'}
+                                    {' -> '}
+                                    {entry.destination ?? 'unknown'}; write-back{' '}
+                                    {entry.write_back_allowed
+                                      ? 'allowed'
+                                      : (entry.write_back_blocker ?? 'blocked')}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
                       </details>
                     </div>
                   ) : null}

@@ -158,3 +158,11 @@ Cabinet SHALL model eBay seller listing draft, publish, revise, end, and relist 
 - **THEN** the HTTP response MUST expose the normalized command, capability, confirmation, local-only, remote-write, allowed, status, blocker, and response fields.
 - **AND** local draft execution MAY return a Cabinet-local draft response.
 - **AND** confirmed remote lifecycle writes MUST remain blocked with an adapter-required blocker until a real eBay lifecycle adapter is configured.
+
+#### Scenario: Listing lifecycle commands are available from the integration UI
+- **GIVEN** the eBay integration dialog is open for a configured profile
+- **WHEN** the operator previews or executes listing lifecycle commands from the dialog
+- **THEN** Cabinet MUST expose draft, publish, revise, end, and relist controls with the required item, draft, listing, and title identifiers.
+- **AND** draft preview and execution MUST report local-only completion without remote eBay writes.
+- **AND** publish, revise, end, and relist controls MUST keep confirmation visible before any remote-write attempt.
+- **AND** confirmed remote lifecycle execution MUST display the adapter-required blocker separately from local draft completion.
