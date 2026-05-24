@@ -63,3 +63,12 @@ Cabinet SHALL return explicit operation metadata for maintenance actions so user
 - **THEN** the response SHALL include `ok`, `operation`, and `completed_at` metadata
 - **AND** reindex SHALL report that the search index was rebuilt
 - **AND** repair SHALL report the integrity-check result
+
+### Requirement DATA-MANAGEMENT-008: Import failure feedback SHALL preserve recovery context
+Cabinet SHALL explain import dry-run and apply failures without implying partial mutation, and SHALL preserve reviewed dry-run summaries after failed apply attempts so users can retry safely.
+
+#### Scenario: Import failure recovery
+- **GIVEN** a user is running a JSON or CSV import dry-run or applying a reviewed import
+- **WHEN** the dry-run or apply request fails
+- **THEN** the UI SHALL state that no records were changed
+- **AND** failed apply feedback SHALL keep the reviewed dry-run summary visible for retry or conflict-action changes
