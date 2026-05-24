@@ -8,6 +8,7 @@ Contains provider registry/contracts, scanner contracts, integration UI behavior
 - `ai-gateway` -> `openspec/specs/integrations/ai-gateway/spec.md`
 - `candidates` -> `openspec/specs/integrations/candidates/spec.md`
 - `default-site-search` -> `openspec/specs/integrations/default-site-search/spec.md`
+- `ebay-purchase-capture` -> `openspec/specs/integrations/ebay-purchase-capture/spec.md`
 - `provider-amazon` -> `openspec/specs/integrations/provider-amazon/spec.md`
 - `provider-au-webshops` -> `openspec/specs/integrations/provider-au-webshops/spec.md`
 - `provider-ebay` -> `openspec/specs/integrations/provider-ebay/spec.md`
@@ -38,3 +39,4 @@ Contains provider registry/contracts, scanner contracts, integration UI behavior
 - `PROVIDER-CLAUDE-*`
 - `PROVIDER-FAMILY-*`
 - `POKEMON-COMP-*`
+- `EBAY-PURCHASE-CAPTURE-*`

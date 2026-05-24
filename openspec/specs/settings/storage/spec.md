@@ -55,5 +55,5 @@ Storage section MUST avoid hard-fail UX and provide actionable recovery with ret
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-SET-STR-01 | Reindex Search action | `Reindex Search` triggers search reindex workflow with deterministic feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Reindex Search and reports deterministic completion feedback` |
-| UC-SET-STR-02 | Rebuild Thumbnails action | `Rebuild Thumbnails` triggers thumbnail maintenance workflow with deterministic feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Rebuild Thumbnails and reports deterministic feedback` |
+| UC-SET-STR-01 | Reindex Search action | `Reindex Search` triggers search reindex workflow with deterministic completion/error feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Reindex Search and reports deterministic completion feedback`, `UI-SCREEN-SETTINGS-STORAGE-006 reports Reindex Search failure without route reload` |
+| UC-SET-STR-02 | Rebuild Thumbnails action | `Rebuild Thumbnails` triggers thumbnail maintenance workflow with deterministic completion/error feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Rebuild Thumbnails and reports deterministic feedback`, `UI-SCREEN-SETTINGS-STORAGE-006 reports Rebuild Thumbnails failure without route reload` |

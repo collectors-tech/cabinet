@@ -294,6 +294,13 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 	}
 
 	for _, table := range tables {
+		exists, err := resetTableExists(ctx, tx, table)
+		if err != nil {
+			return fmt.Errorf("check table %s: %w", table, err)
+		}
+		if !exists {
+			continue
+		}
 		query := "DELETE FROM " + table
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("clear table %s: %w", table, err)
@@ -307,6 +314,14 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 		return fmt.Errorf("commit reset tx: %w", err)
 	}
 	return nil
+}
+
+func resetTableExists(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?`, table).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func bootstrapE2EFixtures(ctx context.Context, conn *sql.DB, cfg config.Config, req e2eBootstrapRequest) (e2eBootstrapResponse, error) {

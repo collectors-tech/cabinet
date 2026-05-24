@@ -83,6 +83,17 @@ Sign-in screen SHALL include a first-time-user CTA that routes deterministically
 - **THEN** UI MUST show visible `Create account` link/button
 - **AND** control MUST navigate to `/sign-up`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-016: Sign-in SHALL explain database/profile context before unlock
+The signed-out sign-in surface SHALL explain that authentication unlocks the Cabinet workspace and that the active database/profile controls app-wide data context after sign-in.
+
+#### Scenario: Signed-out profile context guidance
+- **GIVEN** runtime setup is complete and user is on `/sign-in`
+- **WHEN** user reviews the signed-out sign-in surface before entering credentials
+- **THEN** UI MUST show guidance that sign-in unlocks the Cabinet workspace
+- **AND** guidance MUST explain that the active database/profile controls Inventory, Wishlist, Collections, Settings, Chats, and Integrations after sign-in
+- **AND** guidance MUST distinguish collections as content inside the active profile rather than a replacement for database/profile context
+- **AND** guidance MUST keep a deterministic `Create account` handoff available for first-time users
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-010B: Sign-in forgot-password entry SHALL be visible and deterministic
 Sign-in SHALL expose a visible forgot-password recovery entry path that supports deterministic mouse and keyboard navigation to `/forgot-password`.
 

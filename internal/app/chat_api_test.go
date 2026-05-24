@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -138,6 +139,38 @@ func TestChatAPIsThreadMessageAttachmentAndPreviewApply(t *testing.T) {
 	if !strings.Contains(strings.ToLower(itemsAfter.Body.String()), "chat-001") {
 		t.Fatalf("expected item created after apply, body=%s", itemsAfter.Body.String())
 	}
+
+	cancelPreviewResp := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","action":"update_inventory_item","payload":{"item_id":"cancel-target","part_number":"CHAT-CANCEL-001","title":"Canceled Chat Update"}}`), map[string]string{"Content-Type": "application/json"})
+	if cancelPreviewResp.Code != http.StatusOK {
+		t.Fatalf("cancel preview status=%d body=%s", cancelPreviewResp.Code, cancelPreviewResp.Body.String())
+	}
+	var cancelPreview struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(cancelPreviewResp.Body).Decode(&cancelPreview); err != nil {
+		t.Fatalf("decode cancel preview: %v", err)
+	}
+	cancelResp := doRequest(t, a, http.MethodPost, "/api/chat/actions/cancel", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+cancelPreview.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if cancelResp.Code != http.StatusOK {
+		t.Fatalf("cancel status=%d body=%s", cancelResp.Code, cancelResp.Body.String())
+	}
+	if !strings.Contains(cancelResp.Body.String(), `"applied":false`) || !strings.Contains(cancelResp.Body.String(), `"preview_id":"`+cancelPreview.ID+`"`) {
+		t.Fatalf("expected cancel result with applied=false and preview id, body=%s", cancelResp.Body.String())
+	}
+	itemsAfterCancel := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if itemsAfterCancel.Code != http.StatusOK {
+		t.Fatalf("items after cancel status=%d body=%s", itemsAfterCancel.Code, itemsAfterCancel.Body.String())
+	}
+	if strings.Contains(strings.ToLower(itemsAfterCancel.Body.String()), "chat-cancel-001") {
+		t.Fatalf("canceled preview should not mutate inventory, body=%s", itemsAfterCancel.Body.String())
+	}
+	messagesAfterCancel := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if messagesAfterCancel.Code != http.StatusOK {
+		t.Fatalf("messages after cancel status=%d body=%s", messagesAfterCancel.Code, messagesAfterCancel.Body.String())
+	}
+	if !strings.Contains(messagesAfterCancel.Body.String(), "Canceled update_inventory_item") || !strings.Contains(messagesAfterCancel.Body.String(), "no mutation applied") {
+		t.Fatalf("expected canceled assistant history outcome, body=%s", messagesAfterCancel.Body.String())
+	}
 }
 
 func TestChatInboxItemStatusLifecycle(t *testing.T) {
@@ -257,5 +290,465 @@ func TestChatAPIsValidateErrorsAndProfileIsolation(t *testing.T) {
 	crossProfileApply := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+p2.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewObj.ID+`","confirm":true}`), map[string]string{"Content-Type": "application/json"})
 	if crossProfileApply.Code != http.StatusBadRequest {
 		t.Fatalf("cross profile apply status=%d body=%s", crossProfileApply.Code, crossProfileApply.Body.String())
+	}
+}
+
+func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Capability Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	resp := doRequest(t, a, http.MethodGet, "/api/chat/capabilities?profile_id="+p.ID+"&route=/inventory", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("capabilities status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		ProfileID    string `json:"profile_id"`
+		Route        string `json:"route"`
+		Capabilities []struct {
+			ID               string   `json:"id"`
+			Group            string   `json:"group"`
+			Mode             string   `json:"mode"`
+			PermissionState  string   `json:"permission_state"`
+			Requires         []string `json:"requires"`
+			ProviderRequires []string `json:"provider_requires"`
+			InputSchema      string   `json:"input_schema"`
+			PreviewShape     string   `json:"preview_shape"`
+			ApplyBehavior    string   `json:"apply_behavior"`
+			AuditBehavior    string   `json:"audit_behavior"`
+			ResultLink       string   `json:"result_link"`
+			Unavailable      bool     `json:"unavailable"`
+		} `json:"capabilities"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode capabilities: %v", err)
+	}
+	if payload.ProfileID != p.ID || payload.Route != "/inventory" {
+		t.Fatalf("expected profile and route context, got %+v", payload)
+	}
+
+	seen := map[string]struct {
+		mode             string
+		permission       string
+		unavailable      bool
+		providerRequires []string
+		inputSchema      string
+		previewShape     string
+		applyBehavior    string
+		auditBehavior    string
+		resultLink       string
+	}{}
+	for _, capability := range payload.Capabilities {
+		seen[capability.ID] = struct {
+			mode             string
+			permission       string
+			unavailable      bool
+			providerRequires []string
+			inputSchema      string
+			previewShape     string
+			applyBehavior    string
+			auditBehavior    string
+			resultLink       string
+		}{mode: capability.Mode, permission: capability.PermissionState, unavailable: capability.Unavailable, providerRequires: capability.ProviderRequires, inputSchema: capability.InputSchema, previewShape: capability.PreviewShape, applyBehavior: capability.ApplyBehavior, auditBehavior: capability.AuditBehavior, resultLink: capability.ResultLink}
+		if capability.Group == "" || len(capability.Requires) == 0 {
+			t.Fatalf("capability must expose group and context requirements: %+v", capability)
+		}
+		if capability.InputSchema == "" || capability.PreviewShape == "" || capability.ApplyBehavior == "" || capability.AuditBehavior == "" || capability.ResultLink == "" {
+			t.Fatalf("capability must expose schema, preview, apply, audit and result contract: %+v", capability)
+		}
+	}
+	if got := seen["inventory.item.create"]; got.mode != "confirm-required" || got.permission != "available" || got.unavailable {
+		t.Fatalf("inventory create must be available but confirm-required, got %+v", got)
+	}
+	if got := seen["collections.item.assign"]; got.mode != "preview-only" || got.permission != "preview-only" || got.unavailable {
+		t.Fatalf("collections assignment must expose preview-only boundary, got %+v", got)
+	}
+	if got := seen["integrations.provider.run"]; got.mode != "unavailable" || got.permission != "setup-needed" || !got.unavailable {
+		t.Fatalf("provider runs must be setup-needed/unavailable until connected, got %+v", got)
+	}
+	analyze := seen["image_analyze"]
+	if analyze.mode != "unavailable" || analyze.permission != "setup-needed" || !analyze.unavailable || analyze.previewShape != "image_analysis_preview_with_sources" || analyze.applyBehavior != "preview_only_no_mutation" || !slices.Contains(analyze.providerRequires, "openai") || !slices.Contains(analyze.providerRequires, "provider_test_passed") || !slices.Contains(analyze.providerRequires, "media_read_access") || analyze.resultLink != "/media" {
+		t.Fatalf("image_analyze must expose setup-needed preview-only media analysis contract, got %+v", analyze)
+	}
+	process := seen["image_process"]
+	if process.mode != "unavailable" || process.permission != "setup-needed" || !process.unavailable || process.previewShape != "image_process_variant_preview" || process.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(process.providerRequires, "openai") || !slices.Contains(process.providerRequires, "provider_test_passed") || !slices.Contains(process.providerRequires, "media_write_access") || process.resultLink != "/media" {
+		t.Fatalf("image_process must expose setup-needed confirmation-gated media variant contract, got %+v", process)
+	}
+	content := seen["content_generate"]
+	if content.mode != "unavailable" || content.permission != "setup-needed" || !content.unavailable || content.previewShape != "catalog_content_draft_preview" || content.applyBehavior != "preview_only_no_mutation" || !slices.Contains(content.providerRequires, "openai") {
+		t.Fatalf("content_generate must expose preview-only setup-needed OpenAI contract, got %+v", content)
+	}
+	listing := seen["listing_draft_generate"]
+	if listing.mode != "unavailable" || listing.permission != "setup-needed" || !listing.unavailable || listing.previewShape != "listing_draft_preview_with_sources" || listing.applyBehavior != "requires_explicit_confirmation" || !slices.Contains(listing.providerRequires, "provider_test_passed") {
+		t.Fatalf("listing_draft_generate must expose confirmation-gated setup-needed OpenAI contract, got %+v", listing)
+	}
+
+	missingProfile := doRequest(t, a, http.MethodGet, "/api/chat/capabilities", nil, nil)
+	if missingProfile.Code != http.StatusBadRequest {
+		t.Fatalf("missing profile status=%d body=%s", missingProfile.Code, missingProfile.Body.String())
+	}
+}
+
+func TestAssistantContentListingGenerationRunsStayPreviewFirst(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Generated Content Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"GEN-001","title":"Original catalog title","brand":"AFX","category":"Cars","condition":"Used"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Generated Content Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	contentRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-content-generate",
+		"capability_id":"content_generate",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"not_required",
+		"input":{"item_id":"`+item.ID+`","fields":["description","condition_notes"]},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if contentRun.Code != http.StatusCreated {
+		t.Fatalf("create content workflow run status=%d body=%s", contentRun.Code, contentRun.Body.String())
+	}
+	var content struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(contentRun.Body).Decode(&content); err != nil {
+		t.Fatalf("decode content run: %v", err)
+	}
+	if content.CapabilityID != "content_generate" || content.ConfirmationState != "not_required" || content.ProviderTrace["setup_needed"] != "provider_test_required" {
+		t.Fatalf("content_generate must remain setup-needed preview-only metadata, got %+v", content)
+	}
+
+	contentDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+content.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"preview_id":"content-preview-1","item_id":"`+item.ID+`","description":"Generated sales copy","condition_notes":"Generated condition notes"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if contentDone.Code != http.StatusOK {
+		t.Fatalf("complete content run status=%d body=%s", contentDone.Code, contentDone.Body.String())
+	}
+	if !strings.Contains(contentDone.Body.String(), `"preview_id":"content-preview-1"`) || !strings.Contains(contentDone.Body.String(), `"confirmation_state":"not_required"`) {
+		t.Fatalf("content run must return preview result without pending apply state, body=%s", contentDone.Body.String())
+	}
+
+	itemsAfterContent := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if itemsAfterContent.Code != http.StatusOK {
+		t.Fatalf("list items after content run status=%d body=%s", itemsAfterContent.Code, itemsAfterContent.Body.String())
+	}
+	if !strings.Contains(itemsAfterContent.Body.String(), `"title":"Original catalog title"`) || strings.Contains(itemsAfterContent.Body.String(), "Generated sales copy") {
+		t.Fatalf("content_generate result must not silently mutate inventory item, body=%s", itemsAfterContent.Body.String())
+	}
+
+	listingRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-listing-draft-generate",
+		"capability_id":"listing_draft_generate",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"required",
+		"input":{"item_id":"`+item.ID+`","target_marketplace":"ebay"},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if listingRun.Code != http.StatusCreated {
+		t.Fatalf("create listing workflow run status=%d body=%s", listingRun.Code, listingRun.Body.String())
+	}
+	var listing struct {
+		ID                string `json:"id"`
+		CapabilityID      string `json:"capability_id"`
+		ConfirmationState string `json:"confirmation_state"`
+	}
+	if err := json.NewDecoder(listingRun.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode listing run: %v", err)
+	}
+	if listing.CapabilityID != "listing_draft_generate" || listing.ConfirmationState != "required" {
+		t.Fatalf("listing_draft_generate must start confirmation-gated, got %+v", listing)
+	}
+
+	listingDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+listing.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"listing-preview-1","marketplace":"ebay","title":"Generated listing title","sources":[{"type":"item","id":"`+item.ID+`"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if listingDone.Code != http.StatusOK {
+		t.Fatalf("complete listing run status=%d body=%s", listingDone.Code, listingDone.Body.String())
+	}
+	if !strings.Contains(listingDone.Body.String(), `"confirmation_state":"pending"`) || !strings.Contains(listingDone.Body.String(), `"sources"`) {
+		t.Fatalf("listing draft must preserve source-attributed pending confirmation preview, body=%s", listingDone.Body.String())
+	}
+}
+
+func TestAssistantWorkflowRunsPersistLifecycleAndBulkResults(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Workflow Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Workflow Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	createRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"catalog-draft-from-text",
+		"capability_id":"catalog_add_from_text",
+		"source_channel":"telegram",
+		"source_thread_id":"`+thread.ID+`",
+		"source_message_id":"tg-message-1",
+		"confirmation_state":"required",
+		"input":{"text":"AFX slot car notes"},
+		"provider_trace":{"provider":"openai","method":"api_key","model":"gpt-4o-mini"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create workflow run status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run struct {
+		ID                string         `json:"id"`
+		ProfileID         string         `json:"profile_id"`
+		CapabilityID      string         `json:"capability_id"`
+		SourceChannel     string         `json:"source_channel"`
+		SourceThreadID    string         `json:"source_thread_id"`
+		SourceMessageID   string         `json:"source_message_id"`
+		Status            string         `json:"status"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+		Input             map[string]any `json:"input"`
+	}
+	if err := json.NewDecoder(createRun.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if run.ID == "" || run.ProfileID != p.ID || run.Status != "queued" || run.ConfirmationState != "required" {
+		t.Fatalf("unexpected created workflow run: %+v", run)
+	}
+	if run.CapabilityID != "catalog_add_from_text" || run.SourceChannel != "telegram" || run.SourceThreadID != thread.ID || run.SourceMessageID != "tg-message-1" {
+		t.Fatalf("expected source/capability metadata to persist, got %+v", run)
+	}
+	if run.ProviderTrace["provider"] != "openai" || run.Input["text"] != "AFX slot car notes" {
+		t.Fatalf("expected provider trace and input payload, got %+v", run)
+	}
+
+	running := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"running","provider_trace":{"provider":"openai","request_id":"req_123","model":"gpt-4o-mini"}}`), map[string]string{"Content-Type": "application/json"})
+	if running.Code != http.StatusOK {
+		t.Fatalf("running status=%d body=%s", running.Code, running.Body.String())
+	}
+	if !strings.Contains(running.Body.String(), `"started_at"`) || !strings.Contains(running.Body.String(), `"request_id":"req_123"`) {
+		t.Fatalf("expected running update to persist started_at/provider trace, body=%s", running.Body.String())
+	}
+
+	completed := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+run.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"preview-1","summary":"Draft ready"},
+		"bulk_items":[
+			{"item_key":"photo-1","status":"completed","result_id":"draft-1"},
+			{"item_key":"photo-2","status":"failed","error_code":"low_confidence"}
+		]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if completed.Code != http.StatusOK {
+		t.Fatalf("completed status=%d body=%s", completed.Code, completed.Body.String())
+	}
+	if !strings.Contains(completed.Body.String(), `"status":"completed"`) || !strings.Contains(completed.Body.String(), `"confirmation_state":"pending"`) {
+		t.Fatalf("expected completed pending-confirmation state, body=%s", completed.Body.String())
+	}
+	if !strings.Contains(completed.Body.String(), `"item_key":"photo-2"`) || !strings.Contains(completed.Body.String(), `"error_code":"low_confidence"`) {
+		t.Fatalf("expected per-item bulk failure result, body=%s", completed.Body.String())
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), run.ID) || !strings.Contains(list.Body.String(), `"preview_id":"preview-1"`) {
+		t.Fatalf("expected listed run with result payload, body=%s", list.Body.String())
+	}
+
+	failed := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"provider-test",
+		"capability_id":"provider_test",
+		"provider_trace":{"provider":"openai","setup_needed":"api_key_missing"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if failed.Code != http.StatusCreated {
+		t.Fatalf("create failed-run candidate status=%d body=%s", failed.Code, failed.Body.String())
+	}
+	var failedRun struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(failed.Body).Decode(&failedRun); err != nil {
+		t.Fatalf("decode failed run: %v", err)
+	}
+	failedUpdate := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+failedRun.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"failed","error":{"code":"setup_needed","message":"OpenAI API key is not connected","retry":"connect_provider"}}`), map[string]string{"Content-Type": "application/json"})
+	if failedUpdate.Code != http.StatusOK {
+		t.Fatalf("failed update status=%d body=%s", failedUpdate.Code, failedUpdate.Body.String())
+	}
+	if !strings.Contains(failedUpdate.Body.String(), `"status":"failed"`) || !strings.Contains(failedUpdate.Body.String(), `"retry":"connect_provider"`) {
+		t.Fatalf("expected failure payload and retry guidance, body=%s", failedUpdate.Body.String())
+	}
+
+	badStatus := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+failedRun.ID, strings.NewReader(`{"profile_id":"`+p.ID+`","status":"mystery"}`), map[string]string{"Content-Type": "application/json"})
+	if badStatus.Code != http.StatusBadRequest {
+		t.Fatalf("bad status=%d body=%s", badStatus.Code, badStatus.Body.String())
+	}
+}
+
+func TestAssistantImageCapabilityRunsPreserveOriginalAndAuditLinks(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Image Capability Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Image Capability Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	analyzeRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-image-analyze",
+		"capability_id":"image_analyze",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"not_required",
+		"input":{"media_id":"media-original-1","analysis_goal":"identify visible item details"},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required","media_access":"read"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if analyzeRun.Code != http.StatusCreated {
+		t.Fatalf("create image analyze run status=%d body=%s", analyzeRun.Code, analyzeRun.Body.String())
+	}
+	var analyze struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(analyzeRun.Body).Decode(&analyze); err != nil {
+		t.Fatalf("decode analyze run: %v", err)
+	}
+	if analyze.CapabilityID != "image_analyze" || analyze.ConfirmationState != "not_required" || analyze.ProviderTrace["media_access"] != "read" {
+		t.Fatalf("image_analyze must start as setup-needed preview-only read run, got %+v", analyze)
+	}
+	analyzeDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+analyze.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"not_required",
+		"result":{"preview_id":"image-analysis-preview-1","media_id":"media-original-1","findings":[{"field":"title","value":"AFX slot car","confidence":0.74}],"source_links":[{"type":"media","id":"media-original-1","href":"/media"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if analyzeDone.Code != http.StatusOK {
+		t.Fatalf("complete image analyze run status=%d body=%s", analyzeDone.Code, analyzeDone.Body.String())
+	}
+	if !strings.Contains(analyzeDone.Body.String(), `"confirmation_state":"not_required"`) || !strings.Contains(analyzeDone.Body.String(), `"source_links"`) || strings.Contains(analyzeDone.Body.String(), `"variant_media_id"`) {
+		t.Fatalf("image_analyze must return source-linked preview findings without processed variant mutation, body=%s", analyzeDone.Body.String())
+	}
+
+	processRun := doRequest(t, a, http.MethodPost, "/api/chat/workflow-runs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"workflow_id":"openai-image-process",
+		"capability_id":"image_process",
+		"source_channel":"in_app_chat",
+		"source_thread_id":"`+thread.ID+`",
+		"confirmation_state":"required",
+		"input":{"media_id":"media-original-1","operation":"background_cleanup","preserve_original":true},
+		"provider_trace":{"provider":"openai","setup_needed":"provider_test_required","media_access":"read_write"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if processRun.Code != http.StatusCreated {
+		t.Fatalf("create image process run status=%d body=%s", processRun.Code, processRun.Body.String())
+	}
+	var process struct {
+		ID                string         `json:"id"`
+		CapabilityID      string         `json:"capability_id"`
+		ConfirmationState string         `json:"confirmation_state"`
+		ProviderTrace     map[string]any `json:"provider_trace"`
+	}
+	if err := json.NewDecoder(processRun.Body).Decode(&process); err != nil {
+		t.Fatalf("decode process run: %v", err)
+	}
+	if process.CapabilityID != "image_process" || process.ConfirmationState != "required" || process.ProviderTrace["setup_needed"] != "provider_test_required" || process.ProviderTrace["media_access"] != "read_write" {
+		t.Fatalf("image_process must start confirmation-gated, got %+v", process)
+	}
+	processDone := doRequest(t, a, http.MethodPatch, "/api/chat/workflow-runs/"+process.ID, strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"status":"completed",
+		"confirmation_state":"pending",
+		"result":{"preview_id":"image-process-preview-1","original_media_id":"media-original-1","variant_media_id":"media-variant-1","provenance":{"operation":"background_cleanup","source_media_id":"media-original-1"},"result_links":[{"type":"media","id":"media-variant-1","href":"/media"}]}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if processDone.Code != http.StatusOK {
+		t.Fatalf("complete image process run status=%d body=%s", processDone.Code, processDone.Body.String())
+	}
+	if !strings.Contains(processDone.Body.String(), `"confirmation_state":"pending"`) || !strings.Contains(processDone.Body.String(), `"original_media_id":"media-original-1"`) || !strings.Contains(processDone.Body.String(), `"variant_media_id":"media-variant-1"`) || !strings.Contains(processDone.Body.String(), `"source_media_id":"media-original-1"`) {
+		t.Fatalf("image_process must preserve original media provenance and return pending-confirmation variant links, body=%s", processDone.Body.String())
 	}
 }

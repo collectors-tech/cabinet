@@ -461,10 +461,19 @@ describe('ui-foundation-shell-navigation', () => {
 
     signInTo('/inventory/')
     visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-primary-db-plan"]').should('contain', 'Database')
+    cy.get('[data-testid="team-option-showcase-db-plan"]').should(
+      'contain',
+      'Showcase sample data'
+    )
     cy.get('[data-testid="team-option-showcase-db"]').click()
     cy.contains('Showcase Seed One', { timeout: 20000 }).should('be.visible')
     cy.contains('Showcase Seed Two').should('be.visible')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
+    cy.get('[data-testid="active-profile-status"]').should(
+      'contain',
+      'Showcase sample data'
+    )
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-011 fills available shell width on wide desktop viewport by default', () => {

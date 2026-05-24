@@ -17,7 +17,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - `seller`
   - `first_seen`
   - `last_seen`
-  - and MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
+  - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state
 Cabinet SHALL report eBay provider health and recent failure telemetry via provider health endpoints.
@@ -35,12 +35,12 @@ Cabinet SHALL report eBay provider health and recent failure telemetry via provi
 Cabinet SHALL persist stock/availability observations from eBay listing payloads when present.
 
 #### Scenario: Persist eBay stock observation
-- **GIVEN** normalized eBay candidate contains `availability` text or numeric quantity signal
-- **WHEN** candidate persistence runs
-- **THEN** candidate state MUST transition to `normalized_stock_observed=true` and store:
-  - `stock_signal.raw`
-  - `stock_signal.normalized_state`
-  - `stock_signal.observed_at`
+- **GIVEN** eBay Browse item summary contains `estimatedAvailabilities` status and quantity signals
+- **WHEN** provider normalization and candidate persistence run
+- **THEN** candidate state MUST preserve normalized stock fields including:
+  - `stock_state`
+  - `stock_count`
+  - `last_seen`
 
 ### Requirement INTEGRATION-025: eBay buyer-interest sync MUST preserve state and provenance
 Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest states without collapsing them into owned inventory.

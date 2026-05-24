@@ -81,6 +81,15 @@ Authenticated Home SHALL load on `/dashboard`, while `/` SHALL redirect determin
 - **AND** primary Dashboard navigation SHALL target `/dashboard`
 - **AND** refresh/back-forward behavior on `/dashboard` SHALL remain stable without falling into 404
 
+### Requirement UI-SCREEN-HOME-008: Home summary data SHALL be scoped to the active profile
+Home API summary counts, action signals, and recent activity SHALL use the active profile as the data boundary.
+
+#### Scenario: Active profile summary isolation
+- **GIVEN** two local profiles have different inventory, wishlist, discovery, and pricing records
+- **WHEN** the user opens Home with one profile active
+- **THEN** Home summary totals, action cards, and recently-added items SHALL include only records for the active profile
+- **AND** records from inactive profiles MUST NOT inflate Home counts or recent activity
+
 ## Acceptance Criteria
 - Every Home critical flow has UC ID and deterministic expected outcome.
 - E2E mapping exists for command-center render and quick actions.
@@ -101,3 +110,4 @@ Authenticated Home SHALL load on `/dashboard`, while `/` SHALL redirect determin
 | UC-HOME-06 | Click Refresh Dashboard | Home data re-fetches without route transition | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `home-refresh-dashboard` |
 | UC-HOME-07 | Home renders without legacy onboarding controls | Legacy setup step controls absent from authenticated shell | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until sign-in then unlocks redirect target` |
 | UC-HOME-08 | Resolve Home via canonical route and shell nav | `/dashboard` loads directly, `/` redirects to `/dashboard`, and Dashboard nav targets canonical path | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability` |
+| UC-HOME-09 | Open Home after switching active profile | Summary counts and recent activity include only active profile records | Go: `internal/dashboard/service_test.go` `TestSummaryScopesSignalsToProfile`; `internal/app/dashboard_api_test.go` `TestDashboardEndpointScopesToActiveProfile` |
