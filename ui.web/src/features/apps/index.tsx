@@ -11,7 +11,9 @@ import { getRouteApi } from '@tanstack/react-router'
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  Download,
   PlugZap,
+  SearchCheck,
   SlidersHorizontal,
   Store,
 } from 'lucide-react'
@@ -107,6 +109,33 @@ type IntegrationForm = {
   itemsPerPage: string
   openAiModel: string
   openAiTestPrompt: string
+  buyerInterestPayload: string
+}
+
+type BuyerInterestSyncResult = {
+  provider?: string
+  mode?: string
+  total?: number
+  counts?: Record<string, number>
+  mappings?: Array<{
+    title?: string
+    listing_id?: string
+    interest_state?: string
+    destination?: string
+    write_back_allowed?: boolean
+    write_back_blocker?: string
+  }>
+  results?: Array<{
+    title?: string
+    listing_id?: string
+    interest_state?: string
+    destination?: string
+    persisted_id?: string
+    item_id?: string
+    candidate_id?: string
+    write_back_allowed?: boolean
+    write_back_blocker?: string
+  }>
 }
 
 type ProfileOption = {
@@ -124,6 +153,28 @@ const appText = new Map<AppType, string>([
   ['connected', 'Connected'],
   ['notConnected', 'Not Connected'],
 ])
+
+const defaultBuyerInterestPayload = JSON.stringify(
+  {
+    source_account: 'buyer@example.test',
+    items: [
+      {
+        listing_id: 'v1|watch|0',
+        title: 'Watched eBay listing',
+        url: 'https://www.ebay.com/itm/watch',
+        state: 'watched',
+      },
+      {
+        listing_id: 'v1|cart|0',
+        title: 'Cart eBay listing',
+        url: 'https://www.ebay.com/itm/cart',
+        state: 'cart_like',
+      },
+    ],
+  },
+  null,
+  2
+)
 
 function providerSettingsKeys(providerID: string) {
   if (providerID === 'ebay') {
@@ -257,7 +308,14 @@ export function Apps({
     openAiModel: 'gpt-4o-mini',
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
+    buyerInterestPayload: defaultBuyerInterestPayload,
   })
+  const [buyerInterestWorking, setBuyerInterestWorking] = useState(false)
+  const [buyerInterestError, setBuyerInterestError] = useState<string | null>(
+    null
+  )
+  const [buyerInterestResult, setBuyerInterestResult] =
+    useState<BuyerInterestSyncResult | null>(null)
 
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
@@ -471,7 +529,10 @@ export function Apps({
       openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
+      buyerInterestPayload: defaultBuyerInterestPayload,
     })
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
     setReplaceToken(!provider.has_token)
   }
 
@@ -550,7 +611,10 @@ export function Apps({
       openAiModel: 'gpt-4o-mini',
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
+      buyerInterestPayload: defaultBuyerInterestPayload,
     })
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
   }
 
   useEffect(() => {
@@ -784,6 +848,46 @@ export function Apps({
       setSaveError(error instanceof Error ? error.message : 'validate_failed')
     } finally {
       setValidating(false)
+    }
+  }
+
+  const runBuyerInterestSync = async (mode: 'preview' | 'import') => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    setBuyerInterestWorking(true)
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
+    try {
+      const parsed = JSON.parse(form.buyerInterestPayload) as unknown
+      const response = await fetch(
+        `/api/providers/ebay/buyer-interest/${mode}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`buyer_interest_${mode}_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as BuyerInterestSyncResult
+      setBuyerInterestResult(payload)
+      setActionMessage(
+        mode === 'preview'
+          ? 'Buyer-interest preview mapped without remote write-back.'
+          : 'Buyer-interest import persisted local Wishlist and Discovery state.'
+      )
+    } catch (error) {
+      setBuyerInterestError(
+        error instanceof SyntaxError
+          ? 'Buyer-interest payload must be valid JSON.'
+          : error instanceof Error
+            ? error.message
+            : 'buyer_interest_sync_failed'
+      )
+    } finally {
+      setBuyerInterestWorking(false)
     }
   }
 
@@ -1120,7 +1224,7 @@ export function Apps({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className='top-4 max-h-[90vh] translate-y-0 overflow-y-auto sm:max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editingProvider?.display_name ?? 'Integration'}
@@ -1435,7 +1539,9 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
+                    <Label htmlFor='provider-marketplace'>
+                      Marketplace / Region
+                    </Label>
                     <Input
                       id='provider-marketplace'
                       placeholder='Marketplace / Region'
@@ -1449,7 +1555,9 @@ export function Apps({
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='provider-items-per-page'>Items per page</Label>
+                    <Label htmlFor='provider-items-per-page'>
+                      Items per page
+                    </Label>
                     <Input
                       id='provider-items-per-page'
                       type='number'
@@ -1486,7 +1594,9 @@ export function Apps({
                         </div>
                       ) : (
                         <div className='space-y-2'>
-                          <Label htmlFor='provider-token'>New token / API key</Label>
+                          <Label htmlFor='provider-token'>
+                            New token / API key
+                          </Label>
                           <Input
                             id='provider-token'
                             type='password'
@@ -1503,6 +1613,117 @@ export function Apps({
                         </div>
                       )}
                     </div>
+                  ) : null}
+                  {editingProvider.provider_id === 'ebay' ? (
+                    <details
+                      className='rounded-md border p-3'
+                      data-testid='ebay-buyer-interest-sync-panel'
+                    >
+                      <summary className='cursor-pointer text-sm font-medium'>
+                        Buyer Interest Sync
+                      </summary>
+                      <div className='mt-3 space-y-3'>
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <p className='font-medium'>Buyer Interest Sync</p>
+                            <p className='text-xs text-muted-foreground'>
+                              Preview or import watched, saved, liked, and
+                              cart-like listings into local Wishlist and
+                              Discoveries.
+                            </p>
+                          </div>
+                          <span
+                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                            data-testid='ebay-buyer-interest-writeback-status'
+                          >
+                            Write-back blocked until eBay capability is verified
+                          </span>
+                        </div>
+                        <Label
+                          className='mt-3 block'
+                          htmlFor='ebay-buyer-interest-payload'
+                        >
+                          Sync payload
+                        </Label>
+                        <textarea
+                          id='ebay-buyer-interest-payload'
+                          className='mt-2 min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs'
+                          data-testid='ebay-buyer-interest-payload'
+                          value={form.buyerInterestPayload}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              buyerInterestPayload: e.target.value,
+                            }))
+                          }
+                        />
+                        <div className='mt-3 flex flex-wrap gap-2'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid='ebay-buyer-interest-preview'
+                            disabled={buyerInterestWorking}
+                            onClick={() => void runBuyerInterestSync('preview')}
+                          >
+                            <SearchCheck className='mr-2 size-4' />
+                            Preview
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            data-testid='ebay-buyer-interest-import'
+                            disabled={buyerInterestWorking}
+                            onClick={() => void runBuyerInterestSync('import')}
+                          >
+                            <Download className='mr-2 size-4' />
+                            Import
+                          </Button>
+                        </div>
+                        {buyerInterestError ? (
+                          <p className='mt-2 text-xs text-destructive'>
+                            {buyerInterestError}
+                          </p>
+                        ) : null}
+                        {buyerInterestResult ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-buyer-interest-result'
+                          >
+                            <p>
+                              Mode: {buyerInterestResult.mode ?? 'unknown'} /
+                              Total: {buyerInterestResult.total ?? 0}
+                            </p>
+                            <p>
+                              Wishlist:{' '}
+                              {buyerInterestResult.counts?.wishlist ?? 0} /
+                              Discoveries:{' '}
+                              {buyerInterestResult.counts?.discovery ?? 0}
+                            </p>
+                            <ul className='mt-2 space-y-1'>
+                              {(
+                                buyerInterestResult.results ??
+                                buyerInterestResult.mappings ??
+                                []
+                              ).map((entry, index) => (
+                                <li
+                                  key={`${entry.listing_id ?? 'entry'}-${index}`}
+                                >
+                                  {entry.title ??
+                                    entry.listing_id ??
+                                    'Untitled'}
+                                  {' -> '}
+                                  {entry.destination ?? 'unknown'}; write-back{' '}
+                                  {entry.write_back_allowed
+                                    ? 'allowed'
+                                    : (entry.write_back_blocker ?? 'blocked')}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    </details>
                   ) : null}
                 </>
               )}
