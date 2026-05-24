@@ -494,6 +494,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 2,
+          created: 1,
+          merged: 1,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importApply')
@@ -517,7 +522,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import applied successfully.'
+      'Import applied: 2 items, 1 created, 1 merged, 0 skipped, 0 failed.'
     )
   })
 
@@ -751,6 +756,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 2,
+          created: 1,
+          merged: 1,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importCsvApply')
@@ -774,7 +784,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import applied successfully.'
+      'CSV import applied: 2 items, 1 created, 1 merged, 0 skipped, 0 failed.'
     )
   })
 
@@ -960,6 +970,11 @@ describe('settings/operations', () => {
         statusCode: 200,
         body: {
           ok: true,
+          total_items: 1,
+          created: 1,
+          merged: 0,
+          skipped: 0,
+          failed: 0,
         },
       })
     }).as('importCsvApply')
@@ -991,7 +1006,7 @@ describe('settings/operations', () => {
     cy.wait('@importCsvApply')
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import applied successfully.'
+      'CSV import applied: 1 item, 1 created, 0 merged, 0 skipped, 0 failed.'
     )
   })
 
