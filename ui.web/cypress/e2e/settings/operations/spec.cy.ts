@@ -430,7 +430,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import dry-run failed.'
+      'Import dry-run failed. No records were changed; fix the JSON snapshot and run dry-run again.'
     )
   })
 
@@ -583,7 +583,11 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-data-status"]').should(
       'contain',
-      'Import apply failed.'
+      'Import apply failed. No records were changed; review the dry-run summary and retry when data services are healthy.'
+    )
+    cy.get('[data-testid="settings-operations-import-summary"]').should(
+      'contain',
+      'OPS-APPLY-ERR'
     )
   })
 
@@ -705,7 +709,7 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV dry-run failed.'
+      'CSV dry-run failed. No records were changed; fix the CSV rows or mapping and run dry-run again.'
     )
   })
 
@@ -844,7 +848,11 @@ describe('settings/operations', () => {
     cy.location('pathname').should('match', /^\/settings\/operations\/?$/)
     cy.get('[data-testid="settings-operations-csv-status"]').should(
       'contain',
-      'CSV import apply failed.'
+      'CSV import apply failed. No records were changed; review the CSV dry-run summary and retry when data services are healthy.'
+    )
+    cy.get('[data-testid="settings-operations-csv-summary"]').should(
+      'contain',
+      'CSV-APPLY-ERR'
     )
   })
 

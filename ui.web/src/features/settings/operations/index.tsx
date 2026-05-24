@@ -305,7 +305,9 @@ export function SettingsOperations() {
     } catch {
       setImportSummary(null)
       setDataTone('destructive')
-      setDataStatus('Import dry-run failed.')
+      setDataStatus(
+        'Import dry-run failed. No records were changed; fix the JSON snapshot and run dry-run again.'
+      )
     } finally {
       setImportDryRunPending(false)
     }
@@ -337,7 +339,9 @@ export function SettingsOperations() {
       setLastDryRunRequest(null)
     } catch {
       setDataTone('destructive')
-      setDataStatus('Import apply failed.')
+      setDataStatus(
+        'Import apply failed. No records were changed; review the dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportApplyPending(false)
     }
@@ -441,7 +445,9 @@ export function SettingsOperations() {
     } catch {
       setCsvSummary(null)
       setCsvTone('destructive')
-      setCsvStatus('CSV dry-run failed.')
+      setCsvStatus(
+        'CSV dry-run failed. No records were changed; fix the CSV rows or mapping and run dry-run again.'
+      )
     } finally {
       setImportCsvDryRunPending(false)
     }
@@ -473,7 +479,9 @@ export function SettingsOperations() {
       setLastCsvDryRunRequest(null)
     } catch {
       setCsvTone('destructive')
-      setCsvStatus('CSV import apply failed.')
+      setCsvStatus(
+        'CSV import apply failed. No records were changed; review the CSV dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportCsvApplyPending(false)
     }
