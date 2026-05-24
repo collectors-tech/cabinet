@@ -26,3 +26,12 @@ Cabinet SHALL require import apply flows to return readable created, merged, ski
 - **WHEN** Cabinet applies the import
 - **THEN** the response SHALL include total item, created, merged, skipped, and failed counts
 - **AND** the failed count SHALL be zero only when all requested item actions were committed successfully
+
+### Requirement DATA-MANAGEMENT-004: Backup and restore SHALL report verifiable outcomes and require restore confirmation
+Cabinet SHALL require explicit restore confirmation and SHALL return readable backup, list, and restore metadata including selected path, file name, size, timestamp, and integrity-check outcome.
+
+#### Scenario: Backup run and restore
+- **GIVEN** a user creates or selects a database backup
+- **WHEN** Cabinet runs backup, lists backups, or restores a confirmed backup
+- **THEN** responses SHALL include user-verifiable backup or restore metadata
+- **AND** restore SHALL fail without explicit confirmation before replacing the active database

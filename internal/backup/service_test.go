@@ -25,9 +25,12 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	_ = conn.Close()
 
 	svc := NewService(dbPath, filepath.Join(base, "backups"), 1)
-	backupPath, err := svc.CreateBackup(context.Background())
+	backupRun, err := svc.CreateBackup(context.Background())
 	if err != nil {
 		t.Fatalf("CreateBackup error: %v", err)
+	}
+	if backupRun.Path == "" || backupRun.FileName == "" || backupRun.SizeBytes == 0 || backupRun.IntegrityCheck != "ok" {
+		t.Fatalf("expected backup run metadata, got %+v", backupRun)
 	}
 	list, err := svc.ListBackups()
 	if err != nil {
@@ -36,6 +39,9 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	if len(list) == 0 {
 		t.Fatal("expected at least one backup")
 	}
+	if list[0].Path == "" || list[0].FileName == "" || list[0].SizeBytes == 0 {
+		t.Fatalf("expected backup list metadata, got %+v", list[0])
+	}
 
 	conn2, _ := sql.Open("sqlite", "file:"+dbPath)
 	if _, err := conn2.Exec(`DELETE FROM t;`); err != nil {
@@ -43,8 +49,12 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	}
 	_ = conn2.Close()
 
-	if err := svc.RestoreBackup(backupPath); err != nil {
+	restore, err := svc.RestoreBackup(backupRun.Path)
+	if err != nil {
 		t.Fatalf("RestoreBackup error: %v", err)
+	}
+	if restore.RestoredPath != backupRun.Path || restore.IntegrityCheck != "ok" || restore.RestoredAt == "" {
+		t.Fatalf("expected restore metadata, got %+v", restore)
 	}
 	conn3, _ := sql.Open("sqlite", "file:"+dbPath)
 	defer conn3.Close()
