@@ -151,3 +151,10 @@ Cabinet SHALL model eBay seller listing draft, publish, revise, end, and relist 
 - **WHEN** publish, revise, end, or relist is requested without explicit confirmation
 - **THEN** the command MUST remain blocked with a confirmation-required reason
 - **AND** the eBay lifecycle adapter MUST NOT be called.
+
+#### Scenario: Listing lifecycle APIs expose truthful preview and execution states
+- **GIVEN** Cabinet receives an eBay seller listing lifecycle API request
+- **WHEN** the request previews or executes draft, publish, revise, end, or relist
+- **THEN** the HTTP response MUST expose the normalized command, capability, confirmation, local-only, remote-write, allowed, status, blocker, and response fields.
+- **AND** local draft execution MAY return a Cabinet-local draft response.
+- **AND** confirmed remote lifecycle writes MUST remain blocked with an adapter-required blocker until a real eBay lifecycle adapter is configured.

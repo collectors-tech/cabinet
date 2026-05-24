@@ -17,42 +17,42 @@ const (
 )
 
 type SellerListingLifecycleCommandRequest struct {
-	Command    string
-	Capability string
-	Confirmed  bool
-	ItemID     string
-	DraftID    string
-	ListingID  string
-	Title      string
+	Command    string `json:"command"`
+	Capability string `json:"capability"`
+	Confirmed  bool   `json:"confirmed"`
+	ItemID     string `json:"item_id,omitempty"`
+	DraftID    string `json:"draft_id,omitempty"`
+	ListingID  string `json:"listing_id,omitempty"`
+	Title      string `json:"title,omitempty"`
 }
 
 type SellerListingLifecycleCommandPreview struct {
-	Command              string
-	Capability           string
-	Confirmed            bool
-	ItemID               string
-	DraftID              string
-	ListingID            string
-	Allowed              bool
-	LocalOnly            bool
-	RemoteWrite          bool
-	ConfirmationRequired bool
-	Blocker              string
+	Command              string `json:"command"`
+	Capability           string `json:"capability"`
+	Confirmed            bool   `json:"confirmed"`
+	ItemID               string `json:"item_id,omitempty"`
+	DraftID              string `json:"draft_id,omitempty"`
+	ListingID            string `json:"listing_id,omitempty"`
+	Allowed              bool   `json:"allowed"`
+	LocalOnly            bool   `json:"local_only"`
+	RemoteWrite          bool   `json:"remote_write"`
+	ConfirmationRequired bool   `json:"confirmation_required"`
+	Blocker              string `json:"blocker,omitempty"`
 }
 
 type SellerListingLifecycleCommandExecution struct {
 	SellerListingLifecycleCommandPreview
-	Executed bool
-	Status   string
-	Response *SellerListingLifecycleCommandResponse
+	Executed bool                                   `json:"executed"`
+	Status   string                                 `json:"status"`
+	Response *SellerListingLifecycleCommandResponse `json:"response,omitempty"`
 }
 
 type SellerListingLifecycleCommandResponse struct {
-	Provider  string
-	Command   string
-	DraftID   string
-	ListingID string
-	Status    string
+	Provider  string `json:"provider"`
+	Command   string `json:"command"`
+	DraftID   string `json:"draft_id,omitempty"`
+	ListingID string `json:"listing_id,omitempty"`
+	Status    string `json:"status"`
 }
 
 type SellerListingLifecycleClient interface {
