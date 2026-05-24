@@ -100,3 +100,74 @@ func TestEbaySellerOperationPreviewRejectsMissingOperationOrAction(t *testing.T)
 		t.Fatalf("expected invalid seller preview to be rejected, status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
+
+func TestEbaySellerOperationExecuteAllowsReadOnlySyncOnly(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	body := `{"operation":"orders","capability":"read_only","action":"sync","reference_id":"orders-local-sync"}`
+	resp := doRequest(t, a, http.MethodPost, "/api/providers/ebay/seller-operations/execute", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("execute status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload struct {
+		Provider  string `json:"provider"`
+		Mode      string `json:"mode"`
+		Execution struct {
+			Operation   string `json:"operation"`
+			Action      string `json:"action"`
+			Allowed     bool   `json:"allowed"`
+			RemoteWrite bool   `json:"remote_write"`
+			Executed    bool   `json:"executed"`
+			LocalOnly   bool   `json:"local_only"`
+			Status      string `json:"status"`
+			Blocker     string `json:"blocker"`
+		} `json:"execution"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode execute payload: %v", err)
+	}
+	if payload.Provider != "ebay" || payload.Mode != "seller_operation_execute" {
+		t.Fatalf("unexpected provider/mode: %+v", payload)
+	}
+	if payload.Execution.Operation != "sold_orders" || payload.Execution.Action != "sync" {
+		t.Fatalf("seller execute did not normalize requested action: %+v", payload.Execution)
+	}
+	if !payload.Execution.Allowed || !payload.Execution.Executed || !payload.Execution.LocalOnly || payload.Execution.RemoteWrite {
+		t.Fatalf("read-only seller sync should execute locally only, got %+v", payload.Execution)
+	}
+	if payload.Execution.Status != "read_only_sync_ready" || payload.Execution.Blocker != "" {
+		t.Fatalf("expected local sync ready status with no blocker, got %+v", payload.Execution)
+	}
+}
+
+func TestEbaySellerOperationExecuteRejectsRemoteWriteWithoutAdapter(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	body := `{"operation":"fulfilment","capability":"confirmed_api","action":"ship","reference_id":"order-1","confirmed":true}`
+	resp := doRequest(t, a, http.MethodPost, "/api/providers/ebay/seller-operations/execute", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected confirmed remote write execution to be blocked, status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload struct {
+		Execution struct {
+			Allowed     bool   `json:"allowed"`
+			RemoteWrite bool   `json:"remote_write"`
+			Executed    bool   `json:"executed"`
+			Status      string `json:"status"`
+			Blocker     string `json:"blocker"`
+		} `json:"execution"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode blocked execute payload: %v", err)
+	}
+	if payload.Execution.Allowed || payload.Execution.Executed || !payload.Execution.RemoteWrite {
+		t.Fatalf("remote write execution must remain blocked without adapter, got %+v", payload.Execution)
+	}
+	if payload.Execution.Status != "blocked" || payload.Execution.Blocker != "ebay_seller_remote_write_execution_not_configured" {
+		t.Fatalf("expected remote write adapter blocker, got %+v", payload.Execution)
+	}
+}

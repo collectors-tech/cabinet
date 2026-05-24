@@ -54,6 +54,13 @@ type SellerOperationActionPreview struct {
 	Blocker              string `json:"blocker,omitempty"`
 }
 
+type SellerOperationActionExecution struct {
+	SellerOperationActionPreview
+	Executed  bool   `json:"executed"`
+	LocalOnly bool   `json:"local_only"`
+	Status    string `json:"status"`
+}
+
 func SellerOperationStatuses(inputs []SellerOperationCapabilityInput) []SellerOperationCapabilityStatus {
 	configured := map[string]string{}
 	for _, in := range inputs {
@@ -124,6 +131,31 @@ func PreviewSellerOperationAction(req SellerOperationActionRequest) SellerOperat
 	preview.Allowed = true
 	preview.RemoteWrite = true
 	return preview
+}
+
+func ExecuteSellerOperationAction(req SellerOperationActionRequest) SellerOperationActionExecution {
+	preview := PreviewSellerOperationAction(req)
+	execution := SellerOperationActionExecution{
+		SellerOperationActionPreview: preview,
+	}
+	if preview.Operation == "" || preview.Action == "" {
+		execution.Status = "invalid"
+		return execution
+	}
+	if !preview.Allowed {
+		execution.Status = "blocked"
+		return execution
+	}
+	if preview.RemoteWrite {
+		execution.Allowed = false
+		execution.Blocker = "ebay_seller_remote_write_execution_not_configured"
+		execution.Status = "blocked"
+		return execution
+	}
+	execution.Executed = true
+	execution.LocalOnly = true
+	execution.Status = "read_only_sync_ready"
+	return execution
 }
 
 func sellerOperationStatus(operation, capability string) SellerOperationCapabilityStatus {

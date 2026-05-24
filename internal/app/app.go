@@ -2186,6 +2186,33 @@ func New(cfg config.Config) (*App, error) {
 			"preview":  preview,
 		})
 	})
+	mux.HandleFunc("/api/providers/ebay/seller-operations/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerOperationActionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerOperationAction(req)
+		if execution.Operation == "" || execution.Action == "" {
+			http.Error(w, `{"error":"missing_seller_operation_action"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "seller_operation_execute",
+			"execution": execution,
+		})
+	})
 	registerEbayBuyerInterestImportRoute(mux, conn, profiles)
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

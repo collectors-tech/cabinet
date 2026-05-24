@@ -165,6 +165,26 @@ type SellerOperationPreviewResult = {
   }
 }
 
+type SellerOperationExecuteResult = {
+  provider?: string
+  mode?: string
+  execution?: {
+    operation?: string
+    action?: string
+    capability?: string
+    read_available?: boolean
+    write_available?: boolean
+    confirmation_required?: boolean
+    confirmed?: boolean
+    allowed?: boolean
+    remote_write?: boolean
+    blocker?: string
+    executed?: boolean
+    local_only?: boolean
+    status?: string
+  }
+}
+
 type ProfileOption = {
   id: string
   name: string
@@ -372,6 +392,8 @@ export function Apps({
   >(null)
   const [sellerOperationResult, setSellerOperationResult] =
     useState<SellerOperationPreviewResult | null>(null)
+  const [sellerOperationExecution, setSellerOperationExecution] =
+    useState<SellerOperationExecuteResult | null>(null)
 
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
@@ -591,6 +613,7 @@ export function Apps({
     setBuyerInterestResult(null)
     setSellerOperationError(null)
     setSellerOperationResult(null)
+    setSellerOperationExecution(null)
     setSellerOperationWorking(null)
     setReplaceToken(!provider.has_token)
   }
@@ -676,6 +699,7 @@ export function Apps({
     setBuyerInterestResult(null)
     setSellerOperationError(null)
     setSellerOperationResult(null)
+    setSellerOperationExecution(null)
     setSellerOperationWorking(null)
   }
 
@@ -966,6 +990,7 @@ export function Apps({
     setSellerOperationWorking(workingKey)
     setSellerOperationError(null)
     setSellerOperationResult(null)
+    setSellerOperationExecution(null)
     try {
       const response = await fetch(
         '/api/providers/ebay/seller-operations/preview',
@@ -996,6 +1021,59 @@ export function Apps({
         error instanceof Error
           ? error.message
           : 'seller_operation_preview_failed'
+      )
+    } finally {
+      setSellerOperationWorking(null)
+    }
+  }
+
+  const executeSellerOperation = async (
+    status: SellerOperationStatus,
+    confirmed: boolean
+  ) => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    const action =
+      status.read_available && !status.write_available ? 'sync' : 'fulfill'
+    const workingKey = `${status.operation}-${confirmed ? 'confirmed-execute' : 'execute'}`
+    setSellerOperationWorking(workingKey)
+    setSellerOperationError(null)
+    setSellerOperationResult(null)
+    setSellerOperationExecution(null)
+    try {
+      const response = await fetch(
+        '/api/providers/ebay/seller-operations/execute',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operation: status.operation,
+            capability: status.capability,
+            action,
+            confirmed,
+            reference_id: `${status.operation}-local-execute`,
+          }),
+        }
+      )
+      const payload = (await response.json()) as SellerOperationExecuteResult
+      setSellerOperationExecution(payload)
+      if (!response.ok) {
+        throw new Error(
+          payload.execution?.blocker ??
+            `seller_operation_execute_failed_${response.status}`
+        )
+      }
+      setActionMessage(
+        payload.execution?.local_only
+          ? 'Seller operation read-only sync completed locally without remote write.'
+          : 'Seller operation execute request returned without local completion.'
+      )
+    } catch (error) {
+      setSellerOperationError(
+        error instanceof Error
+          ? error.message
+          : 'seller_operation_execute_failed'
       )
     } finally {
       setSellerOperationWorking(null)
@@ -1802,6 +1880,38 @@ export function Apps({
                                   >
                                     Confirm Preview
                                   </Button>
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-execute-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      !status.read_available ||
+                                      status.write_available
+                                    }
+                                    onClick={() =>
+                                      void executeSellerOperation(status, false)
+                                    }
+                                  >
+                                    Sync
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-confirm-execute-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      !status.write_available ||
+                                      !status.confirmation_required
+                                    }
+                                    onClick={() =>
+                                      void executeSellerOperation(status, true)
+                                    }
+                                  >
+                                    Confirm Execute
+                                  </Button>
                                 </div>
                               </div>
                             )
@@ -1839,6 +1949,35 @@ export function Apps({
                             <p className='mt-1 text-muted-foreground'>
                               {sellerOperationResult.preview.blocker ??
                                 'No blocker'}
+                            </p>
+                          </div>
+                        ) : null}
+                        {sellerOperationExecution?.execution ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-seller-operation-execute-result'
+                          >
+                            <p className='font-medium'>
+                              Execute:{' '}
+                              {sellerOperationLabel(
+                                sellerOperationExecution.execution.operation ??
+                                  ''
+                              )}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              Executed:{' '}
+                              {sellerOperationExecution.execution.executed
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Local only:{' '}
+                              {sellerOperationExecution.execution.local_only
+                                ? 'yes'
+                                : 'no'}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              {sellerOperationExecution.execution.status ??
+                                sellerOperationExecution.execution.blocker ??
+                                'No status'}
                             </p>
                           </div>
                         ) : null}
