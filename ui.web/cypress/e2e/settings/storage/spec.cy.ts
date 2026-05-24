@@ -118,6 +118,35 @@ describe('settings/storage', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-STORAGE-006 reports Reindex Search failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('POST', '/api/data/reindex', {
+      statusCode: 500,
+      body: { error: 'failed_to_reindex' },
+    }).as('reindexSearch')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('button', 'Reindex Search').click()
+    cy.wait('@reindexSearch')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Search reindex failed. Try again when runtime diagnostics are healthy.'
+    )
+  })
+
   it('UI-SCREEN-SETTINGS-STORAGE-006 runs Rebuild Thumbnails and reports deterministic feedback', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -143,6 +172,35 @@ describe('settings/storage', () => {
     cy.get('[data-testid="settings-storage-action-status"]').should(
       'contain',
       'Thumbnail rebuild completed for 5 photos across 2 items.'
+    )
+  })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-006 reports Rebuild Thumbnails failure without route reload', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 200,
+      body: {
+        db_path: 'C:/cabinet/profiles/default/cabinet.db',
+        media_dir: 'C:/cabinet/profiles/default/media',
+      },
+    }).as('storageInfo')
+    cy.intercept('POST', '/api/data/rebuild-thumbnails', {
+      statusCode: 500,
+      body: { error: 'failed_to_rebuild_thumbnails' },
+    }).as('rebuildThumbnails')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.contains('button', 'Rebuild Thumbnails').click()
+    cy.wait('@rebuildThumbnails')
+    cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
+    cy.get('[data-testid="settings-storage-action-status"]').should(
+      'contain',
+      'Thumbnail rebuild failed. Check diagnostics health and try again.'
     )
   })
 

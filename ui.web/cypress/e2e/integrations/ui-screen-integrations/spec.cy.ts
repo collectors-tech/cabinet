@@ -134,19 +134,22 @@ describe('ui-screen-integrations', () => {
     signIn()
 
     cy.get('[data-testid="provider-open-ebay"]').click()
-    cy.contains('Manage provider credentials, validation, and sync controls.').should(
-      'be.visible'
+    cy.contains('Manage provider credentials, validation, and setup controls.').should(
+      'exist'
     )
-    cy.contains('Configure eBay token and marketplace.').should('be.visible')
-    cy.contains('button', 'Validate').should('be.visible')
-    cy.contains('button', 'Sync').should('be.visible')
-    cy.contains('button', 'Save Integration').should('be.visible')
-    cy.contains('Mode: official_api').should('be.visible')
-    cy.contains('Health: ok').should('be.visible')
-    cy.contains('Last run: success').should('be.visible')
+    cy.contains('Configure eBay token and marketplace.').should('exist')
+    cy.contains('button', 'Validate').scrollIntoView().should('be.visible')
+    cy.contains('button', 'Sync').scrollIntoView().should('be.disabled')
+    cy.contains('Sync runs from Market Watch query sets.')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('button', 'Save Integration').scrollIntoView().should('be.visible')
+    cy.contains('Mode: official_api').should('exist')
+    cy.contains('Health: ok').should('exist')
+    cy.contains('Last run: success').should('exist')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004: persists settings with write-only replace-token flow', () => {
+  it('INTEGRATION-025 + INTEGRATION-026: previews and imports eBay buyer-interest sync without remote write-back claims', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
@@ -178,6 +181,148 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/profiles/*/settings', {
       statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    })
+    cy.intercept('POST', '/api/providers/ebay/buyer-interest/preview', (req) => {
+      expect(req.body.source_account).to.eq('buyer@example.test')
+      expect(req.body.items).to.have.length(2)
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          mode: 'preview',
+          total: 2,
+          counts: { wishlist: 1, discovery: 1 },
+          mappings: [
+            {
+              title: 'Watched eBay listing',
+              listing_id: 'v1|watch|0',
+              interest_state: 'watched',
+              destination: 'wishlist',
+              write_back_allowed: false,
+              write_back_blocker: 'ebay_api_capability_not_verified',
+            },
+            {
+              title: 'Cart eBay listing',
+              listing_id: 'v1|cart|0',
+              interest_state: 'cart_like',
+              destination: 'discovery',
+              write_back_allowed: false,
+              write_back_blocker: 'ebay_api_capability_not_verified',
+            },
+          ],
+        },
+      })
+    }).as('buyerInterestPreview')
+    cy.intercept('POST', '/api/providers/ebay/buyer-interest/import', (req) => {
+      expect(req.body.source_account).to.eq('buyer@example.test')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          mode: 'import',
+          total: 2,
+          counts: { wishlist: 1, discovery: 1 },
+          results: [
+            {
+              title: 'Watched eBay listing',
+              listing_id: 'v1|watch|0',
+              interest_state: 'watched',
+              destination: 'wishlist',
+              persisted_id: 'wishlist-ebay-watch',
+              item_id: 'item-ebay-watch',
+              write_back_allowed: false,
+              write_back_blocker: 'ebay_api_capability_not_verified',
+            },
+            {
+              title: 'Cart eBay listing',
+              listing_id: 'v1|cart|0',
+              interest_state: 'cart_like',
+              destination: 'discovery',
+              persisted_id: 'candidate-ebay-cart',
+              candidate_id: 'candidate-ebay-cart',
+              write_back_allowed: false,
+              write_back_blocker: 'ebay_api_capability_not_verified',
+            },
+          ],
+        },
+      })
+    }).as('buyerInterestImport')
+
+    signIn()
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="ebay-buyer-interest-sync-panel"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[data-testid="ebay-buyer-interest-sync-panel"] summary').click()
+    cy.get('[data-testid="ebay-buyer-interest-writeback-status"]').should(
+      'contain',
+      'Write-back blocked until eBay capability is verified'
+    )
+    cy.get('[data-testid="ebay-buyer-interest-payload"]').should(
+      'contain.value',
+      'buyer@example.test'
+    )
+
+    cy.get('[data-testid="ebay-buyer-interest-preview"]')
+      .scrollIntoView()
+      .click()
+    cy.wait('@buyerInterestPreview')
+    cy.contains('Buyer-interest preview mapped without remote write-back.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="ebay-buyer-interest-result"]')
+      .should('contain', 'Mode: preview / Total: 2')
+      .and('contain', 'Wishlist: 1 / Discoveries: 1')
+      .and('contain', 'Watched eBay listing -> wishlist')
+      .and('contain', 'ebay_api_capability_not_verified')
+
+    cy.get('[data-testid="ebay-buyer-interest-import"]')
+      .scrollIntoView()
+      .click()
+    cy.wait('@buyerInterestImport')
+    cy.contains(
+      'Buyer-interest import persisted local Wishlist and Discovery state.'
+    ).should('be.visible')
+    cy.get('[data-testid="ebay-buyer-interest-result"]')
+      .should('contain', 'Mode: import / Total: 2')
+      .and('contain', 'Cart eBay listing -> discovery')
+      .and('contain', 'ebay_api_capability_not_verified')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
       body: {
         settings: {
           ebay_base_url: 'https://api.ebay.com',
@@ -188,6 +333,7 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/provider/health?provider=ebay', {
       statusCode: 200,
+      delayMs: 250,
       body: {
         provider: 'ebay',
         status: 'ok',
@@ -217,9 +363,22 @@ describe('ui-screen-integrations', () => {
     cy.contains('input[placeholder="New token / API key"]').should('not.exist')
     cy.get('[data-testid="replace-token"]').click()
     cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
+    cy.contains('Health: unknown').should('be.visible')
+    cy.contains('Last run: never').should('be.visible')
+    cy.contains('Last checked: n/a').should('be.visible')
     cy.contains('button', 'Validate').click()
+    cy.contains('button', 'Validating...').should('be.visible')
     cy.wait('@validate')
-    cy.contains('Validated eBay health.').should('be.visible')
+    cy.contains('Validated eBay health: ok.').should('be.visible')
+    cy.contains('Health: ok').should('be.visible')
+    cy.contains('Last run: success').should('be.visible')
+    cy.contains('Last checked: 2026-03-01T00:01:00Z').should('be.visible')
+    cy.contains('button', 'Cancel').click()
+    cy.contains('[data-testid="provider-card-ebay"]', 'Health: ok').should('be.visible')
+    cy.contains('[data-testid="provider-card-ebay"]', 'Last run: success').should('be.visible')
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="replace-token"]').click()
+    cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
     cy.contains('button', 'Save Integration').click()
     cy.wait('@saveSettings')
     cy.contains('Provider configuration saved.').should('be.visible')

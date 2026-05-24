@@ -11,7 +11,9 @@ import { getRouteApi } from '@tanstack/react-router'
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  Download,
   PlugZap,
+  SearchCheck,
   SlidersHorizontal,
   Store,
 } from 'lucide-react'
@@ -24,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -69,7 +72,25 @@ type ProviderRecord = {
     stock_observation: boolean
     pricing: boolean
     health: boolean
+    assistant?: boolean
+    image_help?: boolean
+    content_generation?: boolean
   }
+  active_auth_method?: 'api_key' | 'browser_auth' | string
+  auth_methods?: {
+    api_key?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+    }
+    browser_auth?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+      setup_message?: string
+    }
+  }
+  model_options?: string[]
   health?: {
     status: 'ok' | 'degraded' | 'down' | 'unknown' | string
     last_checked_at?: string | null
@@ -79,6 +100,7 @@ type ProviderRecord = {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
     finished_at?: string | null
   }
+  seller_operations?: SellerOperationStatus[]
 }
 
 type IntegrationForm = {
@@ -86,6 +108,81 @@ type IntegrationForm = {
   token: string
   marketplace: string
   itemsPerPage: string
+  openAiModel: string
+  openAiTestPrompt: string
+  buyerInterestPayload: string
+}
+
+type BuyerInterestSyncResult = {
+  provider?: string
+  mode?: string
+  total?: number
+  counts?: Record<string, number>
+  mappings?: Array<{
+    title?: string
+    listing_id?: string
+    interest_state?: string
+    destination?: string
+    write_back_allowed?: boolean
+    write_back_blocker?: string
+  }>
+  results?: Array<{
+    title?: string
+    listing_id?: string
+    interest_state?: string
+    destination?: string
+    persisted_id?: string
+    item_id?: string
+    candidate_id?: string
+    write_back_allowed?: boolean
+    write_back_blocker?: string
+  }>
+}
+
+type SellerOperationStatus = {
+  operation: string
+  capability: string
+  read_available: boolean
+  write_available: boolean
+  confirmation_required: boolean
+  blocker?: string
+}
+
+type SellerOperationPreviewResult = {
+  provider?: string
+  mode?: string
+  preview?: {
+    operation?: string
+    action?: string
+    capability?: string
+    read_available?: boolean
+    write_available?: boolean
+    confirmation_required?: boolean
+    confirmed?: boolean
+    allowed?: boolean
+    remote_write?: boolean
+    blocker?: string
+  }
+}
+
+type SellerOperationExecuteResult = {
+  provider?: string
+  mode?: string
+  execution?: {
+    operation?: string
+    action?: string
+    capability?: string
+    read_available?: boolean
+    write_available?: boolean
+    confirmation_required?: boolean
+    confirmed?: boolean
+    allowed?: boolean
+    remote_write?: boolean
+    blocker?: string
+    executed?: boolean
+    local_only?: boolean
+    status?: string
+  }
 }
 
 type ProfileOption = {
@@ -103,6 +200,49 @@ const appText = new Map<AppType, string>([
   ['connected', 'Connected'],
   ['notConnected', 'Not Connected'],
 ])
+
+const defaultBuyerInterestPayload = JSON.stringify(
+  {
+    source_account: 'buyer@example.test',
+    items: [
+      {
+        listing_id: 'v1|watch|0',
+        title: 'Watched eBay listing',
+        url: 'https://www.ebay.com/itm/watch',
+        state: 'watched',
+      },
+      {
+        listing_id: 'v1|cart|0',
+        title: 'Cart eBay listing',
+        url: 'https://www.ebay.com/itm/cart',
+        state: 'cart_like',
+      },
+    ],
+  },
+  null,
+  2
+)
+
+function sellerOperationLabel(operation: string) {
+  const labels: Record<string, string> = {
+    messages: 'Messages',
+    notifications: 'Notifications',
+    sold_orders: 'Sold orders',
+    fulfillment: 'Fulfilment',
+    offers: 'Offers',
+  }
+  return labels[operation] ?? operation
+}
+
+function sellerOperationState(status: SellerOperationStatus) {
+  if (status.write_available) {
+    return status.confirmation_required ? 'Write confirmed' : 'Writable'
+  }
+  if (status.read_available) {
+    return 'Read-only'
+  }
+  return 'Blocked'
+}
 
 function providerSettingsKeys(providerID: string) {
   if (providerID === 'ebay') {
@@ -128,6 +268,14 @@ function isConnected(
   provider: ProviderRecord,
   settings: Record<string, string>
 ) {
+  if (provider.provider_id === 'openai') {
+    return (
+      settings['openai.active_auth_method'] === 'api_key' ||
+      settings['openai.active_auth_method'] === 'browser_auth' ||
+      provider.active_auth_method === 'api_key' ||
+      provider.active_auth_method === 'browser_auth'
+    )
+  }
   if (provider.auth_mode === 'none') {
     return true
   }
@@ -208,6 +356,7 @@ export function Apps({
   const [validating, setValidating] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [tokenFieldError, setTokenFieldError] = useState<string | null>(null)
   const [replaceToken, setReplaceToken] = useState(false)
   const [rowDetailsProviderID, setRowDetailsProviderID] = useState<
     string | null
@@ -218,12 +367,33 @@ export function Apps({
   )
   const [rowEditOpen, setRowEditOpen] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
+  const tokenInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<IntegrationForm>({
     baseURL: '',
     token: '',
     marketplace: '',
     itemsPerPage: '',
+    openAiModel: 'gpt-4o-mini',
+    openAiTestPrompt:
+      'Write one sentence confirming OpenAI is connected to Cabinet.',
+    buyerInterestPayload: defaultBuyerInterestPayload,
   })
+  const [buyerInterestWorking, setBuyerInterestWorking] = useState(false)
+  const [buyerInterestError, setBuyerInterestError] = useState<string | null>(
+    null
+  )
+  const [buyerInterestResult, setBuyerInterestResult] =
+    useState<BuyerInterestSyncResult | null>(null)
+  const [sellerOperationWorking, setSellerOperationWorking] = useState<
+    string | null
+  >(null)
+  const [sellerOperationError, setSellerOperationError] = useState<
+    string | null
+  >(null)
+  const [sellerOperationResult, setSellerOperationResult] =
+    useState<SellerOperationPreviewResult | null>(null)
+  const [sellerOperationExecution, setSellerOperationExecution] =
+    useState<SellerOperationExecuteResult | null>(null)
 
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
@@ -434,7 +604,17 @@ export function Apps({
       token: '',
       marketplace: settings[keys.marketplaceKey] ?? 'AU',
       itemsPerPage: settings[keys.itemsPerPageKey] ?? '24',
+      openAiModel: settings['assistant_default_model'] ?? 'gpt-4o-mini',
+      openAiTestPrompt:
+        'Write one sentence confirming OpenAI is connected to Cabinet.',
+      buyerInterestPayload: defaultBuyerInterestPayload,
     })
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
+    setSellerOperationError(null)
+    setSellerOperationResult(null)
+    setSellerOperationExecution(null)
+    setSellerOperationWorking(null)
     setReplaceToken(!provider.has_token)
   }
 
@@ -503,13 +683,35 @@ export function Apps({
   const closeIntegration = () => {
     setEditingProviderID(null)
     setSaveError(null)
+    setTokenFieldError(null)
     setReplaceToken(false)
     setForm({
       baseURL: '',
       token: '',
       marketplace: '',
       itemsPerPage: '',
+      openAiModel: 'gpt-4o-mini',
+      openAiTestPrompt:
+        'Write one sentence confirming OpenAI is connected to Cabinet.',
+      buyerInterestPayload: defaultBuyerInterestPayload,
     })
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
+    setSellerOperationError(null)
+    setSellerOperationResult(null)
+    setSellerOperationExecution(null)
+    setSellerOperationWorking(null)
+  }
+
+  useEffect(() => {
+    if (tokenFieldError) {
+      tokenInputRef.current?.focus()
+    }
+  }, [tokenFieldError])
+
+  const showTokenFieldError = (message: string) => {
+    setTokenFieldError(message)
+    window.setTimeout(() => tokenInputRef.current?.focus(), 0)
   }
 
   const saveIntegration = async () => {
@@ -518,10 +720,89 @@ export function Apps({
     }
     setSaving(true)
     setSaveError(null)
+    setTokenFieldError(null)
     setActionMessage(null)
     try {
       const keys = providerSettingsKeys(editingProvider.provider_id)
       const trimmedToken = form.token.trim()
+      if (editingProvider.provider_id === 'openai') {
+        if (
+          trimmedToken === '' &&
+          !editingProvider.has_token &&
+          settings['openai.active_auth_method'] !== 'browser_auth'
+        ) {
+          showTokenFieldError('OpenAI API key is required before connecting.')
+          return
+        }
+        const openAiSettings: Record<string, string> = {
+          openai_base_url: form.baseURL.trim(),
+          openai_active_auth_method:
+            trimmedToken !== ''
+              ? 'api_key'
+              : (settings['openai_active_auth_method'] ??
+                settings['openai.active_auth_method'] ??
+                ''),
+          'openai.active_auth_method':
+            trimmedToken !== ''
+              ? 'api_key'
+              : (settings['openai.active_auth_method'] ?? ''),
+          assistant_default_provider: 'openai',
+          assistant_default_model: form.openAiModel.trim() || 'gpt-4o-mini',
+          'integration.openai.enabled':
+            trimmedToken !== '' ||
+            settings['openai.active_auth_method'] === 'browser_auth'
+              ? 'true'
+              : 'false',
+        }
+        const settingsResponse = await fetch(
+          `/api/profiles/${activeProfileId}/settings`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: openAiSettings }),
+          }
+        )
+        if (!settingsResponse.ok) {
+          throw new Error(`save_failed_${settingsResponse.status}`)
+        }
+        if (trimmedToken !== '') {
+          const secretResponse = await fetch(
+            `/api/profiles/${activeProfileId}/secrets`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: 'openai_api_key',
+                value: trimmedToken,
+              }),
+            }
+          )
+          if (!secretResponse.ok) {
+            throw new Error(`secret_save_failed_${secretResponse.status}`)
+          }
+        }
+        const payload = (await settingsResponse.json()) as {
+          settings?: Record<string, string>
+        }
+        setSettings(payload.settings ?? {})
+        setProviders((prev) =>
+          prev.map((provider) =>
+            provider.provider_id === 'openai'
+              ? {
+                  ...provider,
+                  has_token: provider.has_token || trimmedToken !== '',
+                  active_auth_method:
+                    trimmedToken !== ''
+                      ? 'api_key'
+                      : provider.active_auth_method,
+                }
+              : provider
+          )
+        )
+        setActionMessage('OpenAI configuration saved.')
+        closeIntegration()
+        return
+      }
       if (
         editingProvider.auth_mode !== 'none' &&
         !editingProvider.has_token &&
@@ -591,8 +872,19 @@ export function Apps({
     if (!editingProvider) {
       return
     }
+    if (
+      editingProvider.provider_id === 'openai' &&
+      form.token.trim() === '' &&
+      !editingProvider.has_token &&
+      settings['openai.active_auth_method'] !== 'browser_auth'
+    ) {
+      setSaveError(null)
+      showTokenFieldError('OpenAI API key is required before validating.')
+      return
+    }
     setValidating(true)
     setSaveError(null)
+    setTokenFieldError(null)
     try {
       const response = await fetch(
         `/api/provider/health?provider=${encodeURIComponent(editingProvider.provider_id)}`
@@ -605,34 +897,186 @@ export function Apps({
         message?: string
         updated_at?: string
       }
+      const checkedAt = payload.updated_at ?? new Date().toISOString()
+      const healthStatus = payload.status ?? 'unknown'
+      const nextProvider: ProviderRecord = {
+        ...editingProvider,
+        health: {
+          status: healthStatus,
+          message: payload.message,
+          last_checked_at: checkedAt,
+        },
+        last_run: {
+          status:
+            healthStatus === 'ok'
+              ? 'success'
+              : healthStatus === 'unknown'
+                ? 'never'
+                : 'failed',
+          finished_at: checkedAt,
+        },
+      }
       setProviders((prev) =>
         prev.map((provider) =>
           provider.provider_id === editingProvider.provider_id
             ? {
                 ...provider,
-                health: {
-                  status: payload.status ?? 'unknown',
-                  message: payload.message,
-                  last_checked_at: payload.updated_at ?? null,
-                },
-                last_run: {
-                  status:
-                    payload.status === 'ok'
-                      ? 'success'
-                      : payload.status === 'unknown'
-                        ? 'never'
-                        : 'failed',
-                  finished_at: payload.updated_at ?? null,
-                },
+                health: nextProvider.health,
+                last_run: nextProvider.last_run,
               }
             : provider
         )
       )
-      setActionMessage(`Validated ${editingProvider.display_name} health.`)
+      setActionMessage(
+        `Validated ${editingProvider.display_name} health: ${healthStatus}.`
+      )
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'validate_failed')
     } finally {
       setValidating(false)
+    }
+  }
+
+  const runBuyerInterestSync = async (mode: 'preview' | 'import') => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    setBuyerInterestWorking(true)
+    setBuyerInterestError(null)
+    setBuyerInterestResult(null)
+    try {
+      const parsed = JSON.parse(form.buyerInterestPayload) as unknown
+      const response = await fetch(
+        `/api/providers/ebay/buyer-interest/${mode}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`buyer_interest_${mode}_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as BuyerInterestSyncResult
+      setBuyerInterestResult(payload)
+      setActionMessage(
+        mode === 'preview'
+          ? 'Buyer-interest preview mapped without remote write-back.'
+          : 'Buyer-interest import persisted local Wishlist and Discovery state.'
+      )
+    } catch (error) {
+      setBuyerInterestError(
+        error instanceof SyntaxError
+          ? 'Buyer-interest payload must be valid JSON.'
+          : error instanceof Error
+            ? error.message
+            : 'buyer_interest_sync_failed'
+      )
+    } finally {
+      setBuyerInterestWorking(false)
+    }
+  }
+
+  const previewSellerOperation = async (
+    status: SellerOperationStatus,
+    confirmed: boolean
+  ) => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    const action =
+      status.read_available && !status.write_available ? 'sync' : 'fulfill'
+    const workingKey = `${status.operation}-${confirmed ? 'confirmed' : 'preview'}`
+    setSellerOperationWorking(workingKey)
+    setSellerOperationError(null)
+    setSellerOperationResult(null)
+    setSellerOperationExecution(null)
+    try {
+      const response = await fetch(
+        '/api/providers/ebay/seller-operations/preview',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operation: status.operation,
+            capability: status.capability,
+            action,
+            confirmed,
+            reference_id: `${status.operation}-local-preview`,
+          }),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`seller_operation_preview_failed_${response.status}`)
+      }
+      const payload = (await response.json()) as SellerOperationPreviewResult
+      setSellerOperationResult(payload)
+      setActionMessage(
+        payload.preview?.remote_write
+          ? 'Seller operation preview is allowed only after explicit confirmation.'
+          : 'Seller operation preview completed without remote write.'
+      )
+    } catch (error) {
+      setSellerOperationError(
+        error instanceof Error
+          ? error.message
+          : 'seller_operation_preview_failed'
+      )
+    } finally {
+      setSellerOperationWorking(null)
+    }
+  }
+
+  const executeSellerOperation = async (
+    status: SellerOperationStatus,
+    confirmed: boolean
+  ) => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    const action =
+      status.read_available && !status.write_available ? 'sync' : 'fulfill'
+    const workingKey = `${status.operation}-${confirmed ? 'confirmed-execute' : 'execute'}`
+    setSellerOperationWorking(workingKey)
+    setSellerOperationError(null)
+    setSellerOperationResult(null)
+    setSellerOperationExecution(null)
+    try {
+      const response = await fetch(
+        '/api/providers/ebay/seller-operations/execute',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operation: status.operation,
+            capability: status.capability,
+            action,
+            confirmed,
+            reference_id: `${status.operation}-local-execute`,
+          }),
+        }
+      )
+      const payload = (await response.json()) as SellerOperationExecuteResult
+      setSellerOperationExecution(payload)
+      if (!response.ok) {
+        throw new Error(
+          payload.execution?.blocker ??
+            `seller_operation_execute_failed_${response.status}`
+        )
+      }
+      setActionMessage(
+        payload.execution?.local_only
+          ? 'Seller operation read-only sync completed locally without remote write.'
+          : 'Seller operation execute request returned without local completion.'
+      )
+    } catch (error) {
+      setSellerOperationError(
+        error instanceof Error
+          ? error.message
+          : 'seller_operation_execute_failed'
+      )
+    } finally {
+      setSellerOperationWorking(null)
     }
   }
 
@@ -944,6 +1388,16 @@ export function Apps({
                       Pricing
                     </span>
                   ) : null}
+                  {provider.capabilities.assistant ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Assistant
+                    </span>
+                  ) : null}
+                  {provider.capabilities.image_help ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Image help
+                    </span>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -959,13 +1413,13 @@ export function Apps({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className='top-4 max-h-[90vh] translate-y-0 overflow-y-auto sm:max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editingProvider?.display_name ?? 'Integration'}
             </DialogTitle>
             <DialogDescription>
-              Manage provider credentials, validation, and sync controls.
+              Manage provider credentials, validation, and setup controls.
             </DialogDescription>
           </DialogHeader>
           {editingProvider ? (
@@ -987,6 +1441,7 @@ export function Apps({
                     editingProvider.last_run?.finished_at ??
                     'n/a'}
                 </p>
+                {actionMessage ? <p>{actionMessage}</p> : null}
               </div>
 
               <div className='rounded-md border p-3 text-xs text-muted-foreground'>
@@ -994,85 +1449,684 @@ export function Apps({
                   'Enter provider details, validate health, and save configuration.'}
               </div>
 
-              <Input
-                placeholder='Base URL'
-                value={form.baseURL}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, baseURL: e.target.value }))
-                }
-              />
-              <Input
-                placeholder='Marketplace / Region'
-                value={form.marketplace}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, marketplace: e.target.value }))
-                }
-              />
-              <Input
-                type='number'
-                min='1'
-                placeholder='Items per page'
-                value={form.itemsPerPage}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, itemsPerPage: e.target.value }))
-                }
-              />
-
-              {editingProvider.auth_mode !== 'none' ? (
-                <div className='space-y-2'>
-                  {editingProvider.has_token && !replaceToken ? (
-                    <div className='rounded-md border bg-muted/20 p-3 text-xs'>
-                      <p>Token on file.</p>
-                      <p className='text-muted-foreground'>
-                        Existing token is hidden. Use replace-token to update
-                        it.
-                      </p>
+              {editingProvider.provider_id === 'openai' ? (
+                <div className='space-y-4' data-testid='openai-config-dialog'>
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-browser-auth-section'
+                  >
+                    <div className='flex items-center justify-between gap-3'>
+                      <div>
+                        <p className='font-medium'>Browser Auth</p>
+                        <p className='text-xs text-muted-foreground'>
+                          Use a verified OpenAI/Codex browser-auth artifact when
+                          available.
+                        </p>
+                      </div>
+                      <span
+                        className='rounded bg-muted px-2 py-1 text-xs'
+                        data-testid='openai-browser-auth-status'
+                      >
+                        {settings['openai.browser_auth_state'] ??
+                          editingProvider.auth_methods?.browser_auth?.state ??
+                          'setup_needed'}
+                      </span>
+                    </div>
+                    <p
+                      className='mt-2 text-xs text-muted-foreground'
+                      data-testid='openai-browser-auth-setup-needed'
+                    >
+                      Browser Auth is setup-needed until Cabinet can verify an
+                      acquired callback/artifact. Navigation alone never marks
+                      OpenAI connected.
+                    </p>
+                    <div className='mt-3 flex flex-wrap gap-2'>
                       <Button
+                        type='button'
+                        size='sm'
+                        disabled
+                        data-testid='openai-browser-auth-connect'
+                      >
+                        Only available on this PC
+                      </Button>
+                      <Button
+                        type='button'
                         size='sm'
                         variant='outline'
-                        className='mt-2'
-                        data-testid='replace-token'
-                        onClick={() => setReplaceToken(true)}
+                        data-testid='openai-browser-auth-disconnect'
+                        onClick={() => {
+                          setSettings((prev) => ({
+                            ...prev,
+                            'openai.browser_auth_state': 'disconnected',
+                            'openai.active_auth_method':
+                              prev['openai.active_auth_method'] ===
+                              'browser_auth'
+                                ? ''
+                                : prev['openai.active_auth_method'],
+                          }))
+                        }}
                       >
-                        Replace Token
+                        Disconnect
                       </Button>
                     </div>
-                  ) : (
+                  </section>
+
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-api-key-section'
+                  >
+                    <div className='flex items-center justify-between gap-3'>
+                      <div>
+                        <p className='font-medium'>API key</p>
+                        <p className='text-xs text-muted-foreground'>
+                          Validate and save an OpenAI API key for Cabinet
+                          assistant, image, and content workflows.
+                        </p>
+                      </div>
+                      <span
+                        className='rounded bg-muted px-2 py-1 text-xs'
+                        data-testid='openai-api-key-status'
+                      >
+                        {editingProvider.has_token ||
+                        settings['openai.active_auth_method'] === 'api_key'
+                          ? 'connected'
+                          : 'setup_needed'}
+                      </span>
+                    </div>
+                    {editingProvider.has_token && !replaceToken ? (
+                      <div className='mt-3 rounded-md border bg-muted/20 p-3 text-xs'>
+                        <p>API key on file.</p>
+                        <p className='text-muted-foreground'>
+                          Existing key is hidden. Replace it to update the
+                          active API-key method.
+                        </p>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='mt-2'
+                          data-testid='replace-token'
+                          onClick={() => setReplaceToken(true)}
+                        >
+                          Replace API key
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className='mt-3 space-y-2'>
+                        <Label htmlFor='provider-token'>OpenAI API key</Label>
+                        <Input
+                          ref={tokenInputRef}
+                          id='provider-token'
+                          type='password'
+                          data-testid='provider-token-input'
+                          placeholder='OpenAI API key'
+                          value={form.token}
+                          aria-invalid={tokenFieldError ? 'true' : undefined}
+                          aria-describedby={
+                            tokenFieldError ? 'provider-token-error' : undefined
+                          }
+                          onChange={(e) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              token: e.target.value,
+                            }))
+                            if (tokenFieldError) {
+                              setTokenFieldError(null)
+                            }
+                          }}
+                        />
+                        {tokenFieldError ? (
+                          <p
+                            id='provider-token-error'
+                            className='text-xs text-destructive'
+                          >
+                            {tokenFieldError}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        onClick={() => void validateProvider()}
+                        disabled={validating}
+                        data-testid='openai-api-key-validate'
+                      >
+                        {validating ? 'Validating...' : 'Validate'}
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        data-testid='openai-api-key-connect'
+                        onClick={() => void saveIntegration()}
+                        disabled={saving}
+                      >
+                        Connect
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='openai-api-key-disconnect'
+                        onClick={() => setReplaceToken(true)}
+                      >
+                        Disconnect
+                      </Button>
+                    </div>
+                  </section>
+
+                  <section
+                    className='rounded-md border p-3'
+                    data-testid='openai-test-section'
+                  >
+                    <p className='font-medium'>Test OpenAI</p>
+                    <p className='text-xs text-muted-foreground'>
+                      Uses the active connected method. If no method is
+                      verified, Cabinet shows setup-needed instead of pretending
+                      readiness.
+                    </p>
+                    <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                      <div className='space-y-2'>
+                        <Label htmlFor='openai-test-model'>Test model</Label>
+                        <Select
+                          value={form.openAiModel}
+                          onValueChange={(value) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              openAiModel: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger
+                            id='openai-test-model'
+                            data-testid='openai-test-model'
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(
+                              editingProvider.model_options ?? [
+                                'gpt-4o-mini',
+                                'gpt-4.1-mini',
+                              ]
+                            ).map((model) => (
+                              <SelectItem key={model} value={model}>
+                                {model}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='openai-active-method'>
+                          Active method
+                        </Label>
+                        <Input
+                          id='openai-active-method'
+                          data-testid='openai-active-method'
+                          readOnly
+                          value={
+                            settings['openai.active_auth_method'] ===
+                            'browser_auth'
+                              ? 'Browser Auth'
+                              : settings['openai.active_auth_method'] ===
+                                    'api_key' || editingProvider.has_token
+                                ? 'API key'
+                                : 'None connected'
+                          }
+                        />
+                      </div>
+                    </div>
+                    <Label className='mt-3 block' htmlFor='openai-test-prompt'>
+                      Test prompt
+                    </Label>
                     <Input
-                      type='password'
-                      data-testid='provider-token-input'
-                      placeholder='New token / API key'
-                      value={form.token}
+                      className='mt-2'
+                      id='openai-test-prompt'
+                      data-testid='openai-test-prompt'
+                      aria-label='OpenAI test prompt'
+                      value={form.openAiTestPrompt}
                       onChange={(e) =>
-                        setForm((prev) => ({ ...prev, token: e.target.value }))
+                        setForm((prev) => ({
+                          ...prev,
+                          openAiTestPrompt: e.target.value,
+                        }))
                       }
                     />
-                  )}
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-3'
+                      data-testid='openai-test-run'
+                      disabled={!isConnected(editingProvider, settings)}
+                      onClick={() =>
+                        setActionMessage(
+                          'OpenAI test requires a verified active method before Cabinet runs provider calls.'
+                        )
+                      }
+                    >
+                      Test
+                    </Button>
+                  </section>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-base-url'>Base URL</Label>
+                    <Input
+                      id='provider-base-url'
+                      placeholder='Base URL'
+                      value={form.baseURL}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          baseURL: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-marketplace'>Marketplace / Region</Label>
+                    <Input
+                      id='provider-marketplace'
+                      placeholder='Marketplace / Region'
+                      value={form.marketplace}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          marketplace: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='provider-items-per-page'>Items per page</Label>
+                    <Input
+                      id='provider-items-per-page'
+                      type='number'
+                      min='1'
+                      placeholder='Items per page'
+                      value={form.itemsPerPage}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          itemsPerPage: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  {editingProvider.auth_mode !== 'none' ? (
+                    <div className='space-y-2'>
+                      {editingProvider.has_token && !replaceToken ? (
+                        <div className='rounded-md border bg-muted/20 p-3 text-xs'>
+                          <p>Token on file.</p>
+                          <p className='text-muted-foreground'>
+                            Existing token is hidden. Use replace-token to
+                            update it.
+                          </p>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='mt-2'
+                            data-testid='replace-token'
+                            onClick={() => setReplaceToken(true)}
+                          >
+                            Replace Token
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className='space-y-2'>
+                          <Label htmlFor='provider-token'>New token / API key</Label>
+                          <Input
+                            id='provider-token'
+                            type='password'
+                            data-testid='provider-token-input'
+                            placeholder='New token / API key'
+                            value={form.token}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                token: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                  {editingProvider.provider_id === 'ebay' ? (
+                    <div className='space-y-3'>
+                      <section
+                        className='rounded-md border p-3'
+                        data-testid='ebay-seller-operations-panel'
+                      >
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <p className='font-medium'>Seller Operations</p>
+                            <p className='text-xs text-muted-foreground'>
+                              Messages, notifications, sold orders, fulfilment,
+                              and offers stay blocked until exact eBay API
+                              support is verified.
+                            </p>
+                          </div>
+                          <span
+                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                            data-testid='ebay-seller-operations-safe-mode'
+                          >
+                            External writes require confirmation
+                          </span>
+                        </div>
+                        <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                          {(editingProvider.seller_operations ?? []).map(
+                            (status) => (
+                              <div
+                                key={status.operation}
+                                className='rounded-md bg-muted/40 p-3 text-xs'
+                                data-testid={`ebay-seller-operation-${status.operation}`}
+                              >
+                                <div className='flex items-center justify-between gap-2'>
+                                  <span className='font-medium'>
+                                    {sellerOperationLabel(status.operation)}
+                                  </span>
+                                  <span>{sellerOperationState(status)}</span>
+                                </div>
+                                <p className='mt-1 text-muted-foreground'>
+                                  Read: {status.read_available ? 'yes' : 'no'} /
+                                  Write:{' '}
+                                  {status.write_available ? 'yes' : 'no'}
+                                </p>
+                                <p className='mt-1 text-muted-foreground'>
+                                  {status.blocker ??
+                                    (status.confirmation_required
+                                      ? 'confirmation_required'
+                                      : 'available')}
+                                </p>
+                                <div
+                                  className='mt-3 flex flex-wrap gap-2'
+                                  data-testid={`ebay-seller-operation-preview-controls-${status.operation}`}
+                                >
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-preview-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      (!status.read_available &&
+                                        !status.write_available)
+                                    }
+                                    onClick={() =>
+                                      void previewSellerOperation(status, false)
+                                    }
+                                  >
+                                    Preview
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-confirm-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      !status.write_available ||
+                                      !status.confirmation_required
+                                    }
+                                    onClick={() =>
+                                      void previewSellerOperation(status, true)
+                                    }
+                                  >
+                                    Confirm Preview
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-execute-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      !status.read_available ||
+                                      status.write_available
+                                    }
+                                    onClick={() =>
+                                      void executeSellerOperation(status, false)
+                                    }
+                                  >
+                                    Sync
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    size='sm'
+                                    variant='outline'
+                                    data-testid={`ebay-seller-operation-confirm-execute-${status.operation}`}
+                                    disabled={
+                                      sellerOperationWorking !== null ||
+                                      !status.write_available ||
+                                      !status.confirmation_required
+                                    }
+                                    onClick={() =>
+                                      void executeSellerOperation(status, true)
+                                    }
+                                  >
+                                    Confirm Execute
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          )}
+                        </div>
+                        {sellerOperationError ? (
+                          <p
+                            className='mt-3 text-xs text-destructive'
+                            data-testid='ebay-seller-operation-preview-error'
+                          >
+                            {sellerOperationError}
+                          </p>
+                        ) : null}
+                        {sellerOperationResult?.preview ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-seller-operation-preview-result'
+                          >
+                            <p className='font-medium'>
+                              Preview:{' '}
+                              {sellerOperationLabel(
+                                sellerOperationResult.preview.operation ?? ''
+                              )}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              Allowed:{' '}
+                              {sellerOperationResult.preview.allowed
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Remote write:{' '}
+                              {sellerOperationResult.preview.remote_write
+                                ? 'yes'
+                                : 'no'}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              {sellerOperationResult.preview.blocker ??
+                                'No blocker'}
+                            </p>
+                          </div>
+                        ) : null}
+                        {sellerOperationExecution?.execution ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-seller-operation-execute-result'
+                          >
+                            <p className='font-medium'>
+                              Execute:{' '}
+                              {sellerOperationLabel(
+                                sellerOperationExecution.execution.operation ??
+                                  ''
+                              )}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              Executed:{' '}
+                              {sellerOperationExecution.execution.executed
+                                ? 'yes'
+                                : 'no'}{' '}
+                              / Local only:{' '}
+                              {sellerOperationExecution.execution.local_only
+                                ? 'yes'
+                                : 'no'}
+                            </p>
+                            <p className='mt-1 text-muted-foreground'>
+                              {sellerOperationExecution.execution.status ??
+                                sellerOperationExecution.execution.blocker ??
+                                'No status'}
+                            </p>
+                          </div>
+                        ) : null}
+                      </section>
+                      <details
+                        className='rounded-md border p-3'
+                        data-testid='ebay-buyer-interest-sync-panel'
+                      >
+                        <summary className='cursor-pointer text-sm font-medium'>
+                          Buyer Interest Sync
+                        </summary>
+                      <div className='mt-3 space-y-3'>
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <p className='font-medium'>Buyer Interest Sync</p>
+                            <p className='text-xs text-muted-foreground'>
+                              Preview or import watched, saved, liked, and
+                              cart-like listings into local Wishlist and
+                              Discoveries.
+                            </p>
+                          </div>
+                          <span
+                            className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                            data-testid='ebay-buyer-interest-writeback-status'
+                          >
+                            Write-back blocked until eBay capability is verified
+                          </span>
+                        </div>
+                        <Label
+                          className='mt-3 block'
+                          htmlFor='ebay-buyer-interest-payload'
+                        >
+                          Sync payload
+                        </Label>
+                        <textarea
+                          id='ebay-buyer-interest-payload'
+                          className='mt-2 min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs'
+                          data-testid='ebay-buyer-interest-payload'
+                          value={form.buyerInterestPayload}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              buyerInterestPayload: e.target.value,
+                            }))
+                          }
+                        />
+                        <div className='mt-3 flex flex-wrap gap-2'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid='ebay-buyer-interest-preview'
+                            disabled={buyerInterestWorking}
+                            onClick={() => void runBuyerInterestSync('preview')}
+                          >
+                            <SearchCheck className='mr-2 size-4' />
+                            Preview
+                          </Button>
+                          <Button
+                            type='button'
+                            size='sm'
+                            data-testid='ebay-buyer-interest-import'
+                            disabled={buyerInterestWorking}
+                            onClick={() => void runBuyerInterestSync('import')}
+                          >
+                            <Download className='mr-2 size-4' />
+                            Import
+                          </Button>
+                        </div>
+                        {buyerInterestError ? (
+                          <p className='mt-2 text-xs text-destructive'>
+                            {buyerInterestError}
+                          </p>
+                        ) : null}
+                        {buyerInterestResult ? (
+                          <div
+                            className='mt-3 rounded-md bg-muted/40 p-3 text-xs'
+                            data-testid='ebay-buyer-interest-result'
+                          >
+                            <p>
+                              Mode: {buyerInterestResult.mode ?? 'unknown'} /
+                              Total: {buyerInterestResult.total ?? 0}
+                            </p>
+                            <p>
+                              Wishlist:{' '}
+                              {buyerInterestResult.counts?.wishlist ?? 0} /
+                              Discoveries:{' '}
+                              {buyerInterestResult.counts?.discovery ?? 0}
+                            </p>
+                            <ul className='mt-2 space-y-1'>
+                              {(
+                                buyerInterestResult.results ??
+                                buyerInterestResult.mappings ??
+                                []
+                              ).map((entry, index) => (
+                                <li
+                                  key={`${entry.listing_id ?? 'entry'}-${index}`}
+                                >
+                                  {entry.title ??
+                                    entry.listing_id ??
+                                    'Untitled'}
+                                  {' -> '}
+                                  {entry.destination ?? 'unknown'}; write-back{' '}
+                                  {entry.write_back_allowed
+                                    ? 'allowed'
+                                    : (entry.write_back_blocker ?? 'blocked')}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                      </details>
+                    </div>
+                  ) : null}
+                </>
+              )}
 
               {saveError ? (
                 <p className='text-sm text-destructive'>{saveError}</p>
               ) : null}
 
               <div className='flex flex-wrap justify-end gap-2'>
-                <Button
-                  variant='outline'
-                  onClick={() => void validateProvider()}
-                  disabled={validating}
-                >
-                  {validating ? 'Validating...' : 'Validate'}
-                </Button>
-                <Button
-                  variant='outline'
-                  onClick={() => {
-                    setActionMessage(
-                      'Sync is initiated from Market Watch query sets. Open Market Watch to run provider discovery.'
-                    )
-                  }}
-                >
-                  Sync
-                </Button>
+                {editingProvider.provider_id !== 'openai' ? (
+                  <>
+                    <Button
+                      variant='outline'
+                      onClick={() => void validateProvider()}
+                      disabled={validating}
+                    >
+                      {validating ? 'Validating...' : 'Validate'}
+                    </Button>
+                    <div className='flex max-w-xs flex-col items-end gap-1'>
+                      <Button
+                        variant='outline'
+                        disabled
+                        aria-describedby='provider-sync-unavailable'
+                      >
+                        Sync
+                      </Button>
+                      <p
+                        id='provider-sync-unavailable'
+                        className='text-right text-xs text-muted-foreground'
+                      >
+                        Sync runs from Market Watch query sets.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
                 <Button
                   variant='outline'
                   onClick={closeIntegration}
@@ -1084,7 +2138,11 @@ export function Apps({
                   onClick={() => void saveIntegration()}
                   disabled={saving}
                 >
-                  {saving ? 'Saving...' : 'Save Integration'}
+                  {saving
+                    ? 'Saving...'
+                    : editingProvider.provider_id === 'openai'
+                      ? 'Save OpenAI'
+                      : 'Save Integration'}
                 </Button>
               </div>
             </div>

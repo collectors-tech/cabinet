@@ -1,13 +1,10 @@
 describe('settings/account', () => {
   function signInToSettings() {
-    cy.visit('/sign-in?redirect=%2Fsettings%2Faccount')
-    cy.get('input[name="email"]').clear().type('e2e-settings@example.com')
-    cy.get('input[name="password"]').clear().type('password123')
-    cy.contains('button', 'Sign in').click()
-    cy.location('pathname', { timeout: 15000 }).should(
-      'match',
-      /^\/settings\/account\/?$/
-    )
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/settings/account',
+    })
   }
 
   beforeEach(() => {
@@ -34,5 +31,40 @@ describe('settings/account', () => {
     cy.get('input[name="name"]').clear()
     cy.contains('button', 'Update account').click()
     cy.contains('Please enter your name.').should('be.visible')
+  })
+
+  it('UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload', () => {
+    let settingsAttempt = 0
+    cy.intercept('GET', '/api/profiles/*/settings', (req) => {
+      settingsAttempt += 1
+      if (settingsAttempt === 1) {
+        req.reply({
+          statusCode: 503,
+          body: { error: 'profile_settings_unavailable' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: {
+          settings: {
+            'account.name': 'Retry Account Name',
+            'account.language': 'ko',
+            'account.dob': '1998-05-01T00:00:00.000Z',
+          },
+        },
+      })
+    }).as('accountSettings')
+
+    cy.reload()
+    cy.wait('@accountSettings')
+    cy.contains('Failed to load account settings.').should('be.visible')
+    cy.contains('button', 'Retry').click()
+    cy.wait('@accountSettings')
+
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.contains('Failed to load account settings.').should('not.exist')
+    cy.get('input[name="name"]').should('have.value', 'Retry Account Name')
+    cy.contains('button[role="combobox"]', 'Korean').should('be.visible')
   })
 })

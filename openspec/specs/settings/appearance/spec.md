@@ -50,5 +50,5 @@ Language preferences MUST include at minimum English, Chinese, and Japanese opti
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-SET-APP-01 | Update preferences action | `Update preferences` persists theme/language/display selections | planned: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` `settings-appearance-update-preferences` |
-| UC-SET-APP-02 | Retry appearance load failure | `Retry` re-attempts appearance fetch deterministically | planned: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` `settings-appearance-retry` |
+| UC-SET-APP-01 | Update preferences action | `Update preferences` persists theme/language/display selections | implemented: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` (`UI-SCREEN-SETTINGS-APPEARANCE-005 updates preferences with deterministic success feedback`) |
+| UC-SET-APP-02 | Retry appearance load failure | `Retry` re-attempts appearance fetch deterministically | implemented: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` (`UI-SCREEN-SETTINGS-APPEARANCE-005 retries appearance settings load failure without route reload`) |
