@@ -18,29 +18,29 @@ const (
 )
 
 type BuyerInterestInput struct {
-	ListingID           string
-	Title               string
-	URL                 string
-	State               string
-	SourceAccount       string
-	ObservedAt          string
-	WriteBackCapability string
+	ListingID           string `json:"listing_id"`
+	Title               string `json:"title"`
+	URL                 string `json:"url"`
+	State               string `json:"state"`
+	SourceAccount       string `json:"source_account"`
+	ObservedAt          string `json:"observed_at"`
+	WriteBackCapability string `json:"write_back_capability"`
 }
 
 type BuyerInterestMapping struct {
-	ListingID           string
-	Title               string
-	URL                 string
-	State               string
-	Destination         string
-	SourceProvider      string
-	SourceAccount       string
-	ObservedAt          string
-	ProvenanceKey       string
-	WriteBackCapability string
-	WriteBackAllowed    bool
-	WriteBackBlocker    string
-	OwnedInventory      bool
+	ListingID           string `json:"listing_id"`
+	Title               string `json:"title"`
+	URL                 string `json:"url"`
+	State               string `json:"state"`
+	Destination         string `json:"destination"`
+	SourceProvider      string `json:"source_provider"`
+	SourceAccount       string `json:"source_account"`
+	ObservedAt          string `json:"observed_at"`
+	ProvenanceKey       string `json:"provenance_key"`
+	WriteBackCapability string `json:"write_back_capability"`
+	WriteBackAllowed    bool   `json:"write_back_allowed"`
+	WriteBackBlocker    string `json:"write_back_blocker,omitempty"`
+	OwnedInventory      bool   `json:"owned_inventory"`
 }
 
 func MapBuyerInterest(in BuyerInterestInput) BuyerInterestMapping {
