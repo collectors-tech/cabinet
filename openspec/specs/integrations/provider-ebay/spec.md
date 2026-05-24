@@ -58,6 +58,12 @@ Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest st
 - **AND** watched/saved states MUST target Wishlist while liked/cart-like states MUST target Discoveries unless a later user action promotes the item.
 - **AND** persisted imports MUST retain the deterministic provenance key in the saved Wishlist entry or Discovery candidate action.
 
+#### Scenario: Preview and import buyer-interest from the eBay integration UI
+- **GIVEN** the eBay integration dialog is open for a configured profile
+- **WHEN** the operator previews or imports buyer-interest payloads from the dialog
+- **THEN** Cabinet MUST call the buyer-interest preview/import endpoints with the edited payload, summarize Wishlist and Discovery destination counts, and show per-listing destination/provenance outcomes.
+- **AND** the dialog MUST keep remote write-back visibly blocked unless eBay write-back capability has been verified.
+
 ### Requirement INTEGRATION-026: eBay buyer-interest write-back MUST be capability gated
 Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay API capability has been verified for the active account and marketplace.
 
