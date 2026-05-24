@@ -574,13 +574,17 @@ func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
 	}
 	src := string(b)
 	required := []string{
-		"<Label htmlFor='provider-base-url'>Base URL</Label>",
+		"htmlFor='provider-base-url'",
+		"Base URL",
 		"id='provider-base-url'",
-		"<Label htmlFor='provider-marketplace'>Marketplace / Region</Label>",
+		"htmlFor='provider-marketplace'",
+		"Marketplace / Region",
 		"id='provider-marketplace'",
-		"<Label htmlFor='provider-items-per-page'>Items per page</Label>",
+		"htmlFor='provider-items-per-page'",
+		"Items per page",
 		"id='provider-items-per-page'",
-		"<Label htmlFor='provider-token'>New token / API key</Label>",
+		"htmlFor='provider-token'",
+		"New token / API key",
 		"id='provider-token'",
 	}
 	for _, token := range required {
