@@ -123,6 +123,14 @@ func TestEbaySellerOperationExecuteAllowsReadOnlySyncOnly(t *testing.T) {
 			LocalOnly   bool   `json:"local_only"`
 			Status      string `json:"status"`
 			Blocker     string `json:"blocker"`
+			Result      struct {
+				Operation string `json:"operation"`
+				Source    string `json:"source"`
+				Records   []struct {
+					Kind string `json:"kind"`
+				} `json:"records"`
+				Summary map[string]int `json:"summary"`
+			} `json:"result"`
 		} `json:"execution"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -139,6 +147,12 @@ func TestEbaySellerOperationExecuteAllowsReadOnlySyncOnly(t *testing.T) {
 	}
 	if payload.Execution.Status != "read_only_sync_ready" || payload.Execution.Blocker != "" {
 		t.Fatalf("expected local sync ready status with no blocker, got %+v", payload.Execution)
+	}
+	if payload.Execution.Result.Operation != "sold_orders" || payload.Execution.Result.Source != "local_read_model" {
+		t.Fatalf("expected sold-order local read result, got %+v", payload.Execution.Result)
+	}
+	if len(payload.Execution.Result.Records) != 1 || payload.Execution.Result.Records[0].Kind != "sold_order" || payload.Execution.Result.Summary["open_orders"] != 1 {
+		t.Fatalf("expected sold-order read records and summary, got %+v", payload.Execution.Result)
 	}
 }
 
