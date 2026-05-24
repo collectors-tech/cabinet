@@ -53,8 +53,12 @@ func TestDryRunAndApplyImport(t *testing.T) {
 		t.Fatalf("unexpected dry run summary: %#v", sum)
 	}
 
-	if err := svc.ApplyImport(context.Background(), snap, ApplyOptions{DefaultAction: "merge"}); err != nil {
+	applySummary, err := svc.ApplyImport(context.Background(), snap, ApplyOptions{DefaultAction: "merge"})
+	if err != nil {
 		t.Fatalf("ApplyImport() error = %v", err)
+	}
+	if applySummary.TotalItems != 2 || applySummary.Created != 1 || applySummary.Merged != 1 || applySummary.Skipped != 0 || applySummary.Failed != 0 {
+		t.Fatalf("unexpected apply summary: %#v", applySummary)
 	}
 
 	var itemCount int
@@ -63,6 +67,49 @@ func TestDryRunAndApplyImport(t *testing.T) {
 	}
 	if itemCount != 2 {
 		t.Fatalf("expected 2 canonical items after import, got %d", itemCount)
+	}
+}
+
+func TestApplyImportReportsSkippedAndInvalidActionFailures(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items (id, brand, category, part_number, title) VALUES ('existing','AFX','Slot Car','P-300','Existing Car')`); err != nil {
+		t.Fatalf("seed existing item: %v", err)
+	}
+
+	svc := NewService(conn)
+	snap := Snapshot{
+		SchemaVersion: 1,
+		Items: []SnapshotItem{
+			{Brand: "AFX", Category: "Slot Car", PartNumber: "P-300", Title: "Skip Existing"},
+			{Brand: "AFX", Category: "Slot Car", PartNumber: "P-301", Title: "Create New"},
+		},
+	}
+
+	summary, err := svc.ApplyImport(context.Background(), snap, ApplyOptions{
+		DefaultAction: "merge",
+		Overrides:     map[string]string{"P-300": "skip"},
+	})
+	if err != nil {
+		t.Fatalf("ApplyImport() with skip override error = %v", err)
+	}
+	if summary.TotalItems != 2 || summary.Created != 1 || summary.Merged != 0 || summary.Skipped != 1 || summary.Failed != 0 {
+		t.Fatalf("unexpected skip apply summary: %#v", summary)
+	}
+
+	failingSummary, err := svc.ApplyImport(context.Background(), snap, ApplyOptions{DefaultAction: "delete"})
+	if err == nil {
+		t.Fatal("expected invalid action error")
+	}
+	if failingSummary.TotalItems != 2 || failingSummary.Failed != 2 {
+		t.Fatalf("expected failed count for rejected apply, got %#v", failingSummary)
 	}
 }
 

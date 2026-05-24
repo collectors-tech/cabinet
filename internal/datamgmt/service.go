@@ -63,6 +63,14 @@ type ApplyOptions struct {
 	Overrides     map[string]string `json:"overrides"`
 }
 
+type ApplySummary struct {
+	TotalItems int `json:"total_items"`
+	Created    int `json:"created"`
+	Merged     int `json:"merged"`
+	Skipped    int `json:"skipped"`
+	Failed     int `json:"failed"`
+}
+
 type CSVImportRequest struct {
 	CSV     string            `json:"csv"`
 	Mapping map[string]string `json:"mapping"`
@@ -287,10 +295,11 @@ func (s *Service) DryRunImport(ctx context.Context, snap Snapshot) (DryRunSummar
 	return sum, nil
 }
 
-func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOptions) error {
+func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOptions) (ApplySummary, error) {
 	if snap.SchemaVersion != 1 {
-		return fmt.Errorf("unsupported schema version: %d", snap.SchemaVersion)
+		return ApplySummary{TotalItems: len(snap.Items), Failed: len(snap.Items)}, fmt.Errorf("unsupported schema version: %d", snap.SchemaVersion)
 	}
+	sum := ApplySummary{TotalItems: len(snap.Items)}
 	if opts.DefaultAction == "" {
 		opts.DefaultAction = "merge"
 	}
@@ -300,7 +309,8 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin import tx: %w", err)
+		sum = failedApplySummary(sum)
+		return sum, fmt.Errorf("begin import tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -308,7 +318,8 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 		partNumber := strings.TrimSpace(item.PartNumber)
 		existingID, err := s.findItemIDByPartNumberTx(ctx, tx, partNumber)
 		if err != nil {
-			return err
+			sum = failedApplySummary(sum)
+			return sum, err
 		}
 
 		action := opts.DefaultAction
@@ -317,30 +328,45 @@ func (s *Service) ApplyImport(ctx context.Context, snap Snapshot, opts ApplyOpti
 		}
 		action = strings.ToLower(strings.TrimSpace(action))
 		if action != "merge" && action != "create" && action != "skip" {
-			return fmt.Errorf("invalid action %q for part_number %q", action, partNumber)
+			sum = failedApplySummary(sum)
+			return sum, fmt.Errorf("invalid action %q for part_number %q", action, partNumber)
 		}
 
 		targetItemID := existingID
 		if existingID == "" || action == "create" {
 			targetItemID, err = s.insertItemTx(ctx, tx, item, action == "create")
 			if err != nil {
-				return err
+				sum = failedApplySummary(sum)
+				return sum, err
 			}
 			existingID = targetItemID
+			sum.Created++
+		} else if action == "skip" {
+			sum.Skipped++
+			continue
+		} else {
+			sum.Merged++
 		}
 
-		if existingID != "" && action == "skip" {
-			continue
-		}
 		if err := s.mergeChildrenTx(ctx, tx, targetItemID, item); err != nil {
-			return err
+			sum = failedApplySummary(sum)
+			return sum, err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit import tx: %w", err)
+		sum = failedApplySummary(sum)
+		return sum, fmt.Errorf("commit import tx: %w", err)
 	}
-	return nil
+	return sum, nil
+}
+
+func failedApplySummary(sum ApplySummary) ApplySummary {
+	sum.Created = 0
+	sum.Merged = 0
+	sum.Skipped = 0
+	sum.Failed = sum.TotalItems
+	return sum
 }
 
 func (s *Service) Reindex(ctx context.Context) error {

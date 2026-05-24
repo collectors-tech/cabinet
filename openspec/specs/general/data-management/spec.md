@@ -17,3 +17,12 @@ Cabinet SHALL support search reindex and database repair endpoints.
 - **GIVEN** maintenance operation is requested
 - **WHEN** user triggers reindex
 - **THEN** Cabinet SHALL execute and report maintenance outcome
+
+### Requirement DATA-MANAGEMENT-003: Import apply SHALL report explicit mutation counts
+Cabinet SHALL require import apply flows to return readable created, merged, skipped, and failed counts so users can verify the result of confirmed JSON/CSV imports.
+
+#### Scenario: Apply confirmed import
+- **GIVEN** a user has reviewed an import dry-run and submits an apply request with conflict choices
+- **WHEN** Cabinet applies the import
+- **THEN** the response SHALL include total item, created, merged, skipped, and failed counts
+- **AND** the failed count SHALL be zero only when all requested item actions were committed successfully

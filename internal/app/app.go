@@ -4350,11 +4350,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options); err != nil {
+		sum, err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/import/csv/dry-run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4398,11 +4399,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_parse_csv"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), snap, req.Options); err != nil {
+		sum, err := dataService.ApplyImport(r.Context(), snap, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/reindex", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
