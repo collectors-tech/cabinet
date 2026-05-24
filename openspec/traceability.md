@@ -6,6 +6,9 @@
 
 | Requirement ID | Spec Path | Route/Component Scope | Validating Tests | Status |
 | --- | --- | --- | --- | --- |
+| COMMERCE-LANDED-COST-001 | openspec/specs/commerce/landed-cost/spec.md | deterministic landed-cost allocation engine with equal/value/weight/manual shared component allocation and non-mutating output | TestAllocateLandedCostsByValueWeightAndManualAdjustments (internal/costing/landed_cost_test.go) | implemented |
+| COMMERCE-LANDED-COST-002 | openspec/specs/commerce/landed-cost/spec.md | manual adjustment validation rejects unknown item shares and preserves provenance on successful allocations | TestAllocateLandedCostsRejectsInvalidManualAllocation, TestAllocateLandedCostsByValueWeightAndManualAdjustments (internal/costing/landed_cost_test.go) | implemented |
+| COMMERCE-LANDED-COST-003 | openspec/specs/commerce/landed-cost/spec.md | non-mutating consolidation planner threshold states and deterministic item ordering | TestPlanConsolidationThresholdWarnings (internal/costing/landed_cost_test.go) | implemented |
 | `AI-ASSIST-001` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AI-ASSIST-002` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AI-ASSIST-003` | `openspec/specs/chats/ai-assist/spec.md` | `internal/app/ai_api_test.go` (`TestAIAssistApplyRequiresExplicitConfirmation`) | implemented |
