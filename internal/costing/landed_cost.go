@@ -17,78 +17,78 @@ const (
 )
 
 type ItemInput struct {
-	ID                    string
-	PurchaseCents         int64
-	DomesticShippingCents int64
-	TaxCents              int64
-	WeightGrams           int64
-	Quantity              int
+	ID                    string `json:"id"`
+	PurchaseCents         int64  `json:"purchase_cents"`
+	DomesticShippingCents int64  `json:"domestic_shipping_cents"`
+	TaxCents              int64  `json:"tax_cents"`
+	WeightGrams           int64  `json:"weight_grams"`
+	Quantity              int    `json:"quantity,omitempty"`
 }
 
 type CostComponentInput struct {
-	ID               string
-	Label            string
-	AmountCents      int64
-	AllocationMethod AllocationMethod
-	ManualShares     map[string]int64
-	Provenance       string
+	ID               string           `json:"id"`
+	Label            string           `json:"label,omitempty"`
+	AmountCents      int64            `json:"amount_cents"`
+	AllocationMethod AllocationMethod `json:"allocation_method"`
+	ManualShares     map[string]int64 `json:"manual_shares,omitempty"`
+	Provenance       string           `json:"provenance,omitempty"`
 }
 
 type AllocationRequest struct {
-	Items      []ItemInput
-	Components []CostComponentInput
+	Items      []ItemInput          `json:"items"`
+	Components []CostComponentInput `json:"components"`
 }
 
 type ItemLandedCost struct {
-	ItemID                 string
-	DirectCostCents        int64
-	AllocatedCostCents     int64
-	LandedCostCents        int64
-	ComponentAllocations   []ComponentAllocation
-	AllocationProvenanceID []string
+	ItemID                 string                `json:"item_id"`
+	DirectCostCents        int64                 `json:"direct_cost_cents"`
+	AllocatedCostCents     int64                 `json:"allocated_cost_cents"`
+	LandedCostCents        int64                 `json:"landed_cost_cents"`
+	ComponentAllocations   []ComponentAllocation `json:"component_allocations,omitempty"`
+	AllocationProvenanceID []string              `json:"allocation_provenance_id,omitempty"`
 }
 
 type ComponentAllocation struct {
-	ComponentID      string
-	Label            string
-	Method           AllocationMethod
-	AmountCents      int64
-	Provenance       string
-	AllocationBasis  int64
-	AllocationWeight int64
+	ComponentID      string           `json:"component_id"`
+	Label            string           `json:"label,omitempty"`
+	Method           AllocationMethod `json:"method"`
+	AmountCents      int64            `json:"amount_cents"`
+	Provenance       string           `json:"provenance,omitempty"`
+	AllocationBasis  int64            `json:"allocation_basis"`
+	AllocationWeight int64            `json:"allocation_weight"`
 }
 
 type AllocationResult struct {
-	Items             []ItemLandedCost
-	TotalDirectCents  int64
-	TotalSharedCents  int64
-	TotalLandedCents  int64
-	AllocationSummary []ComponentAllocationSummary
+	Items             []ItemLandedCost             `json:"items"`
+	TotalDirectCents  int64                        `json:"total_direct_cents"`
+	TotalSharedCents  int64                        `json:"total_shared_cents"`
+	TotalLandedCents  int64                        `json:"total_landed_cents"`
+	AllocationSummary []ComponentAllocationSummary `json:"allocation_summary,omitempty"`
 }
 
 type ComponentAllocationSummary struct {
-	ComponentID string
-	Label       string
-	Method      AllocationMethod
-	AmountCents int64
-	Provenance  string
+	ComponentID string           `json:"component_id"`
+	Label       string           `json:"label,omitempty"`
+	Method      AllocationMethod `json:"method"`
+	AmountCents int64            `json:"amount_cents"`
+	Provenance  string           `json:"provenance,omitempty"`
 }
 
 type ConsolidationRequest struct {
-	Items                 []ItemLandedCost
-	ShipmentFeeCents      int64
-	DestinationLimitCents int64
-	WarningBufferCents    int64
+	Items                 []ItemLandedCost `json:"items"`
+	ShipmentFeeCents      int64            `json:"shipment_fee_cents"`
+	DestinationLimitCents int64            `json:"destination_limit_cents"`
+	WarningBufferCents    int64            `json:"warning_buffer_cents"`
 }
 
 type ConsolidationPlan struct {
-	ItemIDs             []string
-	EstimatedValueCents int64
-	EstimatedFeeCents   int64
-	EstimatedTotalCents int64
-	ThresholdState      string
-	Warnings            []string
-	Mutable             bool
+	ItemIDs             []string `json:"item_ids"`
+	EstimatedValueCents int64    `json:"estimated_value_cents"`
+	EstimatedFeeCents   int64    `json:"estimated_fee_cents"`
+	EstimatedTotalCents int64    `json:"estimated_total_cents"`
+	ThresholdState      string   `json:"threshold_state"`
+	Warnings            []string `json:"warnings,omitempty"`
+	Mutable             bool     `json:"mutable"`
 }
 
 func AllocateLandedCosts(req AllocationRequest) (AllocationResult, error) {

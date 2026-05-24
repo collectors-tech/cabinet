@@ -10,12 +10,17 @@ Cabinet SHALL calculate item landed cost from purchase price, domestic shipping,
 - **WHEN** Cabinet allocates landed costs by equal, value, weight, or manual allocation rules
 - **THEN** Cabinet MUST return per-item direct cost, allocated cost, landed cost, allocation method, and provenance for each allocated component without mutating inventory state.
 
+#### Scenario: Preview allocation through the app API
+- **GIVEN** a landed-cost planning request with items, shared cost components, and consolidation thresholds
+- **WHEN** Cabinet receives the request through the commerce API
+- **THEN** Cabinet MUST return an explainable non-mutating allocation and consolidation plan using stable JSON contract fields.
+
 ### Requirement COMMERCE-LANDED-COST-002: Manual adjustments SHALL preserve audit provenance
 Cabinet SHALL require manual landed-cost adjustments to preserve source/provenance metadata and deterministic allocation shares.
 
 #### Scenario: Reject invalid manual allocation
 - **GIVEN** a manual allocation references an item outside the allocation request
-- **WHEN** Cabinet validates the landed-cost request
+- **WHEN** Cabinet validates the landed-cost request directly or through the commerce API
 - **THEN** Cabinet MUST reject the request instead of silently reallocating or dropping the manual adjustment.
 
 ### Requirement COMMERCE-LANDED-COST-003: Consolidation planning SHALL warn near or over destination thresholds

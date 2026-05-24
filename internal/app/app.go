@@ -37,6 +37,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/costing"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
@@ -3096,6 +3097,46 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
+	})
+	mux.HandleFunc("/api/commerce/landed-cost/plan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			costing.AllocationRequest
+			Consolidation struct {
+				ShipmentFeeCents      int64 `json:"shipment_fee_cents"`
+				DestinationLimitCents int64 `json:"destination_limit_cents"`
+				WarningBufferCents    int64 `json:"warning_buffer_cents"`
+			} `json:"consolidation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		allocation, err := costing.AllocateLandedCosts(req.AllocationRequest)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_landed_cost_allocation"}`, http.StatusBadRequest)
+			return
+		}
+		plan, err := costing.PlanConsolidation(costing.ConsolidationRequest{
+			Items:                 allocation.Items,
+			ShipmentFeeCents:      req.Consolidation.ShipmentFeeCents,
+			DestinationLimitCents: req.Consolidation.DestinationLimitCents,
+			WarningBufferCents:    req.Consolidation.WarningBufferCents,
+		})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_consolidation_plan"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":          "landed_cost_plan",
+			"mutable":       false,
+			"allocation":    allocation,
+			"consolidation": plan,
+		})
 	})
 	mux.HandleFunc("/api/commerce/lifecycle", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
