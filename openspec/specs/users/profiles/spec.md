@@ -26,7 +26,7 @@ The authenticated shell SHALL show actionable guidance when active profile/datab
 - **GIVEN** the authenticated shell cannot load the active profile/database context
 - **WHEN** the user opens the database switcher
 - **THEN** the shell SHALL show profile-unavailable guidance with a retry action
-- **AND** retrying after the active profile endpoint recovers SHALL restore the active database label
+- **AND** retrying after the active profile endpoint recovers SHALL restore the active profile name and database/sample classification label
 
 ### Requirement PROFILES-004: Cabinet SHALL create and activate database profiles from the shell switcher
 The authenticated database/profile switcher SHALL let users create a new database profile and SHALL make that profile the active app-wide data context immediately after creation.
