@@ -44,3 +44,12 @@ Cabinet SHALL expose profile-scoped JSON snapshot and CSV item exports as user-d
 - **WHEN** Cabinet offers JSON snapshot and CSV item exports
 - **THEN** the UI SHALL provide clear download actions for both formats
 - **AND** the export endpoints SHALL return attachment filenames that identify the Cabinet snapshot or item CSV export
+
+### Requirement DATA-MANAGEMENT-006: Import apply UI SHALL report mutation counts
+Cabinet SHALL show created, merged, skipped, and failed counts after a confirmed JSON or CSV import apply so users can verify the result before continuing recovery or portability work.
+
+#### Scenario: Import apply count feedback
+- **GIVEN** a user has reviewed a JSON or CSV import dry-run and confirms apply
+- **WHEN** the apply request succeeds
+- **THEN** the UI SHALL report total item, created, merged, skipped, and failed counts returned by the API
+- **AND** the user SHALL remain on the import operations screen for follow-up review
