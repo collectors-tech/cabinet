@@ -15,6 +15,11 @@ Cabinet SHALL calculate item landed cost from purchase price, domestic shipping,
 - **WHEN** Cabinet receives the request through the commerce API
 - **THEN** Cabinet MUST return an explainable non-mutating allocation and consolidation plan using stable JSON contract fields.
 
+#### Scenario: Preview allocation recommendations in the eBay integration UI
+- **GIVEN** an operator opens the eBay integration detail panel with a landed-cost planning payload
+- **WHEN** they preview the plan from Cabinet's landed-cost planner UI
+- **THEN** Cabinet MUST call the non-mutating commerce planning API and show direct, shared, landed, provenance, threshold, and sorted consolidation item evidence without claiming inventory or shipment mutation.
+
 ### Requirement COMMERCE-LANDED-COST-002: Manual adjustments SHALL preserve audit provenance
 Cabinet SHALL require manual landed-cost adjustments to preserve source/provenance metadata and deterministic allocation shares.
 

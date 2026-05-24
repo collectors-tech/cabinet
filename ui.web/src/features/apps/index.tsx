@@ -111,6 +111,7 @@ type IntegrationForm = {
   openAiModel: string
   openAiTestPrompt: string
   buyerInterestPayload: string
+  landedCostPayload: string
   listingLifecycleItemId: string
   listingLifecycleDraftId: string
   listingLifecycleListingId: string
@@ -235,6 +236,40 @@ type SellerListingLifecycleExecuteResult = {
   }
 }
 
+type LandedCostPlanResult = {
+  provider?: string
+  mode?: string
+  mutable?: boolean
+  allocation?: {
+    total_direct_cents?: number
+    total_shared_cents?: number
+    total_landed_cents?: number
+    items?: Array<{
+      item_id?: string
+      direct_cost_cents?: number
+      allocated_cost_cents?: number
+      landed_cost_cents?: number
+      component_allocations?: Array<{
+        component_id?: string
+        label?: string
+        method?: string
+        amount_cents?: number
+        provenance?: string
+      }>
+      allocation_provenance_id?: string[]
+    }>
+  }
+  consolidation?: {
+    item_ids?: string[]
+    estimated_value_cents?: number
+    estimated_fee_cents?: number
+    estimated_total_cents?: number
+    threshold_state?: string
+    warnings?: string[]
+    mutable?: boolean
+  }
+}
+
 type ProfileOption = {
   id: string
   name: string
@@ -273,6 +308,50 @@ const defaultBuyerInterestPayload = JSON.stringify(
   2
 )
 
+const defaultLandedCostPayload = JSON.stringify(
+  {
+    items: [
+      {
+        id: 'card-b',
+        purchase_cents: 30000,
+        domestic_shipping_cents: 1500,
+        tax_cents: 3000,
+        weight_grams: 300,
+      },
+      {
+        id: 'card-a',
+        purchase_cents: 10000,
+        domestic_shipping_cents: 500,
+        tax_cents: 1000,
+        weight_grams: 100,
+      },
+    ],
+    components: [
+      {
+        id: 'intl',
+        label: 'International shipping',
+        amount_cents: 8000,
+        allocation_method: 'weight',
+        provenance: 'forwarder-shipment:SHIP-1',
+      },
+      {
+        id: 'handling',
+        label: 'Handling',
+        amount_cents: 1200,
+        allocation_method: 'equal',
+        provenance: 'forwarder-invoice:INV-1',
+      },
+    ],
+    consolidation: {
+      shipment_fee_cents: 2500,
+      destination_limit_cents: 60000,
+      warning_buffer_cents: 1500,
+    },
+  },
+  null,
+  2
+)
+
 const listingLifecycleCommands: SellerListingLifecycleCommand[] = [
   'draft',
   'publish',
@@ -290,6 +369,10 @@ function sellerListingLifecycleLabel(command: string) {
     relist: 'Relist',
   }
   return labels[command] ?? command
+}
+
+function formatCents(value?: number) {
+  return '$' + ((value ?? 0) / 100).toFixed(2)
 }
 
 function sellerOperationLabel(operation: string) {
@@ -446,6 +529,7 @@ export function Apps({
     openAiTestPrompt:
       'Write one sentence confirming OpenAI is connected to Cabinet.',
     buyerInterestPayload: defaultBuyerInterestPayload,
+    landedCostPayload: defaultLandedCostPayload,
     listingLifecycleItemId: 'item-local-1',
     listingLifecycleDraftId: 'draft-local-1',
     listingLifecycleListingId: 'listing-live-1',
@@ -477,6 +561,10 @@ export function Apps({
     useState<SellerListingLifecyclePreviewResult | null>(null)
   const [listingLifecycleExecution, setListingLifecycleExecution] =
     useState<SellerListingLifecycleExecuteResult | null>(null)
+  const [landedCostWorking, setLandedCostWorking] = useState(false)
+  const [landedCostError, setLandedCostError] = useState<string | null>(null)
+  const [landedCostResult, setLandedCostResult] =
+    useState<LandedCostPlanResult | null>(null)
 
   const loadBootstrap = useCallback(async () => {
     setLoading(true)
@@ -691,6 +779,7 @@ export function Apps({
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
       buyerInterestPayload: defaultBuyerInterestPayload,
+      landedCostPayload: defaultLandedCostPayload,
       listingLifecycleItemId: 'item-local-1',
       listingLifecycleDraftId: 'draft-local-1',
       listingLifecycleListingId: 'listing-live-1',
@@ -706,6 +795,9 @@ export function Apps({
     setListingLifecycleResult(null)
     setListingLifecycleExecution(null)
     setListingLifecycleWorking(null)
+    setLandedCostError(null)
+    setLandedCostResult(null)
+    setLandedCostWorking(false)
     setReplaceToken(!provider.has_token)
   }
 
@@ -785,6 +877,7 @@ export function Apps({
       openAiTestPrompt:
         'Write one sentence confirming OpenAI is connected to Cabinet.',
       buyerInterestPayload: defaultBuyerInterestPayload,
+      landedCostPayload: defaultLandedCostPayload,
       listingLifecycleItemId: 'item-local-1',
       listingLifecycleDraftId: 'draft-local-1',
       listingLifecycleListingId: 'listing-live-1',
@@ -800,6 +893,9 @@ export function Apps({
     setListingLifecycleResult(null)
     setListingLifecycleExecution(null)
     setListingLifecycleWorking(null)
+    setLandedCostError(null)
+    setLandedCostResult(null)
+    setLandedCostWorking(false)
   }
 
   useEffect(() => {
@@ -1281,6 +1377,41 @@ export function Apps({
       )
     } finally {
       setListingLifecycleWorking(null)
+    }
+  }
+
+  const previewLandedCostPlan = async () => {
+    if (!editingProvider || editingProvider.provider_id !== 'ebay') {
+      return
+    }
+    setLandedCostWorking(true)
+    setLandedCostError(null)
+    setLandedCostResult(null)
+    try {
+      const parsed = JSON.parse(form.landedCostPayload) as unknown
+      const response = await fetch('/api/commerce/landed-cost/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+      })
+      const payload = (await response.json()) as LandedCostPlanResult
+      setLandedCostResult(payload)
+      if (!response.ok) {
+        throw new Error('landed_cost_plan_failed_' + response.status)
+      }
+      setActionMessage(
+        'Landed-cost plan previewed without mutating inventory or shipment state.'
+      )
+    } catch (error) {
+      setLandedCostError(
+        error instanceof SyntaxError
+          ? 'Landed-cost payload must be valid JSON.'
+          : error instanceof Error
+            ? error.message
+            : 'landed_cost_plan_failed'
+      )
+    } finally {
+      setLandedCostWorking(false)
     }
   }
 
@@ -2435,6 +2566,152 @@ export function Apps({
                           </div>
                         ) : null}
                       </section>
+                      <details
+                        className='rounded-md border p-3'
+                        data-testid='ebay-landed-cost-planner-panel'
+                      >
+                        <summary className='cursor-pointer text-sm font-medium'>
+                          Landed Cost Planner
+                        </summary>
+                        <div className='mt-3 space-y-3'>
+                          <div className='flex flex-wrap items-start justify-between gap-3'>
+                            <div>
+                              <p className='font-medium'>Landed Cost Planner</p>
+                              <p className='text-xs text-muted-foreground'>
+                                Preview allocation, provenance, and
+                                consolidation thresholds from the commerce
+                                planning API.
+                              </p>
+                            </div>
+                            <span
+                              className='rounded bg-muted px-2 py-1 text-xs text-muted-foreground'
+                              data-testid='ebay-landed-cost-mutation-status'
+                            >
+                              Preview only / no mutation
+                            </span>
+                          </div>
+                          <Label
+                            className='block'
+                            htmlFor='ebay-landed-cost-payload'
+                          >
+                            Planning payload
+                          </Label>
+                          <textarea
+                            id='ebay-landed-cost-payload'
+                            className='min-h-40 w-full rounded-md border bg-background p-2 font-mono text-xs'
+                            data-testid='ebay-landed-cost-payload'
+                            value={form.landedCostPayload}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                landedCostPayload: e.target.value,
+                              }))
+                            }
+                          />
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            data-testid='ebay-landed-cost-preview'
+                            disabled={landedCostWorking}
+                            onClick={() => void previewLandedCostPlan()}
+                          >
+                            {landedCostWorking
+                              ? 'Previewing...'
+                              : 'Preview Plan'}
+                          </Button>
+                          {landedCostError ? (
+                            <p
+                              className='text-xs text-destructive'
+                              data-testid='ebay-landed-cost-error'
+                            >
+                              {landedCostError}
+                            </p>
+                          ) : null}
+                          {landedCostResult?.allocation &&
+                          landedCostResult.consolidation ? (
+                            <div
+                              className='rounded-md bg-muted/40 p-3 text-xs'
+                              data-testid='ebay-landed-cost-result'
+                            >
+                              <p className='font-medium'>
+                                Mode: {landedCostResult.mode} / Mutable:{' '}
+                                {landedCostResult.mutable ? 'yes' : 'no'}
+                              </p>
+                              <p className='mt-1 text-muted-foreground'>
+                                Direct:{' '}
+                                {formatCents(
+                                  landedCostResult.allocation
+                                    .total_direct_cents
+                                )}{' '}
+                                / Shared:{' '}
+                                {formatCents(
+                                  landedCostResult.allocation
+                                    .total_shared_cents
+                                )}{' '}
+                                / Landed:{' '}
+                                {formatCents(
+                                  landedCostResult.allocation
+                                    .total_landed_cents
+                                )}
+                              </p>
+                              <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                                {(landedCostResult.allocation.items ?? []).map(
+                                  (item) => (
+                                    <div
+                                      key={item.item_id}
+                                      className='rounded bg-background/70 p-2'
+                                    >
+                                      <p className='font-medium'>
+                                        {item.item_id}: landed{' '}
+                                        {formatCents(item.landed_cost_cents)}
+                                      </p>
+                                      <p className='mt-1 text-muted-foreground'>
+                                        Allocated:{' '}
+                                        {formatCents(
+                                          item.allocated_cost_cents
+                                        )}{' '}
+                                        / Direct:{' '}
+                                        {formatCents(item.direct_cost_cents)}
+                                      </p>
+                                      <p className='mt-1 text-muted-foreground'>
+                                        Provenance:{' '}
+                                        {(
+                                          item.allocation_provenance_id ?? []
+                                        ).join(', ') || 'none'}
+                                      </p>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                              <p className='mt-3 text-muted-foreground'>
+                                Consolidation:{' '}
+                                {landedCostResult.consolidation
+                                  .threshold_state ?? 'unknown'}{' '}
+                                / Total:{' '}
+                                {formatCents(
+                                  landedCostResult.consolidation
+                                    .estimated_total_cents
+                                )}{' '}
+                                / Items:{' '}
+                                {(
+                                  landedCostResult.consolidation.item_ids ?? []
+                                ).join(', ')}
+                              </p>
+                              {(
+                                landedCostResult.consolidation.warnings ?? []
+                              ).length > 0 ? (
+                                <p className='mt-1 text-muted-foreground'>
+                                  Warnings:{' '}
+                                  {landedCostResult.consolidation.warnings?.join(
+                                    ', '
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
                       <details
                         className='rounded-md border p-3'
                         data-testid='ebay-buyer-interest-sync-panel'

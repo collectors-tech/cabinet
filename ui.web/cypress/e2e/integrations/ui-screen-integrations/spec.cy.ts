@@ -463,6 +463,119 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'blocked')
   })
 
+  it('COMMERCE-LANDED-COST-001 + COMMERCE-LANDED-COST-003: previews landed-cost recommendations without mutation', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            seller_operations: [],
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    })
+    cy.intercept('POST', '/api/commerce/landed-cost/plan', (req) => {
+      expect(req.body.items).to.have.length(2)
+      expect(req.body.components[0].allocation_method).to.eq('weight')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'cabinet',
+          mode: 'landed_cost_plan',
+          mutable: false,
+          allocation: {
+            total_direct_cents: 46000,
+            total_shared_cents: 9200,
+            total_landed_cents: 55200,
+            items: [
+              {
+                item_id: 'card-b',
+                direct_cost_cents: 34500,
+                allocated_cost_cents: 6600,
+                landed_cost_cents: 41100,
+                allocation_provenance_id: [
+                  'forwarder-shipment:SHIP-1',
+                  'forwarder-invoice:INV-1',
+                ],
+              },
+              {
+                item_id: 'card-a',
+                direct_cost_cents: 11500,
+                allocated_cost_cents: 2600,
+                landed_cost_cents: 14100,
+                allocation_provenance_id: [
+                  'forwarder-shipment:SHIP-1',
+                  'forwarder-invoice:INV-1',
+                ],
+              },
+            ],
+          },
+          consolidation: {
+            item_ids: ['card-a', 'card-b'],
+            estimated_value_cents: 55200,
+            estimated_fee_cents: 2500,
+            estimated_total_cents: 57700,
+            threshold_state: 'under_limit',
+            warnings: [],
+            mutable: false,
+          },
+        },
+      })
+    }).as('landedCostPlan')
+
+    signIn()
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="ebay-landed-cost-planner-panel"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[data-testid="ebay-landed-cost-planner-panel"] summary').click()
+    cy.get('[data-testid="ebay-landed-cost-mutation-status"]').should(
+      'contain',
+      'Preview only / no mutation'
+    )
+    cy.get('[data-testid="ebay-landed-cost-payload"]').should(
+      'contain.value',
+      'forwarder-shipment:SHIP-1'
+    )
+    cy.get('[data-testid="ebay-landed-cost-preview"]').click()
+    cy.wait('@landedCostPlan')
+    cy.contains(
+      'Landed-cost plan previewed without mutating inventory or shipment state.'
+    ).should('be.visible')
+    cy.get('[data-testid="ebay-landed-cost-result"]')
+      .should('contain', 'Mode: landed_cost_plan / Mutable: no')
+      .and('contain', 'Direct: $460.00 / Shared: $92.00 / Landed: $552.00')
+      .and('contain', 'card-b: landed $411.00')
+      .and('contain', 'forwarder-shipment:SHIP-1')
+      .and('contain', 'Consolidation: under_limit / Total: $577.00')
+      .and('contain', 'Items: card-a, card-b')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
