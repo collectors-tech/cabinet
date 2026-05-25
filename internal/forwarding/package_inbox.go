@@ -88,6 +88,25 @@ type PackageLink struct {
 	UpdatedAt         string `json:"updated_at,omitempty"`
 }
 
+type PackageMatchSignal struct {
+	Name     string  `json:"name"`
+	Matched  bool    `json:"matched"`
+	Weight   float64 `json:"weight"`
+	Evidence string  `json:"evidence"`
+}
+
+type PackageMatchSuggestion struct {
+	PackageID         string               `json:"package_id"`
+	ItemID            string               `json:"item_id"`
+	LifecycleEntryID  string               `json:"lifecycle_entry_id,omitempty"`
+	ExpectedArrivalID string               `json:"expected_arrival_id,omitempty"`
+	Confidence        float64              `json:"confidence"`
+	ConfidenceLabel   string               `json:"confidence_label"`
+	Explanation       []string             `json:"explanation"`
+	Signals           []PackageMatchSignal `json:"signals"`
+	AuditTrail        []string             `json:"audit_trail"`
+}
+
 type PackageCSVRowError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`
@@ -467,6 +486,71 @@ func (s *Service) ListPackageLinks(ctx context.Context, profileID, packageID str
 	return out, rows.Err()
 }
 
+func (s *Service) SuggestPackageMatches(ctx context.Context, profileID, packageID string) ([]PackageMatchSuggestion, error) {
+	profileID = strings.TrimSpace(profileID)
+	packageID = strings.TrimSpace(packageID)
+	if profileID == "" {
+		return nil, fmt.Errorf("profile_id is required")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			p.id, p.external_package_id, p.shipment_id, p.tracking_number, p.received_at, p.sender, p.weight_grams, p.raw_payload_json,
+			i.id, i.title, i.brand, i.part_number,
+			COALESCE(l.id, ''), COALESCE(l.source, ''), COALESCE(l.external_ref, ''), COALESCE(l.quantity, 0), COALESCE(l.notes, ''),
+			a.id, a.external_ref, a.quantity, a.expected_on, a.notes
+		FROM forwarder_packages p
+		JOIN expected_arrivals a ON a.profile_id = p.profile_id
+		JOIN canonical_items i ON i.id = a.item_id AND i.profile_id = p.profile_id
+		LEFT JOIN commerce_lifecycle_entries l ON l.id = a.lifecycle_entry_id AND l.profile_id = p.profile_id AND l.item_id = i.id
+		LEFT JOIN forwarder_package_links existing ON existing.package_id = p.id
+		WHERE p.profile_id = ? AND (? = '' OR p.id = ?) AND existing.id IS NULL
+		ORDER BY p.updated_at DESC, a.updated_at DESC, i.id ASC
+	`, profileID, packageID, packageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []PackageMatchSuggestion
+	for rows.Next() {
+		var pkg matchPackageRow
+		var item matchItemRow
+		var lifecycle matchLifecycleRow
+		var arrival matchArrivalRow
+		var rawJSON string
+		if err := rows.Scan(
+			&pkg.ID, &pkg.ExternalPackageID, &pkg.ShipmentID, &pkg.TrackingNumber, &pkg.ReceivedAt, &pkg.Sender, &pkg.WeightGrams, &rawJSON,
+			&item.ID, &item.Title, &item.Brand, &item.PartNumber,
+			&lifecycle.ID, &lifecycle.Source, &lifecycle.ExternalRef, &lifecycle.Quantity, &lifecycle.Notes,
+			&arrival.ID, &arrival.ExternalRef, &arrival.Quantity, &arrival.ExpectedOn, &arrival.Notes,
+		); err != nil {
+			return nil, err
+		}
+		raw, err := decodePayload(rawJSON)
+		if err != nil {
+			return nil, err
+		}
+		pkg.RawPayload = raw
+		suggestion := scorePackageMatch(pkg, item, lifecycle, arrival)
+		if suggestion.Confidence > 0 {
+			out = append(out, suggestion)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Confidence == out[j].Confidence {
+			if out[i].PackageID == out[j].PackageID {
+				return out[i].ExpectedArrivalID < out[j].ExpectedArrivalID
+			}
+			return out[i].PackageID < out[j].PackageID
+		}
+		return out[i].Confidence > out[j].Confidence
+	})
+	return out, nil
+}
+
 func (s *Service) requirePackageProfile(ctx context.Context, profileID, packageID string) error {
 	var found string
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM forwarder_packages WHERE id = ? AND profile_id = ?`, packageID, profileID).Scan(&found)
@@ -504,6 +588,178 @@ func (s *Service) requireArrivalProfile(ctx context.Context, profileID, arrivalI
 		return fmt.Errorf("expected arrival not found for profile item")
 	}
 	return err
+}
+
+type matchPackageRow struct {
+	ID                string
+	ExternalPackageID string
+	ShipmentID        string
+	TrackingNumber    string
+	ReceivedAt        string
+	Sender            string
+	WeightGrams       int
+	RawPayload        map[string]any
+}
+
+type matchItemRow struct {
+	ID         string
+	Title      string
+	Brand      string
+	PartNumber string
+}
+
+type matchLifecycleRow struct {
+	ID          string
+	Source      string
+	ExternalRef string
+	Quantity    int
+	Notes       string
+}
+
+type matchArrivalRow struct {
+	ID          string
+	ExternalRef string
+	Quantity    int
+	ExpectedOn  string
+	Notes       string
+}
+
+func scorePackageMatch(pkg matchPackageRow, item matchItemRow, lifecycle matchLifecycleRow, arrival matchArrivalRow) PackageMatchSuggestion {
+	suggestion := PackageMatchSuggestion{
+		PackageID:         pkg.ID,
+		ItemID:            item.ID,
+		LifecycleEntryID:  lifecycle.ID,
+		ExpectedArrivalID: arrival.ID,
+		AuditTrail: []string{
+			"match suggestion generated without mutating package reconciliation links",
+			"signals scored deterministically from package, item, lifecycle, and expected-arrival fields",
+		},
+	}
+	addSignal := func(name string, weight float64, matched bool, evidence string) {
+		signal := PackageMatchSignal{Name: name, Matched: matched, Weight: weight, Evidence: evidence}
+		suggestion.Signals = append(suggestion.Signals, signal)
+		if matched {
+			suggestion.Confidence += weight
+			suggestion.Explanation = append(suggestion.Explanation, evidence)
+		}
+	}
+
+	trackingHaystack := strings.Join([]string{arrival.ExternalRef, arrival.Notes, lifecycle.ExternalRef, lifecycle.Notes}, " ")
+	addSignal("tracking", 0.35, containsToken(trackingHaystack, pkg.TrackingNumber), "package tracking number appears in purchase or expected-arrival evidence")
+
+	externalHaystack := strings.Join([]string{arrival.ExternalRef, arrival.Notes, lifecycle.ExternalRef, lifecycle.Notes}, " ")
+	addSignal("package_or_order_reference", 0.25, containsToken(externalHaystack, pkg.ExternalPackageID) || containsToken(externalHaystack, pkg.ShipmentID), "package or shipment id appears in purchase/order evidence")
+
+	titleNeedle := strings.Join([]string{rawString(pkg.RawPayload, "title"), rawString(pkg.RawPayload, "item_title"), rawString(pkg.RawPayload, "description")}, " ")
+	titleHaystack := strings.Join([]string{item.Title, item.Brand, item.PartNumber, lifecycle.Notes, arrival.Notes}, " ")
+	addSignal("title_or_part", 0.20, sharedMeaningfulToken(titleNeedle, titleHaystack), "package item text overlaps the purchase item title, brand, or part number")
+
+	sellerNeedle := strings.Join([]string{pkg.Sender, rawString(pkg.RawPayload, "seller"), rawString(pkg.RawPayload, "merchant")}, " ")
+	sellerHaystack := strings.Join([]string{lifecycle.Source, lifecycle.Notes, arrival.Notes}, " ")
+	addSignal("seller_or_source", 0.10, sharedMeaningfulToken(sellerNeedle, sellerHaystack), "package sender/source overlaps purchase source evidence")
+
+	quantity := rawInt(pkg.RawPayload, "quantity")
+	addSignal("quantity", 0.05, quantity > 0 && (quantity == lifecycle.Quantity || quantity == arrival.Quantity), "package quantity matches lifecycle or expected-arrival quantity")
+
+	addSignal("date", 0.05, sameDate(pkg.ReceivedAt, arrival.ExpectedOn), "package received date matches expected-arrival date")
+
+	suggestion.Confidence = roundConfidence(suggestion.Confidence)
+	suggestion.ConfidenceLabel = confidenceLabel(suggestion.Confidence)
+	if len(suggestion.Explanation) == 0 {
+		suggestion.Explanation = []string{"no positive matching signals found"}
+	}
+	return suggestion
+}
+
+func containsToken(haystack, needle string) bool {
+	needle = normalizeMatchText(needle)
+	if len(needle) < 3 {
+		return false
+	}
+	return strings.Contains(normalizeMatchText(haystack), needle)
+}
+
+func sharedMeaningfulToken(left, right string) bool {
+	right = normalizeMatchText(right)
+	for _, token := range strings.Fields(normalizeMatchText(left)) {
+		if len(token) < 3 {
+			continue
+		}
+		if strings.Contains(right, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeMatchText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer("-", " ", "_", " ", "/", " ", "\\", " ", ".", " ", ",", " ", ":", " ")
+	return strings.Join(strings.Fields(replacer.Replace(value)), " ")
+}
+
+func rawString(payload map[string]any, key string) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch value := value.(type) {
+	case string:
+		return value
+	case fmt.Stringer:
+		return value.String()
+	default:
+		return fmt.Sprint(value)
+	}
+}
+
+func rawInt(payload map[string]any, key string) int {
+	if len(payload) == 0 {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case string:
+		parsed, _ := strconv.Atoi(strings.TrimSpace(value))
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func sameDate(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if len(left) >= 10 {
+		left = left[:10]
+	}
+	if len(right) >= 10 {
+		right = right[:10]
+	}
+	return left != "" && left == right
+}
+
+func roundConfidence(value float64) float64 {
+	return float64(int(value*100+0.5)) / 100
+}
+
+func confidenceLabel(confidence float64) string {
+	switch {
+	case confidence >= 0.80:
+		return "high"
+	case confidence >= 0.50:
+		return "medium"
+	default:
+		return "low"
+	}
 }
 
 func normalizeProvider(provider string) string {
