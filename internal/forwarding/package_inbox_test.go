@@ -222,3 +222,60 @@ PKG-READY,ready_to_ship,250
 		t.Fatalf("expected row 4 weight error, got %+v", rowErrors[1])
 	}
 }
+
+func TestParsePackageEmailBuildsImportAndPreservesMessageProvenance(t *testing.T) {
+	t.Parallel()
+
+	email := strings.NewReader(`From: notifications@stackry.example
+Subject: Package PKG-EMAIL-1 received at your locker
+
+Package ID: PKG-EMAIL-1
+Status: Ready to Ship
+Shipment ID: SHIP-EMAIL-1
+Tracking Number: 1ZEMAIL
+Received At: 2026-05-25T04:30:00Z
+Sender: eBay seller
+Warehouse Location: Suite A-42
+Weight: 425 g
+`)
+	imported, err := ParsePackageEmail("profile-email", ProviderStackry, "msg-123", email)
+	if err != nil {
+		t.Fatalf("ParsePackageEmail() error = %v", err)
+	}
+
+	if imported.ProfileID != "profile-email" || imported.Provider != ProviderStackry || imported.Source != SourceEmail {
+		t.Fatalf("expected email import identity, got %+v", imported)
+	}
+	if imported.ExternalPackageID != "PKG-EMAIL-1" || imported.Status != StatusReadyToShip || imported.WeightGrams != 425 {
+		t.Fatalf("expected email fields to map into package import, got %+v", imported)
+	}
+	if imported.ShipmentID != "SHIP-EMAIL-1" || imported.TrackingNumber != "1ZEMAIL" {
+		t.Fatalf("expected shipment and tracking fields, got %+v", imported)
+	}
+	if imported.RawPayload["source"] != "email" || imported.RawPayload["message_id"] != "msg-123" {
+		t.Fatalf("expected message provenance to be retained, got %+v", imported.RawPayload)
+	}
+	pkg, err := NormalizePackageImport(imported)
+	if err != nil {
+		t.Fatalf("NormalizePackageImport(email import) error = %v", err)
+	}
+	if pkg.ProvenanceKey != "stackry:email:PKG-EMAIL-1" {
+		t.Fatalf("expected email provenance key, got %q", pkg.ProvenanceKey)
+	}
+}
+
+func TestParsePackageEmailRejectsMissingPackageIdentity(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParsePackageEmail("profile-email", ProviderStackry, "msg-missing", strings.NewReader(`Subject: package update
+
+Status: received
+Weight: 100 g
+`))
+	if err == nil {
+		t.Fatal("expected missing external package id to fail")
+	}
+	if got := err.Error(); got != "external_package_id is required" {
+		t.Fatalf("expected identity validation error, got %q", got)
+	}
+}

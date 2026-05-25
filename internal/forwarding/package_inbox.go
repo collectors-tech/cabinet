@@ -161,6 +161,41 @@ func ParsePackageCSV(profileID, provider string, r io.Reader) ([]PackageImport, 
 	return imports, rowErrors, nil
 }
 
+func ParsePackageEmail(profileID, provider, messageID string, r io.Reader) (PackageImport, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return PackageImport{}, fmt.Errorf("read forwarder package email: %w", err)
+	}
+	body := string(data)
+	fields := parseEmailFields(body)
+	weightGrams, err := parseEmailWeight(firstEmailValue(fields, "weight_grams", "weight"))
+	if err != nil {
+		return PackageImport{}, err
+	}
+	imported := PackageImport{
+		ProfileID:         profileID,
+		Provider:          provider,
+		Source:            SourceEmail,
+		ExternalPackageID: firstEmailValue(fields, "external_package_id", "package_id", "stackry_package_id"),
+		ShipmentID:        firstEmailValue(fields, "shipment_id", "shipment", "shipment_number"),
+		TrackingNumber:    firstEmailValue(fields, "tracking_number", "tracking", "tracking_no"),
+		Status:            normalizeEmailStatus(firstEmailValue(fields, "status", "package_status")),
+		ReceivedAt:        firstEmailValue(fields, "received_at", "received", "date_received"),
+		Sender:            firstEmailValue(fields, "sender", "merchant", "from"),
+		WarehouseLocation: firstEmailValue(fields, "warehouse_location", "warehouse", "suite"),
+		WeightGrams:       weightGrams,
+		RawPayload: map[string]any{
+			"source":     SourceEmail,
+			"message_id": strings.TrimSpace(messageID),
+			"body":       body,
+		},
+	}
+	if _, err := NormalizePackageImport(imported); err != nil {
+		return PackageImport{}, err
+	}
+	return imported, nil
+}
+
 type MemoryInbox struct {
 	mu       sync.Mutex
 	packages map[string]Package
@@ -388,6 +423,58 @@ func parseCSVWeight(value string) (int, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return 0, nil
+	}
+	weight, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("weight_grams must be an integer")
+	}
+	if weight < 0 {
+		return 0, fmt.Errorf("weight_grams must be non-negative")
+	}
+	return weight, nil
+}
+
+func parseEmailFields(body string) map[string]string {
+	fields := map[string]string{}
+	for _, line := range strings.Split(body, "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		key = normalizeCSVHeader(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		fields[key] = value
+	}
+	return fields
+}
+
+func firstEmailValue(fields map[string]string, names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(fields[normalizeCSVHeader(name)]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeEmailStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	status = strings.ReplaceAll(status, "-", "_")
+	status = strings.ReplaceAll(status, " ", "_")
+	return status
+}
+
+func parseEmailWeight(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	parts := strings.Fields(value)
+	if len(parts) > 0 {
+		value = parts[0]
 	}
 	weight, err := strconv.Atoi(value)
 	if err != nil {
