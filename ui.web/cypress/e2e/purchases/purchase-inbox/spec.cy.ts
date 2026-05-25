@@ -316,7 +316,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'stackry:csv:STK-CSV-2001')
   })
 
-  it('INTEGRATION-036 imports email forwarder package notices and reports validation errors', () => {
+  it('INTEGRATION-036/037 imports email notices and shows package detail provenance', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -334,10 +334,17 @@ describe('purchases/purchase-inbox', () => {
           shipment_id: 'SHIP-3001',
           tracking_number: '1ZEMAIL3001',
           status: 'received',
+          received_at: '2026-05-25T05:00:00Z',
           sender: 'Stackry Intake',
           warehouse_location: 'Locker E-5',
           weight_grams: 640,
           provenance_key: 'stackry:email:STK-EMAIL-3001',
+          raw_payload: {
+            message_id: 'manual-email-notice',
+            sender: 'Stackry Intake',
+          },
+          created_at: '2026-05-25T05:01:00Z',
+          updated_at: '2026-05-25T05:02:00Z',
         },
       },
     }).as('importForwarderPackageEmail')
@@ -354,10 +361,17 @@ describe('purchases/purchase-inbox', () => {
             shipment_id: 'SHIP-3001',
             tracking_number: '1ZEMAIL3001',
             status: 'received',
+            received_at: '2026-05-25T05:00:00Z',
             sender: 'Stackry Intake',
             warehouse_location: 'Locker E-5',
             weight_grams: 640,
             provenance_key: 'stackry:email:STK-EMAIL-3001',
+            raw_payload: {
+              message_id: 'manual-email-notice',
+              sender: 'Stackry Intake',
+            },
+            created_at: '2026-05-25T05:01:00Z',
+            updated_at: '2026-05-25T05:02:00Z',
           },
         ],
         summary: { count: 1 },
@@ -390,6 +404,21 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'stackry / email')
       .and('contain', 'Stackry Intake')
       .and('contain', 'stackry:email:STK-EMAIL-3001')
+    cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
+    cy.get('[data-testid="forwarder-package-detail"]')
+      .should('contain', 'Shipment ID')
+      .and('contain', 'SHIP-3001')
+      .and('contain', 'Tracking number')
+      .and('contain', '1ZEMAIL3001')
+      .and('contain', 'Received')
+      .and('contain', '2026-05-25T05:00:00Z')
+      .and('contain', 'Created')
+      .and('contain', '2026-05-25T05:01:00Z')
+      .and('contain', 'Updated')
+      .and('contain', '2026-05-25T05:02:00Z')
+    cy.get('[data-testid="forwarder-package-raw-payload"]')
+      .should('contain', 'manual-email-notice')
+      .and('contain', 'Stackry Intake')
 
     cy.intercept('POST', '/api/forwarding/packages/import-email', {
       statusCode: 400,
