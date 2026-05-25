@@ -81,3 +81,11 @@ Cabinet SHALL let a profile-scoped forwarder package be linked to one confirmed 
 - **GIVEN** a user has an active profile with a persisted forwarder package, inventory item, purchase lifecycle entry, and expected arrival
 - **WHEN** Cabinet receives a reconciliation link for that package, item, lifecycle entry, and arrival
 - **THEN** Cabinet MUST verify every target belongs to the active profile, persist a durable package-to-purchase link with source/notes provenance, return the saved link through the API, and reject attempts to relink the same package to a different item or arrival.
+
+### Requirement INTEGRATION-039: Forwarder package inbox SHALL expose reconciliation links in the UI
+Cabinet SHALL let a user review and create package-to-purchase-arrival reconciliation links from the forwarder package inbox detail view, using the profile-scoped package-link API and surfacing ambiguous-link failures inline.
+
+#### Scenario: Link a package from the inbox detail panel
+- **GIVEN** a user has opened a persisted forwarder package detail record from the inbox
+- **WHEN** the user reviews existing link state and submits an item, lifecycle entry, expected arrival, source, and notes
+- **THEN** Cabinet MUST create the package reconciliation link through \`/api/forwarding/package-links\`, display the saved link result, refresh the package link state, and show API validation errors inline when the package is already linked to a different target.

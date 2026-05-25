@@ -167,6 +167,10 @@ describe('purchases/purchase-inbox', () => {
         summary: { count: 1 },
       },
     }).as('listForwarderPackages')
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], summary: { count: 0 } },
+    }).as('listForwarderPackageLinks')
     cy.intercept('POST', '/api/forwarding/packages', {
       statusCode: 200,
       body: {
@@ -287,6 +291,10 @@ describe('purchases/purchase-inbox', () => {
         summary: { count: 1 },
       },
     }).as('listForwarderPackages')
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], summary: { count: 0 } },
+    }).as('listForwarderPackageLinks')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inbox',
@@ -377,6 +385,10 @@ describe('purchases/purchase-inbox', () => {
         summary: { count: 1 },
       },
     }).as('listForwarderPackages')
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], summary: { count: 0 } },
+    }).as('listForwarderPackageLinks')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inbox',
@@ -405,6 +417,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Stackry Intake')
       .and('contain', 'stackry:email:STK-EMAIL-3001')
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
+    cy.wait('@listForwarderPackageLinks')
     cy.get('[data-testid="forwarder-package-detail"]')
       .should('contain', 'Shipment ID')
       .and('contain', 'SHIP-3001')
@@ -437,5 +450,96 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-error"]')
       .should('be.visible')
       .and('contain', 'external_package_id is required')
+  })
+
+  it('INTEGRATION-039 links forwarder packages to purchase arrivals from the inbox UI', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_link_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'email',
+            external_package_id: 'STK-LINK-4001',
+            shipment_id: 'SHIP-4001',
+            tracking_number: '1ZLINK4001',
+            status: 'received',
+            sender: 'Stackry Intake',
+            warehouse_location: 'Locker L-4',
+            weight_grams: 720,
+            provenance_key: 'stackry:email:STK-LINK-4001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], summary: { count: 0 } },
+    }).as('listForwarderPackageLinks')
+    cy.intercept('POST', '/api/forwarding/package-links', {
+      statusCode: 200,
+      body: {
+        mode: 'forwarder_package_reconciliation_link',
+        link: {
+          id: 'fwdpkg_link_001:item-expected-001:arrival-expected-001',
+          profile_id: 'e2e-profile-001',
+          package_id: 'fwdpkg_link_001',
+          item_id: 'item-expected-001',
+          lifecycle_entry_id: 'life-entry-001',
+          expected_arrival_id: 'arrival-expected-001',
+          source: 'manual_review',
+          notes: 'Matched from package inbox review',
+        },
+      },
+    }).as('saveForwarderPackageLink')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-refresh"]').click()
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
+    cy.wait('@listForwarderPackageLinks')
+      .its('request.url')
+      .should('include', 'package_id=fwdpkg_link_001')
+    cy.get('[data-testid="forwarder-package-link-panel"]')
+      .should('be.visible')
+      .and('contain', 'No reconciliation link recorded')
+    cy.get('[data-testid="forwarder-package-link-save"]').click()
+    cy.wait('@saveForwarderPackageLink')
+      .its('request.body')
+      .should('include', {
+        package_id: 'fwdpkg_link_001',
+        item_id: 'item-expected-001',
+        lifecycle_entry_id: 'life-entry-001',
+        expected_arrival_id: 'arrival-expected-001',
+        source: 'manual_review',
+      })
+    cy.get('[data-testid="forwarder-package-link-result"]')
+      .should('be.visible')
+      .and('contain', 'Linked package to item item-expected-001')
+
+    cy.intercept('POST', '/api/forwarding/package-links', {
+      statusCode: 400,
+      body: {
+        error: 'invalid_forwarder_package_link',
+        message: 'forwarder package already linked to a different target',
+      },
+    }).as('rejectAmbiguousForwarderPackageLink')
+    cy.get('[data-testid="forwarder-package-link-arrival"]')
+      .clear()
+      .type('arrival-other-002')
+    cy.get('[data-testid="forwarder-package-link-save"]').click()
+    cy.wait('@rejectAmbiguousForwarderPackageLink')
+    cy.get('[data-testid="forwarder-package-link-error"]')
+      .should('be.visible')
+      .and('contain', 'already linked to a different target')
   })
 })
