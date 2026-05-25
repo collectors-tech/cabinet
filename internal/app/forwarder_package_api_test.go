@@ -49,3 +49,49 @@ func TestForwarderPackageAPIRejectsInvalidImports(t *testing.T) {
 		t.Fatalf("expected invalid package import to fail, status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
+
+func TestForwarderPackageCSVImportAPIUpsertsValidRowsAndReportsRowErrors(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	body := `{
+		"profile_id":"profile-csv-api",
+		"provider":"Stackry",
+		"csv":"Stackry Package ID,Status,Shipment ID,Tracking Number,Warehouse Location,Weight Grams\nPKG-CSV-API-1,received,SHIP-1,TRACK-1,A-12,425\n,received,SHIP-2,TRACK-2,B-7,510\nPKG-CSV-API-3,ready_to_ship,SHIP-3,TRACK-3,C-4,invalid\n"
+	}`
+	resp := doRequest(t, a, http.MethodPost, "/api/forwarding/packages/import-csv", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("csv import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Imported []map[string]any `json:"imported"`
+		Errors   []map[string]any `json:"errors"`
+		Summary  map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode csv import payload: %v", err)
+	}
+	if payload.Summary["imported"] != 1 || payload.Summary["errors"] != 2 {
+		t.Fatalf("expected one imported row and two errors, got %+v", payload.Summary)
+	}
+	if len(payload.Imported) != 1 || payload.Imported[0]["external_package_id"] != "PKG-CSV-API-1" || payload.Imported[0]["source"] != "csv" {
+		t.Fatalf("expected imported CSV package response, got %+v", payload.Imported)
+	}
+	if len(payload.Errors) != 2 {
+		t.Fatalf("expected two row errors, got %+v", payload.Errors)
+	}
+	listed := doRequest(t, a, http.MethodGet, "/api/forwarding/packages?profile_id=profile-csv-api", nil, nil)
+	if listed.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listed.Code, listed.Body.String())
+	}
+	var listPayload struct {
+		Packages []map[string]any
+		Summary  map[string]int
+	}
+	if err := json.NewDecoder(listed.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list payload: %v", err)
+	}
+	if listPayload.Summary["count"] != 1 || listPayload.Packages[0]["provenance_key"] != "stackry:csv:PKG-CSV-API-1" {
+		t.Fatalf("expected only valid CSV package to persist, got %+v", listPayload)
+	}
+}

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   Inbox,
+  FileUp,
   Loader2,
   PackagePlus,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -107,6 +109,20 @@ type PackageImportForm = {
   weight_grams: string
 }
 
+type ForwarderPackageCSVError = {
+  row?: number
+  error: string
+}
+
+type ForwarderPackageCSVImportResponse = {
+  imported?: ForwarderPackage[]
+  errors?: ForwarderPackageCSVError[]
+  summary?: {
+    imported?: number
+    errors?: number
+  }
+}
+
 const sampleCards: PurchaseCard[] = [
   {
     order_id: '20-14595-70928',
@@ -141,6 +157,11 @@ const defaultPackageImport: PackageImportForm = {
   weight_grams: '420',
 }
 
+const defaultPackageCSV = [
+  'Stackry Package ID,Status,Shipment ID,Tracking Number,Warehouse Location,Weight Grams',
+  'STK-CSV-2001,received,SHIP-2001,1ZCSV2001,Locker C-4,520',
+].join('\n')
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -160,6 +181,10 @@ export function Purchases() {
   const [packagesLoading, setPackagesLoading] = useState(false)
   const [packageError, setPackageError] = useState<string | null>(null)
   const [packageResult, setPackageResult] = useState<string | null>(null)
+  const [packageCSV, setPackageCSV] = useState(defaultPackageCSV)
+  const [packageCSVErrors, setPackageCSVErrors] = useState<
+    ForwarderPackageCSVError[]
+  >([])
   const [packageForm, setPackageForm] =
     useState<PackageImportForm>(defaultPackageImport)
   const [confirmedAction, setConfirmedAction] = useState<string | null>(null)
@@ -284,6 +309,56 @@ export function Purchases() {
     } catch (err) {
       setPackageError(
         err instanceof Error ? err.message : 'forwarder_package_import_failed'
+      )
+    } finally {
+      setPackagesLoading(false)
+    }
+  }
+
+  const importPackageCSV = async () => {
+    setPackagesLoading(true)
+    setPackageError(null)
+    setPackageResult(null)
+    setPackageCSVErrors([])
+    try {
+      const response = await fetch('/api/forwarding/packages/import-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: packageForm.profile_id,
+          provider: packageForm.provider,
+          csv: packageCSV,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message)
+            : 'forwarder_package_csv_import_' + response.status
+        throw new Error(message)
+      }
+      const result = payload as ForwarderPackageCSVImportResponse
+      const imported = result.summary?.imported ?? result.imported?.length ?? 0
+      const errors = result.errors ?? []
+      setPackageCSVErrors(errors)
+      setPackageResult(
+        'Imported ' +
+          imported +
+          ' CSV package' +
+          (imported === 1 ? '' : 's') +
+          (errors.length > 0
+            ? '; ' +
+              errors.length +
+              ' row' +
+              (errors.length === 1 ? '' : 's') +
+              ' needs attention'
+            : '')
+      )
+      await loadPackages(packageForm.profile_id)
+    } catch (err) {
+      setPackageError(
+        err instanceof Error ? err.message : 'forwarder_package_csv_failed'
       )
     } finally {
       setPackagesLoading(false)
@@ -655,6 +730,38 @@ export function Purchases() {
               </div>
             </div>
 
+            <div className='rounded-md border p-4'>
+              <div className='mb-3 flex items-center gap-2'>
+                <FileUp className='h-4 w-4' />
+                <h3 className='font-medium'>CSV import</h3>
+              </div>
+              <div className='grid gap-3'>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-csv'>Package CSV</Label>
+                  <Textarea
+                    id='forwarder-package-csv'
+                    data-testid='forwarder-package-csv'
+                    className='min-h-32 font-mono text-xs'
+                    value={packageCSV}
+                    onChange={(event) => setPackageCSV(event.target.value)}
+                  />
+                </div>
+                <Button
+                  variant='secondary'
+                  data-testid='forwarder-package-import-csv'
+                  onClick={() => void importPackageCSV()}
+                  disabled={packagesLoading}
+                >
+                  {packagesLoading ? (
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  ) : (
+                    <FileUp className='mr-2 h-4 w-4' />
+                  )}
+                  Import CSV
+                </Button>
+              </div>
+            </div>
+
             <div className='space-y-3'>
               {packageError ? (
                 <div
@@ -672,6 +779,22 @@ export function Purchases() {
                   data-testid='forwarder-package-result'
                 >
                   {packageResult}
+                </div>
+              ) : null}
+
+              {packageCSVErrors.length > 0 ? (
+                <div
+                  className='rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
+                  data-testid='forwarder-package-csv-errors'
+                >
+                  <p className='font-medium'>CSV rows need attention.</p>
+                  <ul className='mt-2 space-y-1'>
+                    {packageCSVErrors.map((rowError, index) => (
+                      <li key={index}>
+                        Row {rowError.row ?? 'unknown'}: {rowError.error}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
 

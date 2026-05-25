@@ -41,3 +41,11 @@ Cabinet SHALL parse Stackry/freight-forwarder CSV package rows into normalized p
 - **GIVEN** a user has a CSV export or manually prepared file containing forwarder package ids, statuses, shipment/tracking fields, warehouse metadata, and package weights
 - **WHEN** Cabinet parses the CSV for a profile and provider
 - **THEN** Cabinet MUST map supported header aliases into normalized CSV package imports, preserve the original row values as raw provenance, return row-specific validation errors for missing identity or invalid weight values, and keep valid rows available for package upsert.
+
+### Requirement INTEGRATION-034: Forwarder package inbox SHALL import CSV rows through API and UI
+Cabinet SHALL let users submit Stackry/freight-forwarder CSV package rows from the package inbox UI, persist valid rows through the forwarder package API, refresh the profile package list, and show row-specific validation errors for rows that were not imported.
+
+#### Scenario: Import mixed-validity CSV rows from the inbox UI
+- **GIVEN** a user has an active profile and enters CSV package rows with at least one valid package and at least one invalid row
+- **WHEN** the user submits the CSV import from the forwarder package inbox
+- **THEN** Cabinet MUST upsert valid rows as source `csv`, preserve their provenance keys, keep invalid rows out of the package list, refresh the visible package list, and display row-specific CSV errors inline.
