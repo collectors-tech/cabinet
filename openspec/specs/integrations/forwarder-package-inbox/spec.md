@@ -25,3 +25,11 @@ Cabinet SHALL persist normalized forwarder package imports and expose an API for
 - **GIVEN** a user imports a Stackry or freight-forwarder package with profile, provider, source, external package id, status, and optional raw provenance
 - **WHEN** Cabinet accepts the import through the forwarding package API
 - **THEN** Cabinet MUST persist the normalized package record, return the saved package identity, allow status-filtered listing, and reject invalid imports without creating a package.
+
+### Requirement INTEGRATION-032: Forwarder package inbox SHALL expose manual import UI
+Cabinet SHALL provide a visible package inbox surface that lets users manually import Stackry or freight-forwarder package records, refresh the profile-scoped package list, see normalized provenance, and recover from validation errors without requiring a live provider adapter.
+
+#### Scenario: Import a manual Stackry package from the inbox UI
+- **GIVEN** a user is reviewing purchase and forwarding intake work from the Cabinet inbox
+- **WHEN** the user submits a manual Stackry package with profile, provider, source, external package id, status, tracking, warehouse, and weight fields
+- **THEN** Cabinet MUST call the forwarder package import API, refresh the package list, show the imported package with status and provenance key, and display API validation errors inline when required identity fields are missing.

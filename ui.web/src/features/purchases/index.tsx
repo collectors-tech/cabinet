@@ -1,5 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Inbox, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import {
+  Inbox,
+  Loader2,
+  PackagePlus,
+  RefreshCw,
+  ShieldCheck,
+  Truck,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,11 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Header, HeaderTitle } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Header, HeaderTitle } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -63,6 +72,41 @@ type ReviewResponse = {
   reviews?: PurchaseInboxReview[]
 }
 
+type ForwarderPackage = {
+  id: string
+  profile_id: string
+  provider: string
+  source: string
+  external_package_id: string
+  shipment_id?: string
+  tracking_number?: string
+  status: string
+  sender?: string
+  warehouse_location?: string
+  weight_grams?: number
+  provenance_key: string
+}
+
+type ForwarderPackageListResponse = {
+  packages?: ForwarderPackage[]
+  summary?: {
+    count?: number
+  }
+}
+
+type PackageImportForm = {
+  profile_id: string
+  provider: string
+  source: string
+  external_package_id: string
+  status: string
+  shipment_id: string
+  tracking_number: string
+  sender: string
+  warehouse_location: string
+  weight_grams: string
+}
+
 const sampleCards: PurchaseCard[] = [
   {
     order_id: '20-14595-70928',
@@ -84,6 +128,19 @@ const sampleCards: PurchaseCard[] = [
   },
 ]
 
+const defaultPackageImport: PackageImportForm = {
+  profile_id: 'e2e-profile-001',
+  provider: 'stackry',
+  source: 'manual',
+  external_package_id: 'STK-PKG-1001',
+  status: 'received',
+  shipment_id: 'SHIP-1001',
+  tracking_number: '1Z999AA10123456784',
+  sender: 'Stackry warehouse intake',
+  warehouse_location: 'Locker A-12',
+  weight_grams: '420',
+}
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -99,18 +156,24 @@ export function Purchases() {
   const [reviews, setReviews] = useState<PurchaseInboxReview[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [packages, setPackages] = useState<ForwarderPackage[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [packageError, setPackageError] = useState<string | null>(null)
+  const [packageResult, setPackageResult] = useState<string | null>(null)
+  const [packageForm, setPackageForm] =
+    useState<PackageImportForm>(defaultPackageImport)
   const [confirmedAction, setConfirmedAction] = useState<string | null>(null)
-  const [pendingAction, setPendingAction] = useState<PurchaseInboxAction | null>(
-    null
-  )
+  const [pendingAction, setPendingAction] =
+    useState<PurchaseInboxAction | null>(null)
 
   const readyItemCount = useMemo(
     () =>
       reviews.reduce(
         (count, review) =>
           count +
-          review.items.filter((item) => item.status === 'ready_to_link_or_convert')
-            .length,
+          review.items.filter(
+            (item) => item.status === 'ready_to_link_or_convert'
+          ).length,
         0
       ),
     [reviews]
@@ -121,11 +184,14 @@ export function Purchases() {
     setError(null)
     setConfirmedAction(null)
     try {
-      const response = await fetch('/api/integrations/ebay/purchase-inbox/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: sampleCards }),
-      })
+      const response = await fetch(
+        '/api/integrations/ebay/purchase-inbox/reviews',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards: sampleCards }),
+        }
+      )
       if (!response.ok) {
         throw new Error('purchase_inbox_reviews_' + response.status)
       }
@@ -134,14 +200,95 @@ export function Purchases() {
     } catch (err) {
       setReviews([])
       setError(
-        err instanceof Error
-          ? err.message
-          : 'purchase_inbox_reviews_failed'
+        err instanceof Error ? err.message : 'purchase_inbox_reviews_failed'
       )
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const loadPackages = useCallback(
+    async (profileId = packageForm.profile_id) => {
+      setPackagesLoading(true)
+      setPackageError(null)
+      try {
+        const params = new URLSearchParams()
+        if (profileId.trim()) {
+          params.set('profile_id', profileId.trim())
+        }
+        const response = await fetch(
+          '/api/forwarding/packages?' + params.toString()
+        )
+        if (!response.ok) {
+          throw new Error('forwarder_packages_' + response.status)
+        }
+        const payload = (await response.json()) as ForwarderPackageListResponse
+        setPackages(payload.packages ?? [])
+      } catch (err) {
+        setPackages([])
+        setPackageError(
+          err instanceof Error ? err.message : 'forwarder_packages_failed'
+        )
+      } finally {
+        setPackagesLoading(false)
+      }
+    },
+    [packageForm.profile_id]
+  )
+
+  const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
+    setPackageForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const importPackage = async () => {
+    setPackagesLoading(true)
+    setPackageError(null)
+    setPackageResult(null)
+    try {
+      const response = await fetch('/api/forwarding/packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: packageForm.profile_id,
+          provider: packageForm.provider,
+          source: packageForm.source,
+          external_package_id: packageForm.external_package_id,
+          status: packageForm.status,
+          shipment_id: packageForm.shipment_id,
+          tracking_number: packageForm.tracking_number,
+          sender: packageForm.sender,
+          warehouse_location: packageForm.warehouse_location,
+          weight_grams: Number(packageForm.weight_grams || 0),
+          raw_payload: {
+            manual_import: true,
+            ui_surface: 'purchase_inbox_forwarder_packages',
+          },
+        }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message =
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message)
+            : 'forwarder_package_import_' + response.status
+        throw new Error(message)
+      }
+      const payload = (await response.json()) as { package?: ForwarderPackage }
+      const saved = payload.package
+      setPackageResult(
+        saved
+          ? 'Imported package ' + saved.external_package_id
+          : 'Imported package'
+      )
+      await loadPackages(packageForm.profile_id)
+    } catch (err) {
+      setPackageError(
+        err instanceof Error ? err.message : 'forwarder_package_import_failed'
+      )
+    } finally {
+      setPackagesLoading(false)
+    }
+  }
 
   const requestAction = (action: PurchaseInboxAction) => {
     if (!action.requires_confirmation) {
@@ -184,7 +331,9 @@ export function Purchases() {
       <Main>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Purchase Inbox</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              Purchase Inbox
+            </h1>
             <p className='text-muted-foreground'>
               Captured orders stay review-only until a link or convert action is
               confirmed.
@@ -211,7 +360,9 @@ export function Purchases() {
             className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
             data-testid='purchase-inbox-error-state'
           >
-            <p className='font-medium'>Purchase Inbox could not load reviews.</p>
+            <p className='font-medium'>
+              Purchase Inbox could not load reviews.
+            </p>
             <p className='mt-1 text-muted-foreground'>{error}</p>
           </section>
         ) : null}
@@ -230,7 +381,9 @@ export function Purchases() {
             className='rounded-md border border-dashed p-6'
             data-testid='purchase-inbox-empty-state'
           >
-            <p className='font-medium'>No captured purchases are ready for review.</p>
+            <p className='font-medium'>
+              No captured purchases are ready for review.
+            </p>
             <p className='mt-1 text-sm text-muted-foreground'>
               Import or capture eBay purchase cards, then prepare review records
               before mutating inventory.
@@ -239,7 +392,10 @@ export function Purchases() {
         ) : null}
 
         {reviews.length > 0 ? (
-          <section className='space-y-4' data-testid='purchase-inbox-ready-state'>
+          <section
+            className='space-y-4'
+            data-testid='purchase-inbox-ready-state'
+          >
             <div className='grid gap-3 md:grid-cols-3'>
               <div className='rounded-md border p-3'>
                 <p className='text-sm text-muted-foreground'>Orders</p>
@@ -346,6 +502,234 @@ export function Purchases() {
             ))}
           </section>
         ) : null}
+
+        <Separator className='my-6' />
+
+        <section className='space-y-4' data-testid='forwarder-package-inbox'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <div>
+              <h2 className='flex items-center gap-2 text-xl font-semibold tracking-tight'>
+                <Truck className='h-5 w-5' />
+                Forwarder Packages
+              </h2>
+              <p className='text-sm text-muted-foreground'>
+                Import Stackry or freight-forwarder package records before
+                matching them to purchases.
+              </p>
+            </div>
+            <Button
+              variant='outline'
+              data-testid='forwarder-package-refresh'
+              onClick={() => void loadPackages()}
+              disabled={packagesLoading}
+            >
+              {packagesLoading ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : (
+                <RefreshCw className='mr-2 h-4 w-4' />
+              )}
+              Refresh packages
+            </Button>
+          </div>
+
+          <div className='grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]'>
+            <div className='rounded-md border p-4'>
+              <div className='mb-3 flex items-center gap-2'>
+                <PackagePlus className='h-4 w-4' />
+                <h3 className='font-medium'>Manual import</h3>
+              </div>
+              <div className='grid gap-3'>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-profile'>Profile</Label>
+                  <Input
+                    id='forwarder-package-profile'
+                    data-testid='forwarder-package-profile'
+                    value={packageForm.profile_id}
+                    onChange={(event) =>
+                      updatePackageForm('profile_id', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-3'>
+                  <div className='grid gap-1.5'>
+                    <Label htmlFor='forwarder-package-provider'>Provider</Label>
+                    <Input
+                      id='forwarder-package-provider'
+                      data-testid='forwarder-package-provider'
+                      value={packageForm.provider}
+                      onChange={(event) =>
+                        updatePackageForm('provider', event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className='grid gap-1.5'>
+                    <Label htmlFor='forwarder-package-source'>Source</Label>
+                    <Input
+                      id='forwarder-package-source'
+                      data-testid='forwarder-package-source'
+                      value={packageForm.source}
+                      onChange={(event) =>
+                        updatePackageForm('source', event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-external-id'>
+                    Package ID
+                  </Label>
+                  <Input
+                    id='forwarder-package-external-id'
+                    data-testid='forwarder-package-external-id'
+                    value={packageForm.external_package_id}
+                    onChange={(event) =>
+                      updatePackageForm(
+                        'external_package_id',
+                        event.target.value
+                      )
+                    }
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-3'>
+                  <div className='grid gap-1.5'>
+                    <Label htmlFor='forwarder-package-status'>Status</Label>
+                    <Input
+                      id='forwarder-package-status'
+                      data-testid='forwarder-package-status'
+                      value={packageForm.status}
+                      onChange={(event) =>
+                        updatePackageForm('status', event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className='grid gap-1.5'>
+                    <Label htmlFor='forwarder-package-weight'>Weight g</Label>
+                    <Input
+                      id='forwarder-package-weight'
+                      data-testid='forwarder-package-weight'
+                      inputMode='numeric'
+                      value={packageForm.weight_grams}
+                      onChange={(event) =>
+                        updatePackageForm('weight_grams', event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-tracking'>Tracking</Label>
+                  <Input
+                    id='forwarder-package-tracking'
+                    data-testid='forwarder-package-tracking'
+                    value={packageForm.tracking_number}
+                    onChange={(event) =>
+                      updatePackageForm('tracking_number', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-warehouse'>Warehouse</Label>
+                  <Input
+                    id='forwarder-package-warehouse'
+                    data-testid='forwarder-package-warehouse'
+                    value={packageForm.warehouse_location}
+                    onChange={(event) =>
+                      updatePackageForm(
+                        'warehouse_location',
+                        event.target.value
+                      )
+                    }
+                  />
+                </div>
+                <Button
+                  data-testid='forwarder-package-import'
+                  onClick={() => void importPackage()}
+                  disabled={packagesLoading}
+                >
+                  {packagesLoading ? (
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  ) : (
+                    <PackagePlus className='mr-2 h-4 w-4' />
+                  )}
+                  Import package
+                </Button>
+              </div>
+            </div>
+
+            <div className='space-y-3'>
+              {packageError ? (
+                <div
+                  className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
+                  data-testid='forwarder-package-error'
+                >
+                  <p className='font-medium'>Package inbox could not update.</p>
+                  <p className='mt-1 text-muted-foreground'>{packageError}</p>
+                </div>
+              ) : null}
+
+              {packageResult ? (
+                <div
+                  className='rounded-md border bg-muted/30 p-3 text-sm'
+                  data-testid='forwarder-package-result'
+                >
+                  {packageResult}
+                </div>
+              ) : null}
+
+              {packages.length === 0 && !packagesLoading ? (
+                <div
+                  className='rounded-md border border-dashed p-6'
+                  data-testid='forwarder-package-empty'
+                >
+                  <p className='font-medium'>No forwarder packages listed.</p>
+                  <p className='mt-1 text-sm text-muted-foreground'>
+                    Import a package or refresh the current profile inbox.
+                  </p>
+                </div>
+              ) : null}
+
+              {packages.length > 0 ? (
+                <div className='space-y-3' data-testid='forwarder-package-list'>
+                  {packages.map((pkg) => (
+                    <article
+                      key={pkg.id}
+                      className='rounded-md border p-4'
+                      data-testid='forwarder-package-row'
+                    >
+                      <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div>
+                          <h3 className='font-semibold'>
+                            {pkg.external_package_id}
+                          </h3>
+                          <p className='text-sm text-muted-foreground'>
+                            {pkg.provider} / {pkg.source} ·{' '}
+                            {pkg.tracking_number || 'tracking pending'}
+                          </p>
+                        </div>
+                        <span className='rounded-md border px-2 py-1 text-xs font-medium'>
+                          {labelForStatus(pkg.status)}
+                        </span>
+                      </div>
+                      <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-3'>
+                        <div>
+                          <dt className='text-muted-foreground'>Warehouse</dt>
+                          <dd>{pkg.warehouse_location || 'Pending'}</dd>
+                        </div>
+                        <div>
+                          <dt className='text-muted-foreground'>Weight</dt>
+                          <dd>{pkg.weight_grams ?? 0} g</dd>
+                        </div>
+                        <div>
+                          <dt className='text-muted-foreground'>Provenance</dt>
+                          <dd className='break-all'>{pkg.provenance_key}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
       </Main>
 
       <Dialog
