@@ -324,6 +324,32 @@ export function Purchases() {
     [reviews]
   )
 
+  const packageReviewSummary = useMemo(() => {
+    const linkedPackageIDs = new Set<string>()
+    let auditEventCount = 0
+    let suggestionCount = 0
+
+    Object.entries(packageLinks).forEach(([packageID, links]) => {
+      if ((links ?? []).length > 0) {
+        linkedPackageIDs.add(packageID)
+      }
+    })
+    Object.values(packageLinkEvents).forEach((events) => {
+      auditEventCount += (events ?? []).length
+    })
+    Object.values(packageSuggestions).forEach((suggestions) => {
+      suggestionCount += (suggestions ?? []).length
+    })
+
+    return {
+      packageCount: packages.length,
+      linkedCount: linkedPackageIDs.size,
+      unlinkedCount: Math.max(packages.length - linkedPackageIDs.size, 0),
+      auditEventCount,
+      suggestionCount,
+    }
+  }, [packageLinkEvents, packageLinks, packageSuggestions, packages.length])
+
   const loadReviews = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -1022,6 +1048,42 @@ export function Purchases() {
               Find matches
             </Button>
           </div>
+
+          <dl
+            className='grid gap-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-5'
+            data-testid='forwarder-package-review-summary'
+          >
+            <div>
+              <dt className='text-muted-foreground'>Packages</dt>
+              <dd className='text-lg font-semibold'>
+                {packageReviewSummary.packageCount}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground'>Linked</dt>
+              <dd className='text-lg font-semibold'>
+                {packageReviewSummary.linkedCount}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground'>Unlinked</dt>
+              <dd className='text-lg font-semibold'>
+                {packageReviewSummary.unlinkedCount}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground'>Audit events</dt>
+              <dd className='text-lg font-semibold'>
+                {packageReviewSummary.auditEventCount}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground'>Suggestions</dt>
+              <dd className='text-lg font-semibold'>
+                {packageReviewSummary.suggestionCount}
+              </dd>
+            </div>
+          </dl>
 
           <div className='grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]'>
             <div className='rounded-md border p-4'>
