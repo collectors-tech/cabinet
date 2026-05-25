@@ -84,3 +84,14 @@ Cabinet MUST present missing OpenAI API-key validation as field-level feedback o
 - **THEN** Cabinet MUST keep the dialog open and focus the token input
 - **AND** the token input MUST expose invalid state and be described by visible field-level validation copy
 - **AND** Cabinet MUST NOT call the provider health endpoint
+
+### Requirement PROVIDER-OPENAI-UX-009: API key disconnect SHALL clear only API-key readiness
+Cabinet MUST let a user explicitly disconnect the OpenAI API-key method by deleting the stored API-key secret and clearing API-key active-method readiness without destroying unrelated Browser Auth state.
+
+#### Scenario: Disconnect API-key method
+- **GIVEN** user opens the OpenAI / ChatGPT API-key setup dialog
+- **WHEN** user disconnects the API-key method
+- **THEN** Cabinet MUST delete openai_api_key through /api/profiles/:profileId/secrets
+- **AND** Cabinet MUST clear API-key active method and integration enabled readiness when no other connected method is active
+- **AND** Browser Auth state MUST remain present for a future verified Browser Auth proof
+- **AND** Test OpenAI MUST return to setup-needed/disabled until a verified active method exists

@@ -1143,6 +1143,82 @@ export function Apps({
     }
   }
 
+  const disconnectOpenAIApiKey = async () => {
+    if (!activeProfileId || !editingProvider || editingProvider.provider_id !== 'openai') {
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    setTokenFieldError(null)
+    setActionMessage(null)
+    try {
+      const deleteResponse = await fetch(
+        `/api/profiles/${activeProfileId}/secrets?key=openai_api_key`,
+        { method: 'DELETE' }
+      )
+      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        throw new Error(`secret_delete_failed_${deleteResponse.status}`)
+      }
+      const currentBrowserState =
+        settings['openai.browser_auth_state'] ??
+        editingProvider.auth_methods?.browser_auth?.state ??
+        ''
+      const browserRemainsActive =
+        settings['openai.active_auth_method'] === 'browser_auth' ||
+        editingProvider.active_auth_method === 'browser_auth'
+      const nextSettings: Record<string, string> = {
+        openai_active_auth_method: browserRemainsActive ? 'browser_auth' : '',
+        'openai.active_auth_method': browserRemainsActive ? 'browser_auth' : '',
+        'integration.openai.enabled': browserRemainsActive ? 'true' : 'false',
+      }
+      if (currentBrowserState) {
+        nextSettings['openai.browser_auth_state'] = currentBrowserState
+      }
+      const settingsResponse = await fetch(
+        `/api/profiles/${activeProfileId}/settings`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: nextSettings }),
+        }
+      )
+      if (!settingsResponse.ok) {
+        throw new Error(`save_failed_${settingsResponse.status}`)
+      }
+      const payload = (await settingsResponse.json()) as {
+        settings?: Record<string, string>
+      }
+      setSettings(payload.settings ?? nextSettings)
+      setProviders((prev) =>
+        prev.map((provider) =>
+          provider.provider_id === 'openai'
+            ? {
+                ...provider,
+                has_token: false,
+                active_auth_method: browserRemainsActive ? 'browser_auth' : '',
+                auth_methods: {
+                  ...provider.auth_methods,
+                  api_key: {
+                    ...(provider.auth_methods?.api_key ?? {}),
+                    state: 'setup_needed',
+                    connected: false,
+                    credential_present: false,
+                  },
+                },
+              }
+            : provider
+        )
+      )
+      setReplaceToken(true)
+      setForm((prev) => ({ ...prev, token: '' }))
+      setActionMessage('OpenAI API key disconnected.')
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'disconnect_failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const runBuyerInterestSync = async (mode: 'preview' | 'import') => {
     if (!editingProvider || editingProvider.provider_id !== 'ebay') {
       return
@@ -1955,7 +2031,8 @@ export function Apps({
                         size='sm'
                         variant='outline'
                         data-testid='openai-api-key-disconnect'
-                        onClick={() => setReplaceToken(true)}
+                        onClick={() => void disconnectOpenAIApiKey()}
+                        disabled={saving}
                       >
                         Disconnect
                       </Button>

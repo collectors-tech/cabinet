@@ -839,6 +839,15 @@ func New(cfg config.Config) (*App, error) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "value": value})
 				return
 			}
+			if r.Method == http.MethodDelete {
+				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				if err := profiles.DeleteSecret(r.Context(), profileID, key); err != nil {
+					http.Error(w, `{"error":"failed_to_delete_secret"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		case "license":
 			if r.Method == http.MethodPut {
