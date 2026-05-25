@@ -21,6 +21,24 @@ type Service struct {
 	lastBackup string
 }
 
+type BackupInfo struct {
+	Path      string `json:"path"`
+	FileName  string `json:"file_name"`
+	SizeBytes int64  `json:"size_bytes"`
+	CreatedAt string `json:"created_at"`
+}
+
+type BackupRunResult struct {
+	BackupInfo
+	IntegrityCheck string `json:"integrity_check"`
+}
+
+type RestoreResult struct {
+	RestoredPath   string `json:"restored_path"`
+	RestoredAt     string `json:"restored_at"`
+	IntegrityCheck string `json:"integrity_check"`
+}
+
 func NewService(dbPath, backupDir string, intervalMinutes int) *Service {
 	if intervalMinutes <= 0 {
 		intervalMinutes = 60
@@ -47,56 +65,84 @@ func (s *Service) Start(ctx context.Context) {
 	}()
 }
 
-func (s *Service) CreateBackup(ctx context.Context) (string, error) {
+func (s *Service) CreateBackup(ctx context.Context) (BackupRunResult, error) {
 	_ = ctx
 	if err := os.MkdirAll(s.backupDir, 0o755); err != nil {
-		return "", fmt.Errorf("create backup dir: %w", err)
+		return BackupRunResult{}, fmt.Errorf("create backup dir: %w", err)
 	}
 	name := "cabinet-backup-" + time.Now().UTC().Format("20060102-150405") + ".db"
 	target := filepath.Join(s.backupDir, name)
 	if err := copyFile(s.dbPath, target); err != nil {
-		return "", fmt.Errorf("copy db backup: %w", err)
+		return BackupRunResult{}, fmt.Errorf("copy db backup: %w", err)
 	}
 	ok, err := validateSQLiteFile(target)
 	if err != nil {
-		return "", err
+		return BackupRunResult{}, err
 	}
 	if ok != "ok" {
-		return "", fmt.Errorf("backup integrity check failed: %s", ok)
+		return BackupRunResult{}, fmt.Errorf("backup integrity check failed: %s", ok)
 	}
 	s.mu.Lock()
 	s.lastBackup = target
 	s.mu.Unlock()
-	return target, nil
+	info, err := describeBackup(target)
+	if err != nil {
+		return BackupRunResult{}, err
+	}
+	return BackupRunResult{BackupInfo: info, IntegrityCheck: ok}, nil
 }
 
-func (s *Service) ListBackups() ([]string, error) {
+func (s *Service) ListBackups() ([]BackupInfo, error) {
 	entries, err := os.ReadDir(s.backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []string{}, nil
+			return []BackupInfo{}, nil
 		}
 		return nil, fmt.Errorf("list backups: %w", err)
 	}
-	out := []string{}
+	out := []BackupInfo{}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		out = append(out, filepath.Join(s.backupDir, e.Name()))
+		info, err := describeBackup(filepath.Join(s.backupDir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, info)
 	}
 	return out, nil
 }
 
-func (s *Service) RestoreBackup(backupPath string) error {
+func (s *Service) RestoreBackup(backupPath string) (RestoreResult, error) {
 	ok, err := validateSQLiteFile(backupPath)
 	if err != nil {
-		return err
+		return RestoreResult{}, err
 	}
 	if ok != "ok" {
-		return fmt.Errorf("backup integrity check failed: %s", ok)
+		return RestoreResult{}, fmt.Errorf("backup integrity check failed: %s", ok)
 	}
-	return copyFile(backupPath, s.dbPath)
+	if err := copyFile(backupPath, s.dbPath); err != nil {
+		return RestoreResult{}, err
+	}
+	return RestoreResult{
+		RestoredPath:   backupPath,
+		RestoredAt:     time.Now().UTC().Format(time.RFC3339),
+		IntegrityCheck: ok,
+	}, nil
+}
+
+func describeBackup(path string) (BackupInfo, error) {
+	stat, err := os.Stat(path)
+	if err != nil {
+		return BackupInfo{}, fmt.Errorf("stat backup: %w", err)
+	}
+	return BackupInfo{
+		Path:      path,
+		FileName:  filepath.Base(path),
+		SizeBytes: stat.Size(),
+		CreatedAt: stat.ModTime().UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func validateSQLiteFile(path string) (string, error) {

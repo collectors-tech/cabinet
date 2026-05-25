@@ -153,22 +153,19 @@ export function DisplayForm() {
         {profileContextMissing ? null : (
           <>
             <FormField
-          control={form.control}
-          name='items'
-          render={() => (
-            <FormItem>
-              <div className='mb-4'>
-                <FormLabel className='text-base'>Sidebar</FormLabel>
-                <FormDescription>
-                  Select the items you want to display in the sidebar.
-                </FormDescription>
-              </div>
-              {items.map((item) => (
-                <FormField
-                  key={item.id}
-                  control={form.control}
-                  name='items'
-                  render={({ field }) => {
+              control={form.control}
+              name='items'
+              render={({ field }) => (
+                <FormItem>
+                  <div className='mb-4'>
+                    <FormLabel className='text-base'>Sidebar</FormLabel>
+                    <FormDescription>
+                      Select the items you want to display in the sidebar.
+                    </FormDescription>
+                  </div>
+                  {items.map((item) => {
+                    const selectedItems = field.value ?? []
+                    const checkboxID = `settings-display-${item.id}`
                     return (
                       <FormItem
                         key={item.id}
@@ -176,40 +173,45 @@ export function DisplayForm() {
                       >
                         <FormControl>
                           <Checkbox
+                            id={checkboxID}
                             data-testid={`settings-display-${item.id}`}
-                            checked={field.value?.includes(item.id)}
+                            checked={selectedItems.includes(item.id)}
                             onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([...field.value, item.id])
-                                : field.onChange(
-                                    field.value?.filter(
+                              field.onChange(
+                                checked
+                                  ? Array.from(
+                                      new Set([...selectedItems, item.id])
+                                    )
+                                  : selectedItems.filter(
                                       (value) => value !== item.id
                                     )
-                                  )
+                              )
                             }}
                           />
                         </FormControl>
-                        <FormLabel className='font-normal'>
+                        <FormLabel htmlFor={checkboxID} className='font-normal'>
                           {item.label}
                         </FormLabel>
                       </FormItem>
                     )
-                  }}
-                />
-              ))}
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='mt-3'
-                onClick={() => form.reset({ items: [] })}
-              >
-                Clear selection
-              </Button>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                  })}
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='mt-3'
+                    disabled={loading}
+                    onClick={() => {
+                      field.onChange([])
+                      form.clearErrors('items')
+                    }}
+                  >
+                    Clear selection
+                  </Button>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <Button type='submit' disabled={saving || loading}>
               Update display
             </Button>

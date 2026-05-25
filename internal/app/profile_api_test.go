@@ -114,6 +114,13 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())
 	}
+	var reindexPayload map[string]any
+	if err := json.NewDecoder(reindex.Body).Decode(&reindexPayload); err != nil {
+		t.Fatalf("decode reindex response: %v", err)
+	}
+	if reindexPayload["ok"] != true || reindexPayload["operation"] != "reindex_search" || reindexPayload["rebuilt_search_index"] != true || strings.TrimSpace(reindexPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected reindex metadata, got %+v", reindexPayload)
+	}
 
 	rebuild := doRequest(t, a, http.MethodPost, "/api/data/rebuild-thumbnails", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if rebuild.Code != http.StatusOK {
@@ -140,5 +147,8 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	}
 	if strings.TrimSpace(repairPayload["integrity_check"].(string)) == "" {
 		t.Fatalf("expected integrity check result, got %+v", repairPayload)
+	}
+	if repairPayload["ok"] != true || repairPayload["operation"] != "integrity_check" || strings.TrimSpace(repairPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected repair metadata, got %+v", repairPayload)
 	}
 }
