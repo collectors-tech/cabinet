@@ -135,9 +135,28 @@ type ForwarderPackageLink = {
   lifecycle_entry_id?: string
   expected_arrival_id?: string
   source: string
+  decision?: string
   notes?: string
+  audit_trail?: string[]
   created_at?: string
   updated_at?: string
+}
+
+type ForwarderPackageLinkEvent = {
+  id: string
+  package_id: string
+  link_id?: string
+  action: string
+  item_id?: string
+  lifecycle_entry_id?: string
+  expected_arrival_id?: string
+  previous_item_id?: string
+  previous_lifecycle_entry_id?: string
+  previous_expected_arrival_id?: string
+  source: string
+  notes?: string
+  audit_trail?: string[]
+  created_at?: string
 }
 
 type ForwarderPackageLinkForm = {
@@ -239,6 +258,9 @@ export function Purchases() {
   const [packageLinks, setPackageLinks] = useState<
     Record<string, ForwarderPackageLink[]>
   >({})
+  const [packageLinkEvents, setPackageLinkEvents] = useState<
+    Record<string, ForwarderPackageLinkEvent[]>
+  >({})
   const [packageLinkForms, setPackageLinkForms] = useState<
     Record<string, ForwarderPackageLinkForm>
   >({})
@@ -339,13 +361,19 @@ export function Purchases() {
       }
       const payload = (await response.json()) as {
         links?: ForwarderPackageLink[]
+        events?: ForwarderPackageLinkEvent[]
       }
       setPackageLinks((current) => ({
         ...current,
         [packageID]: payload.links ?? [],
       }))
+      setPackageLinkEvents((current) => ({
+        ...current,
+        [packageID]: payload.events ?? [],
+      }))
     } catch (err) {
       setPackageLinks((current) => ({ ...current, [packageID]: [] }))
+      setPackageLinkEvents((current) => ({ ...current, [packageID]: [] }))
       setPackageLinkErrors((current) => ({
         ...current,
         [packageID]:
@@ -387,10 +415,15 @@ export function Purchases() {
     await loadPackageLinks(packageID)
   }
 
-  const linkPackage = async (pkg: ForwarderPackage) => {
+  const linkPackage = async (
+    pkg: ForwarderPackage,
+    decision: 'confirmed' | 'overridden' = 'confirmed'
+  ) => {
     const form = packageLinkFormFor(pkg.id)
     setPackageLinkErrors((current) => ({ ...current, [pkg.id]: null }))
     setPackageLinkResults((current) => ({ ...current, [pkg.id]: null }))
+    const override = decision === 'overridden'
+    const source = override ? 'manual_override' : form.source
     try {
       const response = await fetch('/api/forwarding/package-links', {
         method: 'POST',
@@ -400,8 +433,18 @@ export function Purchases() {
           item_id: form.item_id,
           lifecycle_entry_id: form.lifecycle_entry_id,
           expected_arrival_id: form.expected_arrival_id,
-          source: form.source,
+          source,
+          decision,
           notes: form.notes,
+          override,
+          actor: 'reviewer',
+          audit_trail: [
+            decision +
+              ' from purchase inbox UI: ' +
+              form.item_id +
+              ' / ' +
+              form.expected_arrival_id,
+          ],
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -417,8 +460,12 @@ export function Purchases() {
       setPackageLinkResults((current) => ({
         ...current,
         [pkg.id]: link
-          ? 'Linked package to item ' + link.item_id
-          : 'Linked package',
+          ? (decision === 'overridden' ? 'Override linked' : 'Confirmed link') +
+            ' to item ' +
+            link.item_id
+          : decision === 'overridden'
+            ? 'Override linked package'
+            : 'Confirmed package link',
       }))
       await loadPackageLinks(pkg.id)
     } catch (err) {
@@ -428,6 +475,54 @@ export function Purchases() {
           err instanceof Error
             ? err.message
             : 'forwarder_package_link_failed',
+      }))
+    }
+  }
+
+  const unlinkPackage = async (pkg: ForwarderPackage) => {
+    const form = packageLinkFormFor(pkg.id)
+    setPackageLinkErrors((current) => ({ ...current, [pkg.id]: null }))
+    setPackageLinkResults((current) => ({ ...current, [pkg.id]: null }))
+    try {
+      const params = new URLSearchParams({ package_id: pkg.id })
+      const response = await fetch(
+        '/api/forwarding/package-links?' + params.toString(),
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'manual_unlink',
+            actor: 'reviewer',
+            notes: form.notes || 'Unlinked from purchase inbox review',
+            audit_trail: [
+              'unlinked from purchase inbox UI: ' +
+                form.item_id +
+                ' / ' +
+                form.expected_arrival_id,
+            ],
+          }),
+        }
+      )
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message)
+            : 'forwarder_package_unlink_' + response.status
+        throw new Error(message)
+      }
+      setPackageLinkResults((current) => ({
+        ...current,
+        [pkg.id]: 'Unlinked package from reconciliation target',
+      }))
+      await loadPackageLinks(pkg.id)
+    } catch (err) {
+      setPackageLinkErrors((current) => ({
+        ...current,
+        [pkg.id]:
+          err instanceof Error
+            ? err.message
+            : 'forwarder_package_unlink_failed',
       }))
     }
   }
@@ -1057,6 +1152,7 @@ export function Purchases() {
                       : 'No raw source payload returned for this package.'
                     const linkForm = packageLinkFormFor(pkg.id)
                     const links = packageLinks[pkg.id] ?? []
+                    const events = packageLinkEvents[pkg.id] ?? []
                     return (
                     <article
                       key={pkg.id}
@@ -1185,11 +1281,33 @@ export function Purchases() {
                                 data-testid='forwarder-package-link-state'
                               >
                                 {links.map((link) => (
-                                  <div key={link.id}>
-                                    Linked to item {link.item_id}
-                                    {link.expected_arrival_id
-                                      ? ' / arrival ' + link.expected_arrival_id
-                                      : ''}
+                                  <div key={link.id} className='space-y-1'>
+                                    <p>
+                                      {labelForStatus(
+                                        link.decision || 'confirmed'
+                                      )}{' '}
+                                      to item {link.item_id}
+                                      {link.expected_arrival_id
+                                        ? ' / arrival ' + link.expected_arrival_id
+                                        : ''}
+                                    </p>
+                                    <p className='text-xs text-muted-foreground'>
+                                      Source {link.source}
+                                      {link.notes ? ' · ' + link.notes : ''}
+                                    </p>
+                                    {link.audit_trail &&
+                                    link.audit_trail.length > 0 ? (
+                                      <ul
+                                        className='list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                        data-testid='forwarder-package-link-audit-trail'
+                                      >
+                                        {link.audit_trail.map(
+                                          (entry, index) => (
+                                            <li key={index}>{entry}</li>
+                                          )
+                                        )}
+                                      </ul>
+                                    ) : null}
                                   </div>
                                 ))}
                               </div>
@@ -1295,15 +1413,74 @@ export function Purchases() {
                                 }
                               />
                             </div>
-                            <div className='flex justify-end'>
+                            <div className='flex flex-wrap justify-end gap-2'>
                               <Button
                                 type='button'
                                 size='sm'
                                 data-testid='forwarder-package-link-save'
                                 onClick={() => void linkPackage(pkg)}
                               >
-                                Link package
+                                Confirm link
                               </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='secondary'
+                                data-testid='forwarder-package-link-override'
+                                onClick={() =>
+                                  void linkPackage(pkg, 'overridden')
+                                }
+                              >
+                                Override link
+                              </Button>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                data-testid='forwarder-package-link-unlink'
+                                onClick={() => void unlinkPackage(pkg)}
+                                disabled={links.length === 0}
+                              >
+                                Unlink package
+                              </Button>
+                            </div>
+                            <div
+                              className='rounded-md border bg-muted/20 p-3 text-sm'
+                              data-testid='forwarder-package-link-events'
+                            >
+                              <p className='font-medium'>Decision audit</p>
+                              {events.length > 0 ? (
+                                <ul className='mt-2 space-y-2'>
+                                  {events.map((event) => (
+                                    <li key={event.id}>
+                                      <span className='font-medium'>
+                                        {labelForStatus(event.action)}
+                                      </span>
+                                      {event.item_id
+                                        ? ' item ' + event.item_id
+                                        : ''}
+                                      {event.expected_arrival_id
+                                        ? ' / arrival ' +
+                                          event.expected_arrival_id
+                                        : ''}
+                                      {event.previous_item_id
+                                        ? ' (previous item ' +
+                                          event.previous_item_id +
+                                          ')'
+                                        : ''}
+                                      <span className='text-muted-foreground'>
+                                        {' '}
+                                        via {event.source}
+                                        {event.notes ? ' · ' + event.notes : ''}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className='mt-1 text-muted-foreground'>
+                                  No link decisions recorded yet.
+                                </p>
+                              )}
                             </div>
                             {packageLinkResults[pkg.id] ? (
                               <div

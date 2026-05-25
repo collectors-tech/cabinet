@@ -524,7 +524,7 @@ describe('purchases/purchase-inbox', () => {
       })
     cy.get('[data-testid="forwarder-package-link-result"]')
       .should('be.visible')
-      .and('contain', 'Linked package to item item-expected-001')
+      .and('contain', 'Confirmed link to item item-expected-001')
 
     cy.intercept('POST', '/api/forwarding/package-links', {
       statusCode: 400,
@@ -541,5 +541,301 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-link-error"]')
       .should('be.visible')
       .and('contain', 'already linked to a different target')
+  })
+
+  it('INTEGRATION-042 confirms overrides unlinks and shows forwarder package link audit events', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_audit_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'email',
+            external_package_id: 'STK-AUDIT-5001',
+            shipment_id: 'SHIP-5001',
+            tracking_number: '1ZAUDIT5001',
+            status: 'received',
+            sender: 'Stackry Intake',
+            warehouse_location: 'Locker A-5',
+            weight_grams: 840,
+            provenance_key: 'stackry:email:STK-AUDIT-5001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+
+    let linkListRequest = 0
+    cy.intercept('GET', '/api/forwarding/package-links*', (req) => {
+      linkListRequest += 1
+      const states = [
+        { links: [], events: [] },
+        {
+          links: [
+            {
+              id: 'fwdpkg_audit_001:item-expected-001:arrival-expected-001',
+              profile_id: 'e2e-profile-001',
+              package_id: 'fwdpkg_audit_001',
+              item_id: 'item-expected-001',
+              lifecycle_entry_id: 'life-entry-001',
+              expected_arrival_id: 'arrival-expected-001',
+              source: 'manual_review',
+              decision: 'confirmed',
+              notes: 'Matched from package inbox review',
+              audit_trail: [
+                'confirmed from purchase inbox UI: item-expected-001 / arrival-expected-001',
+              ],
+            },
+          ],
+          events: [
+            {
+              id: 'event-confirmed',
+              package_id: 'fwdpkg_audit_001',
+              action: 'confirmed',
+              item_id: 'item-expected-001',
+              expected_arrival_id: 'arrival-expected-001',
+              source: 'manual_review',
+              notes: 'Matched from package inbox review',
+            },
+          ],
+        },
+        {
+          links: [
+            {
+              id: 'fwdpkg_audit_001:item-override-002:arrival-override-002',
+              profile_id: 'e2e-profile-001',
+              package_id: 'fwdpkg_audit_001',
+              item_id: 'item-override-002',
+              lifecycle_entry_id: 'life-entry-override-002',
+              expected_arrival_id: 'arrival-override-002',
+              source: 'manual_override',
+              decision: 'overridden',
+              notes: 'Override to corrected package target',
+              audit_trail: [
+                'overridden from purchase inbox UI: item-override-002 / arrival-override-002',
+              ],
+            },
+          ],
+          events: [
+            {
+              id: 'event-overridden',
+              package_id: 'fwdpkg_audit_001',
+              action: 'overridden',
+              item_id: 'item-override-002',
+              expected_arrival_id: 'arrival-override-002',
+              previous_item_id: 'item-expected-001',
+              source: 'manual_override',
+              notes: 'Override to corrected package target',
+            },
+            {
+              id: 'event-confirmed',
+              package_id: 'fwdpkg_audit_001',
+              action: 'confirmed',
+              item_id: 'item-expected-001',
+              expected_arrival_id: 'arrival-expected-001',
+              source: 'manual_review',
+              notes: 'Matched from package inbox review',
+            },
+          ],
+        },
+        {
+          links: [],
+          events: [
+            {
+              id: 'event-unlinked',
+              package_id: 'fwdpkg_audit_001',
+              action: 'unlinked',
+              previous_item_id: 'item-override-002',
+              source: 'manual_unlink',
+              notes: 'Override to corrected package target',
+            },
+            {
+              id: 'event-overridden',
+              package_id: 'fwdpkg_audit_001',
+              action: 'overridden',
+              item_id: 'item-override-002',
+              expected_arrival_id: 'arrival-override-002',
+              previous_item_id: 'item-expected-001',
+              source: 'manual_override',
+              notes: 'Override to corrected package target',
+            },
+          ],
+        },
+      ]
+      const state = states[Math.min(linkListRequest - 1, states.length - 1)]
+      req.reply({
+        statusCode: 200,
+        body: {
+          links: state.links,
+          events: state.events,
+          summary: {
+            count: state.links.length,
+            events: state.events.length,
+          },
+        },
+      })
+    }).as('listForwarderPackageLinks')
+
+    cy.intercept('POST', '/api/forwarding/package-links', (req) => {
+      expect(req.body).to.include({
+        package_id: 'fwdpkg_audit_001',
+        item_id: 'item-expected-001',
+        lifecycle_entry_id: 'life-entry-001',
+        expected_arrival_id: 'arrival-expected-001',
+        source: 'manual_review',
+        decision: 'confirmed',
+        override: false,
+        actor: 'reviewer',
+      })
+      expect(req.body.audit_trail).to.deep.equal([
+        'confirmed from purchase inbox UI: item-expected-001 / arrival-expected-001',
+      ])
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_reconciliation_link',
+          link: {
+            id: 'fwdpkg_audit_001:item-expected-001:arrival-expected-001',
+            package_id: 'fwdpkg_audit_001',
+            item_id: 'item-expected-001',
+            expected_arrival_id: 'arrival-expected-001',
+            source: 'manual_review',
+            decision: 'confirmed',
+          },
+        },
+      })
+    }).as('confirmForwarderPackageLink')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-refresh"]').click()
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
+    cy.wait('@listForwarderPackageLinks')
+    cy.get('[data-testid="forwarder-package-link-events"]')
+      .should('be.visible')
+      .and('contain', 'No link decisions recorded yet.')
+
+    cy.get('[data-testid="forwarder-package-link-save"]').click()
+    cy.wait('@confirmForwarderPackageLink')
+    cy.wait('@listForwarderPackageLinks')
+    cy.get('[data-testid="forwarder-package-link-result"]')
+      .should('be.visible')
+      .and('contain', 'Confirmed link to item item-expected-001')
+    cy.get('[data-testid="forwarder-package-link-state"]')
+      .should('contain', 'confirmed to item item-expected-001')
+      .and('contain', 'arrival arrival-expected-001')
+      .and('contain', 'Source manual_review')
+    cy.get('[data-testid="forwarder-package-link-audit-trail"]').should(
+      'contain',
+      'confirmed from purchase inbox UI'
+    )
+    cy.get('[data-testid="forwarder-package-link-events"]')
+      .should('contain', 'confirmed item item-expected-001')
+      .and('contain', 'via manual_review')
+
+    cy.intercept('POST', '/api/forwarding/package-links', (req) => {
+      expect(req.body).to.include({
+        package_id: 'fwdpkg_audit_001',
+        item_id: 'item-override-002',
+        lifecycle_entry_id: 'life-entry-override-002',
+        expected_arrival_id: 'arrival-override-002',
+        source: 'manual_override',
+        decision: 'overridden',
+        override: true,
+        actor: 'reviewer',
+      })
+      expect(req.body.audit_trail).to.deep.equal([
+        'overridden from purchase inbox UI: item-override-002 / arrival-override-002',
+      ])
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_reconciliation_link',
+          link: {
+            id: 'fwdpkg_audit_001:item-override-002:arrival-override-002',
+            package_id: 'fwdpkg_audit_001',
+            item_id: 'item-override-002',
+            expected_arrival_id: 'arrival-override-002',
+            source: 'manual_override',
+            decision: 'overridden',
+          },
+        },
+      })
+    }).as('overrideForwarderPackageLink')
+
+    cy.get('[data-testid="forwarder-package-link-item"]')
+      .clear()
+      .type('item-override-002')
+    cy.get('[data-testid="forwarder-package-link-lifecycle"]')
+      .clear()
+      .type('life-entry-override-002')
+    cy.get('[data-testid="forwarder-package-link-arrival"]')
+      .clear()
+      .type('arrival-override-002')
+    cy.get('[data-testid="forwarder-package-link-notes"]')
+      .clear()
+      .type('Override to corrected package target')
+    cy.get('[data-testid="forwarder-package-link-override"]').click()
+    cy.wait('@overrideForwarderPackageLink')
+    cy.wait('@listForwarderPackageLinks')
+    cy.get('[data-testid="forwarder-package-link-result"]').should(
+      'contain',
+      'Override linked to item item-override-002'
+    )
+    cy.get('[data-testid="forwarder-package-link-state"]')
+      .should('contain', 'overridden to item item-override-002')
+      .and('contain', 'Source manual_override')
+    cy.get('[data-testid="forwarder-package-link-events"]')
+      .should('contain', 'overridden item item-override-002')
+      .and('contain', 'previous item item-expected-001')
+
+    cy.intercept('DELETE', '/api/forwarding/package-links*', (req) => {
+      expect(req.url).to.include('package_id=fwdpkg_audit_001')
+      expect(req.body).to.include({
+        source: 'manual_unlink',
+        actor: 'reviewer',
+        notes: 'Override to corrected package target',
+      })
+      expect(req.body.audit_trail).to.deep.equal([
+        'unlinked from purchase inbox UI: item-override-002 / arrival-override-002',
+      ])
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_reconciliation_unlink',
+          event: {
+            id: 'event-unlinked',
+            package_id: 'fwdpkg_audit_001',
+            action: 'unlinked',
+            previous_item_id: 'item-override-002',
+            source: 'manual_unlink',
+          },
+        },
+      })
+    }).as('unlinkForwarderPackage')
+
+    cy.get('[data-testid="forwarder-package-link-unlink"]').click()
+    cy.wait('@unlinkForwarderPackage')
+    cy.wait('@listForwarderPackageLinks')
+    cy.get('[data-testid="forwarder-package-link-result"]').should(
+      'contain',
+      'Unlinked package from reconciliation target'
+    )
+    cy.get('[data-testid="forwarder-package-link-empty"]').should(
+      'contain',
+      'No reconciliation link recorded'
+    )
+    cy.get('[data-testid="forwarder-package-link-events"]')
+      .should('contain', 'unlinked')
+      .and('contain', 'previous item item-override-002')
+      .and('contain', 'via manual_unlink')
   })
 })
