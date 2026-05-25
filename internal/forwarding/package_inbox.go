@@ -124,7 +124,7 @@ type PackageLinkEvent struct {
 type PackageMatchSignal struct {
 	Name     string  `json:"name"`
 	Matched  bool    `json:"matched"`
-	Weight   float64 `json:"weight"`
+	Weight   float64 `json:"score"`
 	Evidence string  `json:"evidence"`
 }
 
@@ -133,7 +133,7 @@ type PackageMatchSuggestion struct {
 	ItemID            string               `json:"item_id"`
 	LifecycleEntryID  string               `json:"lifecycle_entry_id,omitempty"`
 	ExpectedArrivalID string               `json:"expected_arrival_id,omitempty"`
-	Confidence        float64              `json:"confidence"`
+	Confidence        float64              `json:"confidence_score"`
 	ConfidenceLabel   string               `json:"confidence_label"`
 	Explanation       []string             `json:"explanation"`
 	Signals           []PackageMatchSignal `json:"signals"`

@@ -248,6 +248,26 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if suggestion["item_id"] != "fwd-match-item" || suggestion["confidence_label"] != "high" {
 		t.Fatalf("expected high confidence item suggestion, got %+v", suggestion)
 	}
+	if suggestion["confidence_score"] != float64(0.95) {
+		t.Fatalf("expected API confidence_score for UI rendering, got %+v", suggestion)
+	}
+	if _, ok := suggestion["confidence"]; ok {
+		t.Fatalf("suggestion API must not expose stale confidence field, got %+v", suggestion)
+	}
+	signals, ok := suggestion["signals"].([]any)
+	if !ok || len(signals) == 0 {
+		t.Fatalf("expected scored suggestion signals, got %+v", suggestion["signals"])
+	}
+	firstSignal, ok := signals[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected object suggestion signal, got %+v", signals[0])
+	}
+	if _, ok := firstSignal["score"]; !ok {
+		t.Fatalf("expected signal score for UI rendering, got %+v", firstSignal)
+	}
+	if _, ok := firstSignal["weight"]; ok {
+		t.Fatalf("suggestion signal API must not expose stale weight field, got %+v", firstSignal)
+	}
 	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links", nil, nil)
 	if listLinks.Code != http.StatusOK {
 		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
