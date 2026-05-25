@@ -129,3 +129,11 @@ Cabinet SHALL show the durable package-link audit event details returned by the 
 - **GIVEN** a user has opened a forwarder package detail panel with confirmed, override, or unlink audit events
 - **WHEN** Cabinet refreshes package link state from `/api/forwarding/package-links`
 - **THEN** Cabinet MUST show each event's action, current item/lifecycle/arrival target when present, previous item/lifecycle/arrival target when present, source, created timestamp, notes, and audit-trail entries without hiding the active link state.
+
+### Requirement INTEGRATION-045: Forwarder package inbox UI SHALL summarize reconciliation review state
+Cabinet SHALL show a compact forwarder package review summary so a reviewer can see package volume, known linked/unlinked reconciliation state, loaded audit event volume, and loaded match suggestion volume before drilling into individual package records.
+
+#### Scenario: Review package reconciliation summary
+- **GIVEN** the forwarder package inbox has loaded package records, package-link state, decision audit events, or match suggestions
+- **WHEN** the user reviews the forwarder package inbox
+- **THEN** Cabinet MUST show package, linked, unlinked, audit-event, and suggestion counts that update after package refreshes, link-state refreshes, link/unlink decisions, and match suggestion loads.
