@@ -82,6 +82,14 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	if getSecret.Code != http.StatusOK {
 		t.Fatalf("get secret status=%d body=%s", getSecret.Code, getSecret.Body.String())
 	}
+	deleteSecret := doRequest(t, a, http.MethodDelete, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if deleteSecret.Code != http.StatusNoContent {
+		t.Fatalf("delete secret status=%d body=%s", deleteSecret.Code, deleteSecret.Body.String())
+	}
+	missingSecret := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if missingSecret.Code != http.StatusBadRequest {
+		t.Fatalf("expected deleted secret lookup to fail, status=%d body=%s", missingSecret.Code, missingSecret.Body.String())
+	}
 
 	putLicense := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/license", strings.NewReader(`{"license_json":"{\"tier\":\"pro\"}"}`), map[string]string{"Content-Type": "application/json"})
 	if putLicense.Code != http.StatusOK {

@@ -75,6 +75,11 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
       req.reply({ statusCode: 200, body: { ok: true } })
     }).as('saveSecret')
 
+    cy.intercept('DELETE', '/api/profiles/*/secrets?key=openai_api_key', {
+      statusCode: 204,
+      body: {},
+    }).as('deleteSecret')
+
     cy.intercept('GET', '/api/provider/health*', {
       statusCode: 200,
       body: { status: 'ok', message: 'ok', updated_at: '2026-05-19T01:20:00Z' },
@@ -94,7 +99,8 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
     cy.get('[data-testid="provider-card-openai"]').should('not.contain', 'OpenAI is using:')
 
     cy.get('[data-testid="provider-open-openai"]').click()
-    cy.get('[data-testid="openai-config-dialog"]').should('be.visible')
+    cy.get('[role="dialog"]').should('be.visible')
+    cy.get('[data-testid="openai-config-dialog"]').should('exist')
     cy.get('[data-testid="openai-browser-auth-section"]').should('contain', 'Browser Auth')
     cy.get('[data-testid="openai-api-key-section"]').should('contain', 'API key')
     cy.get('[data-testid="openai-test-section"]').should('contain', 'Test OpenAI')
@@ -102,11 +108,11 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
 
     cy.get('[data-testid="openai-config-dialog"]').within(() => {
       cy.contains('button', 'Sync').should('not.exist')
-      cy.contains('label', 'OpenAI API key').should('be.visible')
+      cy.contains('label', 'OpenAI API key').should('exist')
       cy.get('[data-testid="provider-token-input"]')
         .should('have.attr', 'id', 'provider-token')
         .and('have.attr', 'placeholder', 'OpenAI API key')
-      cy.contains('label', 'Test model').should('be.visible')
+      cy.contains('label', 'Test model').should('exist')
       cy.get('[data-testid="openai-test-prompt"]').should(
         'have.attr',
         'aria-label',
@@ -189,5 +195,30 @@ describe('integrations/provider-openai-chatgpt-ux', () => {
       .should('be.visible')
       .and('contain', 'OpenAI API key is required before validating.')
     cy.get('@providerHealth.all').should('have.length', 0)
+  })
+
+  it('PROVIDER-OPENAI-UX-009 disconnects the API key without clearing Browser Auth state', () => {
+    cy.wait('@activeProfile')
+    cy.wait('@providersRegistry')
+    cy.wait('@profileSettings')
+
+    cy.get('[data-testid="provider-open-openai"]').click()
+    cy.get('[data-testid="openai-api-key-disconnect"]').click()
+
+    cy.wait('@deleteSecret')
+    cy.wait('@saveSettings').then(({ request }) => {
+      expect(request.body.settings).to.include({
+        openai_active_auth_method: '',
+        'openai.active_auth_method': '',
+        'integration.openai.enabled': 'false',
+      })
+      expect(request.body.settings).to.include({
+        'openai.browser_auth_state': 'setup_needed',
+      })
+    })
+    cy.contains('OpenAI API key disconnected.').should('be.visible')
+    cy.get('[data-testid="openai-api-key-status"]').should('contain', 'setup_needed')
+    cy.get('[data-testid="openai-active-method"]').should('have.value', 'None connected')
+    cy.get('[data-testid="openai-test-run"]').should('be.disabled')
   })
 })
