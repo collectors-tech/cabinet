@@ -565,6 +565,148 @@ func TestIntegrationsEditPersistenceContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationsProviderConfigInputsHaveLabels(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"htmlFor='provider-base-url'",
+		"Base URL",
+		"id='provider-base-url'",
+		"htmlFor='provider-marketplace'",
+		"Marketplace / Region",
+		"id='provider-marketplace'",
+		"htmlFor='provider-items-per-page'",
+		"Items per page",
+		"id='provider-items-per-page'",
+		"htmlFor='provider-token'",
+		"New token / API key",
+		"id='provider-token'",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations provider input label contract missing token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"/api/provider/health?provider=",
+		"const checkedAt = payload.updated_at ?? new Date().toISOString()",
+		"health: nextProvider.health",
+		"last_run: nextProvider.last_run",
+		"{actionMessage ? <p>{actionMessage}</p> : null}",
+		"Validated ${editingProvider.display_name} health: ${healthStatus}.",
+		"Validating...",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations validate health reconciliation missing token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationsEbaySellerOperationsPanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-seller-operations-panel'",
+		"editingProvider.seller_operations",
+		"ebay-seller-operation-",
+		"previewSellerOperation",
+		"executeSellerOperation",
+		"/api/providers/ebay/seller-operations/preview",
+		"/api/providers/ebay/seller-operations/execute",
+		"ebay-seller-operation-preview-result",
+		"ebay-seller-operation-execute-result",
+		"ebay-seller-operation-read-result",
+		"ebay-seller-operation-read-records",
+		"sellerOperationResult.preview.remote_write",
+		"sellerOperationExecution.execution.local_only",
+		"sellerOperationExecution.execution.result",
+		"External writes require confirmation",
+		"status.blocker",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay seller operations panel contract missing token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationsEbayListingLifecyclePanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-listing-lifecycle-panel'",
+		"listingLifecycleCommands",
+		"previewListingLifecycle",
+		"executeListingLifecycle",
+		"/api/providers/ebay/listing-lifecycle/preview",
+		"/api/providers/ebay/listing-lifecycle/execute",
+		"ebay-listing-lifecycle-preview-result",
+		"ebay-listing-lifecycle-execute-result",
+		"listingLifecycleResult.preview.remote_write",
+		"listingLifecycleExecution.execution.local_only",
+		"Publish, revise, end, and relist require",
+		"ebay_listing_lifecycle_adapter_required",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay listing lifecycle panel contract missing token: %s", token)
+		}
+	}
+}
+
+func TestIntegrationsEbayLandedCostPlannerPanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-landed-cost-planner-panel'",
+		"defaultLandedCostPayload",
+		"previewLandedCostPlan",
+		"/api/commerce/landed-cost/plan",
+		"ebay-landed-cost-preview",
+		"ebay-landed-cost-result",
+		"Preview only / no mutation",
+		"Landed-cost plan previewed without mutating inventory or shipment state.",
+		"landedCostResult.allocation",
+		"landedCostResult.consolidation",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay landed-cost planner panel contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
