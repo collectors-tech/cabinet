@@ -838,4 +838,141 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'previous item item-override-002')
       .and('contain', 'via manual_unlink')
   })
+
+  it('INTEGRATION-043 shows forwarder package match suggestions and prepares confirmation', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_suggest_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'email',
+            external_package_id: 'STK-SUGGEST-6001',
+            shipment_id: 'SHIP-6001',
+            tracking_number: '1ZSUGGEST6001',
+            status: 'received',
+            sender: 'slot shop',
+            warehouse_location: 'Locker S-6',
+            weight_grams: 760,
+            provenance_key: 'stackry:email:STK-SUGGEST-6001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], events: [], summary: { count: 0, events: 0 } },
+    }).as('listForwarderPackageLinks')
+
+    cy.intercept('GET', '/api/forwarding/package-match-suggestions*', {
+      statusCode: 200,
+      body: {
+        mode: 'forwarder_package_match_suggestions',
+        mutable: false,
+        suggestions: [
+          {
+            id: 'suggestion-fwdpkg-001',
+            package_id: 'fwdpkg_suggest_001',
+            item_id: 'item-suggested-001',
+            lifecycle_entry_id: 'life-suggested-001',
+            expected_arrival_id: 'arrival-suggested-001',
+            confidence_score: 94,
+            confidence_label: 'high',
+            signals: [
+              {
+                name: 'tracking',
+                score: 40,
+                evidence: '1ZSUGGEST6001 matched purchase notes',
+              },
+              {
+                name: 'seller',
+                score: 20,
+                evidence: 'slot shop matched package sender',
+              },
+            ],
+            audit_trail: [
+              'suggested_match package=fwdpkg_suggest_001 item=item-suggested-001 confidence=high score=94',
+            ],
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackageMatchSuggestions')
+
+    cy.intercept('POST', '/api/forwarding/package-links', (req) => {
+      expect(req.body).to.include({
+        package_id: 'fwdpkg_suggest_001',
+        item_id: 'item-suggested-001',
+        lifecycle_entry_id: 'life-suggested-001',
+        expected_arrival_id: 'arrival-suggested-001',
+        source: 'suggested_match',
+        decision: 'confirmed',
+        override: false,
+        actor: 'reviewer',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_reconciliation_link',
+          link: {
+            id: 'fwdpkg_suggest_001:item-suggested-001:arrival-suggested-001',
+            package_id: 'fwdpkg_suggest_001',
+            item_id: 'item-suggested-001',
+            expected_arrival_id: 'arrival-suggested-001',
+            source: 'suggested_match',
+            decision: 'confirmed',
+          },
+        },
+      })
+    }).as('confirmSuggestedForwarderPackageLink')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-refresh"]').click()
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-match-suggestions-load"]').click()
+    cy.wait('@listForwarderPackageMatchSuggestions')
+    cy.get('[data-testid="forwarder-package-suggestion-result"]')
+      .should('be.visible')
+      .and('contain', 'Found 1 package match suggestion')
+    cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
+    cy.wait('@listForwarderPackageLinks')
+    cy.get('[data-testid="forwarder-package-match-suggestions"]')
+      .should('be.visible')
+      .and('contain', 'high match to item item-suggested-001')
+      .and('contain', 'Score 94')
+      .and('contain', 'arrival arrival-suggested-001')
+    cy.get('[data-testid="forwarder-package-match-signals"]')
+      .should('contain', 'tracking')
+      .and('contain', '1ZSUGGEST6001 matched purchase notes')
+    cy.get('[data-testid="forwarder-package-match-audit-trail"]').should(
+      'contain',
+      'suggested_match package=fwdpkg_suggest_001'
+    )
+
+    cy.get('[data-testid="forwarder-package-match-suggestion-use"]').click()
+    cy.get('[data-testid="forwarder-package-link-item"]').should(
+      'have.value',
+      'item-suggested-001'
+    )
+    cy.get('[data-testid="forwarder-package-link-source"]').should(
+      'have.value',
+      'suggested_match'
+    )
+    cy.get('[data-testid="forwarder-package-link-result"]').should(
+      'contain',
+      'Prepared suggested match for item item-suggested-001'
+    )
+    cy.get('[data-testid="forwarder-package-link-save"]').click()
+    cy.wait('@confirmSuggestedForwarderPackageLink')
+  })
 })

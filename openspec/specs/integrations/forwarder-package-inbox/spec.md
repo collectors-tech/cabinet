@@ -113,3 +113,11 @@ Cabinet SHALL let users confirm, override, and unlink package reconciliation tar
 - **GIVEN** a user has opened a persisted forwarder package detail record with existing or pending reconciliation link decisions
 - **WHEN** the user confirms a link, overrides the target with explicit override intent, or unlinks the package from the detail panel
 - **THEN** Cabinet MUST send the corresponding decision/source/notes/audit-trail payload to `/api/forwarding/package-links`, refresh active link and event state after each mutation, show confirmed/override/unlinked decision evidence inline, and surface API validation errors without losing the user's entered target fields.
+
+### Requirement INTEGRATION-043: Forwarder package inbox UI SHALL expose match suggestions before confirmation
+Cabinet SHALL let users request non-mutating forwarder package match suggestions from the package inbox, inspect confidence labels, scored signal evidence, and audit-ready explanation text, then use a suggestion to prefill the existing reconciliation confirmation form without creating a link until the user confirms.
+
+#### Scenario: Review and accept a suggested package match
+- **GIVEN** a user has a persisted unlinked forwarder package and Cabinet has computed package-to-purchase-arrival suggestions
+- **WHEN** the user requests match suggestions, opens a package detail panel, and chooses a suggested target
+- **THEN** Cabinet MUST show the suggestion confidence, score, signal evidence, expected-arrival target, and audit trail text, prefill item/lifecycle/arrival/source fields from the suggestion, and only call `/api/forwarding/package-links` after the user explicitly confirms the link.

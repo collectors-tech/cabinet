@@ -167,6 +167,32 @@ type ForwarderPackageLinkForm = {
   notes: string
 }
 
+type ForwarderPackageMatchSignal = {
+  name?: string
+  score?: number
+  evidence?: string
+}
+
+type ForwarderPackageMatchSuggestion = {
+  id?: string
+  package_id: string
+  item_id: string
+  lifecycle_entry_id?: string
+  expected_arrival_id?: string
+  confidence_score?: number
+  confidence_label?: string
+  signals?: ForwarderPackageMatchSignal[]
+  explanations?: string[]
+  audit_trail?: string[]
+}
+
+type ForwarderPackageMatchSuggestionResponse = {
+  suggestions?: ForwarderPackageMatchSuggestion[]
+  summary?: {
+    count?: number
+  }
+}
+
 const sampleCards: PurchaseCard[] = [
   {
     order_id: '20-14595-70928',
@@ -270,6 +296,12 @@ export function Purchases() {
   const [packageLinkResults, setPackageLinkResults] = useState<
     Record<string, string | null>
   >({})
+  const [packageSuggestions, setPackageSuggestions] = useState<
+    Record<string, ForwarderPackageMatchSuggestion[]>
+  >({})
+  const [packageSuggestionResult, setPackageSuggestionResult] = useState<
+    string | null
+  >(null)
   const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
     null
   )
@@ -382,6 +414,49 @@ export function Purchases() {
     }
   }, [])
 
+  const loadPackageSuggestions = useCallback(async () => {
+    setPackagesLoading(true)
+    setPackageError(null)
+    setPackageSuggestionResult(null)
+    try {
+      const params = new URLSearchParams()
+      if (packageForm.profile_id.trim()) {
+        params.set('profile_id', packageForm.profile_id.trim())
+      }
+      const response = await fetch(
+        '/api/forwarding/package-match-suggestions?' + params.toString()
+      )
+      if (!response.ok) {
+        throw new Error('forwarder_package_match_suggestions_' + response.status)
+      }
+      const payload =
+        (await response.json()) as ForwarderPackageMatchSuggestionResponse
+      const grouped = (payload.suggestions ?? []).reduce<
+        Record<string, ForwarderPackageMatchSuggestion[]>
+      >((current, suggestion) => {
+        current[suggestion.package_id] = [
+          ...(current[suggestion.package_id] ?? []),
+          suggestion,
+        ]
+        return current
+      }, {})
+      setPackageSuggestions(grouped)
+      const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
+      setPackageSuggestionResult(
+        'Found ' + count + ' package match suggestion' + (count === 1 ? '' : 's')
+      )
+    } catch (err) {
+      setPackageSuggestions({})
+      setPackageError(
+        err instanceof Error
+          ? err.message
+          : 'forwarder_package_match_suggestions_failed'
+      )
+    } finally {
+      setPackagesLoading(false)
+    }
+  }, [packageForm.profile_id])
+
   const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
     setPackageForm((current) => ({ ...current, [field]: value }))
   }
@@ -397,6 +472,33 @@ export function Purchases() {
     setPackageLinkForms((current) => ({
       ...current,
       [packageID]: { ...packageLinkFormFor(packageID), [field]: value },
+    }))
+  }
+
+  const applyPackageSuggestion = (
+    packageID: string,
+    suggestion: ForwarderPackageMatchSuggestion
+  ) => {
+    setPackageLinkForms((current) => ({
+      ...current,
+      [packageID]: {
+        item_id: suggestion.item_id,
+        lifecycle_entry_id: suggestion.lifecycle_entry_id ?? '',
+        expected_arrival_id: suggestion.expected_arrival_id ?? '',
+        source: 'suggested_match',
+        notes:
+          (suggestion.confidence_label ?? 'suggested') +
+          ' confidence package match suggestion',
+      },
+    }))
+    setPackageLinkResults((current) => ({
+      ...current,
+      [packageID]:
+        'Prepared suggested match for item ' +
+        suggestion.item_id +
+        (suggestion.expected_arrival_id
+          ? ' / arrival ' + suggestion.expected_arrival_id
+          : ''),
     }))
   }
 
@@ -906,6 +1008,19 @@ export function Purchases() {
               )}
               Refresh packages
             </Button>
+            <Button
+              variant='secondary'
+              data-testid='forwarder-package-match-suggestions-load'
+              onClick={() => void loadPackageSuggestions()}
+              disabled={packagesLoading}
+            >
+              {packagesLoading ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : (
+                <ShieldCheck className='mr-2 h-4 w-4' />
+              )}
+              Find matches
+            </Button>
           </div>
 
           <div className='grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]'>
@@ -1115,6 +1230,15 @@ export function Purchases() {
                 </div>
               ) : null}
 
+              {packageSuggestionResult ? (
+                <div
+                  className='rounded-md border bg-muted/30 p-3 text-sm'
+                  data-testid='forwarder-package-suggestion-result'
+                >
+                  {packageSuggestionResult}
+                </div>
+              ) : null}
+
               {packageCSVErrors.length > 0 ? (
                 <div
                   className='rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -1153,6 +1277,7 @@ export function Purchases() {
                     const linkForm = packageLinkFormFor(pkg.id)
                     const links = packageLinks[pkg.id] ?? []
                     const events = packageLinkEvents[pkg.id] ?? []
+                    const suggestions = packageSuggestions[pkg.id] ?? []
                     return (
                     <article
                       key={pkg.id}
@@ -1266,6 +1391,86 @@ export function Purchases() {
                             className='space-y-3 rounded-md border bg-background p-4'
                             data-testid='forwarder-package-link-panel'
                           >
+                            {suggestions.length > 0 ? (
+                              <div
+                                className='space-y-2 rounded-md border bg-muted/20 p-3 text-sm'
+                                data-testid='forwarder-package-match-suggestions'
+                              >
+                                <p className='font-medium'>
+                                  Suggested package matches
+                                </p>
+                                {suggestions.map((suggestion, index) => (
+                                  <div
+                                    key={suggestion.id ?? index}
+                                    className='rounded-md border bg-background p-3'
+                                    data-testid='forwarder-package-match-suggestion'
+                                  >
+                                    <div className='flex flex-wrap items-start justify-between gap-3'>
+                                      <div>
+                                        <p className='font-medium'>
+                                          {labelForStatus(
+                                            suggestion.confidence_label ??
+                                              'suggested'
+                                          )}{' '}
+                                          match to item {suggestion.item_id}
+                                        </p>
+                                        <p className='text-xs text-muted-foreground'>
+                                          Score{' '}
+                                          {suggestion.confidence_score ?? 0}
+                                          {suggestion.expected_arrival_id
+                                            ? ' · arrival ' +
+                                              suggestion.expected_arrival_id
+                                            : ''}
+                                        </p>
+                                      </div>
+                                      <Button
+                                        type='button'
+                                        size='sm'
+                                        variant='outline'
+                                        data-testid='forwarder-package-match-suggestion-use'
+                                        onClick={() =>
+                                          applyPackageSuggestion(
+                                            pkg.id,
+                                            suggestion
+                                          )
+                                        }
+                                      >
+                                        Use suggestion
+                                      </Button>
+                                    </div>
+                                    {(suggestion.signals ?? []).length > 0 ? (
+                                      <ul
+                                        className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                        data-testid='forwarder-package-match-signals'
+                                      >
+                                        {(suggestion.signals ?? []).map(
+                                          (signal, signalIndex) => (
+                                            <li key={signalIndex}>
+                                              {signal.name ?? 'signal'}:{' '}
+                                              {signal.evidence ?? 'matched'} (
+                                              {signal.score ?? 0})
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    ) : null}
+                                    {(suggestion.audit_trail ?? []).length >
+                                    0 ? (
+                                      <ul
+                                        className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                        data-testid='forwarder-package-match-audit-trail'
+                                      >
+                                        {(suggestion.audit_trail ?? []).map(
+                                          (entry, auditIndex) => (
+                                            <li key={auditIndex}>{entry}</li>
+                                          )
+                                        )}
+                                      </ul>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                             <div>
                               <p className='text-sm font-medium'>
                                 Reconciliation link
