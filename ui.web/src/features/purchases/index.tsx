@@ -162,6 +162,16 @@ const defaultPackageCSV = [
   'STK-CSV-2001,received,SHIP-2001,1ZCSV2001,Locker C-4,520',
 ].join('\n')
 
+const defaultPackageEmail = [
+  'Package ID: STK-EMAIL-3001',
+  'Status: Received',
+  'Shipment ID: SHIP-3001',
+  'Tracking Number: 1ZEMAIL3001',
+  'Warehouse Location: Locker E-5',
+  'Weight Grams: 640',
+  'Sender: Stackry Intake',
+].join('\n')
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -182,6 +192,7 @@ export function Purchases() {
   const [packageError, setPackageError] = useState<string | null>(null)
   const [packageResult, setPackageResult] = useState<string | null>(null)
   const [packageCSV, setPackageCSV] = useState(defaultPackageCSV)
+  const [packageEmail, setPackageEmail] = useState(defaultPackageEmail)
   const [packageCSVErrors, setPackageCSVErrors] = useState<
     ForwarderPackageCSVError[]
   >([])
@@ -359,6 +370,45 @@ export function Purchases() {
     } catch (err) {
       setPackageError(
         err instanceof Error ? err.message : 'forwarder_package_csv_failed'
+      )
+    } finally {
+      setPackagesLoading(false)
+    }
+  }
+
+  const importPackageEmail = async () => {
+    setPackagesLoading(true)
+    setPackageError(null)
+    setPackageResult(null)
+    setPackageCSVErrors([])
+    try {
+      const response = await fetch('/api/forwarding/packages/import-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: packageForm.profile_id,
+          provider: packageForm.provider,
+          message_id: 'manual-email-notice',
+          body: packageEmail,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message)
+            : 'forwarder_package_email_import_' + response.status
+        throw new Error(message)
+      }
+      const result = payload as { package?: ForwarderPackage }
+      setPackageResult(
+        'Imported email package ' +
+          (result.package?.external_package_id ?? 'notice')
+      )
+      await loadPackages(packageForm.profile_id)
+    } catch (err) {
+      setPackageError(
+        err instanceof Error ? err.message : 'forwarder_package_email_failed'
       )
     } finally {
       setPackagesLoading(false)
@@ -762,6 +812,38 @@ export function Purchases() {
               </div>
             </div>
 
+            <div className='rounded-md border p-4'>
+              <div className='mb-3 flex items-center gap-2'>
+                <Inbox className='h-4 w-4' />
+                <h3 className='font-medium'>Email import</h3>
+              </div>
+              <div className='grid gap-3'>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='forwarder-package-email'>Package email</Label>
+                  <Textarea
+                    id='forwarder-package-email'
+                    data-testid='forwarder-package-email'
+                    className='min-h-32 font-mono text-xs'
+                    value={packageEmail}
+                    onChange={(event) => setPackageEmail(event.target.value)}
+                  />
+                </div>
+                <Button
+                  variant='secondary'
+                  data-testid='forwarder-package-import-email'
+                  onClick={() => void importPackageEmail()}
+                  disabled={packagesLoading}
+                >
+                  {packagesLoading ? (
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  ) : (
+                    <Inbox className='mr-2 h-4 w-4' />
+                  )}
+                  Import Email
+                </Button>
+              </div>
+            </div>
+
             <div className='space-y-3'>
               {packageError ? (
                 <div
@@ -832,10 +914,14 @@ export function Purchases() {
                           {labelForStatus(pkg.status)}
                         </span>
                       </div>
-                      <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-3'>
+                      <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-4'>
                         <div>
                           <dt className='text-muted-foreground'>Warehouse</dt>
                           <dd>{pkg.warehouse_location || 'Pending'}</dd>
+                        </div>
+                        <div>
+                          <dt className='text-muted-foreground'>Sender</dt>
+                          <dd>{pkg.sender || 'Pending'}</dd>
                         </div>
                         <div>
                           <dt className='text-muted-foreground'>Weight</dt>

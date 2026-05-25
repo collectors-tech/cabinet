@@ -315,4 +315,98 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'stackry / csv')
       .and('contain', 'stackry:csv:STK-CSV-2001')
   })
+
+  it('INTEGRATION-036 imports email forwarder package notices and reports validation errors', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/forwarding/packages/import-email', {
+      statusCode: 200,
+      body: {
+        mode: 'forwarder_package_email_import',
+        package: {
+          id: 'fwdpkg_email_001',
+          profile_id: 'e2e-profile-001',
+          provider: 'stackry',
+          source: 'email',
+          external_package_id: 'STK-EMAIL-3001',
+          shipment_id: 'SHIP-3001',
+          tracking_number: '1ZEMAIL3001',
+          status: 'received',
+          sender: 'Stackry Intake',
+          warehouse_location: 'Locker E-5',
+          weight_grams: 640,
+          provenance_key: 'stackry:email:STK-EMAIL-3001',
+        },
+      },
+    }).as('importForwarderPackageEmail')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_email_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'email',
+            external_package_id: 'STK-EMAIL-3001',
+            shipment_id: 'SHIP-3001',
+            tracking_number: '1ZEMAIL3001',
+            status: 'received',
+            sender: 'Stackry Intake',
+            warehouse_location: 'Locker E-5',
+            weight_grams: 640,
+            provenance_key: 'stackry:email:STK-EMAIL-3001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-email"]').clear()
+    cy.get('[data-testid="forwarder-package-email"]').type(
+      'Package ID: STK-EMAIL-3001\nStatus: Received\nShipment ID: SHIP-3001\nTracking Number: 1ZEMAIL3001\nWarehouse Location: Locker E-5\nWeight Grams: 640\nSender: Stackry Intake',
+      { delay: 0 }
+    )
+    cy.get('[data-testid="forwarder-package-import-email"]').click()
+    cy.wait('@importForwarderPackageEmail')
+      .its('request.body')
+      .should('include', {
+        profile_id: 'e2e-profile-001',
+        provider: 'stackry',
+        message_id: 'manual-email-notice',
+      })
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-result"]').should(
+      'contain',
+      'Imported email package STK-EMAIL-3001'
+    )
+    cy.get('[data-testid="forwarder-package-list"]')
+      .should('contain', 'STK-EMAIL-3001')
+      .and('contain', 'stackry / email')
+      .and('contain', 'Stackry Intake')
+      .and('contain', 'stackry:email:STK-EMAIL-3001')
+
+    cy.intercept('POST', '/api/forwarding/packages/import-email', {
+      statusCode: 400,
+      body: {
+        error: 'invalid_forwarder_package_email',
+        message: 'external_package_id is required',
+      },
+    }).as('importInvalidForwarderPackageEmail')
+    cy.get('[data-testid="forwarder-package-email"]').clear()
+    cy.get('[data-testid="forwarder-package-email"]').type(
+      'Status: Received\nTracking Number: 1ZEMAIL3002',
+      { delay: 0 }
+    )
+    cy.get('[data-testid="forwarder-package-import-email"]').click()
+    cy.wait('@importInvalidForwarderPackageEmail')
+    cy.get('[data-testid="forwarder-package-error"]')
+      .should('be.visible')
+      .and('contain', 'external_package_id is required')
+  })
 })

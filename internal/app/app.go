@@ -3301,6 +3301,45 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/forwarding/packages/import-email", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			MessageID string `json:"message_id"`
+			Body      string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imported, err := forwarding.ParsePackageEmail(req.ProfileID, req.Provider, req.MessageID, strings.NewReader(req.Body))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		pkg, err := forwarderInbox.UpsertPackage(r.Context(), imported)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":    "forwarder_package_email_import",
+			"package": pkg,
+		})
+	})
 	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

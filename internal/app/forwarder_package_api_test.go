@@ -95,3 +95,54 @@ func TestForwarderPackageCSVImportAPIUpsertsValidRowsAndReportsRowErrors(t *test
 		t.Fatalf("expected only valid CSV package to persist, got %+v", listPayload)
 	}
 }
+
+func TestForwarderPackageEmailImportAPIUpsertsNotice(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	body := `{
+		"profile_id":"profile-email-api",
+		"provider":"Stackry",
+		"message_id":"msg-stackry-001",
+		"body":"Package ID: PKG-EMAIL-API-1\nStatus: Received\nShipment ID: SHIP-EMAIL-1\nTracking Number: TRACK-EMAIL-1\nWarehouse Location: Locker E-5\nWeight Grams: 640\nSender: Stackry Intake"
+	}`
+	resp := doRequest(t, a, http.MethodPost, "/api/forwarding/packages/import-email", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("email import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Package map[string]any `json:"package"`
+		Mode    string         `json:"mode"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode email import payload: %v", err)
+	}
+	if payload.Mode != "forwarder_package_email_import" || payload.Package["external_package_id"] != "PKG-EMAIL-API-1" || payload.Package["source"] != "email" {
+		t.Fatalf("expected imported email package response, got %+v", payload)
+	}
+	listed := doRequest(t, a, http.MethodGet, "/api/forwarding/packages?profile_id=profile-email-api", nil, nil)
+	if listed.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listed.Code, listed.Body.String())
+	}
+	var listPayload struct {
+		Packages []map[string]any
+		Summary  map[string]int
+	}
+	if err := json.NewDecoder(listed.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list payload: %v", err)
+	}
+	if listPayload.Summary["count"] != 1 || listPayload.Packages[0]["provenance_key"] != "stackry:email:PKG-EMAIL-API-1" {
+		t.Fatalf("expected email package to persist, got %+v", listPayload)
+	}
+}
+
+func TestForwarderPackageEmailImportAPIRejectsInvalidNotice(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	body := `{"profile_id":"profile-email-api","provider":"Stackry","message_id":"msg-stackry-invalid","body":"Status: Received\nTracking Number: TRACK-EMAIL-2"}`
+	resp := doRequest(t, a, http.MethodPost, "/api/forwarding/packages/import-email", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid email import to fail, status=%d body=%s", resp.Code, resp.Body.String())
+	}
+}

@@ -57,3 +57,11 @@ Cabinet SHALL parse Stackry/freight-forwarder email package notices into normali
 - **GIVEN** a user has a forwarded package notification email containing package id, status, shipment/tracking fields, received timestamp, sender, warehouse location, and package weight
 - **WHEN** Cabinet parses the email for a profile and provider
 - **THEN** Cabinet MUST map supported label aliases into a normalized source `email` package import, preserve the source message id and raw body as provenance, return deterministic validation errors for missing identity or invalid weight values, and produce an email provenance key for package upsert.
+
+### Requirement INTEGRATION-036: Forwarder package inbox SHALL import email notices through API and UI
+Cabinet SHALL let users submit Stackry/freight-forwarder package email notice text from the package inbox UI, persist the parsed notice through the forwarder package API, refresh the profile package list, and show deterministic validation errors inline when the notice cannot be normalized.
+
+#### Scenario: Import a package email notice from the inbox UI
+- **GIVEN** a user has an active profile and enters a package notification email containing package id, status, shipment/tracking fields, sender, warehouse location, and package weight
+- **WHEN** the user submits the email import from the forwarder package inbox
+- **THEN** Cabinet MUST upsert the notice as source `email`, preserve its email provenance key, refresh the visible package list, and display parser/API validation errors inline without creating invalid package records.
