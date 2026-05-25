@@ -49,3 +49,11 @@ Cabinet SHALL let users submit Stackry/freight-forwarder CSV package rows from t
 - **GIVEN** a user has an active profile and enters CSV package rows with at least one valid package and at least one invalid row
 - **WHEN** the user submits the CSV import from the forwarder package inbox
 - **THEN** Cabinet MUST upsert valid rows as source `csv`, preserve their provenance keys, keep invalid rows out of the package list, refresh the visible package list, and display row-specific CSV errors inline.
+
+### Requirement INTEGRATION-035: Forwarder package inbox SHALL parse email package notices
+Cabinet SHALL parse Stackry/freight-forwarder email package notices into normalized package imports while preserving message provenance and rejecting notices that lack a stable package identity or valid package fields.
+
+#### Scenario: Parse a package email notice
+- **GIVEN** a user has a forwarded package notification email containing package id, status, shipment/tracking fields, received timestamp, sender, warehouse location, and package weight
+- **WHEN** Cabinet parses the email for a profile and provider
+- **THEN** Cabinet MUST map supported label aliases into a normalized source `email` package import, preserve the source message id and raw body as provenance, return deterministic validation errors for missing identity or invalid weight values, and produce an email provenance key for package upsert.
