@@ -105,3 +105,11 @@ Cabinet SHALL persist explicit decision metadata and audit events when a user co
 - **GIVEN** a profile has a persisted forwarder package, candidate purchase arrivals, and a current package reconciliation link
 - **WHEN** a user confirms a suggested target, overrides the link to a different target with explicit override intent, or unlinks the package
 - **THEN** Cabinet MUST persist decision/source/notes/audit-trail metadata, reject ambiguous target changes unless override is explicit, preserve durable audit events for confirmed/override/unlinked decisions, remove the active link after unlink, and return the decision/event evidence through the package-link API.
+
+### Requirement INTEGRATION-042: Forwarder package inbox UI SHALL expose link decision audit controls
+Cabinet SHALL let users confirm, override, and unlink package reconciliation targets from the forwarder package detail panel while showing the active decision metadata and durable audit event history returned by the package-link API.
+
+#### Scenario: Review and update package link decisions from the inbox UI
+- **GIVEN** a user has opened a persisted forwarder package detail record with existing or pending reconciliation link decisions
+- **WHEN** the user confirms a link, overrides the target with explicit override intent, or unlinks the package from the detail panel
+- **THEN** Cabinet MUST send the corresponding decision/source/notes/audit-trail payload to `/api/forwarding/package-links`, refresh active link and event state after each mutation, show confirmed/override/unlinked decision evidence inline, and surface API validation errors without losing the user's entered target fields.
