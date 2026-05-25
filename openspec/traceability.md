@@ -6,6 +6,8 @@
 
 | Requirement ID | Spec Path | Route/Component Scope | Validating Tests | Status |
 | --- | --- | --- | --- | --- |
+| INTEGRATION-029 | openspec/specs/integrations/forwarder-package-inbox/spec.md | internal/forwarding package import normalization contract for Stackry and future forwarders | TestNormalizeForwarderPackageImportPreservesProvenance, TestNormalizeForwarderPackageImportRequiresStableIdentity (internal/forwarding/package_inbox_test.go) | partial |
+| INTEGRATION-030 | openspec/specs/integrations/forwarder-package-inbox/spec.md | internal/forwarding in-memory inbox upsert contract for duplicate provenance keys | TestPackageInboxDeduplicatesByProvenanceKey (internal/forwarding/package_inbox_test.go) | partial |
 | `AI-ASSIST-001` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AI-ASSIST-002` | `openspec/specs/chats/ai-assist/spec.md` | `openspec/specs/chats/ai-assist/spec.md` | TestWave7AIContractsMissingKeySuggestAndToggle (internal/app/traceability_wave7_ai_settings_lookup_test.go) | implemented |
 | `AI-ASSIST-003` | `openspec/specs/chats/ai-assist/spec.md` | `internal/app/ai_api_test.go` (`TestAIAssistApplyRequiresExplicitConfirmation`) | implemented |
