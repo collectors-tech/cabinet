@@ -140,4 +140,101 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchase-inbox-loading-state"]').should('not.exist')
     cy.get('[data-testid="purchase-inbox-empty-state"]').should('be.visible')
   })
+
+  it('INTEGRATION-032 imports and lists manual forwarder packages', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_test_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'manual',
+            external_package_id: 'STK-PKG-1001',
+            shipment_id: 'SHIP-1001',
+            tracking_number: '1Z999AA10123456784',
+            status: 'received',
+            warehouse_location: 'Locker A-12',
+            weight_grams: 420,
+            provenance_key: 'stackry:manual:STK-PKG-1001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+    cy.intercept('POST', '/api/forwarding/packages', {
+      statusCode: 200,
+      body: {
+        mode: 'forwarder_package_upsert',
+        package: {
+          id: 'fwdpkg_test_001',
+          profile_id: 'e2e-profile-001',
+          provider: 'stackry',
+          source: 'manual',
+          external_package_id: 'STK-PKG-1001',
+          shipment_id: 'SHIP-1001',
+          tracking_number: '1Z999AA10123456784',
+          status: 'received',
+          warehouse_location: 'Locker A-12',
+          weight_grams: 420,
+          provenance_key: 'stackry:manual:STK-PKG-1001',
+        },
+      },
+    }).as('importForwarderPackage')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
+    cy.get('[data-testid="forwarder-package-import"]').click()
+    cy.wait('@importForwarderPackage')
+      .its('request.body')
+      .should('include', {
+        profile_id: 'e2e-profile-001',
+        provider: 'stackry',
+        source: 'manual',
+        external_package_id: 'STK-PKG-1001',
+        status: 'received',
+        weight_grams: 420,
+      })
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-result"]').should(
+      'contain',
+      'Imported package STK-PKG-1001'
+    )
+    cy.get('[data-testid="forwarder-package-list"]')
+      .should('contain', 'STK-PKG-1001')
+      .and('contain', 'stackry / manual')
+      .and('contain', 'Locker A-12')
+      .and('contain', 'stackry:manual:STK-PKG-1001')
+  })
+
+  it('INTEGRATION-032 shows forwarder package import validation errors', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/forwarding/packages', {
+      statusCode: 400,
+      body: {
+        error: 'invalid_forwarder_package',
+        message: 'external_package_id is required',
+      },
+    }).as('importForwarderPackage')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-external-id"]').clear()
+    cy.get('[data-testid="forwarder-package-import"]').click()
+    cy.wait('@importForwarderPackage')
+    cy.get('[data-testid="forwarder-package-error"]')
+      .should('be.visible')
+      .and('contain', 'external_package_id is required')
+  })
 })
