@@ -1657,27 +1657,64 @@ export function Purchases() {
                               {events.length > 0 ? (
                                 <ul className='mt-2 space-y-2'>
                                   {events.map((event) => (
-                                    <li key={event.id}>
-                                      <span className='font-medium'>
-                                        {labelForStatus(event.action)}
-                                      </span>
-                                      {event.item_id
-                                        ? ' item ' + event.item_id
-                                        : ''}
-                                      {event.expected_arrival_id
-                                        ? ' / arrival ' +
-                                          event.expected_arrival_id
-                                        : ''}
-                                      {event.previous_item_id
-                                        ? ' (previous item ' +
-                                          event.previous_item_id +
-                                          ')'
-                                        : ''}
-                                      <span className='text-muted-foreground'>
-                                        {' '}
+                                    <li key={event.id} className='space-y-1'>
+                                      <p>
+                                        <span className='font-medium'>
+                                          {labelForStatus(event.action)}
+                                        </span>
+                                        {event.item_id
+                                          ? ' item ' + event.item_id
+                                          : ''}
+                                        {event.lifecycle_entry_id
+                                          ? ' / lifecycle ' +
+                                            event.lifecycle_entry_id
+                                          : ''}
+                                        {event.expected_arrival_id
+                                          ? ' / arrival ' +
+                                            event.expected_arrival_id
+                                          : ''}
+                                        {event.previous_item_id ||
+                                        event.previous_lifecycle_entry_id ||
+                                        event.previous_expected_arrival_id ? (
+                                          <span className='text-muted-foreground'>
+                                            {' '}
+                                            (previous
+                                            {event.previous_item_id
+                                              ? ' item ' +
+                                                event.previous_item_id
+                                              : ''}
+                                            {event.previous_lifecycle_entry_id
+                                              ? ' / lifecycle ' +
+                                                event.previous_lifecycle_entry_id
+                                              : ''}
+                                            {event.previous_expected_arrival_id
+                                              ? ' / arrival ' +
+                                                event.previous_expected_arrival_id
+                                              : ''}
+                                            )
+                                          </span>
+                                        ) : null}
+                                      </p>
+                                      <p className='text-xs text-muted-foreground'>
                                         via {event.source}
+                                        {event.created_at
+                                          ? ' · ' + event.created_at
+                                          : ''}
                                         {event.notes ? ' · ' + event.notes : ''}
-                                      </span>
+                                      </p>
+                                      {event.audit_trail &&
+                                      event.audit_trail.length > 0 ? (
+                                        <ul
+                                          className='list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                          data-testid='forwarder-package-link-event-audit-trail'
+                                        >
+                                          {event.audit_trail.map(
+                                            (entry, index) => (
+                                              <li key={index}>{entry}</li>
+                                            )
+                                          )}
+                                        </ul>
+                                      ) : null}
                                     </li>
                                   ))}
                                 </ul>

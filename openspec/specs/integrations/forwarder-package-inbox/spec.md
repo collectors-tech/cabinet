@@ -121,3 +121,11 @@ Cabinet SHALL let users request non-mutating forwarder package match suggestions
 - **GIVEN** a user has a persisted unlinked forwarder package and Cabinet has computed package-to-purchase-arrival suggestions
 - **WHEN** the user requests match suggestions, opens a package detail panel, and chooses a suggested target
 - **THEN** Cabinet MUST show the suggestion confidence, score, signal evidence, expected-arrival target, and audit trail text, prefill item/lifecycle/arrival/source fields from the suggestion, and only call `/api/forwarding/package-links` after the user explicitly confirms the link.
+
+### Requirement INTEGRATION-044: Forwarder package inbox UI SHALL expose complete decision audit event evidence
+Cabinet SHALL show the durable package-link audit event details returned by the package-link API so a reviewer can understand the current target, prior target, timestamp, source, notes, and audit-trail evidence for confirmed, override, and unlink decisions.
+
+#### Scenario: Review complete package decision event history
+- **GIVEN** a user has opened a forwarder package detail panel with confirmed, override, or unlink audit events
+- **WHEN** Cabinet refreshes package link state from `/api/forwarding/package-links`
+- **THEN** Cabinet MUST show each event's action, current item/lifecycle/arrival target when present, previous item/lifecycle/arrival target when present, source, created timestamp, notes, and audit-trail entries without hiding the active link state.

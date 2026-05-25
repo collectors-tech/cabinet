@@ -599,9 +599,14 @@ describe('purchases/purchase-inbox', () => {
               package_id: 'fwdpkg_audit_001',
               action: 'confirmed',
               item_id: 'item-expected-001',
+              lifecycle_entry_id: 'life-entry-001',
               expected_arrival_id: 'arrival-expected-001',
               source: 'manual_review',
               notes: 'Matched from package inbox review',
+              audit_trail: [
+                'confirmed from purchase inbox UI: item-expected-001 / arrival-expected-001',
+              ],
+              created_at: '2026-05-25T09:00:00Z',
             },
           ],
         },
@@ -628,19 +633,31 @@ describe('purchases/purchase-inbox', () => {
               package_id: 'fwdpkg_audit_001',
               action: 'overridden',
               item_id: 'item-override-002',
+              lifecycle_entry_id: 'life-entry-override-002',
               expected_arrival_id: 'arrival-override-002',
               previous_item_id: 'item-expected-001',
+              previous_lifecycle_entry_id: 'life-entry-001',
+              previous_expected_arrival_id: 'arrival-expected-001',
               source: 'manual_override',
               notes: 'Override to corrected package target',
+              audit_trail: [
+                'overridden from purchase inbox UI: item-override-002 / arrival-override-002',
+              ],
+              created_at: '2026-05-25T09:05:00Z',
             },
             {
               id: 'event-confirmed',
               package_id: 'fwdpkg_audit_001',
               action: 'confirmed',
               item_id: 'item-expected-001',
+              lifecycle_entry_id: 'life-entry-001',
               expected_arrival_id: 'arrival-expected-001',
               source: 'manual_review',
               notes: 'Matched from package inbox review',
+              audit_trail: [
+                'confirmed from purchase inbox UI: item-expected-001 / arrival-expected-001',
+              ],
+              created_at: '2026-05-25T09:00:00Z',
             },
           ],
         },
@@ -652,18 +669,31 @@ describe('purchases/purchase-inbox', () => {
               package_id: 'fwdpkg_audit_001',
               action: 'unlinked',
               previous_item_id: 'item-override-002',
+              previous_lifecycle_entry_id: 'life-entry-override-002',
+              previous_expected_arrival_id: 'arrival-override-002',
               source: 'manual_unlink',
               notes: 'Override to corrected package target',
+              audit_trail: [
+                'unlinked from purchase inbox UI: item-override-002 / arrival-override-002',
+              ],
+              created_at: '2026-05-25T09:08:00Z',
             },
             {
               id: 'event-overridden',
               package_id: 'fwdpkg_audit_001',
               action: 'overridden',
               item_id: 'item-override-002',
+              lifecycle_entry_id: 'life-entry-override-002',
               expected_arrival_id: 'arrival-override-002',
               previous_item_id: 'item-expected-001',
+              previous_lifecycle_entry_id: 'life-entry-001',
+              previous_expected_arrival_id: 'arrival-expected-001',
               source: 'manual_override',
               notes: 'Override to corrected package target',
+              audit_trail: [
+                'overridden from purchase inbox UI: item-override-002 / arrival-override-002',
+              ],
+              created_at: '2026-05-25T09:05:00Z',
             },
           ],
         },
@@ -739,7 +769,13 @@ describe('purchases/purchase-inbox', () => {
     )
     cy.get('[data-testid="forwarder-package-link-events"]')
       .should('contain', 'confirmed item item-expected-001')
+      .and('contain', 'lifecycle life-entry-001')
+      .and('contain', '2026-05-25T09:00:00Z')
       .and('contain', 'via manual_review')
+    cy.get('[data-testid="forwarder-package-link-event-audit-trail"]').should(
+      'contain',
+      'confirmed from purchase inbox UI'
+    )
 
     cy.intercept('POST', '/api/forwarding/package-links', (req) => {
       expect(req.body).to.include({
@@ -796,6 +832,8 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-link-events"]')
       .should('contain', 'overridden item item-override-002')
       .and('contain', 'previous item item-expected-001')
+      .and('contain', 'previous item item-expected-001 / lifecycle life-entry-001 / arrival arrival-expected-001')
+      .and('contain', '2026-05-25T09:05:00Z')
 
     cy.intercept('DELETE', '/api/forwarding/package-links*', (req) => {
       expect(req.url).to.include('package_id=fwdpkg_audit_001')
@@ -836,7 +874,12 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-link-events"]')
       .should('contain', 'unlinked')
       .and('contain', 'previous item item-override-002')
+      .and('contain', 'previous item item-override-002 / lifecycle life-entry-override-002 / arrival arrival-override-002')
       .and('contain', 'via manual_unlink')
+    cy.get('[data-testid="forwarder-package-link-event-audit-trail"]').should(
+      'contain',
+      'unlinked from purchase inbox UI'
+    )
   })
 
   it('INTEGRATION-043 shows forwarder package match suggestions and prepares confirmation', () => {
