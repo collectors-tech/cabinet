@@ -97,3 +97,11 @@ Cabinet SHALL compute deterministic, non-mutating match suggestions between unli
 - **GIVEN** a profile has an unlinked forwarder package plus purchase lifecycle and expected-arrival records with matching tracking, package/order references, item text, seller/source, quantity, and date signals
 - **WHEN** Cabinet requests forwarder package match suggestions
 - **THEN** Cabinet MUST return ordered suggestions with package, item, lifecycle, and expected-arrival IDs, confidence score and label, per-signal evidence, and audit trail text, without creating or modifying any package reconciliation link.
+
+### Requirement INTEGRATION-041: Forwarder package inbox SHALL audit confirm, override, and unlink decisions
+Cabinet SHALL persist explicit decision metadata and audit events when a user confirms a suggested package reconciliation, overrides an existing target, or unlinks a package from a purchase arrival.
+
+#### Scenario: Confirm, override, and unlink package reconciliation decisions
+- **GIVEN** a profile has a persisted forwarder package, candidate purchase arrivals, and a current package reconciliation link
+- **WHEN** a user confirms a suggested target, overrides the link to a different target with explicit override intent, or unlinks the package
+- **THEN** Cabinet MUST persist decision/source/notes/audit-trail metadata, reject ambiguous target changes unless override is explicit, preserve durable audit events for confirmed/override/unlinked decisions, remove the active link after unlink, and return the decision/event evidence through the package-link API.

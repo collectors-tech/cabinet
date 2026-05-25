@@ -3274,9 +3274,15 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_links\"}", http.StatusInternalServerError)
 				return
 			}
+			events, err := forwarderInbox.ListPackageLinkEvents(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_link_events\"}", http.StatusInternalServerError)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"links":   links,
-				"summary": map[string]int{"count": len(links)},
+				"events":  events,
+				"summary": map[string]int{"count": len(links), "events": len(events)},
 			})
 		case http.MethodPost:
 			var req forwarding.PackageLinkRequest
@@ -3297,6 +3303,28 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"link": link,
 				"mode": "forwarder_package_reconciliation_link",
+			})
+		case http.MethodDelete:
+			var req forwarding.PackageUnlinkRequest
+			if r.Body != nil {
+				_ = json.NewDecoder(r.Body).Decode(&req)
+			}
+			req.ProfileID = profileID
+			if req.PackageID == "" {
+				req.PackageID = strings.TrimSpace(r.URL.Query().Get("package_id"))
+			}
+			event, err := forwarderInbox.UnlinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_unlink",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"event": event,
+				"mode":  "forwarder_package_reconciliation_unlink",
 			})
 		default:
 			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
