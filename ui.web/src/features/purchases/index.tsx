@@ -83,10 +83,14 @@ type ForwarderPackage = {
   shipment_id?: string
   tracking_number?: string
   status: string
+  received_at?: string
   sender?: string
   warehouse_location?: string
   weight_grams?: number
   provenance_key: string
+  raw_payload?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
 }
 
 type ForwarderPackageListResponse = {
@@ -183,6 +187,13 @@ function labelForStatus(status: string) {
   return status.split('_').join(' ')
 }
 
+function packageDetailValue(value?: string | number) {
+  if (value === undefined || value === null || value === '') {
+    return 'Pending'
+  }
+  return value
+}
+
 export function Purchases() {
   const [reviews, setReviews] = useState<PurchaseInboxReview[]>([])
   const [loading, setLoading] = useState(false)
@@ -196,6 +207,9 @@ export function Purchases() {
   const [packageCSVErrors, setPackageCSVErrors] = useState<
     ForwarderPackageCSVError[]
   >([])
+  const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
+    null
+  )
   const [packageForm, setPackageForm] =
     useState<PackageImportForm>(defaultPackageImport)
   const [confirmedAction, setConfirmedAction] = useState<string | null>(null)
@@ -894,7 +908,12 @@ export function Purchases() {
 
               {packages.length > 0 ? (
                 <div className='space-y-3' data-testid='forwarder-package-list'>
-                  {packages.map((pkg) => (
+                  {packages.map((pkg) => {
+                    const selected = selectedPackageID === pkg.id
+                    const rawPayload = pkg.raw_payload
+                      ? JSON.stringify(pkg.raw_payload, null, 2)
+                      : 'No raw source payload returned for this package.'
+                    return (
                     <article
                       key={pkg.id}
                       className='rounded-md border p-4'
@@ -932,8 +951,84 @@ export function Purchases() {
                           <dd className='break-all'>{pkg.provenance_key}</dd>
                         </div>
                       </dl>
+                      <div className='mt-4 flex justify-end'>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          data-testid='forwarder-package-detail-toggle'
+                          onClick={() =>
+                            setSelectedPackageID(selected ? null : pkg.id)
+                          }
+                        >
+                          {selected ? 'Hide details' : 'View details'}
+                        </Button>
+                      </div>
+                      {selected ? (
+                        <div
+                          className='mt-4 space-y-4 rounded-md border bg-muted/20 p-4'
+                          data-testid='forwarder-package-detail'
+                        >
+                          <dl className='grid gap-3 text-sm md:grid-cols-3'>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Package ID
+                              </dt>
+                              <dd className='break-all'>
+                                {pkg.external_package_id}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Shipment ID
+                              </dt>
+                              <dd className='break-all'>
+                                {packageDetailValue(pkg.shipment_id)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Tracking number
+                              </dt>
+                              <dd className='break-all'>
+                                {packageDetailValue(pkg.tracking_number)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Received
+                              </dt>
+                              <dd>{packageDetailValue(pkg.received_at)}</dd>
+                            </div>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Created
+                              </dt>
+                              <dd>{packageDetailValue(pkg.created_at)}</dd>
+                            </div>
+                            <div>
+                              <dt className='text-muted-foreground'>
+                                Updated
+                              </dt>
+                              <dd>{packageDetailValue(pkg.updated_at)}</dd>
+                            </div>
+                          </dl>
+                          <div className='space-y-2'>
+                            <p className='text-sm font-medium'>
+                              Source provenance
+                            </p>
+                            <pre
+                              className='max-h-48 overflow-auto rounded-md border bg-background p-3 text-xs'
+                              data-testid='forwarder-package-raw-payload'
+                            >
+                              {rawPayload}
+                            </pre>
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : null}
             </div>

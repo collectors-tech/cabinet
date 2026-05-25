@@ -65,3 +65,11 @@ Cabinet SHALL let users submit Stackry/freight-forwarder package email notice te
 - **GIVEN** a user has an active profile and enters a package notification email containing package id, status, shipment/tracking fields, sender, warehouse location, and package weight
 - **WHEN** the user submits the email import from the forwarder package inbox
 - **THEN** Cabinet MUST upsert the notice as source `email`, preserve its email provenance key, refresh the visible package list, and display parser/API validation errors inline without creating invalid package records.
+
+### Requirement INTEGRATION-037: Forwarder package inbox SHALL expose package and shipment detail
+Cabinet SHALL provide a visible detail view for each forwarder package record that exposes package identity, shipment/tracking fields, source timestamps, and raw provenance without requiring a provider-specific adapter.
+
+#### Scenario: Review a forwarder package detail record
+- **GIVEN** a user has imported or refreshed a Stackry/freight-forwarder package record with shipment, tracking, timestamp, and raw provenance fields
+- **WHEN** the user opens the package detail view from the forwarder package inbox
+- **THEN** Cabinet MUST show package identity, shipment id, tracking number, received/created/updated timestamps, and raw source provenance while keeping missing optional values explicit as pending.
