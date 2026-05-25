@@ -36,6 +36,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/companion"
 	"github.com/collectors-tech/cabinet/internal/config"
 	"github.com/collectors-tech/cabinet/internal/costing"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
@@ -136,6 +137,7 @@ func New(cfg config.Config) (*App, error) {
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
+	companionSvc := companion.DefaultService()
 	aiSvc := ai.NewService(ai.Config{})
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
@@ -2126,6 +2128,38 @@ func New(cfg config.Config) (*App, error) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
+	})
+	mux.HandleFunc("/api/companion/modules", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(companionSvc.Registry())
+	})
+	mux.HandleFunc("/api/companion/payloads", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req companion.PayloadSubmission
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		accepted, err := companionSvc.AcceptPayload(req, r.Header.Get("Authorization"))
+		if err != nil {
+			status := http.StatusBadRequest
+			if err.Error() == "companion_auth_required" {
+				status = http.StatusUnauthorized
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(accepted)
 	})
 	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
