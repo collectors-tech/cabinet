@@ -677,6 +677,33 @@ func TestIntegrationsEbayListingLifecyclePanelContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationsEbayLandedCostPlannerPanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-landed-cost-planner-panel'",
+		"defaultLandedCostPayload",
+		"previewLandedCostPlan",
+		"/api/commerce/landed-cost/plan",
+		"ebay-landed-cost-preview",
+		"ebay-landed-cost-result",
+		"Preview only / no mutation",
+		"Landed-cost plan previewed without mutating inventory or shipment state.",
+		"landedCostResult.allocation",
+		"landedCostResult.consolidation",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay landed-cost planner panel contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
