@@ -137,3 +137,11 @@ Cabinet SHALL show a compact forwarder package review summary so a reviewer can 
 - **GIVEN** the forwarder package inbox has loaded package records, package-link state, decision audit events, or match suggestions
 - **WHEN** the user reviews the forwarder package inbox
 - **THEN** Cabinet MUST show package, linked, unlinked, audit-event, and suggestion counts that update after package refreshes, link-state refreshes, link/unlink decisions, and match suggestion loads.
+
+### Requirement INTEGRATION-046: Forwarder package inbox UI SHALL filter reconciliation review states
+Cabinet SHALL let reviewers filter the forwarder package inbox by all packages, linked packages, unlinked packages, and packages with loaded match suggestions using the currently loaded reconciliation evidence.
+
+#### Scenario: Filter package reconciliation review states
+- **GIVEN** the forwarder package inbox has loaded package records plus package-link or match-suggestion evidence
+- **WHEN** the user chooses a reconciliation review-state filter
+- **THEN** Cabinet MUST show only the packages matching that filter, preserve the non-mutating review evidence, and show an empty filtered-state message when no packages match without hiding the original package count.

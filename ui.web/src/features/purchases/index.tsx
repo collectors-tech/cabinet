@@ -193,6 +193,12 @@ type ForwarderPackageMatchSuggestionResponse = {
   }
 }
 
+type ForwarderPackageReviewFilter =
+  | 'all'
+  | 'linked'
+  | 'unlinked'
+  | 'suggested'
+
 const sampleCards: PurchaseCard[] = [
   {
     order_id: '20-14595-70928',
@@ -302,6 +308,8 @@ export function Purchases() {
   const [packageSuggestionResult, setPackageSuggestionResult] = useState<
     string | null
   >(null)
+  const [packageReviewFilter, setPackageReviewFilter] =
+    useState<ForwarderPackageReviewFilter>('all')
   const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
     null
   )
@@ -349,6 +357,26 @@ export function Purchases() {
       suggestionCount,
     }
   }, [packageLinkEvents, packageLinks, packageSuggestions, packages.length])
+
+  const filteredPackages = useMemo(
+    () =>
+      packages.filter((pkg) => {
+        const hasLink = (packageLinks[pkg.id] ?? []).length > 0
+        const hasSuggestion = (packageSuggestions[pkg.id] ?? []).length > 0
+
+        if (packageReviewFilter === 'linked') {
+          return hasLink
+        }
+        if (packageReviewFilter === 'unlinked') {
+          return !hasLink
+        }
+        if (packageReviewFilter === 'suggested') {
+          return hasSuggestion
+        }
+        return true
+      }),
+    [packageLinks, packageReviewFilter, packageSuggestions, packages]
+  )
 
   const loadReviews = useCallback(async () => {
     setLoading(true)
@@ -1085,6 +1113,37 @@ export function Purchases() {
             </div>
           </dl>
 
+          <div
+            className='flex flex-wrap items-center gap-2'
+            data-testid='forwarder-package-review-filter'
+          >
+            {(
+              [
+                ['all', 'All'],
+                ['linked', 'Linked'],
+                ['unlinked', 'Unlinked'],
+                ['suggested', 'Suggestions'],
+              ] satisfies Array<[ForwarderPackageReviewFilter, string]>
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type='button'
+                variant={packageReviewFilter === value ? 'default' : 'outline'}
+                size='sm'
+                data-testid={'forwarder-package-review-filter-' + value}
+                onClick={() => setPackageReviewFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+            <span
+              className='text-sm text-muted-foreground'
+              data-testid='forwarder-package-review-filter-result'
+            >
+              Showing {filteredPackages.length} of {packages.length} packages
+            </span>
+          </div>
+
           <div className='grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]'>
             <div className='rounded-md border p-4'>
               <div className='mb-3 flex items-center gap-2'>
@@ -1329,9 +1388,23 @@ export function Purchases() {
                 </div>
               ) : null}
 
+              {packages.length > 0 && filteredPackages.length === 0 ? (
+                <div
+                  className='rounded-md border border-dashed p-6'
+                  data-testid='forwarder-package-filter-empty'
+                >
+                  <p className='font-medium'>
+                    No packages match this review state.
+                  </p>
+                  <p className='mt-1 text-sm text-muted-foreground'>
+                    Switch filters or refresh link and suggestion evidence.
+                  </p>
+                </div>
+              ) : null}
+
               {packages.length > 0 ? (
                 <div className='space-y-3' data-testid='forwarder-package-list'>
-                  {packages.map((pkg) => {
+                  {filteredPackages.map((pkg) => {
                     const selected = selectedPackageID === pkg.id
                     const rawPayload = pkg.raw_payload
                       ? JSON.stringify(pkg.raw_payload, null, 2)
