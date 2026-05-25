@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/sha1"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -62,6 +65,11 @@ type Package struct {
 	UpdatedAt         string         `json:"updated_at,omitempty"`
 }
 
+type PackageCSVRowError struct {
+	Row   int    `json:"row"`
+	Error string `json:"error"`
+}
+
 func NormalizePackageImport(in PackageImport) (Package, error) {
 	profileID := strings.TrimSpace(in.ProfileID)
 	if profileID == "" {
@@ -104,6 +112,53 @@ func NormalizePackageImport(in PackageImport) (Package, error) {
 		ProvenanceKey:     provenanceKey,
 		RawPayload:        clonePayload(in.RawPayload),
 	}, nil
+}
+
+func ParsePackageCSV(profileID, provider string, r io.Reader) ([]PackageImport, []PackageCSVRowError, error) {
+	reader := csv.NewReader(r)
+	reader.TrimLeadingSpace = true
+	rows, err := reader.ReadAll()
+	if err != nil {
+		return nil, nil, fmt.Errorf("read forwarder package csv: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil, fmt.Errorf("forwarder package csv is empty")
+	}
+	headers := mapHeaders(rows[0])
+	var imports []PackageImport
+	var rowErrors []PackageCSVRowError
+	for i, row := range rows[1:] {
+		rowNumber := i + 2
+		if rowIsEmpty(row) {
+			continue
+		}
+		raw := rawCSVPayload(rows[0], row, rowNumber)
+		weightGrams, err := parseCSVWeight(valueForCSV(row, headers, "weight_grams"))
+		if err != nil {
+			rowErrors = append(rowErrors, PackageCSVRowError{Row: rowNumber, Error: err.Error()})
+			continue
+		}
+		candidate := PackageImport{
+			ProfileID:         profileID,
+			Provider:          provider,
+			Source:            SourceCSV,
+			ExternalPackageID: firstCSVValue(row, headers, "external_package_id", "package_id", "stackry_package_id"),
+			ShipmentID:        firstCSVValue(row, headers, "shipment_id", "shipment", "shipment_number"),
+			TrackingNumber:    firstCSVValue(row, headers, "tracking_number", "tracking", "tracking_no"),
+			Status:            firstCSVValue(row, headers, "status", "package_status"),
+			ReceivedAt:        firstCSVValue(row, headers, "received_at", "received", "date_received"),
+			Sender:            firstCSVValue(row, headers, "sender", "merchant", "from"),
+			WarehouseLocation: firstCSVValue(row, headers, "warehouse_location", "warehouse", "suite"),
+			WeightGrams:       weightGrams,
+			RawPayload:        raw,
+		}
+		if _, err := NormalizePackageImport(candidate); err != nil {
+			rowErrors = append(rowErrors, PackageCSVRowError{Row: rowNumber, Error: err.Error()})
+			continue
+		}
+		imports = append(imports, candidate)
+	}
+	return imports, rowErrors, nil
 }
 
 type MemoryInbox struct {
@@ -271,6 +326,77 @@ func normalizeStatus(status string) string {
 	default:
 		return ""
 	}
+}
+
+func mapHeaders(row []string) map[string]int {
+	headers := make(map[string]int, len(row))
+	for i, header := range row {
+		headers[normalizeCSVHeader(header)] = i
+	}
+	return headers
+}
+
+func normalizeCSVHeader(header string) string {
+	header = strings.ToLower(strings.TrimSpace(header))
+	header = strings.ReplaceAll(header, " ", "_")
+	header = strings.ReplaceAll(header, "-", "_")
+	return header
+}
+
+func rowIsEmpty(row []string) bool {
+	for _, value := range row {
+		if strings.TrimSpace(value) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func rawCSVPayload(headers, row []string, rowNumber int) map[string]any {
+	payload := map[string]any{
+		"source": "csv",
+		"row":    rowNumber,
+	}
+	for i, header := range headers {
+		key := normalizeCSVHeader(header)
+		if key == "" || i >= len(row) {
+			continue
+		}
+		payload[key] = strings.TrimSpace(row[i])
+	}
+	return payload
+}
+
+func firstCSVValue(row []string, headers map[string]int, names ...string) string {
+	for _, name := range names {
+		if value := valueForCSV(row, headers, name); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func valueForCSV(row []string, headers map[string]int, name string) string {
+	idx, ok := headers[normalizeCSVHeader(name)]
+	if !ok || idx >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[idx])
+}
+
+func parseCSVWeight(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	weight, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("weight_grams must be an integer")
+	}
+	if weight < 0 {
+		return 0, fmt.Errorf("weight_grams must be non-negative")
+	}
+	return weight, nil
 }
 
 func packageID(profileID, provenanceKey string) string {
