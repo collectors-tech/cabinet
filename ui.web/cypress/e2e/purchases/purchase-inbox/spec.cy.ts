@@ -754,6 +754,24 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', '0')
       .and('contain', 'Unlinked')
       .and('contain', '1')
+    cy.get('[data-testid="forwarder-package-review-filter-result"]').should(
+      'contain',
+      'Showing 1 of 1 packages'
+    )
+    cy.get('[data-testid="forwarder-package-review-filter-linked"]').click()
+    cy.get('[data-testid="forwarder-package-filter-empty"]').should(
+      'contain',
+      'No packages match this review state'
+    )
+    cy.get('[data-testid="forwarder-package-review-filter-result"]').should(
+      'contain',
+      'Showing 0 of 1 packages'
+    )
+    cy.get('[data-testid="forwarder-package-review-filter-unlinked"]').click()
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-AUDIT-5001')
+    cy.get('[data-testid="forwarder-package-review-filter-all"]').click()
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
     cy.wait('@listForwarderPackageLinks')
     cy.get('[data-testid="forwarder-package-link-events"]')
@@ -777,6 +795,11 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', '0')
       .and('contain', 'Audit events')
       .and('contain', '1')
+    cy.get('[data-testid="forwarder-package-review-filter-linked"]').click()
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-AUDIT-5001')
+    cy.get('[data-testid="forwarder-package-review-filter-all"]').click()
     cy.get('[data-testid="forwarder-package-link-audit-trail"]').should(
       'contain',
       'confirmed from purchase inbox UI'
@@ -892,6 +915,10 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', '1')
       .and('contain', 'Audit events')
       .and('contain', '2')
+    cy.get('[data-testid="forwarder-package-review-filter-unlinked"]').click()
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-AUDIT-5001')
     cy.get('[data-testid="forwarder-package-link-events"]')
       .should('contain', 'unlinked')
       .and('contain', 'previous item item-override-002')
@@ -1011,6 +1038,10 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-review-summary"]')
       .should('contain', 'Suggestions')
       .and('contain', '1')
+    cy.get('[data-testid="forwarder-package-review-filter-suggested"]').click()
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-SUGGEST-6001')
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
     cy.wait('@listForwarderPackageLinks')
     cy.get('[data-testid="forwarder-package-match-suggestions"]')
