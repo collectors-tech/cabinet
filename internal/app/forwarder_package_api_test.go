@@ -50,6 +50,77 @@ func TestForwarderPackageAPIRejectsInvalidImports(t *testing.T) {
 	}
 }
 
+func TestForwarderPackageLinkAPIReconcilesPackageToPurchaseArrival(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-item-1', ?, 'AFX', 'Slot', 'FWD-1', 'Forwarder Reconcile Item')`, profileID); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	createLifecycle := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-item-1","state":"purchase","source":"ebay","external_ref":"order-link-1","quantity":1,"amount":42,"currency":"aud","notes":"awaiting forwarder package"}`), map[string]string{"Content-Type": "application/json"})
+	if createLifecycle.Code != http.StatusCreated {
+		t.Fatalf("create lifecycle status=%d body=%s", createLifecycle.Code, createLifecycle.Body.String())
+	}
+	var lifecyclePayload struct {
+		Entry struct {
+			ID string `json:"id"`
+		} `json:"entry"`
+		ExpectedArrival struct {
+			ID string `json:"id"`
+		} `json:"expected_arrival"`
+	}
+	if err := json.NewDecoder(createLifecycle.Body).Decode(&lifecyclePayload); err != nil {
+		t.Fatalf("decode lifecycle payload: %v", err)
+	}
+	createPackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"manual","external_package_id":"PKG-LINK-API","status":"received"}`), map[string]string{"Content-Type": "application/json"})
+	if createPackage.Code != http.StatusOK {
+		t.Fatalf("create package status=%d body=%s", createPackage.Code, createPackage.Body.String())
+	}
+	var packagePayload struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createPackage.Body).Decode(&packagePayload); err != nil {
+		t.Fatalf("decode package payload: %v", err)
+	}
+
+	linkBody := `{"package_id":"` + packagePayload.Package.ID + `","item_id":"fwd-item-1","lifecycle_entry_id":"` + lifecyclePayload.Entry.ID + `","expected_arrival_id":"` + lifecyclePayload.ExpectedArrival.ID + `","source":"manual-review","notes":"tracking number matched"}`
+	linkResp := doRequest(t, a, http.MethodPost, "/api/forwarding/package-links", strings.NewReader(linkBody), map[string]string{"Content-Type": "application/json"})
+	if linkResp.Code != http.StatusOK {
+		t.Fatalf("link package status=%d body=%s", linkResp.Code, linkResp.Body.String())
+	}
+	var linkPayload struct {
+		Mode string `json:"mode"`
+		Link struct {
+			PackageID         string `json:"package_id"`
+			ItemID            string `json:"item_id"`
+			ExpectedArrivalID string `json:"expected_arrival_id"`
+			Source            string `json:"source"`
+		} `json:"link"`
+	}
+	if err := json.NewDecoder(linkResp.Body).Decode(&linkPayload); err != nil {
+		t.Fatalf("decode link payload: %v", err)
+	}
+	if linkPayload.Mode != "forwarder_package_reconciliation_link" || linkPayload.Link.PackageID != packagePayload.Package.ID || linkPayload.Link.ExpectedArrivalID != lifecyclePayload.ExpectedArrival.ID || linkPayload.Link.Source != "manual-review" {
+		t.Fatalf("unexpected link payload %+v", linkPayload)
+	}
+	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links?package_id="+packagePayload.Package.ID, nil, nil)
+	if listLinks.Code != http.StatusOK {
+		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
+	}
+	var listPayload struct {
+		Links   []map[string]any `json:"links"`
+		Summary map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(listLinks.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode link list: %v", err)
+	}
+	if listPayload.Summary["count"] != 1 || len(listPayload.Links) != 1 || listPayload.Links[0]["item_id"] != "fwd-item-1" {
+		t.Fatalf("expected one persisted reconciliation link, got %+v", listPayload)
+	}
+}
+
 func TestForwarderPackageCSVImportAPIUpsertsValidRowsAndReportsRowErrors(t *testing.T) {
 	t.Parallel()
 

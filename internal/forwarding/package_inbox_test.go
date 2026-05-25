@@ -1,6 +1,7 @@
 package forwarding
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 
@@ -277,5 +278,91 @@ Weight: 100 g
 	}
 	if got := err.Error(); got != "external_package_id is required" {
 		t.Fatalf("expected identity validation error, got %q", got)
+	}
+}
+
+func TestForwarderPackageServiceLinksPackageToExpectedArrival(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	seedForwarderPackageLinkTarget(t, conn, "profile-link", "item-link", "life-link", "arrival-link")
+	svc := NewService(conn)
+	pkg, err := svc.UpsertPackage(t.Context(), PackageImport{ProfileID: "profile-link", Provider: ProviderStackry, Source: SourceEmail, ExternalPackageID: "PKG-LINK", Status: StatusReadyToShip})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+
+	link, err := svc.LinkPackage(t.Context(), PackageLinkRequest{
+		ProfileID:         "profile-link",
+		PackageID:         pkg.ID,
+		ItemID:            "item-link",
+		LifecycleEntryID:  "life-link",
+		ExpectedArrivalID: "arrival-link",
+		Source:            "manual-review",
+		Notes:             "matched by tracking number",
+	})
+	if err != nil {
+		t.Fatalf("LinkPackage() error = %v", err)
+	}
+	if link.PackageID != pkg.ID || link.ItemID != "item-link" || link.ExpectedArrivalID != "arrival-link" {
+		t.Fatalf("expected package to link to purchase arrival, got %+v", link)
+	}
+	if link.Source != "manual-review" || link.Notes != "matched by tracking number" {
+		t.Fatalf("expected link provenance, got %+v", link)
+	}
+	links, err := svc.ListPackageLinks(t.Context(), "profile-link", pkg.ID)
+	if err != nil {
+		t.Fatalf("ListPackageLinks() error = %v", err)
+	}
+	if len(links) != 1 || links[0].ID != link.ID {
+		t.Fatalf("expected one stored link, got %+v", links)
+	}
+}
+
+func TestForwarderPackageServiceRejectsAmbiguousPackageRelink(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	seedForwarderPackageLinkTarget(t, conn, "profile-link", "item-one", "life-one", "arrival-one")
+	seedForwarderPackageLinkTarget(t, conn, "profile-link", "item-two", "life-two", "arrival-two")
+	svc := NewService(conn)
+	pkg, err := svc.UpsertPackage(t.Context(), PackageImport{ProfileID: "profile-link", Provider: ProviderStackry, Source: SourceManual, ExternalPackageID: "PKG-AMBIG", Status: StatusReceived})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+	_, err = svc.LinkPackage(t.Context(), PackageLinkRequest{ProfileID: "profile-link", PackageID: pkg.ID, ItemID: "item-one", LifecycleEntryID: "life-one", ExpectedArrivalID: "arrival-one"})
+	if err != nil {
+		t.Fatalf("first LinkPackage() error = %v", err)
+	}
+
+	_, err = svc.LinkPackage(t.Context(), PackageLinkRequest{ProfileID: "profile-link", PackageID: pkg.ID, ItemID: "item-two", LifecycleEntryID: "life-two", ExpectedArrivalID: "arrival-two"})
+	if err == nil {
+		t.Fatal("expected ambiguous relink to fail")
+	}
+	if got := err.Error(); got != "forwarder package already linked to a different target" {
+		t.Fatalf("expected ambiguous relink error, got %q", got)
+	}
+}
+
+func seedForwarderPackageLinkTarget(t *testing.T, conn interface {
+	Exec(string, ...any) (sql.Result, error)
+}, profileID, itemID, lifecycleID, arrivalID string) {
+	t.Helper()
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES (?, ?, 'AFX', 'Slot', ?, 'Forwarder Link Target')`, itemID, profileID, itemID); err != nil {
+		t.Fatalf("seed item %s: %v", itemID, err)
+	}
+	if _, err := conn.Exec(`INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes) VALUES (?, ?, ?, 'purchase', 'ebay', ?, 1, 10, 'AUD', '')`, lifecycleID, profileID, itemID, lifecycleID); err != nil {
+		t.Fatalf("seed lifecycle %s: %v", lifecycleID, err)
+	}
+	if _, err := conn.Exec(`INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, notes) VALUES (?, ?, ?, ?, 'ebay', ?, 1, 10, 'AUD', 'expected', '')`, arrivalID, profileID, itemID, lifecycleID, arrivalID); err != nil {
+		t.Fatalf("seed arrival %s: %v", arrivalID, err)
 	}
 }
