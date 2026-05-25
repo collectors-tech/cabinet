@@ -89,3 +89,11 @@ Cabinet SHALL let a user review and create package-to-purchase-arrival reconcili
 - **GIVEN** a user has opened a persisted forwarder package detail record from the inbox
 - **WHEN** the user reviews existing link state and submits an item, lifecycle entry, expected arrival, source, and notes
 - **THEN** Cabinet MUST create the package reconciliation link through \`/api/forwarding/package-links\`, display the saved link result, refresh the package link state, and show API validation errors inline when the package is already linked to a different target.
+
+### Requirement INTEGRATION-040: Forwarder package inbox SHALL suggest purchase-arrival matches with confidence explanations
+Cabinet SHALL compute deterministic, non-mutating match suggestions between unlinked forwarder packages and profile-scoped purchase expected arrivals, including confidence labels, scored signal explanations, and audit-ready provenance for later manual confirmation or override.
+
+#### Scenario: Suggest a package-to-purchase-arrival match
+- **GIVEN** a profile has an unlinked forwarder package plus purchase lifecycle and expected-arrival records with matching tracking, package/order references, item text, seller/source, quantity, and date signals
+- **WHEN** Cabinet requests forwarder package match suggestions
+- **THEN** Cabinet MUST return ordered suggestions with package, item, lifecycle, and expected-arrival IDs, confidence score and label, per-signal evidence, and audit trail text, without creating or modifying any package reconciliation link.

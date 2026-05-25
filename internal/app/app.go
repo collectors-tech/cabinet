@@ -3302,6 +3302,30 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/forwarding/package-match-suggestions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+		suggestions, err := forwarderInbox.SuggestPackageMatches(r.Context(), strings.TrimSpace(active.ID), packageID)
+		if err != nil {
+			http.Error(w, "{\"error\":\"failed_to_suggest_forwarder_package_matches\"}", http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":        "forwarder_package_match_suggestions",
+			"mutable":     false,
+			"suggestions": suggestions,
+			"summary":     map[string]int{"count": len(suggestions)},
+		})
+	})
 	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

@@ -121,6 +121,60 @@ func TestForwarderPackageLinkAPIReconcilesPackageToPurchaseArrival(t *testing.T)
 	}
 }
 
+func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-match-item', ?, 'AFX', 'Slot', 'AFX-901', 'AFX Turbo slot car')`, profileID); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	createLifecycle := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-match-item","state":"purchase","source":"ebay","external_ref":"ORDER-901","quantity":2,"amount":52,"currency":"aud","notes":"Seller: slot shop; tracking TRACK-901; package PKG-901; AFX Turbo"}`), map[string]string{"Content-Type": "application/json"})
+	if createLifecycle.Code != http.StatusCreated {
+		t.Fatalf("create lifecycle status=%d body=%s", createLifecycle.Code, createLifecycle.Body.String())
+	}
+	createPackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"email","external_package_id":"PKG-901","status":"received","tracking_number":"TRACK-901","received_at":"2026-05-27T09:15:00Z","sender":"slot shop","raw_payload":{"title":"AFX Turbo slot car","quantity":2}}`), map[string]string{"Content-Type": "application/json"})
+	if createPackage.Code != http.StatusOK {
+		t.Fatalf("create package status=%d body=%s", createPackage.Code, createPackage.Body.String())
+	}
+
+	resp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions", nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("suggestions status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Mode        string           `json:"mode"`
+		Mutable     bool             `json:"mutable"`
+		Suggestions []map[string]any `json:"suggestions"`
+		Summary     map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode suggestions payload: %v", err)
+	}
+	if payload.Mode != "forwarder_package_match_suggestions" || payload.Mutable {
+		t.Fatalf("expected non-mutating suggestions mode, got %+v", payload)
+	}
+	if payload.Summary["count"] != 1 || len(payload.Suggestions) != 1 {
+		t.Fatalf("expected one suggestion, got %+v", payload)
+	}
+	suggestion := payload.Suggestions[0]
+	if suggestion["item_id"] != "fwd-match-item" || suggestion["confidence_label"] != "high" {
+		t.Fatalf("expected high confidence item suggestion, got %+v", suggestion)
+	}
+	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links", nil, nil)
+	if listLinks.Code != http.StatusOK {
+		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
+	}
+	var linksPayload struct {
+		Summary map[string]int `json:"summary"`
+	}
+	if err := json.NewDecoder(listLinks.Body).Decode(&linksPayload); err != nil {
+		t.Fatalf("decode links payload: %v", err)
+	}
+	if linksPayload.Summary["count"] != 0 {
+		t.Fatalf("suggestions must not create reconciliation links, got %+v", linksPayload)
+	}
+}
+
 func TestForwarderPackageCSVImportAPIUpsertsValidRowsAndReportsRowErrors(t *testing.T) {
 	t.Parallel()
 

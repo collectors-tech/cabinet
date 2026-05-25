@@ -352,6 +352,98 @@ func TestForwarderPackageServiceRejectsAmbiguousPackageRelink(t *testing.T) {
 	}
 }
 
+func TestForwarderPackageServiceSuggestsDeterministicMatchesWithAuditSignals(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	seedForwarderPackageLinkTarget(t, conn, "profile-match", "item-match", "life-match", "arrival-match")
+	if _, err := conn.Exec(`UPDATE canonical_items SET title = 'AFX Turbo slot car', brand = 'AFX', part_number = 'AFX-900' WHERE id = 'item-match'`); err != nil {
+		t.Fatalf("update item: %v", err)
+	}
+	if _, err := conn.Exec(`UPDATE commerce_lifecycle_entries SET source = 'ebay', external_ref = 'ORDER-900', quantity = 2, notes = 'Seller: slot shop; tracking TRACK-900; package PKG-900' WHERE id = 'life-match'`); err != nil {
+		t.Fatalf("update lifecycle: %v", err)
+	}
+	if _, err := conn.Exec(`UPDATE expected_arrivals SET external_ref = 'ORDER-900', quantity = 2, expected_on = '2026-05-27', notes = 'TRACK-900 PKG-900 AFX Turbo' WHERE id = 'arrival-match'`); err != nil {
+		t.Fatalf("update arrival: %v", err)
+	}
+	svc := NewService(conn)
+	pkg, err := svc.UpsertPackage(t.Context(), PackageImport{
+		ProfileID:         "profile-match",
+		Provider:          ProviderStackry,
+		Source:            SourceEmail,
+		ExternalPackageID: "PKG-900",
+		Status:            StatusReceived,
+		TrackingNumber:    "TRACK-900",
+		ReceivedAt:        "2026-05-27T09:15:00Z",
+		Sender:            "slot shop",
+		RawPayload: map[string]any{
+			"title":    "AFX Turbo slot car",
+			"quantity": 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+
+	suggestions, err := svc.SuggestPackageMatches(t.Context(), "profile-match", pkg.ID)
+	if err != nil {
+		t.Fatalf("SuggestPackageMatches() error = %v", err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatalf("expected one match suggestion, got %+v", suggestions)
+	}
+	got := suggestions[0]
+	if got.PackageID != pkg.ID || got.ItemID != "item-match" || got.ExpectedArrivalID != "arrival-match" {
+		t.Fatalf("unexpected match target: %+v", got)
+	}
+	if got.Confidence != 1 || got.ConfidenceLabel != "high" {
+		t.Fatalf("expected high full-confidence suggestion, got %+v", got)
+	}
+	if len(got.Signals) != 6 || len(got.Explanation) != 6 {
+		t.Fatalf("expected six scored signals and explanations, got %+v", got)
+	}
+	if len(got.AuditTrail) == 0 || !strings.Contains(got.AuditTrail[0], "without mutating") {
+		t.Fatalf("expected non-mutating audit trail, got %+v", got.AuditTrail)
+	}
+}
+
+func TestForwarderPackageServiceSuggestionsExcludeAlreadyLinkedPackages(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	seedForwarderPackageLinkTarget(t, conn, "profile-linked", "item-linked", "life-linked", "arrival-linked")
+	svc := NewService(conn)
+	pkg, err := svc.UpsertPackage(t.Context(), PackageImport{
+		ProfileID:         "profile-linked",
+		Provider:          ProviderStackry,
+		Source:            SourceManual,
+		ExternalPackageID: "PKG-LINKED",
+		Status:            StatusReceived,
+	})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+	if _, err := svc.LinkPackage(t.Context(), PackageLinkRequest{ProfileID: "profile-linked", PackageID: pkg.ID, ItemID: "item-linked", LifecycleEntryID: "life-linked", ExpectedArrivalID: "arrival-linked"}); err != nil {
+		t.Fatalf("LinkPackage() error = %v", err)
+	}
+
+	suggestions, err := svc.SuggestPackageMatches(t.Context(), "profile-linked", pkg.ID)
+	if err != nil {
+		t.Fatalf("SuggestPackageMatches() error = %v", err)
+	}
+	if len(suggestions) != 0 {
+		t.Fatalf("expected linked package to be excluded from suggestions, got %+v", suggestions)
+	}
+}
+
 func seedForwarderPackageLinkTarget(t *testing.T, conn interface {
 	Exec(string, ...any) (sql.Result, error)
 }, profileID, itemID, lifecycleID, arrivalID string) {
