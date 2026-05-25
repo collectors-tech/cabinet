@@ -237,4 +237,82 @@ describe('purchases/purchase-inbox', () => {
       .should('be.visible')
       .and('contain', 'external_package_id is required')
   })
+
+  it('INTEGRATION-034 imports CSV forwarder package rows and reports row errors', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/forwarding/packages/import-csv', {
+      statusCode: 200,
+      body: {
+        mode: 'forwarder_package_csv_import',
+        imported: [
+          {
+            id: 'fwdpkg_csv_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'csv',
+            external_package_id: 'STK-CSV-2001',
+            shipment_id: 'SHIP-2001',
+            tracking_number: '1ZCSV2001',
+            status: 'received',
+            warehouse_location: 'Locker C-4',
+            weight_grams: 520,
+            provenance_key: 'stackry:csv:STK-CSV-2001',
+          },
+        ],
+        errors: [{ row: 3, error: 'external_package_id is required' }],
+        summary: { imported: 1, errors: 1 },
+      },
+    }).as('importForwarderPackageCSV')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_csv_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'csv',
+            external_package_id: 'STK-CSV-2001',
+            shipment_id: 'SHIP-2001',
+            tracking_number: '1ZCSV2001',
+            status: 'received',
+            warehouse_location: 'Locker C-4',
+            weight_grams: 520,
+            provenance_key: 'stackry:csv:STK-CSV-2001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-csv"]').clear()
+    cy.get('[data-testid="forwarder-package-csv"]').type(
+      'Stackry Package ID,Status,Shipment ID,Tracking Number,Warehouse Location,Weight Grams\nSTK-CSV-2001,received,SHIP-2001,1ZCSV2001,Locker C-4,520\n,received,SHIP-2002,1ZCSV2002,Locker D-8,420',
+      { delay: 0 }
+    )
+    cy.get('[data-testid="forwarder-package-import-csv"]').click()
+    cy.wait('@importForwarderPackageCSV')
+      .its('request.body')
+      .should('include', {
+        profile_id: 'e2e-profile-001',
+        provider: 'stackry',
+      })
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-result"]')
+      .should('contain', 'Imported 1 CSV package')
+      .and('contain', '1 row needs attention')
+    cy.get('[data-testid="forwarder-package-csv-errors"]')
+      .should('contain', 'Row 3')
+      .and('contain', 'external_package_id is required')
+    cy.get('[data-testid="forwarder-package-list"]')
+      .should('contain', 'STK-CSV-2001')
+      .and('contain', 'stackry / csv')
+      .and('contain', 'stackry:csv:STK-CSV-2001')
+  })
 })

@@ -3258,6 +3258,49 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			CSV       string `json:"csv"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imports, rowErrors, err := forwarding.ParsePackageCSV(req.ProfileID, req.Provider, strings.NewReader(req.CSV))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_csv",
+				"message": err.Error(),
+			})
+			return
+		}
+		imported := make([]forwarding.Package, 0, len(imports))
+		for _, item := range imports {
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), item)
+			if err != nil {
+				rowErrors = append(rowErrors, forwarding.PackageCSVRowError{Error: err.Error()})
+				continue
+			}
+			imported = append(imported, pkg)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":     "forwarder_package_csv_import",
+			"imported": imported,
+			"errors":   rowErrors,
+			"summary": map[string]int{
+				"imported": len(imported),
+				"errors":   len(rowErrors),
+			},
+		})
+	})
 	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
