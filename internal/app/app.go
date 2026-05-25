@@ -44,6 +44,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
 	"github.com/collectors-tech/cabinet/internal/ebaypurchasecapture"
+	"github.com/collectors-tech/cabinet/internal/forwarding"
 	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
@@ -131,6 +132,7 @@ func New(cfg config.Config) (*App, error) {
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
 	commerceSvc := commerce.NewService(conn)
+	forwarderInbox := forwarding.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
@@ -3216,6 +3218,44 @@ func New(cfg config.Config) (*App, error) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/forwarding/packages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			packages, err := forwarderInbox.ListPackages(r.Context(), profileID, status)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_packages\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"packages": packages,
+				"summary":  map[string]int{"count": len(packages)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageImport
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"package": pkg,
+				"mode":    "forwarder_package_upsert",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
 		}
 	})
 	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {

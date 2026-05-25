@@ -1,6 +1,10 @@
 package forwarding
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/db"
+)
 
 func TestNormalizeForwarderPackageImportPreservesProvenance(t *testing.T) {
 	t.Parallel()
@@ -96,5 +100,58 @@ func TestPackageInboxDeduplicatesByProvenanceKey(t *testing.T) {
 	packages := inbox.List("profile-1")
 	if len(packages) != 1 {
 		t.Fatalf("expected one deduplicated package, got %d", len(packages))
+	}
+}
+
+func TestForwarderPackageServicePersistsAndListsImports(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	svc := NewService(conn)
+
+	created, err := svc.UpsertPackage(t.Context(), PackageImport{
+		ProfileID:         "profile-1",
+		Provider:          ProviderStackry,
+		Source:            SourceCSV,
+		ExternalPackageID: "PKG-77",
+		ShipmentID:        "SHIP-77",
+		TrackingNumber:    "TRACK-77",
+		Status:            StatusReceived,
+		WeightGrams:       320,
+		RawPayload:        map[string]any{"row": "77"},
+	})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+	updated, err := svc.UpsertPackage(t.Context(), PackageImport{
+		ProfileID:         "profile-1",
+		Provider:          ProviderStackry,
+		Source:            SourceCSV,
+		ExternalPackageID: "PKG-77",
+		ShipmentID:        "SHIP-77",
+		TrackingNumber:    "TRACK-77",
+		Status:            StatusReadyToShip,
+		WeightGrams:       420,
+		RawPayload:        map[string]any{"row": "77", "status": "ready"},
+	})
+	if err != nil {
+		t.Fatalf("second UpsertPackage() error = %v", err)
+	}
+	if created.ID != updated.ID {
+		t.Fatalf("expected persistent upsert to reuse id, got %q then %q", created.ID, updated.ID)
+	}
+	packages, err := svc.ListPackages(t.Context(), "profile-1", StatusReadyToShip)
+	if err != nil {
+		t.Fatalf("ListPackages() error = %v", err)
+	}
+	if len(packages) != 1 {
+		t.Fatalf("expected one ready package, got %d", len(packages))
+	}
+	if packages[0].Status != StatusReadyToShip || packages[0].WeightGrams != 420 || packages[0].RawPayload["status"] != "ready" {
+		t.Fatalf("expected latest package fields and raw payload, got %+v", packages[0])
 	}
 }
