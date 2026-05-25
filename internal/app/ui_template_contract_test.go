@@ -636,8 +636,11 @@ func TestIntegrationsEbaySellerOperationsPanelContract(t *testing.T) {
 		"/api/providers/ebay/seller-operations/execute",
 		"ebay-seller-operation-preview-result",
 		"ebay-seller-operation-execute-result",
+		"ebay-seller-operation-read-result",
+		"ebay-seller-operation-read-records",
 		"sellerOperationResult.preview.remote_write",
 		"sellerOperationExecution.execution.local_only",
+		"sellerOperationExecution.execution.result",
 		"External writes require confirmation",
 		"status.blocker",
 	}

@@ -122,6 +122,7 @@ Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment,
 - **THEN** Cabinet MAY mark the action executed locally and MUST report local_only=true.
 - **AND** Cabinet MUST report remote_write=false for that completed read-only sync.
 - **AND** the response MUST include a per-operation local read result model for messages, notifications, sold orders, fulfilment, or offers with records and summary counts.
+- **AND** the integration UI MUST render returned read-result records with their source, kind, and status after a safe local sync.
 - **AND** confirmed remote-write seller operations MUST remain blocked with an adapter-not-configured blocker until a real eBay write adapter is wired.
 - **AND** the integration UI MUST display the execute status separately from preview status so local sync completion is not confused with an external eBay write.
 

@@ -187,6 +187,17 @@ type SellerOperationExecuteResult = {
     executed?: boolean
     local_only?: boolean
     status?: string
+    result?: {
+      operation?: string
+      source?: string
+      records?: Array<{
+        id?: string
+        kind?: string
+        status?: string
+        title?: string
+      }>
+      summary?: Record<string, number>
+    }
   }
 }
 
@@ -2319,6 +2330,40 @@ export function Apps({
                                 sellerOperationExecution.execution.blocker ??
                                 'No status'}
                             </p>
+                            {sellerOperationExecution.execution.result ? (
+                              <div
+                                className='mt-3 space-y-2'
+                                data-testid='ebay-seller-operation-read-result'
+                              >
+                                <p className='font-medium'>
+                                  Read result:{' '}
+                                  {sellerOperationExecution.execution.result
+                                    .source ?? 'local_read_model'}
+                                </p>
+                                <div
+                                  className='grid gap-2 sm:grid-cols-2'
+                                  data-testid='ebay-seller-operation-read-records'
+                                >
+                                  {(
+                                    sellerOperationExecution.execution.result
+                                      .records ?? []
+                                  ).map((record) => (
+                                    <div
+                                      key={record.id ?? record.title}
+                                      className='rounded border bg-background/60 p-2'
+                                    >
+                                      <p className='font-medium'>
+                                        {record.title ?? record.id}
+                                      </p>
+                                      <p className='text-muted-foreground'>
+                                        {record.kind ?? 'seller_operation'} /{' '}
+                                        {record.status ?? 'unknown'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </section>
