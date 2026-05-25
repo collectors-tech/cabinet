@@ -33,3 +33,11 @@ Cabinet SHALL provide a visible package inbox surface that lets users manually i
 - **GIVEN** a user is reviewing purchase and forwarding intake work from the Cabinet inbox
 - **WHEN** the user submits a manual Stackry package with profile, provider, source, external package id, status, tracking, warehouse, and weight fields
 - **THEN** Cabinet MUST call the forwarder package import API, refresh the package list, show the imported package with status and provenance key, and display API validation errors inline when required identity fields are missing.
+
+### Requirement INTEGRATION-033: Forwarder package inbox SHALL parse CSV package imports with row-level validation
+Cabinet SHALL parse Stackry/freight-forwarder CSV package rows into normalized package imports while preserving raw row provenance and reporting invalid rows without discarding valid package rows from the same file.
+
+#### Scenario: Parse a mixed-validity CSV package import
+- **GIVEN** a user has a CSV export or manually prepared file containing forwarder package ids, statuses, shipment/tracking fields, warehouse metadata, and package weights
+- **WHEN** Cabinet parses the CSV for a profile and provider
+- **THEN** Cabinet MUST map supported header aliases into normalized CSV package imports, preserve the original row values as raw provenance, return row-specific validation errors for missing identity or invalid weight values, and keep valid rows available for package upsert.

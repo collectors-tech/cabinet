@@ -1,6 +1,7 @@
 package forwarding
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/db"
@@ -153,5 +154,71 @@ func TestForwarderPackageServicePersistsAndListsImports(t *testing.T) {
 	}
 	if packages[0].Status != StatusReadyToShip || packages[0].WeightGrams != 420 || packages[0].RawPayload["status"] != "ready" {
 		t.Fatalf("expected latest package fields and raw payload, got %+v", packages[0])
+	}
+}
+
+func TestParsePackageCSVBuildsImportsAndPreservesRawRows(t *testing.T) {
+	t.Parallel()
+
+	csv := strings.NewReader(`Stackry Package ID,Status,Shipment ID,Tracking Number,Received At,Sender,Warehouse Location,Weight Grams
+PKG-CSV-1,received,SHIP-1,TRACK-1,2026-05-25T03:51:00Z,eBay seller,A-12,425
+PKG-CSV-2,ready_to_ship,SHIP-2,TRACK-2,2026-05-25T04:10:00Z,Card shop,B-7,510
+`)
+	imports, rowErrors, err := ParsePackageCSV("profile-csv", ProviderStackry, csv)
+	if err != nil {
+		t.Fatalf("ParsePackageCSV() error = %v", err)
+	}
+	if len(rowErrors) != 0 {
+		t.Fatalf("expected no row errors, got %+v", rowErrors)
+	}
+	if len(imports) != 2 {
+		t.Fatalf("expected two imports, got %d", len(imports))
+	}
+	first := imports[0]
+	if first.ProfileID != "profile-csv" || first.Provider != ProviderStackry || first.Source != SourceCSV {
+		t.Fatalf("expected CSV import identity, got %+v", first)
+	}
+	if first.ExternalPackageID != "PKG-CSV-1" || first.ShipmentID != "SHIP-1" || first.TrackingNumber != "TRACK-1" || first.WeightGrams != 425 {
+		t.Fatalf("expected first CSV row fields to map into package import, got %+v", first)
+	}
+	if first.RawPayload["row"] != 2 || first.RawPayload["stackry_package_id"] != "PKG-CSV-1" {
+		t.Fatalf("expected raw CSV row provenance, got %+v", first.RawPayload)
+	}
+	pkg, err := NormalizePackageImport(first)
+	if err != nil {
+		t.Fatalf("NormalizePackageImport(first CSV import) error = %v", err)
+	}
+	if pkg.ProvenanceKey != "stackry:csv:PKG-CSV-1" {
+		t.Fatalf("expected CSV provenance key, got %q", pkg.ProvenanceKey)
+	}
+}
+
+func TestParsePackageCSVReportsRowErrorsWithoutDroppingValidRows(t *testing.T) {
+	t.Parallel()
+
+	csv := strings.NewReader(`package_id,status,weight_grams
+PKG-OK,received,100
+,received,200
+PKG-BAD-WEIGHT,received,abc
+PKG-READY,ready_to_ship,250
+`)
+	imports, rowErrors, err := ParsePackageCSV("profile-csv", ProviderStackry, csv)
+	if err != nil {
+		t.Fatalf("ParsePackageCSV() error = %v", err)
+	}
+	if len(imports) != 2 {
+		t.Fatalf("expected two valid imports, got %d: %+v", len(imports), imports)
+	}
+	if imports[0].ExternalPackageID != "PKG-OK" || imports[1].ExternalPackageID != "PKG-READY" {
+		t.Fatalf("expected valid rows to be preserved in order, got %+v", imports)
+	}
+	if len(rowErrors) != 2 {
+		t.Fatalf("expected two row errors, got %+v", rowErrors)
+	}
+	if rowErrors[0].Row != 3 || rowErrors[0].Error != "external_package_id is required" {
+		t.Fatalf("expected row 3 identity error, got %+v", rowErrors[0])
+	}
+	if rowErrors[1].Row != 4 || rowErrors[1].Error != "weight_grams must be an integer" {
+		t.Fatalf("expected row 4 weight error, got %+v", rowErrors[1])
 	}
 }
