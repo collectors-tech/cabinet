@@ -127,6 +127,27 @@ type ForwarderPackageCSVImportResponse = {
   }
 }
 
+type ForwarderPackageLink = {
+  id: string
+  profile_id: string
+  package_id: string
+  item_id: string
+  lifecycle_entry_id?: string
+  expected_arrival_id?: string
+  source: string
+  notes?: string
+  created_at?: string
+  updated_at?: string
+}
+
+type ForwarderPackageLinkForm = {
+  item_id: string
+  lifecycle_entry_id: string
+  expected_arrival_id: string
+  source: string
+  notes: string
+}
+
 const sampleCards: PurchaseCard[] = [
   {
     order_id: '20-14595-70928',
@@ -176,6 +197,14 @@ const defaultPackageEmail = [
   'Sender: Stackry Intake',
 ].join('\n')
 
+const defaultPackageLinkForm: ForwarderPackageLinkForm = {
+  item_id: 'item-expected-001',
+  lifecycle_entry_id: 'life-entry-001',
+  expected_arrival_id: 'arrival-expected-001',
+  source: 'manual_review',
+  notes: 'Matched from package inbox review',
+}
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -207,6 +236,18 @@ export function Purchases() {
   const [packageCSVErrors, setPackageCSVErrors] = useState<
     ForwarderPackageCSVError[]
   >([])
+  const [packageLinks, setPackageLinks] = useState<
+    Record<string, ForwarderPackageLink[]>
+  >({})
+  const [packageLinkForms, setPackageLinkForms] = useState<
+    Record<string, ForwarderPackageLinkForm>
+  >({})
+  const [packageLinkErrors, setPackageLinkErrors] = useState<
+    Record<string, string | null>
+  >({})
+  const [packageLinkResults, setPackageLinkResults] = useState<
+    Record<string, string | null>
+  >({})
   const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
     null
   )
@@ -286,8 +327,109 @@ export function Purchases() {
     [packageForm.profile_id]
   )
 
+  const loadPackageLinks = useCallback(async (packageID: string) => {
+    try {
+      setPackageLinkErrors((current) => ({ ...current, [packageID]: null }))
+      const params = new URLSearchParams({ package_id: packageID })
+      const response = await fetch(
+        '/api/forwarding/package-links?' + params.toString()
+      )
+      if (!response.ok) {
+        throw new Error('forwarder_package_links_' + response.status)
+      }
+      const payload = (await response.json()) as {
+        links?: ForwarderPackageLink[]
+      }
+      setPackageLinks((current) => ({
+        ...current,
+        [packageID]: payload.links ?? [],
+      }))
+    } catch (err) {
+      setPackageLinks((current) => ({ ...current, [packageID]: [] }))
+      setPackageLinkErrors((current) => ({
+        ...current,
+        [packageID]:
+          err instanceof Error ? err.message : 'forwarder_package_links_failed',
+      }))
+    }
+  }, [])
+
   const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
     setPackageForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const packageLinkFormFor = (packageID: string) =>
+    packageLinkForms[packageID] ?? defaultPackageLinkForm
+
+  const updatePackageLinkForm = (
+    packageID: string,
+    field: keyof ForwarderPackageLinkForm,
+    value: string
+  ) => {
+    setPackageLinkForms((current) => ({
+      ...current,
+      [packageID]: { ...packageLinkFormFor(packageID), [field]: value },
+    }))
+  }
+
+  const selectPackage = async (packageID: string, selected: boolean) => {
+    if (selected) {
+      setSelectedPackageID(null)
+      return
+    }
+    setSelectedPackageID(packageID)
+    if (!packageLinkForms[packageID]) {
+      setPackageLinkForms((current) => ({
+        ...current,
+        [packageID]: defaultPackageLinkForm,
+      }))
+    }
+    await loadPackageLinks(packageID)
+  }
+
+  const linkPackage = async (pkg: ForwarderPackage) => {
+    const form = packageLinkFormFor(pkg.id)
+    setPackageLinkErrors((current) => ({ ...current, [pkg.id]: null }))
+    setPackageLinkResults((current) => ({ ...current, [pkg.id]: null }))
+    try {
+      const response = await fetch('/api/forwarding/package-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          package_id: pkg.id,
+          item_id: form.item_id,
+          lifecycle_entry_id: form.lifecycle_entry_id,
+          expected_arrival_id: form.expected_arrival_id,
+          source: form.source,
+          notes: form.notes,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === 'object' && 'message' in payload
+            ? String(payload.message)
+            : 'forwarder_package_link_' + response.status
+        throw new Error(message)
+      }
+      const result = payload as { link?: ForwarderPackageLink }
+      const link = result.link
+      setPackageLinkResults((current) => ({
+        ...current,
+        [pkg.id]: link
+          ? 'Linked package to item ' + link.item_id
+          : 'Linked package',
+      }))
+      await loadPackageLinks(pkg.id)
+    } catch (err) {
+      setPackageLinkErrors((current) => ({
+        ...current,
+        [pkg.id]:
+          err instanceof Error
+            ? err.message
+            : 'forwarder_package_link_failed',
+      }))
+    }
   }
 
   const importPackage = async () => {
@@ -913,6 +1055,8 @@ export function Purchases() {
                     const rawPayload = pkg.raw_payload
                       ? JSON.stringify(pkg.raw_payload, null, 2)
                       : 'No raw source payload returned for this package.'
+                    const linkForm = packageLinkFormFor(pkg.id)
+                    const links = packageLinks[pkg.id] ?? []
                     return (
                     <article
                       key={pkg.id}
@@ -957,9 +1101,7 @@ export function Purchases() {
                           variant='outline'
                           size='sm'
                           data-testid='forwarder-package-detail-toggle'
-                          onClick={() =>
-                            setSelectedPackageID(selected ? null : pkg.id)
-                          }
+                          onClick={() => void selectPackage(pkg.id, selected)}
                         >
                           {selected ? 'Hide details' : 'View details'}
                         </Button>
@@ -1023,6 +1165,162 @@ export function Purchases() {
                             >
                               {rawPayload}
                             </pre>
+                          </div>
+                          <div
+                            className='space-y-3 rounded-md border bg-background p-4'
+                            data-testid='forwarder-package-link-panel'
+                          >
+                            <div>
+                              <p className='text-sm font-medium'>
+                                Reconciliation link
+                              </p>
+                              <p className='text-xs text-muted-foreground'>
+                                Match this package to the reviewed inventory
+                                item and expected arrival target.
+                              </p>
+                            </div>
+                            {links.length > 0 ? (
+                              <div
+                                className='rounded-md border bg-muted/30 p-3 text-sm'
+                                data-testid='forwarder-package-link-state'
+                              >
+                                {links.map((link) => (
+                                  <div key={link.id}>
+                                    Linked to item {link.item_id}
+                                    {link.expected_arrival_id
+                                      ? ' / arrival ' + link.expected_arrival_id
+                                      : ''}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div
+                                className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                                data-testid='forwarder-package-link-empty'
+                              >
+                                No reconciliation link recorded for this
+                                package.
+                              </div>
+                            )}
+                            <div className='grid gap-3 md:grid-cols-2'>
+                              <div className='grid gap-1.5'>
+                                <Label htmlFor={'forwarder-link-item-' + pkg.id}>
+                                  Item ID
+                                </Label>
+                                <Input
+                                  id={'forwarder-link-item-' + pkg.id}
+                                  data-testid='forwarder-package-link-item'
+                                  value={linkForm.item_id}
+                                  onChange={(event) =>
+                                    updatePackageLinkForm(
+                                      pkg.id,
+                                      'item_id',
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className='grid gap-1.5'>
+                                <Label
+                                  htmlFor={'forwarder-link-arrival-' + pkg.id}
+                                >
+                                  Expected arrival ID
+                                </Label>
+                                <Input
+                                  id={'forwarder-link-arrival-' + pkg.id}
+                                  data-testid='forwarder-package-link-arrival'
+                                  value={linkForm.expected_arrival_id}
+                                  onChange={(event) =>
+                                    updatePackageLinkForm(
+                                      pkg.id,
+                                      'expected_arrival_id',
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className='grid gap-1.5'>
+                                <Label
+                                  htmlFor={'forwarder-link-lifecycle-' + pkg.id}
+                                >
+                                  Lifecycle entry ID
+                                </Label>
+                                <Input
+                                  id={'forwarder-link-lifecycle-' + pkg.id}
+                                  data-testid='forwarder-package-link-lifecycle'
+                                  value={linkForm.lifecycle_entry_id}
+                                  onChange={(event) =>
+                                    updatePackageLinkForm(
+                                      pkg.id,
+                                      'lifecycle_entry_id',
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className='grid gap-1.5'>
+                                <Label
+                                  htmlFor={'forwarder-link-source-' + pkg.id}
+                                >
+                                  Source
+                                </Label>
+                                <Input
+                                  id={'forwarder-link-source-' + pkg.id}
+                                  data-testid='forwarder-package-link-source'
+                                  value={linkForm.source}
+                                  onChange={(event) =>
+                                    updatePackageLinkForm(
+                                      pkg.id,
+                                      'source',
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className='grid gap-1.5'>
+                              <Label htmlFor={'forwarder-link-notes-' + pkg.id}>
+                                Notes
+                              </Label>
+                              <Textarea
+                                id={'forwarder-link-notes-' + pkg.id}
+                                data-testid='forwarder-package-link-notes'
+                                value={linkForm.notes}
+                                onChange={(event) =>
+                                  updatePackageLinkForm(
+                                    pkg.id,
+                                    'notes',
+                                    event.target.value
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className='flex justify-end'>
+                              <Button
+                                type='button'
+                                size='sm'
+                                data-testid='forwarder-package-link-save'
+                                onClick={() => void linkPackage(pkg)}
+                              >
+                                Link package
+                              </Button>
+                            </div>
+                            {packageLinkResults[pkg.id] ? (
+                              <div
+                                className='rounded-md border bg-muted/30 p-3 text-sm'
+                                data-testid='forwarder-package-link-result'
+                              >
+                                {packageLinkResults[pkg.id]}
+                              </div>
+                            ) : null}
+                            {packageLinkErrors[pkg.id] ? (
+                              <div
+                                className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                                data-testid='forwarder-package-link-error'
+                              >
+                                {packageLinkErrors[pkg.id]}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       ) : null}
