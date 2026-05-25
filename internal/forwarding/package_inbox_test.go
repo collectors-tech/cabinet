@@ -352,6 +352,67 @@ func TestForwarderPackageServiceRejectsAmbiguousPackageRelink(t *testing.T) {
 	}
 }
 
+func TestForwarderPackageServiceOverridesAndUnlinksWithAuditEvents(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(t.Context(), t.TempDir()+"/cabinet.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	seedForwarderPackageLinkTarget(t, conn, "profile-decision", "item-one", "life-one", "arrival-one")
+	seedForwarderPackageLinkTarget(t, conn, "profile-decision", "item-two", "life-two", "arrival-two")
+	svc := NewService(conn)
+	pkg, err := svc.UpsertPackage(t.Context(), PackageImport{ProfileID: "profile-decision", Provider: ProviderStackry, Source: SourceManual, ExternalPackageID: "PKG-DECISION", Status: StatusReceived})
+	if err != nil {
+		t.Fatalf("UpsertPackage() error = %v", err)
+	}
+	confirmed, err := svc.LinkPackage(t.Context(), PackageLinkRequest{
+		ProfileID: "profile-decision", PackageID: pkg.ID, ItemID: "item-one", LifecycleEntryID: "life-one", ExpectedArrivalID: "arrival-one",
+		Source: "suggested-match", Decision: "confirmed", Actor: "reviewer", Notes: "high confidence suggestion accepted",
+	})
+	if err != nil {
+		t.Fatalf("confirm LinkPackage() error = %v", err)
+	}
+	if confirmed.Decision != "confirmed" || len(confirmed.AuditTrail) == 0 || !strings.Contains(confirmed.AuditTrail[0], "decision=confirmed") {
+		t.Fatalf("expected confirmed audit trail, got %+v", confirmed)
+	}
+	overridden, err := svc.LinkPackage(t.Context(), PackageLinkRequest{
+		ProfileID: "profile-decision", PackageID: pkg.ID, ItemID: "item-two", LifecycleEntryID: "life-two", ExpectedArrivalID: "arrival-two",
+		Source: "manual-override", Decision: "override", Override: true, Actor: "reviewer", Notes: "seller note contradicted package text",
+	})
+	if err != nil {
+		t.Fatalf("override LinkPackage() error = %v", err)
+	}
+	if overridden.ItemID != "item-two" || overridden.Decision != "override" || !strings.Contains(strings.Join(overridden.AuditTrail, " "), "previous target item=item-one") {
+		t.Fatalf("expected override target and audit trail, got %+v", overridden)
+	}
+	unlinked, err := svc.UnlinkPackage(t.Context(), PackageUnlinkRequest{ProfileID: "profile-decision", PackageID: pkg.ID, Source: "manual-unlink", Actor: "reviewer", Notes: "waiting for better evidence"})
+	if err != nil {
+		t.Fatalf("UnlinkPackage() error = %v", err)
+	}
+	if unlinked.Action != "unlinked" || unlinked.PreviousItemID != "item-two" || !strings.Contains(strings.Join(unlinked.AuditTrail, " "), "decision=unlinked") {
+		t.Fatalf("expected unlink event with previous target, got %+v", unlinked)
+	}
+	if _, err := svc.GetPackageLink(t.Context(), "profile-decision", pkg.ID); err == nil {
+		t.Fatal("expected package link to be removed after unlink")
+	}
+	events, err := svc.ListPackageLinkEvents(t.Context(), "profile-decision", pkg.ID)
+	if err != nil {
+		t.Fatalf("ListPackageLinkEvents() error = %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("expected confirm, override, and unlink events, got %+v", events)
+	}
+	seen := map[string]bool{}
+	for _, event := range events {
+		seen[event.Action] = true
+	}
+	if !seen["confirmed"] || !seen["override"] || !seen["unlinked"] {
+		t.Fatalf("expected decision events, got %+v", events)
+	}
+}
+
 func TestForwarderPackageServiceSuggestsDeterministicMatchesWithAuditSignals(t *testing.T) {
 	t.Parallel()
 

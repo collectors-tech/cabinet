@@ -381,12 +381,33 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
 			expected_arrival_id TEXT NOT NULL DEFAULT '',
 			source TEXT NOT NULL DEFAULT 'manual',
+			decision TEXT NOT NULL DEFAULT 'confirmed',
 			notes TEXT NOT NULL DEFAULT '',
+			audit_trail_json TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (package_id) REFERENCES forwarder_packages(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_forwarder_package_links_profile_item ON forwarder_package_links(profile_id, item_id, updated_at);`,
+		`CREATE TABLE IF NOT EXISTS forwarder_package_link_events (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			package_id TEXT NOT NULL,
+			link_id TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL,
+			item_id TEXT NOT NULL DEFAULT '',
+			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			expected_arrival_id TEXT NOT NULL DEFAULT '',
+			previous_item_id TEXT NOT NULL DEFAULT '',
+			previous_lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			previous_expected_arrival_id TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			audit_trail_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (package_id) REFERENCES forwarder_packages(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_forwarder_package_link_events_package ON forwarder_package_link_events(profile_id, package_id, created_at);`,
 		`CREATE TABLE IF NOT EXISTS ai_failures (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -723,6 +744,14 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "chat_messages", "context_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure chat_messages.context_json: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "forwarder_package_links", "decision", "TEXT NOT NULL DEFAULT 'confirmed'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure forwarder_package_links.decision: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "forwarder_package_links", "audit_trail_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure forwarder_package_links.audit_trail_json: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		conn.Close()

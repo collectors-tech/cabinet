@@ -66,26 +66,59 @@ type Package struct {
 }
 
 type PackageLinkRequest struct {
-	ProfileID         string `json:"profile_id"`
-	PackageID         string `json:"package_id"`
-	ItemID            string `json:"item_id"`
-	LifecycleEntryID  string `json:"lifecycle_entry_id"`
-	ExpectedArrivalID string `json:"expected_arrival_id"`
-	Source            string `json:"source"`
-	Notes             string `json:"notes"`
+	ProfileID         string   `json:"profile_id"`
+	PackageID         string   `json:"package_id"`
+	ItemID            string   `json:"item_id"`
+	LifecycleEntryID  string   `json:"lifecycle_entry_id"`
+	ExpectedArrivalID string   `json:"expected_arrival_id"`
+	Source            string   `json:"source"`
+	Decision          string   `json:"decision"`
+	Notes             string   `json:"notes"`
+	Override          bool     `json:"override"`
+	Actor             string   `json:"actor"`
+	AuditTrail        []string `json:"audit_trail"`
 }
 
 type PackageLink struct {
-	ID                string `json:"id"`
-	ProfileID         string `json:"profile_id"`
-	PackageID         string `json:"package_id"`
-	ItemID            string `json:"item_id"`
-	LifecycleEntryID  string `json:"lifecycle_entry_id,omitempty"`
-	ExpectedArrivalID string `json:"expected_arrival_id,omitempty"`
-	Source            string `json:"source"`
-	Notes             string `json:"notes"`
-	CreatedAt         string `json:"created_at,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty"`
+	ID                string   `json:"id"`
+	ProfileID         string   `json:"profile_id"`
+	PackageID         string   `json:"package_id"`
+	ItemID            string   `json:"item_id"`
+	LifecycleEntryID  string   `json:"lifecycle_entry_id,omitempty"`
+	ExpectedArrivalID string   `json:"expected_arrival_id,omitempty"`
+	Source            string   `json:"source"`
+	Decision          string   `json:"decision"`
+	Notes             string   `json:"notes"`
+	AuditTrail        []string `json:"audit_trail"`
+	CreatedAt         string   `json:"created_at,omitempty"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
+}
+
+type PackageUnlinkRequest struct {
+	ProfileID  string   `json:"profile_id"`
+	PackageID  string   `json:"package_id"`
+	Source     string   `json:"source"`
+	Notes      string   `json:"notes"`
+	Actor      string   `json:"actor"`
+	AuditTrail []string `json:"audit_trail"`
+}
+
+type PackageLinkEvent struct {
+	ID                        string   `json:"id"`
+	ProfileID                 string   `json:"profile_id"`
+	PackageID                 string   `json:"package_id"`
+	LinkID                    string   `json:"link_id,omitempty"`
+	Action                    string   `json:"action"`
+	ItemID                    string   `json:"item_id,omitempty"`
+	LifecycleEntryID          string   `json:"lifecycle_entry_id,omitempty"`
+	ExpectedArrivalID         string   `json:"expected_arrival_id,omitempty"`
+	PreviousItemID            string   `json:"previous_item_id,omitempty"`
+	PreviousLifecycleEntryID  string   `json:"previous_lifecycle_entry_id,omitempty"`
+	PreviousExpectedArrivalID string   `json:"previous_expected_arrival_id,omitempty"`
+	Source                    string   `json:"source"`
+	Notes                     string   `json:"notes"`
+	AuditTrail                []string `json:"audit_trail"`
+	CreatedAt                 string   `json:"created_at,omitempty"`
 }
 
 type PackageMatchSignal struct {
@@ -385,7 +418,9 @@ func (s *Service) LinkPackage(ctx context.Context, req PackageLinkRequest) (Pack
 	req.LifecycleEntryID = strings.TrimSpace(req.LifecycleEntryID)
 	req.ExpectedArrivalID = strings.TrimSpace(req.ExpectedArrivalID)
 	req.Source = strings.TrimSpace(req.Source)
+	req.Decision = normalizeLinkDecision(req.Decision)
 	req.Notes = strings.TrimSpace(req.Notes)
+	req.Actor = strings.TrimSpace(req.Actor)
 	if req.ProfileID == "" {
 		return PackageLink{}, fmt.Errorf("profile_id is required")
 	}
@@ -400,6 +435,14 @@ func (s *Service) LinkPackage(ctx context.Context, req PackageLinkRequest) (Pack
 	}
 	if req.Source == "" {
 		req.Source = "manual"
+	}
+	auditTrail := normalizeAuditTrail(req.AuditTrail)
+	if len(auditTrail) == 0 {
+		auditTrail = append(auditTrail, linkAuditLine(req.Decision, req.Source, req.Actor, req.Notes))
+	}
+	auditJSON, err := encodeStringList(auditTrail)
+	if err != nil {
+		return PackageLink{}, fmt.Errorf("encode forwarder package link audit trail: %w", err)
 	}
 	if err := s.requirePackageProfile(ctx, req.ProfileID, req.PackageID); err != nil {
 		return PackageLink{}, err
@@ -420,40 +463,79 @@ func (s *Service) LinkPackage(ctx context.Context, req PackageLinkRequest) (Pack
 	existing, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
 	if err == nil {
 		if existing.ItemID != req.ItemID || existing.LifecycleEntryID != req.LifecycleEntryID || existing.ExpectedArrivalID != req.ExpectedArrivalID {
-			return PackageLink{}, fmt.Errorf("forwarder package already linked to a different target")
+			if !req.Override {
+				return PackageLink{}, fmt.Errorf("forwarder package already linked to a different target")
+			}
+			req.Decision = "override"
+			auditTrail = append([]string{fmt.Sprintf("override accepted previous target item=%s lifecycle=%s expected_arrival=%s", existing.ItemID, existing.LifecycleEntryID, existing.ExpectedArrivalID)}, auditTrail...)
+			auditJSON, err = encodeStringList(auditTrail)
+			if err != nil {
+				return PackageLink{}, fmt.Errorf("encode forwarder package override audit trail: %w", err)
+			}
+			_, err = s.db.ExecContext(ctx, `
+				UPDATE forwarder_package_links
+				SET item_id = ?, lifecycle_entry_id = ?, expected_arrival_id = ?, source = ?, decision = ?, notes = ?, audit_trail_json = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID, req.Source, req.Decision, req.Notes, auditJSON, existing.ID)
+			if err != nil {
+				return PackageLink{}, fmt.Errorf("override forwarder package link: %w", err)
+			}
+			link, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+			if err != nil {
+				return PackageLink{}, err
+			}
+			if _, err := s.recordPackageLinkEvent(ctx, "override", link, existing, req.Source, req.Notes, auditTrail); err != nil {
+				return PackageLink{}, err
+			}
+			return link, nil
 		}
 		_, err = s.db.ExecContext(ctx, `
 			UPDATE forwarder_package_links
-			SET source = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+			SET source = ?, decision = ?, notes = ?, audit_trail_json = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE id = ?
-		`, req.Source, req.Notes, existing.ID)
+		`, req.Source, req.Decision, req.Notes, auditJSON, existing.ID)
 		if err != nil {
 			return PackageLink{}, fmt.Errorf("update forwarder package link: %w", err)
 		}
-		return s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+		link, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+		if err != nil {
+			return PackageLink{}, err
+		}
+		if _, err := s.recordPackageLinkEvent(ctx, req.Decision, link, PackageLink{}, req.Source, req.Notes, auditTrail); err != nil {
+			return PackageLink{}, err
+		}
+		return link, nil
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		return PackageLink{}, err
 	}
 	id := packageLinkID(req.ProfileID, req.PackageID, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID)
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO forwarder_package_links(id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, req.ProfileID, req.PackageID, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID, req.Source, req.Notes)
+		INSERT INTO forwarder_package_links(id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, decision, notes, audit_trail_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, req.ProfileID, req.PackageID, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID, req.Source, req.Decision, req.Notes, auditJSON)
 	if err != nil {
 		return PackageLink{}, fmt.Errorf("create forwarder package link: %w", err)
 	}
-	return s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+	link, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+	if err != nil {
+		return PackageLink{}, err
+	}
+	if _, err := s.recordPackageLinkEvent(ctx, req.Decision, link, PackageLink{}, req.Source, req.Notes, auditTrail); err != nil {
+		return PackageLink{}, err
+	}
+	return link, nil
 }
 
 func (s *Service) GetPackageLink(ctx context.Context, profileID, packageID string) (PackageLink, error) {
 	var out PackageLink
+	var auditJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes, created_at, updated_at
+		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, decision, notes, audit_trail_json, created_at, updated_at
 		FROM forwarder_package_links
 		WHERE profile_id = ? AND package_id = ?
 	`, strings.TrimSpace(profileID), strings.TrimSpace(packageID)).Scan(
-		&out.ID, &out.ProfileID, &out.PackageID, &out.ItemID, &out.LifecycleEntryID, &out.ExpectedArrivalID, &out.Source, &out.Notes, &out.CreatedAt, &out.UpdatedAt,
+		&out.ID, &out.ProfileID, &out.PackageID, &out.ItemID, &out.LifecycleEntryID, &out.ExpectedArrivalID, &out.Source, &out.Decision, &out.Notes, &auditJSON, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -461,12 +543,16 @@ func (s *Service) GetPackageLink(ctx context.Context, profileID, packageID strin
 		}
 		return PackageLink{}, err
 	}
+	out.AuditTrail, err = decodeStringList(auditJSON)
+	if err != nil {
+		return PackageLink{}, err
+	}
 	return out, nil
 }
 
 func (s *Service) ListPackageLinks(ctx context.Context, profileID, packageID string) ([]PackageLink, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes, created_at, updated_at
+		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, decision, notes, audit_trail_json, created_at, updated_at
 		FROM forwarder_package_links
 		WHERE profile_id = ? AND (? = '' OR package_id = ?)
 		ORDER BY updated_at DESC, id ASC
@@ -478,12 +564,118 @@ func (s *Service) ListPackageLinks(ctx context.Context, profileID, packageID str
 	var out []PackageLink
 	for rows.Next() {
 		var link PackageLink
-		if err := rows.Scan(&link.ID, &link.ProfileID, &link.PackageID, &link.ItemID, &link.LifecycleEntryID, &link.ExpectedArrivalID, &link.Source, &link.Notes, &link.CreatedAt, &link.UpdatedAt); err != nil {
+		var auditJSON string
+		if err := rows.Scan(&link.ID, &link.ProfileID, &link.PackageID, &link.ItemID, &link.LifecycleEntryID, &link.ExpectedArrivalID, &link.Source, &link.Decision, &link.Notes, &auditJSON, &link.CreatedAt, &link.UpdatedAt); err != nil {
+			return nil, err
+		}
+		link.AuditTrail, err = decodeStringList(auditJSON)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, link)
 	}
 	return out, rows.Err()
+}
+
+func (s *Service) UnlinkPackage(ctx context.Context, req PackageUnlinkRequest) (PackageLinkEvent, error) {
+	req.ProfileID = strings.TrimSpace(req.ProfileID)
+	req.PackageID = strings.TrimSpace(req.PackageID)
+	req.Source = strings.TrimSpace(req.Source)
+	req.Notes = strings.TrimSpace(req.Notes)
+	req.Actor = strings.TrimSpace(req.Actor)
+	if req.ProfileID == "" {
+		return PackageLinkEvent{}, fmt.Errorf("profile_id is required")
+	}
+	if req.PackageID == "" {
+		return PackageLinkEvent{}, fmt.Errorf("package_id is required")
+	}
+	if req.Source == "" {
+		req.Source = "manual"
+	}
+	if err := s.requirePackageProfile(ctx, req.ProfileID, req.PackageID); err != nil {
+		return PackageLinkEvent{}, err
+	}
+	existing, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+	if err != nil {
+		return PackageLinkEvent{}, err
+	}
+	auditTrail := normalizeAuditTrail(req.AuditTrail)
+	if len(auditTrail) == 0 {
+		auditTrail = []string{linkAuditLine("unlinked", req.Source, req.Actor, req.Notes)}
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM forwarder_package_links WHERE id = ?`, existing.ID); err != nil {
+		return PackageLinkEvent{}, fmt.Errorf("unlink forwarder package: %w", err)
+	}
+	return s.recordPackageLinkEvent(ctx, "unlinked", PackageLink{ProfileID: req.ProfileID, PackageID: req.PackageID}, existing, req.Source, req.Notes, auditTrail)
+}
+
+func (s *Service) ListPackageLinkEvents(ctx context.Context, profileID, packageID string) ([]PackageLinkEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, package_id, link_id, action, item_id, lifecycle_entry_id, expected_arrival_id,
+			previous_item_id, previous_lifecycle_entry_id, previous_expected_arrival_id, source, notes, audit_trail_json, created_at
+		FROM forwarder_package_link_events
+		WHERE profile_id = ? AND (? = '' OR package_id = ?)
+		ORDER BY created_at DESC, id DESC
+	`, strings.TrimSpace(profileID), strings.TrimSpace(packageID), strings.TrimSpace(packageID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PackageLinkEvent
+	for rows.Next() {
+		var event PackageLinkEvent
+		var auditJSON string
+		if err := rows.Scan(&event.ID, &event.ProfileID, &event.PackageID, &event.LinkID, &event.Action, &event.ItemID, &event.LifecycleEntryID, &event.ExpectedArrivalID, &event.PreviousItemID, &event.PreviousLifecycleEntryID, &event.PreviousExpectedArrivalID, &event.Source, &event.Notes, &auditJSON, &event.CreatedAt); err != nil {
+			return nil, err
+		}
+		event.AuditTrail, err = decodeStringList(auditJSON)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) recordPackageLinkEvent(ctx context.Context, action string, link PackageLink, previous PackageLink, source, notes string, auditTrail []string) (PackageLinkEvent, error) {
+	auditJSON, err := encodeStringList(auditTrail)
+	if err != nil {
+		return PackageLinkEvent{}, fmt.Errorf("encode forwarder package link event audit trail: %w", err)
+	}
+	profileID := strings.TrimSpace(link.ProfileID)
+	if profileID == "" {
+		profileID = previous.ProfileID
+	}
+	packageID := strings.TrimSpace(link.PackageID)
+	if packageID == "" {
+		packageID = previous.PackageID
+	}
+	event := PackageLinkEvent{
+		ID:                        packageLinkEventID(profileID, packageID, action, link.ItemID, link.LifecycleEntryID, link.ExpectedArrivalID, previous.ItemID, previous.LifecycleEntryID, previous.ExpectedArrivalID, notes),
+		ProfileID:                 profileID,
+		PackageID:                 packageID,
+		LinkID:                    link.ID,
+		Action:                    action,
+		ItemID:                    link.ItemID,
+		LifecycleEntryID:          link.LifecycleEntryID,
+		ExpectedArrivalID:         link.ExpectedArrivalID,
+		PreviousItemID:            previous.ItemID,
+		PreviousLifecycleEntryID:  previous.LifecycleEntryID,
+		PreviousExpectedArrivalID: previous.ExpectedArrivalID,
+		Source:                    source,
+		Notes:                     notes,
+		AuditTrail:                append([]string(nil), auditTrail...),
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO forwarder_package_link_events(
+			id, profile_id, package_id, link_id, action, item_id, lifecycle_entry_id, expected_arrival_id,
+			previous_item_id, previous_lifecycle_entry_id, previous_expected_arrival_id, source, notes, audit_trail_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, event.ID, event.ProfileID, event.PackageID, event.LinkID, event.Action, event.ItemID, event.LifecycleEntryID, event.ExpectedArrivalID, event.PreviousItemID, event.PreviousLifecycleEntryID, event.PreviousExpectedArrivalID, event.Source, event.Notes, auditJSON)
+	if err != nil {
+		return PackageLinkEvent{}, fmt.Errorf("record forwarder package link event: %w", err)
+	}
+	return event, nil
 }
 
 func (s *Service) SuggestPackageMatches(ctx context.Context, profileID, packageID string) ([]PackageMatchSuggestion, error) {
@@ -922,6 +1114,49 @@ func packageLinkID(profileID, packageID, itemID, lifecycleEntryID, expectedArriv
 	return "fwdlink_" + hex.EncodeToString(sum[:])[:16]
 }
 
+func packageLinkEventID(profileID, packageID, action, itemID, lifecycleEntryID, expectedArrivalID, previousItemID, previousLifecycleEntryID, previousExpectedArrivalID, notes string) string {
+	sum := sha1.Sum([]byte(strings.Join([]string{profileID, packageID, action, itemID, lifecycleEntryID, expectedArrivalID, previousItemID, previousLifecycleEntryID, previousExpectedArrivalID, notes}, "|")))
+	return "fwdlinkevent_" + hex.EncodeToString(sum[:])[:16]
+}
+
+func normalizeLinkDecision(decision string) string {
+	switch strings.ToLower(strings.TrimSpace(decision)) {
+	case "", "confirm", "confirmed":
+		return "confirmed"
+	case "override", "overridden":
+		return "override"
+	case "unlinked", "unlink":
+		return "unlinked"
+	default:
+		return strings.ToLower(strings.TrimSpace(decision))
+	}
+}
+
+func normalizeAuditTrail(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, line := range in {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func linkAuditLine(decision, source, actor, notes string) string {
+	parts := []string{"decision=" + normalizeLinkDecision(decision)}
+	if source != "" {
+		parts = append(parts, "source="+source)
+	}
+	if actor != "" {
+		parts = append(parts, "actor="+actor)
+	}
+	if notes != "" {
+		parts = append(parts, "notes="+notes)
+	}
+	return strings.Join(parts, "; ")
+}
+
 func clonePayload(in map[string]any) map[string]any {
 	if len(in) == 0 {
 		return nil
@@ -951,6 +1186,28 @@ func decodePayload(in string) (map[string]any, error) {
 	var out map[string]any
 	if err := json.Unmarshal([]byte(in), &out); err != nil {
 		return nil, fmt.Errorf("decode raw payload: %w", err)
+	}
+	return out, nil
+}
+
+func encodeStringList(in []string) (string, error) {
+	if len(in) == 0 {
+		return "[]", nil
+	}
+	data, err := json.Marshal(in)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func decodeStringList(in string) ([]string, error) {
+	if strings.TrimSpace(in) == "" {
+		return nil, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(in), &out); err != nil {
+		return nil, fmt.Errorf("decode audit trail: %w", err)
 	}
 	return out, nil
 }

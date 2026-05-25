@@ -121,6 +121,94 @@ func TestForwarderPackageLinkAPIReconcilesPackageToPurchaseArrival(t *testing.T)
 	}
 }
 
+func TestForwarderPackageLinkAPIOverridesAndUnlinksWithEvents(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	for _, itemID := range []string{"fwd-override-item-1", "fwd-override-item-2"} {
+		if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES (?, ?, 'AFX', 'Slot', ?, 'Forwarder Override Item')`, itemID, profileID, itemID); err != nil {
+			t.Fatalf("seed item %s: %v", itemID, err)
+		}
+	}
+	createLifecycleOne := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-override-item-1","state":"purchase","source":"ebay","external_ref":"order-override-1","quantity":1,"amount":42,"currency":"aud"}`), map[string]string{"Content-Type": "application/json"})
+	if createLifecycleOne.Code != http.StatusCreated {
+		t.Fatalf("create lifecycle one status=%d body=%s", createLifecycleOne.Code, createLifecycleOne.Body.String())
+	}
+	createLifecycleTwo := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-override-item-2","state":"purchase","source":"ebay","external_ref":"order-override-2","quantity":1,"amount":43,"currency":"aud"}`), map[string]string{"Content-Type": "application/json"})
+	if createLifecycleTwo.Code != http.StatusCreated {
+		t.Fatalf("create lifecycle two status=%d body=%s", createLifecycleTwo.Code, createLifecycleTwo.Body.String())
+	}
+	var lifeOne, lifeTwo struct {
+		Entry struct {
+			ID string `json:"id"`
+		} `json:"entry"`
+		ExpectedArrival struct {
+			ID string `json:"id"`
+		} `json:"expected_arrival"`
+	}
+	if err := json.NewDecoder(createLifecycleOne.Body).Decode(&lifeOne); err != nil {
+		t.Fatalf("decode lifecycle one: %v", err)
+	}
+	if err := json.NewDecoder(createLifecycleTwo.Body).Decode(&lifeTwo); err != nil {
+		t.Fatalf("decode lifecycle two: %v", err)
+	}
+	createPackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"manual","external_package_id":"PKG-OVERRIDE-API","status":"received"}`), map[string]string{"Content-Type": "application/json"})
+	if createPackage.Code != http.StatusOK {
+		t.Fatalf("create package status=%d body=%s", createPackage.Code, createPackage.Body.String())
+	}
+	var packagePayload struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createPackage.Body).Decode(&packagePayload); err != nil {
+		t.Fatalf("decode package payload: %v", err)
+	}
+
+	confirmBody := `{"package_id":"` + packagePayload.Package.ID + `","item_id":"fwd-override-item-1","lifecycle_entry_id":"` + lifeOne.Entry.ID + `","expected_arrival_id":"` + lifeOne.ExpectedArrival.ID + `","source":"suggested-match","decision":"confirmed","actor":"reviewer","notes":"accepted suggestion"}`
+	confirmResp := doRequest(t, a, http.MethodPost, "/api/forwarding/package-links", strings.NewReader(confirmBody), map[string]string{"Content-Type": "application/json"})
+	if confirmResp.Code != http.StatusOK {
+		t.Fatalf("confirm package status=%d body=%s", confirmResp.Code, confirmResp.Body.String())
+	}
+	overrideBody := `{"package_id":"` + packagePayload.Package.ID + `","item_id":"fwd-override-item-2","lifecycle_entry_id":"` + lifeTwo.Entry.ID + `","expected_arrival_id":"` + lifeTwo.ExpectedArrival.ID + `","source":"manual-override","decision":"override","override":true,"actor":"reviewer","notes":"corrected target"}`
+	overrideResp := doRequest(t, a, http.MethodPost, "/api/forwarding/package-links", strings.NewReader(overrideBody), map[string]string{"Content-Type": "application/json"})
+	if overrideResp.Code != http.StatusOK {
+		t.Fatalf("override package status=%d body=%s", overrideResp.Code, overrideResp.Body.String())
+	}
+	var overridePayload struct {
+		Link struct {
+			ItemID     string   `json:"item_id"`
+			Decision   string   `json:"decision"`
+			AuditTrail []string `json:"audit_trail"`
+		} `json:"link"`
+	}
+	if err := json.NewDecoder(overrideResp.Body).Decode(&overridePayload); err != nil {
+		t.Fatalf("decode override payload: %v", err)
+	}
+	if overridePayload.Link.ItemID != "fwd-override-item-2" || overridePayload.Link.Decision != "override" || !strings.Contains(strings.Join(overridePayload.Link.AuditTrail, " "), "previous target item=fwd-override-item-1") {
+		t.Fatalf("expected override link payload, got %+v", overridePayload)
+	}
+	unlinkResp := doRequest(t, a, http.MethodDelete, "/api/forwarding/package-links?package_id="+packagePayload.Package.ID, strings.NewReader(`{"source":"manual-unlink","actor":"reviewer","notes":"remove stale link"}`), map[string]string{"Content-Type": "application/json"})
+	if unlinkResp.Code != http.StatusOK {
+		t.Fatalf("unlink package status=%d body=%s", unlinkResp.Code, unlinkResp.Body.String())
+	}
+	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links?package_id="+packagePayload.Package.ID, nil, nil)
+	if listLinks.Code != http.StatusOK {
+		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
+	}
+	var listPayload struct {
+		Links   []map[string]any `json:"links"`
+		Events  []map[string]any `json:"events"`
+		Summary map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(listLinks.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list payload: %v", err)
+	}
+	if listPayload.Summary["count"] != 0 || listPayload.Summary["events"] != 3 || len(listPayload.Links) != 0 || len(listPayload.Events) != 3 {
+		t.Fatalf("expected no active link and three audit events, got %+v", listPayload)
+	}
+}
+
 func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	t.Parallel()
 
