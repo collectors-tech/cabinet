@@ -65,6 +65,29 @@ type Package struct {
 	UpdatedAt         string         `json:"updated_at,omitempty"`
 }
 
+type PackageLinkRequest struct {
+	ProfileID         string `json:"profile_id"`
+	PackageID         string `json:"package_id"`
+	ItemID            string `json:"item_id"`
+	LifecycleEntryID  string `json:"lifecycle_entry_id"`
+	ExpectedArrivalID string `json:"expected_arrival_id"`
+	Source            string `json:"source"`
+	Notes             string `json:"notes"`
+}
+
+type PackageLink struct {
+	ID                string `json:"id"`
+	ProfileID         string `json:"profile_id"`
+	PackageID         string `json:"package_id"`
+	ItemID            string `json:"item_id"`
+	LifecycleEntryID  string `json:"lifecycle_entry_id,omitempty"`
+	ExpectedArrivalID string `json:"expected_arrival_id,omitempty"`
+	Source            string `json:"source"`
+	Notes             string `json:"notes"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
+}
+
 type PackageCSVRowError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`
@@ -336,6 +359,153 @@ func (s *Service) ListPackages(ctx context.Context, profileID, status string) ([
 	return out, rows.Err()
 }
 
+func (s *Service) LinkPackage(ctx context.Context, req PackageLinkRequest) (PackageLink, error) {
+	req.ProfileID = strings.TrimSpace(req.ProfileID)
+	req.PackageID = strings.TrimSpace(req.PackageID)
+	req.ItemID = strings.TrimSpace(req.ItemID)
+	req.LifecycleEntryID = strings.TrimSpace(req.LifecycleEntryID)
+	req.ExpectedArrivalID = strings.TrimSpace(req.ExpectedArrivalID)
+	req.Source = strings.TrimSpace(req.Source)
+	req.Notes = strings.TrimSpace(req.Notes)
+	if req.ProfileID == "" {
+		return PackageLink{}, fmt.Errorf("profile_id is required")
+	}
+	if req.PackageID == "" {
+		return PackageLink{}, fmt.Errorf("package_id is required")
+	}
+	if req.ItemID == "" {
+		return PackageLink{}, fmt.Errorf("item_id is required")
+	}
+	if req.ExpectedArrivalID == "" && req.LifecycleEntryID == "" {
+		return PackageLink{}, fmt.Errorf("expected_arrival_id or lifecycle_entry_id is required")
+	}
+	if req.Source == "" {
+		req.Source = "manual"
+	}
+	if err := s.requirePackageProfile(ctx, req.ProfileID, req.PackageID); err != nil {
+		return PackageLink{}, err
+	}
+	if err := s.requireItemProfile(ctx, req.ProfileID, req.ItemID); err != nil {
+		return PackageLink{}, err
+	}
+	if req.LifecycleEntryID != "" {
+		if err := s.requireLifecycleProfile(ctx, req.ProfileID, req.LifecycleEntryID, req.ItemID); err != nil {
+			return PackageLink{}, err
+		}
+	}
+	if req.ExpectedArrivalID != "" {
+		if err := s.requireArrivalProfile(ctx, req.ProfileID, req.ExpectedArrivalID, req.ItemID, req.LifecycleEntryID); err != nil {
+			return PackageLink{}, err
+		}
+	}
+	existing, err := s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+	if err == nil {
+		if existing.ItemID != req.ItemID || existing.LifecycleEntryID != req.LifecycleEntryID || existing.ExpectedArrivalID != req.ExpectedArrivalID {
+			return PackageLink{}, fmt.Errorf("forwarder package already linked to a different target")
+		}
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE forwarder_package_links
+			SET source = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, req.Source, req.Notes, existing.ID)
+		if err != nil {
+			return PackageLink{}, fmt.Errorf("update forwarder package link: %w", err)
+		}
+		return s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		return PackageLink{}, err
+	}
+	id := packageLinkID(req.ProfileID, req.PackageID, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID)
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO forwarder_package_links(id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, req.ProfileID, req.PackageID, req.ItemID, req.LifecycleEntryID, req.ExpectedArrivalID, req.Source, req.Notes)
+	if err != nil {
+		return PackageLink{}, fmt.Errorf("create forwarder package link: %w", err)
+	}
+	return s.GetPackageLink(ctx, req.ProfileID, req.PackageID)
+}
+
+func (s *Service) GetPackageLink(ctx context.Context, profileID, packageID string) (PackageLink, error) {
+	var out PackageLink
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes, created_at, updated_at
+		FROM forwarder_package_links
+		WHERE profile_id = ? AND package_id = ?
+	`, strings.TrimSpace(profileID), strings.TrimSpace(packageID)).Scan(
+		&out.ID, &out.ProfileID, &out.PackageID, &out.ItemID, &out.LifecycleEntryID, &out.ExpectedArrivalID, &out.Source, &out.Notes, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return PackageLink{}, fmt.Errorf("forwarder package link not found")
+		}
+		return PackageLink{}, err
+	}
+	return out, nil
+}
+
+func (s *Service) ListPackageLinks(ctx context.Context, profileID, packageID string) ([]PackageLink, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, profile_id, package_id, item_id, lifecycle_entry_id, expected_arrival_id, source, notes, created_at, updated_at
+		FROM forwarder_package_links
+		WHERE profile_id = ? AND (? = '' OR package_id = ?)
+		ORDER BY updated_at DESC, id ASC
+	`, strings.TrimSpace(profileID), strings.TrimSpace(packageID), strings.TrimSpace(packageID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PackageLink
+	for rows.Next() {
+		var link PackageLink
+		if err := rows.Scan(&link.ID, &link.ProfileID, &link.PackageID, &link.ItemID, &link.LifecycleEntryID, &link.ExpectedArrivalID, &link.Source, &link.Notes, &link.CreatedAt, &link.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, link)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) requirePackageProfile(ctx context.Context, profileID, packageID string) error {
+	var found string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM forwarder_packages WHERE id = ? AND profile_id = ?`, packageID, profileID).Scan(&found)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("forwarder package not found for profile")
+	}
+	return err
+}
+
+func (s *Service) requireItemProfile(ctx context.Context, profileID, itemID string) error {
+	var found string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM canonical_items WHERE id = ? AND profile_id = ?`, itemID, profileID).Scan(&found)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("item not found for profile")
+	}
+	return err
+}
+
+func (s *Service) requireLifecycleProfile(ctx context.Context, profileID, lifecycleEntryID, itemID string) error {
+	var found string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM commerce_lifecycle_entries WHERE id = ? AND profile_id = ? AND item_id = ?`, lifecycleEntryID, profileID, itemID).Scan(&found)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("lifecycle entry not found for profile item")
+	}
+	return err
+}
+
+func (s *Service) requireArrivalProfile(ctx context.Context, profileID, arrivalID, itemID, lifecycleEntryID string) error {
+	var found string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM expected_arrivals
+		WHERE id = ? AND profile_id = ? AND item_id = ? AND (? = '' OR lifecycle_entry_id = ?)
+	`, arrivalID, profileID, itemID, strings.TrimSpace(lifecycleEntryID), strings.TrimSpace(lifecycleEntryID)).Scan(&found)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("expected arrival not found for profile item")
+	}
+	return err
+}
+
 func normalizeProvider(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case ProviderStackry:
@@ -489,6 +659,11 @@ func parseEmailWeight(value string) (int, error) {
 func packageID(profileID, provenanceKey string) string {
 	sum := sha1.Sum([]byte(profileID + "|" + provenanceKey))
 	return "fwdpkg_" + hex.EncodeToString(sum[:])[:16]
+}
+
+func packageLinkID(profileID, packageID, itemID, lifecycleEntryID, expectedArrivalID string) string {
+	sum := sha1.Sum([]byte(profileID + "|" + packageID + "|" + itemID + "|" + lifecycleEntryID + "|" + expectedArrivalID))
+	return "fwdlink_" + hex.EncodeToString(sum[:])[:16]
 }
 
 func clonePayload(in map[string]any) map[string]any {

@@ -373,6 +373,20 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			UNIQUE(profile_id, provider, source, external_package_id)
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_forwarder_packages_profile_status ON forwarder_packages(profile_id, status, updated_at);`,
+		`CREATE TABLE IF NOT EXISTS forwarder_package_links (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL DEFAULT '',
+			package_id TEXT NOT NULL UNIQUE,
+			item_id TEXT NOT NULL,
+			lifecycle_entry_id TEXT NOT NULL DEFAULT '',
+			expected_arrival_id TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT 'manual',
+			notes TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (package_id) REFERENCES forwarder_packages(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_forwarder_package_links_profile_item ON forwarder_package_links(profile_id, item_id, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS ai_failures (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,

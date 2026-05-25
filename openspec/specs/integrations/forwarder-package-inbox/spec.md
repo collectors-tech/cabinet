@@ -73,3 +73,11 @@ Cabinet SHALL provide a visible detail view for each forwarder package record th
 - **GIVEN** a user has imported or refreshed a Stackry/freight-forwarder package record with shipment, tracking, timestamp, and raw provenance fields
 - **WHEN** the user opens the package detail view from the forwarder package inbox
 - **THEN** Cabinet MUST show package identity, shipment id, tracking number, received/created/updated timestamps, and raw source provenance while keeping missing optional values explicit as pending.
+
+### Requirement INTEGRATION-038: Forwarder package inbox SHALL reconcile packages to purchase arrivals
+Cabinet SHALL let a profile-scoped forwarder package be linked to one confirmed inventory item and purchase/expected-arrival target while preserving review provenance and rejecting ambiguous relinks to different targets.
+
+#### Scenario: Link a forwarder package to an expected purchase arrival
+- **GIVEN** a user has an active profile with a persisted forwarder package, inventory item, purchase lifecycle entry, and expected arrival
+- **WHEN** Cabinet receives a reconciliation link for that package, item, lifecycle entry, and arrival
+- **THEN** Cabinet MUST verify every target belongs to the active profile, persist a durable package-to-purchase link with source/notes provenance, return the saved link through the API, and reject attempts to relink the same package to a different item or arrival.

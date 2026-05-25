@@ -3258,6 +3258,50 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/forwarding/package-links", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+			links, err := forwarderInbox.ListPackageLinks(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_links\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"links":   links,
+				"summary": map[string]int{"count": len(links)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageLinkRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			req.ProfileID = profileID
+			link, err := forwarderInbox.LinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_link",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"link": link,
+				"mode": "forwarder_package_reconciliation_link",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
