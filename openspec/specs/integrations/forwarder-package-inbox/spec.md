@@ -17,3 +17,11 @@ Cabinet SHALL deduplicate package imports by profile, provider, source, and exte
 - **GIVEN** a forwarder package record already exists for a profile, provider, source, and external package id
 - **WHEN** Cabinet receives a second import for the same package with updated status or weight fields
 - **THEN** Cabinet MUST update the existing package record and keep a single inbox entry for that profile and provenance key.
+
+### Requirement INTEGRATION-031: Forwarder package inbox SHALL expose import and list APIs
+Cabinet SHALL persist normalized forwarder package imports and expose an API for package import/upsert and filtered inbox listing without requiring a provider-specific live adapter.
+
+#### Scenario: Import and list persisted forwarder packages
+- **GIVEN** a user imports a Stackry or freight-forwarder package with profile, provider, source, external package id, status, and optional raw provenance
+- **WHEN** Cabinet accepts the import through the forwarding package API
+- **THEN** Cabinet MUST persist the normalized package record, return the saved package identity, allow status-filtered listing, and reject invalid imports without creating a package.
