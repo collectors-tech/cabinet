@@ -24,6 +24,8 @@ tags:
   - name: AI
   - name: Chat
   - name: Telegram
+  - name: Forwarding
+    description: Forwarder package intake, reconciliation, and audit APIs.
   - name: Logs
   - name: Data
   - name: Backup
@@ -1246,6 +1248,271 @@ paths:
               schema:
                 $ref: "#/components/schemas/AISuggestion"
         "400":
+          $ref: "#/components/responses/Error"
+  /api/forwarding/packages:
+    get:
+      tags: [Forwarding]
+      operationId: listForwarderPackages
+      summary: List forwarder packages
+      parameters:
+        - in: query
+          name: profile_id
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [received, ready_to_ship, shipped, delivered, exception]
+      responses:
+        "200":
+          description: Profile-scoped forwarder packages and count summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  packages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackage"
+                  summary:
+                    type: object
+                    properties:
+                      count: { type: integer }
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Forwarding]
+      operationId: upsertForwarderPackage
+      summary: Import or upsert a forwarder package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForwarderPackageImport"
+      responses:
+        "200":
+          description: Saved forwarder package
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  package:
+                    $ref: "#/components/schemas/ForwarderPackage"
+                  mode:
+                    type: string
+                    enum: [forwarder_package_upsert]
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/forwarding/packages/import-csv:
+    post:
+      tags: [Forwarding]
+      operationId: importForwarderPackageCSV
+      summary: Import forwarder packages from CSV rows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, provider, csv]
+              properties:
+                profile_id: { type: string }
+                provider: { type: string }
+                csv: { type: string }
+      responses:
+        "200":
+          description: Imported packages with row-level validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                    enum: [forwarder_package_csv_import]
+                  imported:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackage"
+                  errors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackageCSVRowError"
+                  summary:
+                    type: object
+                    properties:
+                      imported: { type: integer }
+                      errors: { type: integer }
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/forwarding/packages/import-email:
+    post:
+      tags: [Forwarding]
+      operationId: importForwarderPackageEmail
+      summary: Import a forwarder package from an email notice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, provider, body]
+              properties:
+                profile_id: { type: string }
+                provider: { type: string }
+                message_id: { type: string }
+                body: { type: string }
+      responses:
+        "200":
+          description: Imported package parsed from email text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                    enum: [forwarder_package_email_import]
+                  package:
+                    $ref: "#/components/schemas/ForwarderPackage"
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/forwarding/package-links:
+    get:
+      tags: [Forwarding]
+      operationId: listForwarderPackageLinks
+      summary: List active package reconciliation links and audit events
+      parameters:
+        - in: query
+          name: package_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: Active package links and durable link decision events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackageLink"
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackageLinkEvent"
+                  summary:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      events: { type: integer }
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Forwarding]
+      operationId: linkForwarderPackage
+      summary: Confirm or override a package-to-purchase reconciliation link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForwarderPackageLinkRequest"
+      responses:
+        "200":
+          description: Saved active reconciliation link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link:
+                    $ref: "#/components/schemas/ForwarderPackageLink"
+                  mode:
+                    type: string
+                    enum: [forwarder_package_reconciliation_link]
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Forwarding]
+      operationId: unlinkForwarderPackage
+      summary: Unlink a package from its active purchase reconciliation target
+      parameters:
+        - in: query
+          name: package_id
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForwarderPackageUnlinkRequest"
+      responses:
+        "200":
+          description: Durable unlink audit event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: "#/components/schemas/ForwarderPackageLinkEvent"
+                  mode:
+                    type: string
+                    enum: [forwarder_package_reconciliation_unlink]
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
+          $ref: "#/components/responses/Error"
+  /api/forwarding/package-match-suggestions:
+    get:
+      tags: [Forwarding]
+      operationId: listForwarderPackageMatchSuggestions
+      summary: Suggest non-mutating package-to-purchase-arrival matches
+      parameters:
+        - in: query
+          name: package_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ordered confidence-scored match suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                    enum: [forwarder_package_match_suggestions]
+                  mutable:
+                    type: boolean
+                    enum: [false]
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwarderPackageMatchSuggestion"
+                  summary:
+                    type: object
+                    properties:
+                      count: { type: integer }
+        "400":
+          $ref: "#/components/responses/Error"
+        "405":
           $ref: "#/components/responses/Error"
   /api/integrations/ebay/purchase-inbox/reviews:
     post:
@@ -2855,6 +3122,143 @@ components:
         title: { type: string }
         confidence: { type: number }
         requires_confirmation: { type: boolean }
+    ForwarderPackageImport:
+      type: object
+      required: [profile_id, provider, source, external_package_id, status]
+      properties:
+        profile_id: { type: string }
+        provider: { type: string }
+        source:
+          type: string
+          enum: [api, capture, csv, email, manual]
+        external_package_id: { type: string }
+        shipment_id: { type: string }
+        tracking_number: { type: string }
+        status:
+          type: string
+          enum: [received, ready_to_ship, shipped, delivered, exception]
+        received_at: { type: string }
+        sender: { type: string }
+        warehouse_location: { type: string }
+        weight_grams: { type: integer }
+        raw_payload:
+          type: object
+          additionalProperties: true
+    ForwarderPackage:
+      allOf:
+        - $ref: "#/components/schemas/ForwarderPackageImport"
+        - type: object
+          properties:
+            id: { type: string }
+            provenance_key: { type: string }
+            created_at: { type: string }
+            updated_at: { type: string }
+    ForwarderPackageCSVRowError:
+      type: object
+      properties:
+        row: { type: integer }
+        error: { type: string }
+    ForwarderPackageLinkRequest:
+      type: object
+      required: [package_id, item_id]
+      properties:
+        profile_id:
+          type: string
+          description: Ignored by the API when an active profile is available.
+        package_id: { type: string }
+        item_id: { type: string }
+        lifecycle_entry_id: { type: string }
+        expected_arrival_id: { type: string }
+        source: { type: string }
+        decision:
+          type: string
+          enum: [confirmed, override]
+        notes: { type: string }
+        override: { type: boolean }
+        actor: { type: string }
+        audit_trail:
+          type: array
+          items: { type: string }
+    ForwarderPackageUnlinkRequest:
+      type: object
+      properties:
+        profile_id:
+          type: string
+          description: Ignored by the API when an active profile is available.
+        package_id: { type: string }
+        source: { type: string }
+        notes: { type: string }
+        actor: { type: string }
+        audit_trail:
+          type: array
+          items: { type: string }
+    ForwarderPackageLink:
+      type: object
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        package_id: { type: string }
+        item_id: { type: string }
+        lifecycle_entry_id: { type: string }
+        expected_arrival_id: { type: string }
+        source: { type: string }
+        decision: { type: string }
+        notes: { type: string }
+        audit_trail:
+          type: array
+          items: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+    ForwarderPackageLinkEvent:
+      type: object
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        package_id: { type: string }
+        link_id: { type: string }
+        action:
+          type: string
+          enum: [confirmed, override, unlinked]
+        item_id: { type: string }
+        lifecycle_entry_id: { type: string }
+        expected_arrival_id: { type: string }
+        previous_item_id: { type: string }
+        previous_lifecycle_entry_id: { type: string }
+        previous_expected_arrival_id: { type: string }
+        source: { type: string }
+        notes: { type: string }
+        audit_trail:
+          type: array
+          items: { type: string }
+        created_at: { type: string }
+    ForwarderPackageMatchSignal:
+      type: object
+      properties:
+        name: { type: string }
+        matched: { type: boolean }
+        score: { type: number }
+        evidence: { type: string }
+    ForwarderPackageMatchSuggestion:
+      type: object
+      properties:
+        package_id: { type: string }
+        item_id: { type: string }
+        lifecycle_entry_id: { type: string }
+        expected_arrival_id: { type: string }
+        confidence_score: { type: number }
+        confidence_label:
+          type: string
+          enum: [high, medium, low]
+        explanation:
+          type: array
+          items: { type: string }
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForwarderPackageMatchSignal"
+        audit_trail:
+          type: array
+          items: { type: string }
     LogEntry:
       type: object
       properties:
