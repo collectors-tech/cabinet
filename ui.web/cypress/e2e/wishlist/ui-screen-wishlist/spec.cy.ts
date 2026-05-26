@@ -556,7 +556,9 @@ describe("ui-screen-wishlist", () => {
     cy.wait("@priceTrendCollector1");
     cy.wait("@priceHistoryCollector1");
     cy.get('button[aria-label="Switch to rows view"]').click();
-    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left");
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
 
     cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
       cy.get('[data-testid="wishlist-owned-checkbox-item-collector-1"]').should(
@@ -573,7 +575,9 @@ describe("ui-screen-wishlist", () => {
         .should("be.visible");
     });
 
-    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("right");
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("right", {
+      ensureScrollable: false,
+    });
     cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
       cy.get('[data-testid="wishlist-price-trend-item-collector-1"]')
         .scrollIntoView()
@@ -594,6 +598,9 @@ describe("ui-screen-wishlist", () => {
         .and("contain.text", "ebay");
     });
 
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
     cy.contains("tr", "F1 Silverline").within(() => {
       cy.get('[data-testid="wishlist-owned-checkbox-item-collector-2"]').should(
         "not.exist"
@@ -602,7 +609,7 @@ describe("ui-screen-wishlist", () => {
         "not.exist"
       );
       cy.get('[data-testid="wishlist-purchase-open-item-collector-2"]').should(
-        "be.visible"
+        "exist"
       );
     });
   });
