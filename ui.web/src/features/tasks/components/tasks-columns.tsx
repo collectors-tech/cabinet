@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import {
-  BarcodeIcon,
-  ImageIcon,
-  PlusIcon,
-  TagsIcon,
-} from 'lucide-react'
+import { BarcodeIcon, ImageIcon, PlusIcon, TagsIcon } from 'lucide-react'
 import { Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -70,6 +65,30 @@ function formatMoney(value: number | undefined) {
   }).format(value)
 }
 
+function formatWishlistDate(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return '-'
+  }
+  const datePart = trimmed.split('T')[0]?.split(' ')[0] ?? trimmed
+  const parts = datePart.split('-').map((part) => Number(part))
+  if (
+    parts.length === 3 &&
+    Number.isInteger(parts[0]) &&
+    Number.isInteger(parts[1]) &&
+    Number.isInteger(parts[2])
+  ) {
+    const [year, month, day] = parts
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return trimmed
+}
+
 function formatCostDraft(value: number | undefined) {
   if (typeof value !== 'number' || value <= 0) {
     return ''
@@ -126,7 +145,7 @@ function WishlistPriceSparkline({
       <button
         type='button'
         data-testid={`wishlist-price-chart-open-${task.id}`}
-        className='rounded bg-slate-950/60 p-0 outline-none ring-offset-background transition-colors hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        className='rounded bg-slate-950/60 p-0 ring-offset-background transition-colors outline-none hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
         aria-label={`Open ${task.title} price graph`}
         title={accessibleLabel}
         onClick={(event) => {
@@ -225,9 +244,7 @@ function WishlistPriceSparkline({
             className='rounded-md border bg-card/40 p-3'
             data-testid={`wishlist-price-chart-points-${task.id}`}
           >
-            <p className='mb-2 text-sm font-semibold'>
-              Latest 10 price points
-            </p>
+            <p className='mb-2 text-sm font-semibold'>Latest 10 price points</p>
             <ul className='grid gap-1 text-sm sm:grid-cols-2'>
               {latestPointRows.map((point) => (
                 <li key={`${point.date}-${point.price}`}>
@@ -304,7 +321,7 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
       title={`${trendConfig.label}. ${sampleCount} points. ${dateText}. Sources: ${sourceText}. ${stockText}.`}
     >
       <span
-        className={`inline-flex w-4 justify-center text-sm font-semibold leading-none ${trendConfig.className}`}
+        className={`inline-flex w-4 justify-center text-sm leading-none font-semibold ${trendConfig.className}`}
         data-testid={`wishlist-price-trend-marker-${task.id}`}
         aria-hidden='true'
       >
@@ -766,6 +783,37 @@ export function getTasksColumns({
                 task={row.original}
                 onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'wishlistCreatedAt',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Date added' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='text-sm whitespace-nowrap'
+                data-testid={`wishlist-date-added-${row.original.id}`}
+              >
+                {formatWishlistDate(row.original.wishlistCreatedAt)}
+              </span>
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'wishlistPriceUpdatedAt',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Updated' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='text-sm whitespace-nowrap'
+                data-testid={`wishlist-date-updated-${row.original.id}`}
+                title='Latest pricing refresh date'
+              >
+                {formatWishlistDate(row.original.wishlistPriceUpdatedAt)}
+              </span>
             ),
           } satisfies ColumnDef<Task>,
           {

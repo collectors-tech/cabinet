@@ -90,6 +90,17 @@ Wishlist rows SHALL expose owned state and purchase details through dedicated ro
 - **AND** saving MUST persist owned state, price paid, quantity, condition, purchase date, and URL
 - **AND** Wishlist row actions MUST NOT include `Mark owned`
 
+### Requirement UI-SCREEN-WISHLIST-016: Wishlist rows and cards SHALL render stable date context
+Wishlist rows and cards SHALL render date context without implying that normal edits refreshed price data.
+
+#### Scenario: Wishlist date context
+- **GIVEN** Wishlist API metadata includes a wishlist entry creation timestamp
+- **AND** pricing history includes a latest snapshot or trend date for the item
+- **WHEN** the Wishlist rows or cards render
+- **THEN** the UI MUST show `Date added` from the wishlist entry creation timestamp
+- **AND** the UI MUST show `Updated` from the latest pricing history or refresh date
+- **AND** missing legacy date context MUST render a non-misleading empty value
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
