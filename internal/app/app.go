@@ -3394,7 +3394,7 @@ func New(cfg config.Config) (*App, error) {
 			"mode":        "forwarder_package_match_suggestions",
 			"mutable":     false,
 			"suggestions": suggestions,
-			"summary":     map[string]int{"count": len(suggestions)},
+			"summary":     forwarding.SummarizePackageMatchSuggestions(packageID, suggestions),
 		})
 	})
 	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {

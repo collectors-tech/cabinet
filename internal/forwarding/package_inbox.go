@@ -140,6 +140,14 @@ type PackageMatchSuggestion struct {
 	AuditTrail        []string             `json:"audit_trail"`
 }
 
+type PackageMatchSuggestionSummary struct {
+	Count            int `json:"count"`
+	HighConfidence   int `json:"high_confidence"`
+	MediumConfidence int `json:"medium_confidence"`
+	LowConfidence    int `json:"low_confidence"`
+	ScopedPackages   int `json:"scoped_packages"`
+}
+
 type PackageCSVRowError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`
@@ -741,6 +749,26 @@ func (s *Service) SuggestPackageMatches(ctx context.Context, profileID, packageI
 		return out[i].Confidence > out[j].Confidence
 	})
 	return out, nil
+}
+
+func SummarizePackageMatchSuggestions(packageID string, suggestions []PackageMatchSuggestion) PackageMatchSuggestionSummary {
+	summary := PackageMatchSuggestionSummary{
+		Count: len(suggestions),
+	}
+	if strings.TrimSpace(packageID) != "" {
+		summary.ScopedPackages = 1
+	}
+	for _, suggestion := range suggestions {
+		switch suggestion.ConfidenceLabel {
+		case "high":
+			summary.HighConfidence++
+		case "medium":
+			summary.MediumConfidence++
+		default:
+			summary.LowConfidence++
+		}
+	}
+	return summary
 }
 
 func (s *Service) requirePackageProfile(ctx context.Context, profileID, packageID string) error {

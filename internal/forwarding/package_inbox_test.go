@@ -505,6 +505,24 @@ func TestForwarderPackageServiceSuggestionsExcludeAlreadyLinkedPackages(t *testi
 	}
 }
 
+func TestForwarderPackageMatchSuggestionSummaryCountsConfidenceBuckets(t *testing.T) {
+	t.Parallel()
+
+	summary := SummarizePackageMatchSuggestions("pkg-scoped", []PackageMatchSuggestion{
+		{PackageID: "pkg-scoped", ConfidenceLabel: "high"},
+		{PackageID: "pkg-scoped", ConfidenceLabel: "medium"},
+		{PackageID: "pkg-other", ConfidenceLabel: "low"},
+		{PackageID: "pkg-other", ConfidenceLabel: ""},
+	})
+
+	if summary.Count != 4 || summary.ScopedPackages != 1 {
+		t.Fatalf("expected scoped four-suggestion summary, got %+v", summary)
+	}
+	if summary.HighConfidence != 1 || summary.MediumConfidence != 1 || summary.LowConfidence != 2 {
+		t.Fatalf("expected confidence bucket counts, got %+v", summary)
+	}
+}
+
 func seedForwarderPackageLinkTarget(t *testing.T, conn interface {
 	Exec(string, ...any) (sql.Result, error)
 }, profileID, itemID, lifecycleID, arrivalID string) {

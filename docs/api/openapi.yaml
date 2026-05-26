@@ -1279,6 +1279,10 @@ paths:
                     type: object
                     properties:
                       count: { type: integer }
+                      high_confidence: { type: integer }
+                      medium_confidence: { type: integer }
+                      low_confidence: { type: integer }
+                      scoped_packages: { type: integer }
         "400":
           $ref: "#/components/responses/Error"
         "405":
