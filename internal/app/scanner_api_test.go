@@ -225,6 +225,28 @@ func TestScannerRunItemsPerPageSummaryAppliesSafeCap(t *testing.T) {
 	if warning == "" {
 		t.Fatalf("expected items_per_page_warning in run summary, got %#v", summary["items_per_page_warning"])
 	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list query sets after run status=%d body=%s", list.Code, list.Body.String())
+	}
+	var querySetPayload map[string][]map[string]any
+	if err := json.NewDecoder(list.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode query set list after run: %v", err)
+	}
+	if len(querySetPayload["query_sets"]) != 1 {
+		t.Fatalf("expected one query set after run, got %d", len(querySetPayload["query_sets"]))
+	}
+	listed := querySetPayload["query_sets"][0]
+	if got, _ := listed["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted last_run_status=succeeded, got %#v", listed["last_run_status"])
+	}
+	if got, ok := listed["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted last_candidate_count=1, got %#v", listed["last_candidate_count"])
+	}
+	if got, _ := listed["last_run_at"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("expected persisted last_run_at, got %#v", listed["last_run_at"])
+	}
 }
 
 func TestScannerRunMapsEbayAuthFailureToProviderErrorCode(t *testing.T) {
