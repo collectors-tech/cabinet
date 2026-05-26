@@ -125,26 +125,27 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	case ActionAddWishlist:
 		var itemID string
 		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
-			var profileID, listingURL, seller, stockSignal string
+			var profileID, listingURL, seller, stockSignal, sourceProvider, querySetID, queryName, providerScopeJSON string
 			var observedPrice float64
 			scanErr := s.db.QueryRowContext(ctx, `
-				SELECT profile_id, url, seller, stock_state, price
-				FROM scanner_candidates
-				WHERE id = ?
-			`, a.CandidateID).Scan(&profileID, &listingURL, &seller, &stockSignal, &observedPrice)
+				SELECT c.profile_id, c.url, c.seller, c.stock_state, c.price, c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]')
+				FROM scanner_candidates c
+				LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
+				WHERE c.id = ?
+			`, a.CandidateID).Scan(&profileID, &listingURL, &seller, &stockSignal, &observedPrice, &sourceProvider, &querySetID, &queryName, &providerScopeJSON)
 			if scanErr != nil {
 				_ = s.db.QueryRowContext(ctx, `
-					SELECT url, seller, stock_state, price
+					SELECT url, seller, stock_state, price, source, query_set_id
 					FROM scanner_candidates
 					WHERE id = ?
-				`, a.CandidateID).Scan(&listingURL, &seller, &stockSignal, &observedPrice)
+				`, a.CandidateID).Scan(&listingURL, &seller, &stockSignal, &observedPrice, &sourceProvider, &querySetID)
 			}
 			profileID = strings.TrimSpace(profileID)
 			if profileID == "" {
 				_ = s.db.QueryRowContext(ctx, `SELECT profile_id FROM canonical_items WHERE id = ?`, itemID).Scan(&profileID)
 				profileID = strings.TrimSpace(profileID)
 			}
-			metadata := buildDiscoveryMetadataNote(listingURL, seller, stockSignal, observedPrice)
+			metadata := buildDiscoveryMetadataNote(listingURL, seller, stockSignal, observedPrice, sourceProvider, querySetID, queryName, decodeStringArray(providerScopeJSON))
 			var existingID, existingNotes string
 			if err := s.db.QueryRowContext(ctx, `SELECT id, notes FROM wishlist_entries WHERE item_id = ? AND (? = '' OR profile_id = ?)`, itemID, profileID, profileID).Scan(&existingID, &existingNotes); err == nil {
 				mergedNotes := mergeDiscoveryMetadataNotes(existingNotes, metadata)
@@ -191,18 +192,37 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	return nil
 }
 
-func buildDiscoveryMetadataNote(listingURL, seller, stockSignal string, observedPrice float64) string {
+func buildDiscoveryMetadataNote(listingURL, seller, stockSignal string, observedPrice float64, sourceProvider string, querySetID string, queryName string, providerScope []string) string {
 	payload := map[string]any{
-		"listing_url":    strings.TrimSpace(listingURL),
-		"seller":         strings.TrimSpace(seller),
-		"stock_signal":   strings.TrimSpace(stockSignal),
-		"observed_price": math.Round(observedPrice*100) / 100,
+		"listing_url":     strings.TrimSpace(listingURL),
+		"seller":          strings.TrimSpace(seller),
+		"stock_signal":    strings.TrimSpace(stockSignal),
+		"observed_price":  math.Round(observedPrice*100) / 100,
+		"source_provider": strings.TrimSpace(sourceProvider),
+		"query_set_id":    strings.TrimSpace(querySetID),
+		"query_name":      strings.TrimSpace(queryName),
+		"provider_scope":  providerScope,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "[discovery_metadata]{}"
 	}
 	return "[discovery_metadata]" + string(raw)
+}
+
+func decodeStringArray(raw string) []string {
+	var values []string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &values); err != nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func mergeDiscoveryMetadataNotes(existing, metadata string) string {
