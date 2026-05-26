@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { flushSync } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -28,6 +27,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
+import { flushSync } from 'react-dom'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -76,14 +76,6 @@ import {
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import {
-  TasksDialogs,
-  type TasksDialogType,
-} from '@/features/tasks/components/tasks-dialogs'
-import { TasksProvider } from '@/features/tasks/components/tasks-provider'
-import { TasksTable } from '@/features/tasks/components/tasks-table'
-import { type Task } from '@/features/tasks/data/schema'
-import { tasks } from '@/features/tasks/data/tasks'
-import {
   defaultInventoryCategoryOptions,
   inventoryCategoryOptionsSettingsKey,
   joinCategoryValue,
@@ -101,6 +93,14 @@ import {
   parseItemTypeConditionScales,
   type InventoryItemTypeConditionScale,
 } from '@/features/inventory/item-type-condition-scales'
+import {
+  TasksDialogs,
+  type TasksDialogType,
+} from '@/features/tasks/components/tasks-dialogs'
+import { TasksProvider } from '@/features/tasks/components/tasks-provider'
+import { TasksTable } from '@/features/tasks/components/tasks-table'
+import { type Task } from '@/features/tasks/data/schema'
+import { tasks } from '@/features/tasks/data/tasks'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -214,6 +214,7 @@ type FolderDropTarget =
 type FolderTreeRenderOptions = {
   showActions?: boolean
   showDragHandles?: boolean
+  forceExpandAll?: boolean
 }
 
 function folderDropTargetsEqual(
@@ -252,6 +253,41 @@ function findFolderNodeByID(
     }
   }
   return null
+}
+
+function filterFolderTreeByQuery(
+  nodes: FolderNode[],
+  rawQuery: string
+): FolderNode[] {
+  const query = rawQuery.trim().toLowerCase()
+  if (!query) {
+    return nodes
+  }
+
+  return nodes.flatMap((node) => {
+    const filteredChildren = filterFolderTreeByQuery(node.children ?? [], query)
+    const nodeText = [
+      node.name,
+      node.category,
+      node.secondaryLabel,
+      node.statusBadge,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    const matchesNode = nodeText.includes(query)
+
+    if (!matchesNode && filteredChildren.length === 0) {
+      return []
+    }
+
+    return [
+      {
+        ...node,
+        children: matchesNode ? node.children : filteredChildren,
+      },
+    ]
+  })
 }
 
 const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
@@ -905,8 +941,8 @@ function InventoryItemPriceHistoryChart({
         <div>
           <h4 className='text-sm font-semibold'>Price history</h4>
           <p className='text-xs text-muted-foreground'>
-            {points.length} price {points.length === 1 ? 'point' : 'points'} from{' '}
-            {firstPoint.date} to {lastPoint.date}
+            {points.length} price {points.length === 1 ? 'point' : 'points'}{' '}
+            from {firstPoint.date} to {lastPoint.date}
           </p>
         </div>
         <div className='text-right text-xs text-muted-foreground'>
@@ -1105,7 +1141,7 @@ function applyInventoryFolderCounts(
       itemCount:
         node.name === 'All Items'
           ? rows.length
-          : countsByFolderName.get(node.name) ?? 0,
+          : (countsByFolderName.get(node.name) ?? 0),
       children: node.children ? walk(node.children) : undefined,
     }))
 
@@ -1832,6 +1868,8 @@ export function Collection({
   )
   const [inventoryFolderBrowserOpen, setInventoryFolderBrowserOpen] =
     useState(false)
+  const [inventoryFolderBrowserQuery, setInventoryFolderBrowserQuery] =
+    useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
@@ -2191,14 +2229,13 @@ export function Collection({
 
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
-      const safeFolder =
-        selectionExistsInInventoryFolders(
-          workspaceCollections,
-          folderTree,
-          nextFolder
-        )
-          ? nextFolder
-          : 'All Items'
+      const safeFolder = selectionExistsInInventoryFolders(
+        workspaceCollections,
+        folderTree,
+        nextFolder
+      )
+        ? nextFolder
+        : 'All Items'
       setActiveFolder(safeFolder)
       setInventoryFolderBrowserOpen(false)
       if (workspaceCollections.includes(safeFolder)) {
@@ -2928,17 +2965,14 @@ export function Collection({
   )
 
   const renderFolderTree = useCallback(
-    (
-      nodes: FolderNode[],
-      level = 1,
-      options: FolderTreeRenderOptions = {}
-    ) => {
+    (nodes: FolderNode[], level = 1, options: FolderTreeRenderOptions = {}) => {
       const showActions = options.showActions ?? true
       const showDragHandles = options.showDragHandles ?? true
-      return (
-      nodes.map((node) => {
+      const forceExpandAll = options.forceExpandAll ?? false
+      return nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
-        const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        const expanded =
+          hasChildren && (forceExpandAll || expandedNodeIDs.has(node.id))
         const isActive = activeFolder === node.name
         const isChildDropTarget =
           dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
@@ -3323,7 +3357,6 @@ export function Collection({
           </div>
         )
       })
-      )
     },
     [
       activeFolder,
@@ -3357,6 +3390,11 @@ export function Collection({
         : folderTree,
     [folderTree, isInventoryRoute, itemFolderAssignments, tableData]
   )
+  const inventoryFolderBrowserQueryTrimmed = inventoryFolderBrowserQuery.trim()
+  const inventoryFolderBrowserTree = useMemo(
+    () => filterFolderTreeByQuery(folderTree, inventoryFolderBrowserQuery),
+    [folderTree, inventoryFolderBrowserQuery]
+  )
   const activeFolderIsAvailable =
     activeFolder === 'All Items' ||
     folderTreeContainsName(folderTree, activeFolder)
@@ -3388,7 +3426,9 @@ export function Collection({
   )
   const selectedItemTypeForCondition =
     itemDraft.item_type.trim() ||
-    inferItemTypeFromCategory(itemDraft.category || selectedInventoryItem?.category || '')
+    inferItemTypeFromCategory(
+      itemDraft.category || selectedInventoryItem?.category || ''
+    )
   const inventoryConditionOptions = useMemo(
     () =>
       conditionsForItemType(
@@ -3874,7 +3914,8 @@ export function Collection({
     try {
       let instancePayload: InventoryInstance | null = null
       const shouldSaveInstance =
-        primaryInstance !== null || hasInventoryInstanceDraftValue(itemInstanceDraft)
+        primaryInstance !== null ||
+        hasInventoryInstanceDraftValue(itemInstanceDraft)
       if (shouldSaveInstance) {
         const priceText = itemInstanceDraft.acquisition_price.trim()
         const quantityText = itemInstanceDraft.quantity.trim()
@@ -4666,7 +4707,7 @@ export function Collection({
         onDragLeave={handleInventoryImageDragLeave}
         onDrop={handleInventoryImageDrop}
       >
-        {(imageDropActive || imageDropBusy || imageDropMessage) ? (
+        {imageDropActive || imageDropBusy || imageDropMessage ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',
@@ -5068,7 +5109,12 @@ export function Collection({
                       <DropdownMenu
                         modal={false}
                         open={inventoryFolderBrowserOpen}
-                        onOpenChange={setInventoryFolderBrowserOpen}
+                        onOpenChange={(open) => {
+                          setInventoryFolderBrowserOpen(open)
+                          if (!open) {
+                            setInventoryFolderBrowserQuery('')
+                          }
+                        }}
                       >
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -5084,8 +5130,19 @@ export function Collection({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align='start'
-                          className='w-[min(32rem,92vw)] p-2'
+                          className='w-[min(32rem,92vw)] space-y-2 p-2'
                         >
+                          <Input
+                            type='search'
+                            value={inventoryFolderBrowserQuery}
+                            aria-label='Search inventory folders'
+                            placeholder='Search folders'
+                            data-testid='inventory-folder-browser-search'
+                            className='h-8'
+                            onChange={(event) =>
+                              setInventoryFolderBrowserQuery(event.target.value)
+                            }
+                          />
                           <div
                             role='tree'
                             aria-label='Inventory folder filter'
@@ -5121,10 +5178,30 @@ export function Collection({
                                   Drop here to move folder to the root level
                                 </div>
                               ) : null}
-                              {renderFolderTree(folderTree, 1, {
-                                showActions: false,
-                                showDragHandles: false,
-                              })}
+                              {inventoryFolderBrowserTree.length > 0 ? (
+                                renderFolderTree(
+                                  inventoryFolderBrowserTree,
+                                  1,
+                                  {
+                                    showActions: false,
+                                    showDragHandles: false,
+                                    forceExpandAll:
+                                      inventoryFolderBrowserQueryTrimmed.length >
+                                      0,
+                                  }
+                                )
+                              ) : (
+                                <div
+                                  className='rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground'
+                                  data-testid='inventory-folder-browser-empty'
+                                >
+                                  No folders match
+                                  {inventoryFolderBrowserQueryTrimmed
+                                    ? ` "${inventoryFolderBrowserQueryTrimmed}"`
+                                    : ''}
+                                  .
+                                </div>
+                              )}
                             </div>
                           </div>
                         </DropdownMenuContent>
@@ -5894,10 +5971,7 @@ export function Collection({
                                     )
                                   }
                                 >
-                                  <RotateCcw
-                                    className='size-4'
-                                    aria-hidden
-                                  />
+                                  <RotateCcw className='size-4' aria-hidden />
                                 </Button>
                                 <Button
                                   type='button'

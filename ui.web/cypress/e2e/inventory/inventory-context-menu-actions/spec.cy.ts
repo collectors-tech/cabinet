@@ -63,4 +63,33 @@ describe("inventory collection browser picker actions", () => {
       .find('[data-testid="folder-tree-drag-handle-store-1"]')
       .should("exist");
   });
+
+  it("filters the Browse picker tree by search text", () => {
+    signIn();
+
+    cy.get('[data-testid="inventory-collection-browser-trigger"]').click();
+    cy.get('[data-testid="inventory-folder-browser-search"]')
+      .should("be.visible")
+      .and("have.attr", "aria-label", "Search inventory folders")
+      .type("warehouse 1");
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-warehouse-1"]')
+      .should("be.visible");
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-watch-list"]')
+      .should("not.exist");
+
+    cy.get('[data-testid="inventory-folder-browser-search"]')
+      .clear()
+      .type("not a folder");
+    cy.get('[data-testid="inventory-folder-browser-empty"]')
+      .should("be.visible")
+      .and("contain.text", "No folders match");
+
+    cy.get('[data-testid="inventory-folder-browser-search"]').clear();
+    cy.get('[data-testid="inventory-folder-browser-empty"]').should("not.exist");
+    cy.get('[data-testid="inventory-folder-browser-menu"]')
+      .find('[data-testid="folder-tree-item-watch-list"]')
+      .should("be.visible");
+  });
 });
