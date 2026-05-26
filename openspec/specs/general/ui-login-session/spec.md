@@ -64,3 +64,12 @@ After a local sign-out, Cabinet SHALL re-apply authenticated-route gating to the
 - **WHEN** the user signs out and then requests `/dashboard` again
 - **THEN** Cabinet MUST redirect to `/sign-in`
 - **AND** the previous authenticated dashboard content MUST not render until the user signs in again
+
+### Requirement UI-LOGIN-SESSION-008: Sign-in screen SHALL avoid redundant profile guidance copy
+Cabinet SHALL keep the sign-in screen focused on credential entry and existing account/legal links without rendering duplicate profile/database explanatory guidance.
+
+#### Scenario: Clean sign-in copy preserves entry links
+- **GIVEN** setup is complete and the user opens `/sign-in`
+- **WHEN** the sign-in form renders
+- **THEN** UI MUST NOT render the explanatory block beginning with "Sign in to unlock your Cabinet workspace."
+- **AND** the sign-in form, create-account link, forgot-password link, Terms of Service link, and Privacy Policy link MUST remain available
