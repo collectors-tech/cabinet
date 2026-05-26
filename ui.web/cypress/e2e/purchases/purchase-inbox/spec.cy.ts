@@ -771,6 +771,10 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-row"]')
       .should('have.length', 1)
       .and('contain', 'STK-AUDIT-5001')
+    cy.get('[data-testid="forwarder-package-row-evidence"]').should(
+      'contain',
+      'No loaded reconciliation evidence'
+    )
     cy.get('[data-testid="forwarder-package-review-filter-all"]').click()
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
     cy.wait('@listForwarderPackageLinks')
@@ -799,6 +803,9 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-row"]')
       .should('have.length', 1)
       .and('contain', 'STK-AUDIT-5001')
+    cy.get('[data-testid="forwarder-package-row-evidence"]')
+      .should('contain', '1 active link')
+      .and('contain', '1 audit event')
     cy.get('[data-testid="forwarder-package-review-filter-all"]').click()
     cy.get('[data-testid="forwarder-package-link-audit-trail"]').should(
       'contain',
@@ -1042,6 +1049,10 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-row"]')
       .should('have.length', 1)
       .and('contain', 'STK-SUGGEST-6001')
+    cy.get('[data-testid="forwarder-package-row-evidence"]').should(
+      'contain',
+      '1 suggestion'
+    )
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
     cy.wait('@listForwarderPackageLinks')
     cy.get('[data-testid="forwarder-package-match-suggestions"]')

@@ -145,3 +145,11 @@ Cabinet SHALL let reviewers filter the forwarder package inbox by all packages, 
 - **GIVEN** the forwarder package inbox has loaded package records plus package-link or match-suggestion evidence
 - **WHEN** the user chooses a reconciliation review-state filter
 - **THEN** Cabinet MUST show only the packages matching that filter, preserve the non-mutating review evidence, and show an empty filtered-state message when no packages match without hiding the original package count.
+
+### Requirement INTEGRATION-048: Forwarder package inbox UI SHALL label per-package reconciliation evidence
+Cabinet SHALL show package-row reconciliation evidence labels derived from the currently loaded active link, match suggestion, and audit event state so reviewers can decide which package rows need drill-in review without relying only on aggregate counts.
+
+#### Scenario: Review row-level reconciliation evidence labels
+- **GIVEN** the forwarder package inbox has loaded package records plus package-link, match-suggestion, or decision audit event evidence
+- **WHEN** the user reviews the visible package rows after refreshing link or suggestion evidence
+- **THEN** Cabinet MUST show each visible package row's loaded active-link, suggestion, and audit-event counts, and MUST show an explicit no-evidence state when no reconciliation evidence is loaded for that package.
