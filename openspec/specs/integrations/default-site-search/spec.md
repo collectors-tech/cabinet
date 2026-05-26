@@ -44,4 +44,4 @@ Cabinet MUST provide workflow handoff from saved-search output into Discoveries 
 - **WHEN** user triggers Discoveries handoff or Wishlist handoff action
 - **THEN** runtime MUST call discovery/wishlist APIs with deterministic payload contract
 - **AND** UI MUST surface action feedback indicating handoff result
-- **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope that produced the discovery candidate
+- **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope in both the Wishlist note and durable discovery action audit payload

@@ -98,6 +98,9 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	if a.Payload == nil {
 		a.Payload = map[string]any{}
 	}
+	if a.Type == ActionAddWishlist {
+		a.Payload = s.enrichWishlistHandoffPayload(ctx, a.CandidateID, a.Payload)
+	}
 	raw, _ := json.Marshal(a.Payload)
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO discovery_actions(id, candidate_id, action_type, payload_json)
@@ -190,6 +193,27 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) enrichWishlistHandoffPayload(ctx context.Context, candidateID string, payload map[string]any) map[string]any {
+	enriched := make(map[string]any, len(payload)+4)
+	for key, value := range payload {
+		enriched[key] = value
+	}
+	var sourceProvider, querySetID, queryName, providerScopeJSON string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]')
+		FROM scanner_candidates c
+		LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
+		WHERE c.id = ?
+	`, candidateID).Scan(&sourceProvider, &querySetID, &queryName, &providerScopeJSON); err != nil {
+		return enriched
+	}
+	enriched["source_provider"] = strings.TrimSpace(sourceProvider)
+	enriched["query_set_id"] = strings.TrimSpace(querySetID)
+	enriched["query_name"] = strings.TrimSpace(queryName)
+	enriched["provider_scope"] = decodeStringArray(providerScopeJSON)
+	return enriched
 }
 
 func buildDiscoveryMetadataNote(listingURL, seller, stockSignal string, observedPrice float64, sourceProvider string, querySetID string, queryName string, providerScope []string) string {

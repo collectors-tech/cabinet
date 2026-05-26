@@ -89,7 +89,13 @@ func TestApplyActionAddWishlistRetainsMarketplaceMetadata(t *testing.T) {
 	}
 
 	svc := NewService(conn)
-	if err := svc.ApplyAction(context.Background(), Action{CandidateID: "c1", Type: ActionAddWishlist}); err != nil {
+	if err := svc.ApplyAction(context.Background(), Action{
+		CandidateID: "c1",
+		Type:        ActionAddWishlist,
+		Payload: map[string]any{
+			"source": "market_watch",
+		},
+	}); err != nil {
 		t.Fatalf("ApplyAction(add_to_wishlist) error = %v", err)
 	}
 
@@ -121,5 +127,25 @@ func TestApplyActionAddWishlistRetainsMarketplaceMetadata(t *testing.T) {
 	providerScope, ok := metadata["provider_scope"].([]any)
 	if !ok || len(providerScope) != 2 || providerScope[0] != "ebay" || providerScope[1] != "bonzaslotcars" {
 		t.Fatalf("expected provider scope provenance, got %v", metadata["provider_scope"])
+	}
+
+	var actionPayloadJSON string
+	if err := conn.QueryRow(`SELECT payload_json FROM discovery_actions WHERE candidate_id = 'c1' AND action_type = 'add_to_wishlist'`).Scan(&actionPayloadJSON); err != nil {
+		t.Fatalf("load discovery action payload: %v", err)
+	}
+	var actionPayload map[string]any
+	if err := json.Unmarshal([]byte(actionPayloadJSON), &actionPayload); err != nil {
+		t.Fatalf("parse action payload json: %v", err)
+	}
+	if actionPayload["source"] != "market_watch" {
+		t.Fatalf("expected existing action payload source to survive, got %v", actionPayload)
+	}
+	for _, field := range []string{"source_provider", "query_set_id", "query_name", "provider_scope"} {
+		if _, ok := actionPayload[field]; !ok {
+			t.Fatalf("expected action payload audit field %q in %v", field, actionPayload)
+		}
+	}
+	if actionPayload["source_provider"] != "ebay" || actionPayload["query_set_id"] != "q1" || actionPayload["query_name"] != "AFX saved search" {
+		t.Fatalf("expected saved-search provenance in action payload, got %v", actionPayload)
 	}
 }
