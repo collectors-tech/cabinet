@@ -207,6 +207,30 @@ function formatWishlistStatus(status: string) {
   return status
 }
 
+function formatWishlistDate(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return '-'
+  }
+  const datePart = trimmed.split('T')[0]?.split(' ')[0] ?? trimmed
+  const parts = datePart.split('-').map((part) => Number(part))
+  if (
+    parts.length === 3 &&
+    Number.isInteger(parts[0]) &&
+    Number.isInteger(parts[1]) &&
+    Number.isInteger(parts[2])
+  ) {
+    const [year, month, day] = parts
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return trimmed
+}
+
 function formatMoneyDraft(value: number | undefined) {
   if (typeof value !== 'number' || value <= 0) {
     return ''
@@ -1020,7 +1044,9 @@ export function TasksTable({
         <div
           className='min-h-0 flex-1 overflow-auto rounded-md border'
           data-testid={
-            isInventoryRoute ? 'inventory-table-surface' : 'wishlist-table-surface'
+            isInventoryRoute
+              ? 'inventory-table-surface'
+              : 'wishlist-table-surface'
           }
         >
           <Table
@@ -1174,6 +1200,25 @@ export function TasksTable({
                   </span>
                   <span>Priority: {row.original.priority}</span>
                   <span>Type: {row.original.label}</span>
+                  {routePath === '/_authenticated/wishlist/' ? (
+                    <>
+                      <span
+                        data-testid={`wishlist-card-date-added-${row.original.id}`}
+                      >
+                        Date added:{' '}
+                        {formatWishlistDate(row.original.wishlistCreatedAt)}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-date-updated-${row.original.id}`}
+                        title='Latest pricing refresh date'
+                      >
+                        Updated:{' '}
+                        {formatWishlistDate(
+                          row.original.wishlistPriceUpdatedAt
+                        )}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
                 {routePath === '/_authenticated/wishlist/' &&
                 row.original.notes ? (

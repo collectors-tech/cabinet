@@ -9,12 +9,16 @@ describe("ui-screen-wishlist", () => {
             item_id: "item-collector-1",
             priority: "medium",
             below_target_now: false,
+            created_at: "2026-03-05T09:15:00Z",
+            updated_at: "2026-03-29T11:30:00Z",
           },
           {
             id: "wish-2",
             item_id: "item-collector-2",
             priority: "high",
             below_target_now: true,
+            created_at: "2026-03-10T13:45:00Z",
+            updated_at: "2026-03-11T08:00:00Z",
           },
         ],
       },
@@ -216,6 +220,43 @@ describe("ui-screen-wishlist", () => {
     cy.get('button[aria-label="Update priority"]').should("be.visible");
     cy.get('button[aria-label="Export wishlist entries"]').should("be.visible");
     cy.get('button[aria-label="Delete selected wishlist entries"]').should("be.visible");
+  });
+
+  it("UI-SCREEN-WISHLIST-016 renders date added and price update context", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.contains("th", "Date added").should("exist");
+    cy.contains("th", "Updated").should("exist");
+    cy.get('[data-testid="wishlist-date-added-item-collector-1"]').should(
+      "contain.text",
+      "Mar 5, 2026"
+    );
+    cy.get('[data-testid="wishlist-date-updated-item-collector-1"]')
+      .should("contain.text", "Apr 22, 2026")
+      .and("have.attr", "title", "Latest pricing refresh date");
+    cy.get('[data-testid="wishlist-date-added-item-collector-2"]').should(
+      "contain.text",
+      "Mar 10, 2026"
+    );
+    cy.get('[data-testid="wishlist-date-updated-item-collector-2"]').should(
+      "contain.text",
+      "-"
+    );
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-date-added-item-collector-1"]').should(
+      "contain.text",
+      "Date added: Mar 5, 2026"
+    );
+    cy.get('[data-testid="wishlist-card-date-updated-item-collector-1"]').should(
+      "contain.text",
+      "Updated: Apr 22, 2026"
+    );
+    cy.get('[data-testid="wishlist-card-date-updated-item-collector-2"]').should(
+      "contain.text",
+      "Updated: -"
+    );
   });
 
   it("UI-SCREEN-WISHLIST-002 exposes direct compact header actions", () => {
