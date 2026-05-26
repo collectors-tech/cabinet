@@ -169,4 +169,22 @@ describe("ui-login-session", () => {
     cy.location("search").should("include", "redirect=%2Fdashboard");
     cy.contains(/dashboard/i).should("not.exist");
   });
+
+  it("UI-LOGIN-SESSION-008 keeps sign-in copy focused while preserving account and legal links", () => {
+    cy.visit("/sign-in");
+
+    cy.contains("Sign in to unlock your Cabinet workspace.").should("not.exist");
+    cy.get('[data-testid="sign-in-profile-guidance"]').should("not.exist");
+    cy.get('input[name="email"]').should("be.visible");
+    cy.get('input[name="password"]').should("be.visible");
+    cy.contains("button", "Sign in").should("be.visible");
+    cy.contains("a", "Create account").should("have.attr", "href", "/sign-up");
+    cy.contains("a", "Forgot password?").should(
+      "have.attr",
+      "href",
+      "/forgot-password"
+    );
+    cy.contains("a", "Terms of Service").should("have.attr", "href", "/terms");
+    cy.contains("a", "Privacy Policy").should("have.attr", "href", "/privacy");
+  });
 });
