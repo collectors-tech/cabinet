@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Download } from 'lucide-react'
 import { ContentSection } from '../components/content-section'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,8 +21,16 @@ type StorageResponse = {
   media_dir?: string
 }
 
+type BackupInfo = {
+  path?: string
+  file_name?: string
+  size_bytes?: number
+  created_at?: string
+  integrity_check?: string
+}
+
 type BackupListResponse = {
-  backups?: string[]
+  backups?: BackupInfo[]
 }
 
 const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
@@ -38,7 +46,7 @@ export function SettingsStorage() {
   const [repairPending, setRepairPending] = useState(false)
   const [repairResult, setRepairResult] = useState<string | null>(null)
   const [repairTone, setRepairTone] = useState<'default' | 'destructive'>('default')
-  const [backupList, setBackupList] = useState<string[]>([])
+  const [backupList, setBackupList] = useState<BackupInfo[]>([])
   const [backupsLoading, setBackupsLoading] = useState(true)
   const [backupPending, setBackupPending] = useState(false)
   const [restorePending, setRestorePending] = useState(false)
@@ -121,7 +129,7 @@ export function SettingsStorage() {
       const payload = (await response.json()) as BackupListResponse
       setBackupList(
         (payload.backups ?? []).filter(
-          (backupPath) => typeof backupPath === 'string' && backupPath.trim() !== ''
+          (backup) => typeof backup.path === 'string' && backup.path.trim() !== ''
         )
       )
     } catch {
@@ -217,7 +225,10 @@ export function SettingsStorage() {
       if (!response.ok) {
         throw new Error('failed_to_create_backup')
       }
-      setActionStatus('Backup created successfully.')
+      const payload = (await response.json()) as { backup?: BackupInfo }
+      const fileName = payload.backup?.file_name?.trim() || 'backup snapshot'
+      const integrityCheck = payload.backup?.integrity_check?.trim() || 'unknown'
+      setActionStatus(`Backup created successfully: ${fileName}. Integrity check: ${integrityCheck}.`)
       await loadBackups()
     } catch {
       setActionTone('destructive')
@@ -238,14 +249,18 @@ export function SettingsStorage() {
       const response = await fetch('/api/backup/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ backup_path: selectedBackupPath }),
+        body: JSON.stringify({ backup_path: selectedBackupPath, confirm_restore: true }),
       })
       if (!response.ok) {
         throw new Error('failed_to_restore_backup')
       }
       setRestoreConfirmOpen(false)
       setSelectedBackupPath(null)
-      setActionStatus('Backup restored successfully.')
+      const payload = (await response.json()) as {
+        restore?: { restored_at?: string; integrity_check?: string }
+      }
+      const integrityCheck = payload.restore?.integrity_check?.trim() || 'unknown'
+      setActionStatus(`Backup restored successfully. Integrity check: ${integrityCheck}.`)
       await Promise.all([loadStorage(), loadBackups()])
     } catch {
       setRestoreConfirmOpen(false)
@@ -372,6 +387,51 @@ export function SettingsStorage() {
             </p>
           ) : null}
           <div className='rounded-md border p-3 space-y-3'>
+            <div>
+              <p className='font-medium'>Data exports</p>
+              <p className='text-xs text-muted-foreground'>
+                Download the active profile as a JSON snapshot or item CSV.
+              </p>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {actionsDisabled ? (
+                <>
+                  <Button variant='outline' size='sm' disabled>
+                    <Download className='mr-2 h-4 w-4' />
+                    JSON Snapshot
+                  </Button>
+                  <Button variant='outline' size='sm' disabled>
+                    <Download className='mr-2 h-4 w-4' />
+                    Item CSV
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant='outline' size='sm'>
+                    <a
+                      data-testid='settings-storage-export-json'
+                      href='/api/data/export/json'
+                      download='cabinet-data-snapshot.json'
+                    >
+                      <Download className='mr-2 h-4 w-4' />
+                      JSON Snapshot
+                    </a>
+                  </Button>
+                  <Button asChild variant='outline' size='sm'>
+                    <a
+                      data-testid='settings-storage-export-csv'
+                      href='/api/data/export/csv/items'
+                      download='cabinet-items.csv'
+                    >
+                      <Download className='mr-2 h-4 w-4' />
+                      Item CSV
+                    </a>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className='rounded-md border p-3 space-y-3'>
             <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='font-medium'>Backups</p>
@@ -404,14 +464,22 @@ export function SettingsStorage() {
             ) : null}
             {!backupsLoading && backupList.length > 0 ? (
               <div className='space-y-2'>
-                {backupList.map((backupPath) => (
+                {backupList.map((backup) => (
                   <div
-                    key={backupPath}
+                    key={backup.path}
                     className='flex items-center justify-between gap-3 rounded-md border p-2'
                     data-testid='settings-storage-backup-row'
                   >
                     <div className='min-w-0 text-sm text-muted-foreground'>
-                      <p className='truncate'>{backupPath}</p>
+                      <p className='truncate font-medium text-foreground'>
+                        {backup.file_name || backup.path}
+                      </p>
+                      <p className='truncate text-xs'>
+                        {backup.path}
+                      </p>
+                      <p className='text-xs'>
+                        {formatBackupSize(backup.size_bytes)} · {backup.created_at || 'created time unavailable'}
+                      </p>
                     </div>
                     <Button
                       variant='outline'
@@ -419,7 +487,7 @@ export function SettingsStorage() {
                       data-testid='settings-storage-backup-restore'
                       disabled={actionsDisabled}
                       onClick={() => {
-                        setSelectedBackupPath(backupPath)
+                        setSelectedBackupPath(backup.path ?? null)
                         setRestoreConfirmOpen(true)
                       }}
                     >
@@ -474,4 +542,17 @@ export function SettingsStorage() {
       </div>
     </ContentSection>
   )
+}
+
+function formatBackupSize(sizeBytes?: number) {
+  if (!Number.isFinite(sizeBytes) || !sizeBytes || sizeBytes <= 0) {
+    return 'size unavailable'
+  }
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }

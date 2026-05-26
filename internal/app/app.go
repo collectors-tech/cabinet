@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -35,12 +36,16 @@ import (
 	"github.com/collectors-tech/cabinet/internal/chat"
 	"github.com/collectors-tech/cabinet/internal/collection"
 	"github.com/collectors-tech/cabinet/internal/commerce"
+	"github.com/collectors-tech/cabinet/internal/companion"
 	"github.com/collectors-tech/cabinet/internal/config"
+	"github.com/collectors-tech/cabinet/internal/costing"
 	"github.com/collectors-tech/cabinet/internal/dashboard"
 	"github.com/collectors-tech/cabinet/internal/datamgmt"
 	"github.com/collectors-tech/cabinet/internal/db"
 	"github.com/collectors-tech/cabinet/internal/discovery"
 	"github.com/collectors-tech/cabinet/internal/ebay"
+	"github.com/collectors-tech/cabinet/internal/ebaypurchasecapture"
+	"github.com/collectors-tech/cabinet/internal/forwarding"
 	"github.com/collectors-tech/cabinet/internal/licensing"
 	"github.com/collectors-tech/cabinet/internal/logging"
 	"github.com/collectors-tech/cabinet/internal/matching"
@@ -49,6 +54,7 @@ import (
 	"github.com/collectors-tech/cabinet/internal/profile"
 	"github.com/collectors-tech/cabinet/internal/scanner"
 	"github.com/collectors-tech/cabinet/internal/search"
+	"github.com/collectors-tech/cabinet/internal/telegramcapture"
 	"github.com/collectors-tech/cabinet/internal/ui"
 	"github.com/collectors-tech/cabinet/internal/update"
 	"github.com/collectors-tech/cabinet/internal/wishlist"
@@ -127,9 +133,11 @@ func New(cfg config.Config) (*App, error) {
 	discoverySvc := discovery.NewService(conn)
 	wishlistSvc := wishlist.NewService(conn)
 	commerceSvc := commerce.NewService(conn)
+	forwarderInbox := forwarding.NewService(conn)
 	pricingSvc := pricing.NewService(conn)
 	dashboardSvc := dashboard.NewService(conn)
 	chatSvc := chat.NewService(conn, filepath.Join(cfg.DataDir, "chat-attachments"))
+	companionSvc := companion.DefaultService()
 	aiSvc := ai.NewService(ai.Config{})
 	licenseSvc := licensing.NewService(conn, profiles, cfg.UpdatePublicKey)
 	logSvc := logging.NewService(conn)
@@ -831,6 +839,15 @@ func New(cfg config.Config) (*App, error) {
 					return
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "value": value})
+				return
+			}
+			if r.Method == http.MethodDelete {
+				key := strings.TrimSpace(r.URL.Query().Get("key"))
+				if err := profiles.DeleteSecret(r.Context(), profileID, key); err != nil {
+					http.Error(w, `{"error":"failed_to_delete_secret"}`, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
@@ -1935,6 +1952,23 @@ func New(cfg config.Config) (*App, error) {
 		out, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), req.QuerySetID, provider)
 		if err != nil {
 			logSvc.Log(r.Context(), "error", "scanner_run_failed", map[string]any{"query_set_id": req.QuerySetID, "error": err.Error()})
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "failed_to_run_scanner",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  "review_provider_credentials_and_health",
+					"query_set_id": req.QuerySetID,
+				})
+				return
+			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
 			return
 		}
@@ -2095,6 +2129,186 @@ func New(cfg config.Config) (*App, error) {
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
 		})
 	})
+	mux.HandleFunc("/api/companion/modules", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(companionSvc.Registry())
+	})
+	mux.HandleFunc("/api/companion/payloads", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req companion.PayloadSubmission
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		accepted, err := companionSvc.AcceptPayload(req, r.Header.Get("Authorization"))
+		if err != nil {
+			status := http.StatusBadRequest
+			if err.Error() == "companion_auth_required" {
+				status = http.StatusUnauthorized
+			}
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(accepted)
+	})
+	mux.HandleFunc("/api/providers/ebay/buyer-interest/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SourceAccount       string                    `json:"source_account"`
+			WriteBackCapability string                    `json:"write_back_capability"`
+			Items               []ebay.BuyerInterestInput `json:"items"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if len(req.Items) == 0 {
+			http.Error(w, `{"error":"missing_items"}`, http.StatusBadRequest)
+			return
+		}
+		mappings := make([]ebay.BuyerInterestMapping, 0, len(req.Items))
+		summary := map[string]int{
+			ebay.InterestDestinationWishlist:  0,
+			ebay.InterestDestinationDiscovery: 0,
+			"write_back_allowed":              0,
+			"write_back_blocked":              0,
+		}
+		for _, item := range req.Items {
+			if strings.TrimSpace(item.SourceAccount) == "" {
+				item.SourceAccount = req.SourceAccount
+			}
+			if strings.TrimSpace(item.WriteBackCapability) == "" {
+				item.WriteBackCapability = req.WriteBackCapability
+			}
+			mapped := ebay.MapBuyerInterest(item)
+			mappings = append(mappings, mapped)
+			summary[mapped.Destination]++
+			if mapped.WriteBackAllowed {
+				summary["write_back_allowed"]++
+			} else {
+				summary["write_back_blocked"]++
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "preview",
+			"items":    mappings,
+			"summary":  summary,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/seller-operations/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerOperationActionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview := ebay.PreviewSellerOperationAction(req)
+		if preview.Operation == "" || preview.Action == "" {
+			http.Error(w, `{"error":"missing_seller_operation_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "seller_operation_preview",
+			"preview":  preview,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/seller-operations/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerOperationActionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerOperationAction(req)
+		if execution.Operation == "" || execution.Action == "" {
+			http.Error(w, `{"error":"missing_seller_operation_action"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "seller_operation_execute",
+			"execution": execution,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/preview", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		preview := ebay.PreviewSellerListingLifecycleCommand(req)
+		if preview.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider": "ebay",
+			"mode":     "listing_lifecycle_preview",
+			"preview":  preview,
+		})
+	})
+	mux.HandleFunc("/api/providers/ebay/listing-lifecycle/execute", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req ebay.SellerListingLifecycleCommandRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		execution := ebay.ExecuteSellerListingLifecycleCommand(req, nil)
+		if execution.Command == "" {
+			http.Error(w, `{"error":"missing_listing_lifecycle_command"}`, http.StatusBadRequest)
+			return
+		}
+		status := http.StatusOK
+		if !execution.Executed {
+			status = http.StatusConflict
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"provider":  "ebay",
+			"mode":      "listing_lifecycle_execute",
+			"execution": execution,
+		})
+	})
+	registerEbayBuyerInterestImportRoute(mux, conn, profiles)
 	mux.HandleFunc("/api/providers/family-detect", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -2929,6 +3143,46 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"hits": hits})
 	})
+	mux.HandleFunc("/api/commerce/landed-cost/plan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			costing.AllocationRequest
+			Consolidation struct {
+				ShipmentFeeCents      int64 `json:"shipment_fee_cents"`
+				DestinationLimitCents int64 `json:"destination_limit_cents"`
+				WarningBufferCents    int64 `json:"warning_buffer_cents"`
+			} `json:"consolidation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		allocation, err := costing.AllocateLandedCosts(req.AllocationRequest)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_landed_cost_allocation"}`, http.StatusBadRequest)
+			return
+		}
+		plan, err := costing.PlanConsolidation(costing.ConsolidationRequest{
+			Items:                 allocation.Items,
+			ShipmentFeeCents:      req.Consolidation.ShipmentFeeCents,
+			DestinationLimitCents: req.Consolidation.DestinationLimitCents,
+			WarningBufferCents:    req.Consolidation.WarningBufferCents,
+		})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_consolidation_plan"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":          "landed_cost_plan",
+			"mutable":       false,
+			"allocation":    allocation,
+			"consolidation": plan,
+		})
+	})
 	mux.HandleFunc("/api/commerce/lifecycle", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		active, err := profiles.GetActiveProfile(r.Context())
@@ -3009,6 +3263,247 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/forwarding/packages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			packages, err := forwarderInbox.ListPackages(r.Context(), profileID, status)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_packages\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"packages": packages,
+				"summary":  map[string]int{"count": len(packages)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageImport
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"package": pkg,
+				"mode":    "forwarder_package_upsert",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/forwarding/package-links", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		switch r.Method {
+		case http.MethodGet:
+			packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+			links, err := forwarderInbox.ListPackageLinks(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_links\"}", http.StatusInternalServerError)
+				return
+			}
+			events, err := forwarderInbox.ListPackageLinkEvents(r.Context(), profileID, packageID)
+			if err != nil {
+				http.Error(w, "{\"error\":\"failed_to_list_forwarder_package_link_events\"}", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"links":   links,
+				"events":  events,
+				"summary": map[string]int{"count": len(links), "events": len(events)},
+			})
+		case http.MethodPost:
+			var req forwarding.PackageLinkRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+				return
+			}
+			req.ProfileID = profileID
+			link, err := forwarderInbox.LinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_link",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"link": link,
+				"mode": "forwarder_package_reconciliation_link",
+			})
+		case http.MethodDelete:
+			var req forwarding.PackageUnlinkRequest
+			if r.Body != nil {
+				_ = json.NewDecoder(r.Body).Decode(&req)
+			}
+			req.ProfileID = profileID
+			if req.PackageID == "" {
+				req.PackageID = strings.TrimSpace(r.URL.Query().Get("package_id"))
+			}
+			event, err := forwarderInbox.UnlinkPackage(r.Context(), req)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":   "invalid_forwarder_package_unlink",
+					"message": err.Error(),
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"event": event,
+				"mode":  "forwarder_package_reconciliation_unlink",
+			})
+		default:
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/forwarding/package-match-suggestions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, "{\"error\":\"active_profile_not_set\"}", http.StatusBadRequest)
+			return
+		}
+		packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+		suggestions, err := forwarderInbox.SuggestPackageMatches(r.Context(), strings.TrimSpace(active.ID), packageID)
+		if err != nil {
+			http.Error(w, "{\"error\":\"failed_to_suggest_forwarder_package_matches\"}", http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":        "forwarder_package_match_suggestions",
+			"mutable":     false,
+			"suggestions": suggestions,
+			"summary":     forwarding.SummarizePackageMatchSuggestions(packageID, suggestions),
+		})
+	})
+	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			CSV       string `json:"csv"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imports, rowErrors, err := forwarding.ParsePackageCSV(req.ProfileID, req.Provider, strings.NewReader(req.CSV))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_csv",
+				"message": err.Error(),
+			})
+			return
+		}
+		imported := make([]forwarding.Package, 0, len(imports))
+		for _, item := range imports {
+			pkg, err := forwarderInbox.UpsertPackage(r.Context(), item)
+			if err != nil {
+				rowErrors = append(rowErrors, forwarding.PackageCSVRowError{Error: err.Error()})
+				continue
+			}
+			imported = append(imported, pkg)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":     "forwarder_package_csv_import",
+			"imported": imported,
+			"errors":   rowErrors,
+			"summary": map[string]int{
+				"imported": len(imported),
+				"errors":   len(rowErrors),
+			},
+		})
+	})
+	mux.HandleFunc("/api/forwarding/packages/import-email", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "{\"error\":\"method_not_allowed\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ProfileID string `json:"profile_id"`
+			Provider  string `json:"provider"`
+			MessageID string `json:"message_id"`
+			Body      string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "{\"error\":\"invalid_json\"}", http.StatusBadRequest)
+			return
+		}
+		imported, err := forwarding.ParsePackageEmail(req.ProfileID, req.Provider, req.MessageID, strings.NewReader(req.Body))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		pkg, err := forwarderInbox.UpsertPackage(r.Context(), imported)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "invalid_forwarder_package_email",
+				"message": err.Error(),
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":    "forwarder_package_email_import",
+			"package": pkg,
+		})
+	})
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/reviews", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Cards []ebaypurchasecapture.PurchaseCard `json:"cards"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		reviews := ebaypurchasecapture.BuildPurchaseInboxReviews(req.Cards)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id": strings.TrimSpace(active.ID),
+			"source":     "ebay_purchase_capture",
+			"reviews":    reviews,
+		})
+	})
 	itemOwnedByProfile := func(ctx context.Context, profileID, itemID string) bool {
 		profileID = strings.TrimSpace(profileID)
 		itemID = strings.TrimSpace(itemID)
@@ -3021,6 +3516,92 @@ func New(cfg config.Config) (*App, error) {
 		}
 		return count > 0
 	}
+	mux.HandleFunc("/api/integrations/ebay/purchase-inbox/actions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		var req struct {
+			ActionID       string                           `json:"action_id"`
+			TargetKey      string                           `json:"target_key"`
+			Confirmed      bool                             `json:"confirmed"`
+			ExistingItemID string                           `json:"existing_item_id"`
+			Card           ebaypurchasecapture.PurchaseCard `json:"card"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		actionID := strings.TrimSpace(req.ActionID)
+		if !req.Confirmed {
+			http.Error(w, `{"error":"purchase_inbox_action_requires_confirmation"}`, http.StatusConflict)
+			return
+		}
+		if actionID != "link_existing_inventory_item" && actionID != "convert_to_inventory_item" {
+			http.Error(w, `{"error":"unsupported_purchase_inbox_action"}`, http.StatusBadRequest)
+			return
+		}
+		targetKey := ebaypurchasecapture.PurchaseItemKey(req.Card)
+		if targetKey == "" || strings.TrimSpace(req.TargetKey) != targetKey {
+			http.Error(w, `{"error":"purchase_inbox_target_mismatch"}`, http.StatusBadRequest)
+			return
+		}
+		itemReview := ebaypurchasecapture.BuildPurchaseInboxReviews([]ebaypurchasecapture.PurchaseCard{req.Card})
+		if len(itemReview) == 0 || len(itemReview[0].Items) == 0 || itemReview[0].Items[0].Status != "ready_to_link_or_convert" {
+			http.Error(w, `{"error":"purchase_inbox_item_not_ready"}`, http.StatusBadRequest)
+			return
+		}
+
+		switch actionID {
+		case "link_existing_inventory_item":
+			existingItemID := strings.TrimSpace(req.ExistingItemID)
+			if !itemOwnedByProfile(r.Context(), profileID, existingItemID) {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing, err := collectionRepo.GetItemByID(r.Context(), existingItemID)
+			if err != nil {
+				http.Error(w, `{"error":"purchase_inbox_existing_item_not_found"}`, http.StatusNotFound)
+				return
+			}
+			existing.Notes = appendPurchaseInboxNote(existing.Notes, req.Card)
+			existing.SourceURLs = appendPurchaseInboxSourceURL(existing.SourceURLs, req.Card.ItemURL)
+			updated, err := collectionRepo.UpdateItem(r.Context(), existingItemID, existing)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_link_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"action_id":   actionID,
+				"target_key":  targetKey,
+				"profile_id":  profileID,
+				"linked_item": updated,
+				"audit":       purchaseInboxActionAudit(req.Card, existingItemID),
+			})
+		case "convert_to_inventory_item":
+			created, err := collectionRepo.CreateItemForProfile(r.Context(), profileID, purchaseInboxCardToItem(req.Card))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_convert_purchase_inbox_item"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":           true,
+				"action_id":    actionID,
+				"target_key":   targetKey,
+				"profile_id":   profileID,
+				"created_item": created,
+				"audit":        purchaseInboxActionAudit(req.Card, created.ID),
+			})
+		}
+	})
 	mux.HandleFunc("/api/pricing/track", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -3254,7 +3835,11 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		sum, err := dashboardSvc.Summary(r.Context())
+		profileID := ""
+		if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+		sum, err := dashboardSvc.Summary(r.Context(), profileID)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_load_dashboard"}`, http.StatusInternalServerError)
 			return
@@ -3533,6 +4118,151 @@ func New(cfg config.Config) (*App, error) {
 			"draft_id":      strings.TrimSpace(req.DraftID),
 		})
 	})
+	mux.HandleFunc("/api/telegram/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramCatalogCaptureRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ProfileID) == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		media, err := telegramCatalogCaptureMedia(req.Media)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_telegram_media"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewService(profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}, chatSvc)
+		result, err := svc.IngestCatalogCapture(r.Context(), telegramcapture.CaptureInput{
+			SenderID:       req.SenderID,
+			ChatID:         req.ChatID,
+			MessageID:      req.MessageID,
+			Text:           req.Text,
+			Barcode:        req.Barcode,
+			GroupingHint:   req.GroupingHint,
+			SourceMetadata: req.SourceMetadata,
+			Draft: telegramcapture.Draft{
+				PartNumber:       req.Draft.PartNumber,
+				Title:            req.Draft.Title,
+				Brand:            req.Draft.Brand,
+				Category:         req.Draft.Category,
+				LookupSource:     req.Draft.LookupSource,
+				LookupURL:        req.Draft.LookupURL,
+				LookupConfidence: req.Draft.LookupConfidence,
+			},
+			Media: media,
+		})
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/webhook/catalog-captures", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var update telegramcapture.WebhookUpdate
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		input, err := telegramcapture.CaptureInputFromWebhookUpdate(update, telegramcapture.Draft{})
+		if err != nil {
+			http.Error(w, `{"error":"invalid_telegram_webhook_update"}`, http.StatusBadRequest)
+			return
+		}
+		authorizer := allProfilesTelegramAuthorizer{profiles: profiles}
+		authorized, err := authorizer.AuthorizeTelegramCapture(r.Context(), input.SenderID, input.ChatID)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		if draft, ok, err := telegramCatalogCaptureLocalBarcodeDraft(r.Context(), conn, authorized.ProfileID, input.Barcode); err != nil {
+			http.Error(w, `{"error":"failed_to_lookup_telegram_barcode"}`, http.StatusBadRequest)
+			return
+		} else if ok {
+			input.Draft = draft
+		}
+		svc := telegramcapture.NewService(authorizer, chatSvc)
+		result, err := svc.IngestCatalogCapture(r.Context(), input)
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			var followUp telegramcapture.DraftNeedsFollowUpError
+			if errors.As(err, &followUp) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":          "telegram_capture_needs_follow_up",
+					"reason":         followUp.Reason,
+					"missing_fields": followUp.MissingFields,
+					"telegram_reply": followUp.Reply,
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_ingest_telegram_capture"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("/api/telegram/catalog-capture-callbacks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramCatalogCaptureCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		svc := telegramcapture.NewService(allProfilesTelegramAuthorizer{profiles: profiles}, chatSvc)
+		result, err := svc.HandleCatalogCaptureCallback(r.Context(), telegramcapture.CallbackInput{
+			SenderID:     req.SenderID,
+			ChatID:       req.ChatID,
+			CallbackData: req.CallbackData,
+		})
+		if err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_handle_telegram_capture_callback"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -3565,6 +4295,98 @@ func New(cfg config.Config) (*App, error) {
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(thread)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+		if profileID == "" {
+			http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		route := strings.TrimSpace(r.URL.Query().Get("route"))
+		if route == "" {
+			route = "/"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"profile_id":    profileID,
+			"route":         route,
+			"capabilities":  assistantCapabilityRegistry(),
+			"policy":        "preview-before-apply",
+			"confirm_apply": true,
+		})
+	})
+	mux.HandleFunc("/api/chat/workflow-runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			runs, err := chatSvc.ListWorkflowRuns(r.Context(), profileID, strings.TrimSpace(r.URL.Query().Get("thread_id")))
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_workflow_runs"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs})
+		case http.MethodPost:
+			var req chat.CreateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.CreateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(run)
+		default:
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/chat/workflow-runs/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		runID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/chat/workflow-runs/"))
+		if runID == "" {
+			http.Error(w, `{"error":"run_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			profileID := strings.TrimSpace(r.URL.Query().Get("profile_id"))
+			if profileID == "" {
+				http.Error(w, `{"error":"profile_id_required"}`, http.StatusBadRequest)
+				return
+			}
+			run, err := chatSvc.GetWorkflowRun(r.Context(), profileID, runID)
+			if err != nil {
+				http.Error(w, `{"error":"workflow_run_not_found"}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
+		case http.MethodPatch:
+			var req chat.UpdateWorkflowRunInput
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			req.RunID = runID
+			run, err := chatSvc.UpdateWorkflowRun(r.Context(), req)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_update_workflow_run"}`, http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(run)
 		default:
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 		}
@@ -3751,6 +4573,24 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/chat/actions/cancel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req chat.ApplyActionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := chatSvc.CancelAction(r.Context(), req)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_cancel_chat_action"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/data/export/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -3762,6 +4602,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_export_snapshot"}`, http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-data-snapshot.json"`)
 		_ = json.NewEncoder(w).Encode(snap)
 	})
 	mux.HandleFunc("/api/data/export/csv/items", func(w http.ResponseWriter, r *http.Request) {
@@ -3775,6 +4616,7 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", `attachment; filename="cabinet-items.csv"`)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(csvText))
 	})
@@ -3812,11 +4654,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options); err != nil {
+		sum, err := dataService.ApplyImport(r.Context(), req.Snapshot, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/import/csv/dry-run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3860,11 +4703,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_parse_csv"}`, http.StatusBadRequest)
 			return
 		}
-		if err := dataService.ApplyImport(r.Context(), snap, req.Options); err != nil {
+		sum, err := dataService.ApplyImport(r.Context(), snap, req.Options)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_import"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(sum)
 	})
 	mux.HandleFunc("/api/data/reindex", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3872,11 +4716,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		if err := dataService.Reindex(r.Context()); err != nil {
+		result, err := dataService.Reindex(r.Context())
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_reindex"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/data/rebuild-thumbnails", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3906,7 +4751,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_repair_check"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"integrity_check": result})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/backup/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3914,12 +4759,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		path, err := backupSvc.CreateBackup(r.Context())
+		result, err := backupSvc.CreateBackup(r.Context())
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_create_backup"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"backup_path": path})
+		_ = json.NewEncoder(w).Encode(map[string]any{"backup": result})
 	})
 	mux.HandleFunc("/api/backup/list", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -3941,17 +4786,23 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		var req struct {
-			BackupPath string `json:"backup_path"`
+			BackupPath     string `json:"backup_path"`
+			ConfirmRestore bool   `json:"confirm_restore"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := backupSvc.RestoreBackup(req.BackupPath); err != nil {
+		if !req.ConfirmRestore {
+			http.Error(w, `{"error":"restore_confirmation_required","recovery":"set confirm_restore to true after reviewing the selected backup"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := backupSvc.RestoreBackup(req.BackupPath)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_restore_backup"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"restore": result})
 	})
 	mux.HandleFunc("/api/items/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -6042,6 +6893,44 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 	base := []map[string]any{
 		{
+			"provider_id":         "openai",
+			"display_name":        "OpenAI / ChatGPT",
+			"base_domain":         "platform.openai.com",
+			"api_family":          "ai_provider",
+			"api_support_profile": "browser_auth_or_api_key",
+			"active_mode":         strings.TrimSpace(settings["openai.active_auth_method"]),
+			"integration_mode":    "assistant_workflows",
+			"api_available":       true,
+			"auth_requirement":    "browser_auth_or_api_key",
+			"auth_mode":           "hybrid",
+			"active_auth_method":  strings.TrimSpace(settings["openai.active_auth_method"]),
+			"auth_methods": map[string]any{
+				"api_key": map[string]any{
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key"],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+					"credential_present": strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+				},
+				"browser_auth": map[string]any{
+					"state":              map[bool]string{true: strings.TrimSpace(settings["openai.browser_auth_state"]), false: "setup_needed"}[strings.TrimSpace(settings["openai.browser_auth_state"]) != ""],
+					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "browser_auth" && strings.TrimSpace(settings["openai.browser_auth_state"]) == "connected" && strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"credential_present": strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"setup_message":      "Browser Auth requires a verifiable callback/artifact before Cabinet marks OpenAI connected.",
+				},
+			},
+			"model_options": []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"},
+			"capabilities": map[string]bool{
+				"search":             false,
+				"stock_observation":  false,
+				"pricing":            false,
+				"health":             true,
+				"assistant":          true,
+				"image_help":         true,
+				"content_generation": true,
+			},
+			"state":              map[bool]string{true: "ready", false: "needs_config"}[strings.TrimSpace(settings["openai.active_auth_method"]) != ""],
+			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
+		},
+		{
 			"provider_id":         "ebay",
 			"display_name":        "eBay",
 			"base_domain":         "ebay.com",
@@ -6058,6 +6947,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"pricing":           true,
 				"health":            true,
 			},
+			"seller_operations":  ebay.SellerOperationStatuses(nil),
 			"state":              "ready",
 			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
 		},
@@ -6384,6 +7274,83 @@ func parsePositiveInt(raw string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func purchaseInboxCardToItem(card ebaypurchasecapture.PurchaseCard) collection.Item {
+	title := strings.TrimSpace(firstNonEmptyString(card.PurchasedIdentity, card.ListingTitle))
+	partNumber := strings.TrimSpace(firstNonEmptyString(card.ListingID, card.TransactionID, ebaypurchasecapture.PurchaseItemKey(card)))
+	return collection.Item{
+		Brand:      "Unknown",
+		Category:   "General",
+		PartNumber: partNumber,
+		Title:      title,
+		Status:     "active",
+		Notes:      appendPurchaseInboxNote("", card),
+		SourceURLs: appendPurchaseInboxSourceURL(nil, card.ItemURL),
+		Tags:       []string{"purchase-inbox", "ebay-purchase"},
+	}
+}
+
+func appendPurchaseInboxNote(existing string, card ebaypurchasecapture.PurchaseCard) string {
+	parts := []string{"Purchase Inbox confirmed eBay capture"}
+	if v := strings.TrimSpace(card.OrderID); v != "" {
+		parts = append(parts, "order "+v)
+	}
+	if v := strings.TrimSpace(card.TransactionID); v != "" {
+		parts = append(parts, "transaction "+v)
+	}
+	if v := strings.TrimSpace(card.ListingID); v != "" {
+		parts = append(parts, "listing "+v)
+	}
+	if card.Quantity > 0 {
+		parts = append(parts, fmt.Sprintf("quantity %d", card.Quantity))
+	}
+	if v := strings.TrimSpace(card.ItemPrice); v != "" {
+		parts = append(parts, "price "+v)
+	}
+	note := strings.Join(parts, "; ") + "."
+	if strings.TrimSpace(existing) == "" {
+		return note
+	}
+	if strings.Contains(existing, note) {
+		return existing
+	}
+	return strings.TrimSpace(existing) + "\n" + note
+}
+
+func appendPurchaseInboxSourceURL(existing []string, rawURL string) []string {
+	trimmed := strings.TrimSpace(rawURL)
+	out := append([]string{}, existing...)
+	if trimmed == "" {
+		return out
+	}
+	for _, value := range out {
+		if strings.TrimSpace(value) == trimmed {
+			return out
+		}
+	}
+	return append(out, trimmed)
+}
+
+func purchaseInboxActionAudit(card ebaypurchasecapture.PurchaseCard, itemID string) map[string]any {
+	return map[string]any{
+		"source":         "ebay_purchase_capture",
+		"item_id":        strings.TrimSpace(itemID),
+		"target_key":     ebaypurchasecapture.PurchaseItemKey(card),
+		"order_id":       strings.TrimSpace(card.OrderID),
+		"listing_id":     strings.TrimSpace(card.ListingID),
+		"transaction_id": strings.TrimSpace(card.TransactionID),
+		"confirmed":      true,
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func discoverFrontlineAlgoliaConfig(
@@ -7822,6 +8789,145 @@ func cleanReason(reason string) string {
 		return "shutdown"
 	}
 	return reason
+}
+
+type telegramCatalogCaptureRequest struct {
+	ProfileID    string `json:"profile_id"`
+	SenderID     string `json:"sender_id"`
+	ChatID       string `json:"chat_id"`
+	MessageID    string `json:"message_id"`
+	Text         string `json:"text"`
+	Barcode      string `json:"barcode"`
+	GroupingHint string `json:"grouping_hint"`
+	Draft        struct {
+		PartNumber       string `json:"part_number"`
+		Title            string `json:"title"`
+		Brand            string `json:"brand"`
+		Category         string `json:"category"`
+		LookupSource     string `json:"lookup_source"`
+		LookupURL        string `json:"lookup_url"`
+		LookupConfidence string `json:"lookup_confidence"`
+	} `json:"draft"`
+	Media          []telegramCatalogCaptureMediaRequest `json:"media"`
+	SourceMetadata map[string]any                       `json:"source_metadata"`
+}
+
+type telegramCatalogCaptureMediaRequest struct {
+	FileID        string `json:"file_id"`
+	Filename      string `json:"filename"`
+	MIMEType      string `json:"mime_type"`
+	Kind          string `json:"kind"`
+	ContentBase64 string `json:"content_base64"`
+}
+
+type telegramCatalogCaptureCallbackRequest struct {
+	SenderID     string `json:"sender_id"`
+	ChatID       string `json:"chat_id"`
+	CallbackData string `json:"callback_data"`
+}
+
+type profileSettingsTelegramAuthorizer struct {
+	profiles  *profile.Repository
+	profileID string
+}
+
+type allProfilesTelegramAuthorizer struct {
+	profiles *profile.Repository
+}
+
+func (a profileSettingsTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
+	profileID := strings.TrimSpace(a.profileID)
+	if profileID == "" || a.profiles == nil {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	settings, err := a.profiles.GetSettings(ctx, profileID)
+	if err != nil {
+		return telegramcapture.AuthorizedProfile{}, err
+	}
+	if strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != strings.TrimSpace(senderID) {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	if strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != strings.TrimSpace(chatID) {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	return telegramcapture.AuthorizedProfile{ProfileID: profileID}, nil
+}
+
+func (a allProfilesTelegramAuthorizer) AuthorizeTelegramCapture(ctx context.Context, senderID, chatID string) (telegramcapture.AuthorizedProfile, error) {
+	if a.profiles == nil || strings.TrimSpace(senderID) == "" || strings.TrimSpace(chatID) == "" {
+		return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+	}
+	profiles, err := a.profiles.List(ctx)
+	if err != nil {
+		return telegramcapture.AuthorizedProfile{}, err
+	}
+	for _, candidate := range profiles {
+		settings, err := a.profiles.GetSettings(ctx, candidate.ID)
+		if err != nil {
+			return telegramcapture.AuthorizedProfile{}, err
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != strings.TrimSpace(senderID) {
+			continue
+		}
+		if strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != strings.TrimSpace(chatID) {
+			continue
+		}
+		return telegramcapture.AuthorizedProfile{ProfileID: candidate.ID}, nil
+	}
+	return telegramcapture.AuthorizedProfile{}, telegramcapture.ErrUnauthorizedSender
+}
+
+func telegramCatalogCaptureLocalBarcodeDraft(ctx context.Context, conn *sql.DB, profileID, barcodeValue string) (telegramcapture.Draft, bool, error) {
+	profileID = strings.TrimSpace(profileID)
+	barcodeValue = strings.TrimSpace(barcodeValue)
+	if conn == nil || profileID == "" || barcodeValue == "" {
+		return telegramcapture.Draft{}, false, nil
+	}
+
+	var itemID string
+	var draft telegramcapture.Draft
+	err := conn.QueryRowContext(ctx, `
+		SELECT c.id, c.part_number, c.title, c.brand, c.category
+		FROM item_barcodes b
+		JOIN canonical_items c ON c.id = b.item_id
+		WHERE b.barcode = ?
+			AND c.profile_id = ?
+			AND COALESCE(c.deleted_at, '') = ''
+		ORDER BY b.created_at ASC
+		LIMIT 1
+	`, barcodeValue, profileID).Scan(&itemID, &draft.PartNumber, &draft.Title, &draft.Brand, &draft.Category)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return telegramcapture.Draft{}, false, nil
+		}
+		return telegramcapture.Draft{}, false, err
+	}
+	draft.LookupSource = "barcode_local"
+	draft.LookupURL = "/api/barcodes/" + url.PathEscape(barcodeValue)
+	draft.LookupConfidence = "high"
+	return draft, strings.TrimSpace(itemID) != "", nil
+}
+
+func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]telegramcapture.MediaInput, error) {
+	out := make([]telegramcapture.MediaInput, 0, len(media))
+	for _, item := range media {
+		var reader io.Reader = strings.NewReader("")
+		if raw := strings.TrimSpace(item.ContentBase64); raw != "" {
+			decoded, err := base64.StdEncoding.DecodeString(raw)
+			if err != nil {
+				return nil, err
+			}
+			reader = bytes.NewReader(decoded)
+		}
+		out = append(out, telegramcapture.MediaInput{
+			FileID:   strings.TrimSpace(item.FileID),
+			Filename: strings.TrimSpace(item.Filename),
+			MIMEType: strings.TrimSpace(item.MIMEType),
+			Kind:     strings.TrimSpace(item.Kind),
+			Reader:   reader,
+		})
+	}
+	return out, nil
 }
 
 func (a *App) close() error {

@@ -187,10 +187,7 @@ describe('SETUP-WIZ', () => {
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
     cy.get('[data-testid="setup-next"]').click();
-<<<<<<< HEAD
-=======
     cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 6 OF 6');
->>>>>>> d335689 (#446 test(shell): align route and setup expectations)
     cy.get('[data-testid="setup-complete"]').click();
     cy.contains('Config complete').should('be.visible');
 

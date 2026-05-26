@@ -33,5 +33,5 @@ Define Account settings screen behavior.
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-SET-ACC-01 | Update account action | `Update account` persists account values | planned: `ui.web/cypress/e2e/settings/account/spec.cy.ts` `settings-account-update-account` |
-| UC-SET-ACC-02 | Retry account load failure | `Retry` re-attempts account fetch deterministically | planned: `ui.web/cypress/e2e/settings/account/spec.cy.ts` `settings-account-retry` |
+| UC-SET-ACC-01 | Update account action | `Update account` persists account values | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-001 persists account fields across reload` |
+| UC-SET-ACC-02 | Retry account load failure | `Retry` re-attempts account fetch deterministically | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload` |

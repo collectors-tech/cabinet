@@ -33,6 +33,7 @@ type CandidateInput struct {
 	ListingID  string  `json:"listing_id"`
 	Title      string  `json:"title"`
 	Price      float64 `json:"price"`
+	Currency   string  `json:"currency,omitempty"`
 	Shipping   float64 `json:"shipping"`
 	URL        string  `json:"url"`
 	Image      string  `json:"image"`
