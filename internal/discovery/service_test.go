@@ -78,7 +78,7 @@ func TestApplyActionAddWishlistRetainsMarketplaceMetadata(t *testing.T) {
 	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title) VALUES ('i1','AFX','Cars','E2E-PN-900','Seed Item')`); err != nil {
 		t.Fatalf("seed item: %v", err)
 	}
-	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Q','["afx"]','[]')`); err != nil {
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('q1','AFX saved search','["afx"]','[]','["ebay","bonzaslotcars"]')`); err != nil {
 		t.Fatalf("seed query set: %v", err)
 	}
 	if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count) VALUES ('c1','q1','L1','AFX P-2',44.95,0,'https://example.test/listing','','seller-1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'new','ebay','low_stock',2)`); err != nil {
@@ -107,9 +107,19 @@ func TestApplyActionAddWishlistRetainsMarketplaceMetadata(t *testing.T) {
 	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
 		t.Fatalf("parse metadata json: %v", err)
 	}
-	for _, field := range []string{"listing_url", "seller", "stock_signal", "observed_price"} {
+	for _, field := range []string{"listing_url", "seller", "stock_signal", "observed_price", "source_provider", "query_set_id", "query_name", "provider_scope"} {
 		if _, ok := metadata[field]; !ok {
 			t.Fatalf("expected metadata field %q in %v", field, metadata)
 		}
+	}
+	if metadata["source_provider"] != "ebay" {
+		t.Fatalf("expected source_provider ebay, got %v", metadata["source_provider"])
+	}
+	if metadata["query_set_id"] != "q1" || metadata["query_name"] != "AFX saved search" {
+		t.Fatalf("expected query set provenance, got %v", metadata)
+	}
+	providerScope, ok := metadata["provider_scope"].([]any)
+	if !ok || len(providerScope) != 2 || providerScope[0] != "ebay" || providerScope[1] != "bonzaslotcars" {
+		t.Fatalf("expected provider scope provenance, got %v", metadata["provider_scope"])
 	}
 }
