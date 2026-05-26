@@ -190,8 +190,16 @@ type ForwarderPackageMatchSuggestionResponse = {
   suggestions?: ForwarderPackageMatchSuggestion[]
   summary?: {
     count?: number
+    high_confidence?: number
+    medium_confidence?: number
+    low_confidence?: number
+    scoped_packages?: number
   }
 }
+
+type ForwarderPackageMatchSuggestionSummary = NonNullable<
+  ForwarderPackageMatchSuggestionResponse['summary']
+>
 
 type ForwarderPackageReviewFilter =
   | 'all'
@@ -308,6 +316,8 @@ export function Purchases() {
   const [packageSuggestionResult, setPackageSuggestionResult] = useState<
     string | null
   >(null)
+  const [packageSuggestionSummary, setPackageSuggestionSummary] =
+    useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [packageReviewFilter, setPackageReviewFilter] =
     useState<ForwarderPackageReviewFilter>('all')
   const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
@@ -472,6 +482,7 @@ export function Purchases() {
     setPackagesLoading(true)
     setPackageError(null)
     setPackageSuggestionResult(null)
+    setPackageSuggestionSummary(null)
     try {
       const params = new URLSearchParams()
       if (packageForm.profile_id.trim()) {
@@ -495,12 +506,14 @@ export function Purchases() {
         return current
       }, {})
       setPackageSuggestions(grouped)
+      setPackageSuggestionSummary(payload.summary ?? null)
       const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
       setPackageSuggestionResult(
         'Found ' + count + ' package match suggestion' + (count === 1 ? '' : 's')
       )
     } catch (err) {
       setPackageSuggestions({})
+      setPackageSuggestionSummary(null)
       setPackageError(
         err instanceof Error
           ? err.message
@@ -1112,6 +1125,44 @@ export function Purchases() {
               </dd>
             </div>
           </dl>
+
+          {packageSuggestionSummary ? (
+            <dl
+              className='grid gap-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-5'
+              data-testid='forwarder-package-suggestion-summary'
+            >
+              <div>
+                <dt className='text-muted-foreground'>Candidates</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionSummary.count ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className='text-muted-foreground'>Scoped packages</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionSummary.scoped_packages ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className='text-muted-foreground'>High confidence</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionSummary.high_confidence ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className='text-muted-foreground'>Medium confidence</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionSummary.medium_confidence ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className='text-muted-foreground'>Low confidence</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionSummary.low_confidence ?? 0}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
 
           <div
             className='flex flex-wrap items-center gap-2'
