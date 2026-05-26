@@ -33,17 +33,29 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("first sample seed status=%d body=%s", firstSeed.Code, firstSeed.Body.String())
 	}
 	var firstPayload struct {
-		CreatedItems            int  `json:"created_items"`
-		CreatedWishlist         int  `json:"created_wishlist_entries"`
-		TotalItems              int  `json:"total_items"`
-		TotalWishlist           int  `json:"total_wishlist_entries"`
-		AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+		DatasetKind             string `json:"dataset_kind"`
+		DatasetLabel            string `json:"dataset_label"`
+		SampleDataDisclosure    string `json:"sample_data_disclosure"`
+		CreatedItems            int    `json:"created_items"`
+		CreatedWishlist         int    `json:"created_wishlist_entries"`
+		TotalItems              int    `json:"total_items"`
+		TotalWishlist           int    `json:"total_wishlist_entries"`
+		AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 	}
 	if err := json.NewDecoder(firstSeed.Body).Decode(&firstPayload); err != nil {
 		t.Fatalf("decode first seed payload: %v", err)
 	}
 	if firstPayload.CreatedItems == 0 {
 		t.Fatalf("expected created_items > 0, got %+v", firstPayload)
+	}
+	if firstPayload.DatasetKind != "sample_showcase" {
+		t.Fatalf("expected sample_showcase dataset kind, got %+v", firstPayload)
+	}
+	if !strings.Contains(strings.ToLower(firstPayload.DatasetLabel), "sample") {
+		t.Fatalf("expected sample dataset label, got %+v", firstPayload)
+	}
+	if !strings.Contains(strings.ToLower(firstPayload.SampleDataDisclosure), "example records") {
+		t.Fatalf("expected explicit sample data disclosure, got %+v", firstPayload)
 	}
 	if firstPayload.AlreadySeededForProfile {
 		t.Fatalf("expected already_seeded_for_profile=false on first run, got %+v", firstPayload)
@@ -54,17 +66,25 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 		t.Fatalf("second sample seed status=%d body=%s", secondSeed.Code, secondSeed.Body.String())
 	}
 	var secondPayload struct {
-		CreatedItems            int  `json:"created_items"`
-		CreatedWishlist         int  `json:"created_wishlist_entries"`
-		TotalItems              int  `json:"total_items"`
-		TotalWishlist           int  `json:"total_wishlist_entries"`
-		AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+		DatasetKind             string `json:"dataset_kind"`
+		DatasetLabel            string `json:"dataset_label"`
+		SampleDataDisclosure    string `json:"sample_data_disclosure"`
+		CreatedItems            int    `json:"created_items"`
+		CreatedWishlist         int    `json:"created_wishlist_entries"`
+		TotalItems              int    `json:"total_items"`
+		TotalWishlist           int    `json:"total_wishlist_entries"`
+		AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 	}
 	if err := json.NewDecoder(secondSeed.Body).Decode(&secondPayload); err != nil {
 		t.Fatalf("decode second seed payload: %v", err)
 	}
 	if secondPayload.CreatedItems != 0 {
 		t.Fatalf("expected no new items on second run, got %+v", secondPayload)
+	}
+	if secondPayload.DatasetKind != firstPayload.DatasetKind ||
+		secondPayload.DatasetLabel != firstPayload.DatasetLabel ||
+		secondPayload.SampleDataDisclosure != firstPayload.SampleDataDisclosure {
+		t.Fatalf("expected stable sample provenance across rerun, first=%+v second=%+v", firstPayload, secondPayload)
 	}
 	if !secondPayload.AlreadySeededForProfile {
 		t.Fatalf("expected already_seeded_for_profile=true on second run, got %+v", secondPayload)
@@ -137,6 +157,12 @@ func TestOnboardingSampleDataEndpointIsIdempotent(t *testing.T) {
 	}
 	if len(folderAssignments) < 30 {
 		t.Fatalf("expected folder assignments for richer sample inventory, got %d: %+v", len(folderAssignments), folderAssignments)
+	}
+	if settingsPayload.Settings["onboarding.sample_data.dataset_kind"] != "sample_showcase" {
+		t.Fatalf("expected persisted sample dataset kind, got %+v", settingsPayload.Settings)
+	}
+	if !strings.Contains(strings.ToLower(settingsPayload.Settings["onboarding.sample_data.disclosure"]), "example records") {
+		t.Fatalf("expected persisted sample disclosure, got %+v", settingsPayload.Settings)
 	}
 	seenFolders := make(map[string]struct{})
 	for itemID, folderName := range folderAssignments {

@@ -26,3 +26,13 @@ func Get(profileID, key string) (string, error) {
 	}
 	return v, nil
 }
+
+func Delete(profileID, key string) error {
+	if os.Getenv("CABINET_FORCE_SECURESTORE_FAIL") == "1" {
+		return fmt.Errorf("forced secure store failure")
+	}
+	if err := keyring.Delete(serviceName, profileID+":"+key); err != nil {
+		return fmt.Errorf("keyring delete: %w", err)
+	}
+	return nil
+}

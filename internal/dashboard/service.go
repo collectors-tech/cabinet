@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Card struct {
@@ -40,9 +41,15 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) Summary(ctx context.Context) (Summary, error) {
+func (s *Service) Summary(ctx context.Context, profileID string) (Summary, error) {
+	profileID = strings.TrimSpace(profileID)
 	out := Summary{}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM scanner_matches WHERE state = 'not_in_collection'`).Scan(&out.NewDiscoveries); err != nil {
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM scanner_matches m
+		JOIN scanner_candidates c ON c.id = m.candidate_id
+		WHERE m.state = 'not_in_collection' AND (? = '' OR c.profile_id = ?)
+	`, profileID, profileID).Scan(&out.NewDiscoveries); err != nil {
 		return Summary{}, fmt.Errorf("discoveries count: %w", err)
 	}
 	if err := s.db.QueryRowContext(ctx, `
@@ -50,50 +57,59 @@ func (s *Service) Summary(ctx context.Context) (Summary, error) {
 		FROM wishlist_entries w
 		JOIN canonical_items i ON i.id = w.item_id
 		JOIN scanner_candidates c ON LOWER(c.title) LIKE '%' || LOWER(i.part_number) || '%'
-		WHERE w.highlight_hit = 1
-	`).Scan(&out.WishlistHits); err != nil {
+		WHERE w.highlight_hit = 1 AND (? = '' OR w.profile_id = ?)
+	`, profileID, profileID).Scan(&out.WishlistHits); err != nil {
 		return Summary{}, fmt.Errorf("wishlist hits count: %w", err)
 	}
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(1)
 		FROM (
-			SELECT item_id, source, snapshot_date, latest_price,
-				LAG(latest_price) OVER (PARTITION BY item_id, source ORDER BY snapshot_date) AS prev_price
-			FROM price_snapshots
+			SELECT p.item_id, p.source, p.snapshot_date, p.latest_price,
+				LAG(p.latest_price) OVER (PARTITION BY p.item_id, p.source ORDER BY p.snapshot_date) AS prev_price
+			FROM price_snapshots p
+			JOIN canonical_items i ON i.id = p.item_id
+			WHERE ? = '' OR i.profile_id = ?
 		) t
 		WHERE prev_price IS NOT NULL AND latest_price < prev_price
-	`).Scan(&out.PriceDrops); err != nil {
+	`, profileID, profileID).Scan(&out.PriceDrops); err != nil {
 		return Summary{}, fmt.Errorf("price drops count: %w", err)
 	}
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(1)
 		FROM scanner_candidates c
 		JOIN scanner_matches m ON m.candidate_id = c.id
-		WHERE m.state = 'not_in_collection' AND (
+		WHERE m.state = 'not_in_collection' AND (? = '' OR c.profile_id = ?) AND (
 			LOWER(c.stock_state) = 'low_stock' OR
 			(c.stock_count > 0 AND c.stock_count <= 3)
 		)
-	`).Scan(&out.LowStockDiscoveries); err != nil {
+	`, profileID, profileID).Scan(&out.LowStockDiscoveries); err != nil {
 		return Summary{}, fmt.Errorf("low stock discoveries count: %w", err)
 	}
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(1)
 		FROM (
-			SELECT item_id, source, snapshot_date, stock_count,
-				LAG(stock_count) OVER (PARTITION BY item_id, source ORDER BY snapshot_date) AS prev_stock
-			FROM price_snapshots
+			SELECT p.item_id, p.source, p.snapshot_date, p.stock_count,
+				LAG(p.stock_count) OVER (PARTITION BY p.item_id, p.source ORDER BY p.snapshot_date) AS prev_stock
+			FROM price_snapshots p
+			JOIN canonical_items i ON i.id = p.item_id
+			WHERE ? = '' OR i.profile_id = ?
 		) t
 		WHERE prev_stock = 0 AND stock_count > 0
-	`).Scan(&out.Restocks); err != nil {
+	`, profileID, profileID).Scan(&out.Restocks); err != nil {
 		return Summary{}, fmt.Errorf("restock count: %w", err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items`).Scan(&out.Collection.TotalItems); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items WHERE ? = '' OR profile_id = ?`, profileID, profileID).Scan(&out.Collection.TotalItems); err != nil {
 		return Summary{}, fmt.Errorf("items count: %w", err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(quantity),0), COALESCE(SUM(quantity*acquisition_price),0) FROM instances`).Scan(&out.Collection.TotalInstances, &out.Collection.EstimatedValue); err != nil {
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(inst.quantity),0), COALESCE(SUM(inst.quantity*inst.acquisition_price),0)
+		FROM instances inst
+		JOIN canonical_items i ON i.id = inst.item_id
+		WHERE ? = '' OR i.profile_id = ?
+	`, profileID, profileID).Scan(&out.Collection.TotalInstances, &out.Collection.EstimatedValue); err != nil {
 		return Summary{}, fmt.Errorf("instances stats: %w", err)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT title FROM canonical_items ORDER BY created_at DESC LIMIT 5`)
+	rows, err := s.db.QueryContext(ctx, `SELECT title FROM canonical_items WHERE ? = '' OR profile_id = ? ORDER BY created_at DESC LIMIT 5`, profileID, profileID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("recently added query: %w", err)
 	}

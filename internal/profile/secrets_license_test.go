@@ -48,6 +48,19 @@ func TestPerProfileSecretAndLicenseIsolation(t *testing.T) {
 	if s1 == s2 {
 		t.Fatal("expected secrets to remain isolated by profile")
 	}
+	if err := repo.DeleteSecret(context.Background(), p1.ID, "openai_api_key"); err != nil {
+		t.Fatalf("DeleteSecret p1 error = %v", err)
+	}
+	if _, err := repo.GetSecret(context.Background(), p1.ID, "openai_api_key"); err == nil {
+		t.Fatal("expected deleted p1 secret lookup to fail")
+	}
+	s2AfterDelete, err := repo.GetSecret(context.Background(), p2.ID, "openai_api_key")
+	if err != nil {
+		t.Fatalf("GetSecret p2 after p1 delete error = %v", err)
+	}
+	if s2AfterDelete != s2 {
+		t.Fatal("deleting p1 secret must not affect p2 secret")
+	}
 
 	if err := repo.PutLicense(context.Background(), p1.ID, `{"tier":"pro"}`); err != nil {
 		t.Fatalf("PutLicense p1 error = %v", err)

@@ -38,6 +38,6 @@ Define Display settings screen behavior.
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-SET-DIS-01 | Retry display load failure | `Retry` re-attempts display fetch deterministically | planned: `ui.web/cypress/e2e/settings/display/spec.cy.ts` `settings-display-retry` |
-| UC-SET-DIS-02 | Clear selection action | `Clear selection` clears selected display items | planned: `ui.web/cypress/e2e/settings/display/spec.cy.ts` `settings-display-clear-selection` |
-| UC-SET-DIS-03 | Update display action | `Update display` persists display selections | planned: `ui.web/cypress/e2e/settings/display/spec.cy.ts` `settings-display-update` |
+| UC-SET-DIS-01 | Retry display load failure | `Retry` re-attempts display fetch deterministically | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-003 retries display settings load failure without route reload` |
+| UC-SET-DIS-02 | Clear selection action | `Clear selection` clears selected display items | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 clears selection without route transition` |
+| UC-SET-DIS-03 | Update display action | `Update display` persists display selections | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 updates display with deterministic success feedback` |

@@ -31,7 +31,7 @@ describe('integrations/ui-screen-scanner', () => {
     cy.location('pathname').should('match', /^\/scanner\/?$/)
     cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('contain', 'Market Watch')
     cy.get('[data-testid="sidebar-nav-link-market-watch"]').should('not.contain', 'Scanner')
-    cy.contains('h1', 'Market Watch').should('be.visible')
+    cy.get('main').contains('h1', 'Market Watch').should('be.visible')
   })
 
   it('UI-SCREEN-SCANNER-001 supports query set create/load and run controls', () => {
@@ -134,7 +134,7 @@ describe('integrations/ui-screen-scanner', () => {
       .and('contain', 'Enter at least one keyword before creating a query set.')
     cy.get('[data-testid="scanner-action-feedback"]')
       .should('contain', 'Create Query Set requires the highlighted fields.')
-      .and('contain', 'Provide a query set name.')
+      .and('contain', 'Query set name is required.')
       .and('contain', 'Enter at least one keyword before creating a query set.')
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()

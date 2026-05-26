@@ -62,6 +62,14 @@ type ImportDryRunSummaryResponse = {
   conflict_details?: ImportConflictDetail[]
 }
 
+type ImportApplySummaryResponse = {
+  total_items?: number
+  created?: number
+  merged?: number
+  skipped?: number
+  failed?: number
+}
+
 type ImportSnapshotRequest = {
   snapshot: {
     schema_version?: number
@@ -124,6 +132,16 @@ function parseImportSnapshotRequest(rawInput: string): ImportSnapshotRequest {
     return parsed as ImportSnapshotRequest
   }
   return { snapshot: parsed }
+}
+
+function formatImportApplySummary(prefix: string, summary: ImportApplySummaryResponse): string {
+  const totalItems = Number(summary.total_items ?? 0)
+  const created = Number(summary.created ?? 0)
+  const merged = Number(summary.merged ?? 0)
+  const skipped = Number(summary.skipped ?? 0)
+  const failed = Number(summary.failed ?? 0)
+
+  return `${prefix}: ${totalItems} item${totalItems === 1 ? '' : 's'}, ${created} created, ${merged} merged, ${skipped} skipped, ${failed} failed.`
 }
 
 export function SettingsOperations() {
@@ -287,7 +305,9 @@ export function SettingsOperations() {
     } catch {
       setImportSummary(null)
       setDataTone('destructive')
-      setDataStatus('Import dry-run failed.')
+      setDataStatus(
+        'Import dry-run failed. No records were changed; fix the JSON snapshot and run dry-run again.'
+      )
     } finally {
       setImportDryRunPending(false)
     }
@@ -313,12 +333,15 @@ export function SettingsOperations() {
       if (!response.ok) {
         throw new Error('failed_to_apply_import')
       }
-      setDataStatus('Import applied successfully.')
+      const payload = (await response.json()) as ImportApplySummaryResponse
+      setDataStatus(formatImportApplySummary('Import applied', payload))
       setImportSummary(null)
       setLastDryRunRequest(null)
     } catch {
       setDataTone('destructive')
-      setDataStatus('Import apply failed.')
+      setDataStatus(
+        'Import apply failed. No records were changed; review the dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportApplyPending(false)
     }
@@ -422,7 +445,9 @@ export function SettingsOperations() {
     } catch {
       setCsvSummary(null)
       setCsvTone('destructive')
-      setCsvStatus('CSV dry-run failed.')
+      setCsvStatus(
+        'CSV dry-run failed. No records were changed; fix the CSV rows or mapping and run dry-run again.'
+      )
     } finally {
       setImportCsvDryRunPending(false)
     }
@@ -448,12 +473,15 @@ export function SettingsOperations() {
       if (!response.ok) {
         throw new Error('failed_to_apply_csv_import')
       }
-      setCsvStatus('CSV import applied successfully.')
+      const payload = (await response.json()) as ImportApplySummaryResponse
+      setCsvStatus(formatImportApplySummary('CSV import applied', payload))
       setCsvSummary(null)
       setLastCsvDryRunRequest(null)
     } catch {
       setCsvTone('destructive')
-      setCsvStatus('CSV import apply failed.')
+      setCsvStatus(
+        'CSV import apply failed. No records were changed; review the CSV dry-run summary and retry when data services are healthy.'
+      )
     } finally {
       setImportCsvApplyPending(false)
     }
