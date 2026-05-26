@@ -1001,7 +1001,13 @@ describe('purchases/purchase-inbox', () => {
             ],
           },
         ],
-        summary: { count: 1 },
+        summary: {
+          count: 1,
+          scoped_packages: 1,
+          high_confidence: 1,
+          medium_confidence: 0,
+          low_confidence: 0,
+        },
       },
     }).as('listForwarderPackageMatchSuggestions')
 
@@ -1045,6 +1051,14 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-review-summary"]')
       .should('contain', 'Suggestions')
       .and('contain', '1')
+    cy.get('[data-testid="forwarder-package-suggestion-summary"]')
+      .should('contain', 'Candidates')
+      .and('contain', '1')
+      .and('contain', 'Scoped packages')
+      .and('contain', 'High confidence')
+      .and('contain', 'Medium confidence')
+      .and('contain', 'Low confidence')
+      .and('contain', '0')
     cy.get('[data-testid="forwarder-package-review-filter-suggested"]').click()
     cy.get('[data-testid="forwarder-package-row"]')
       .should('have.length', 1)

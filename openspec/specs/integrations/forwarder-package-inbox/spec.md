@@ -169,3 +169,11 @@ Cabinet SHALL include deterministic review-summary metadata with non-mutating fo
 - **GIVEN** Cabinet has computed zero or more non-mutating package-to-purchase-arrival match suggestions for a profile or a scoped package
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions`
 - **THEN** Cabinet MUST return `summary.count`, `summary.high_confidence`, `summary.medium_confidence`, `summary.low_confidence`, and `summary.scoped_packages` values derived from the returned suggestions while keeping the suggestion request non-mutating.
+
+### Requirement INTEGRATION-051: Forwarder package inbox UI SHALL surface suggestion confidence summary
+Cabinet SHALL display the non-mutating match-suggestion summary in the forwarder package inbox so reviewers can see total candidates, scoped packages, and high/medium/low confidence buckets before drilling into package rows.
+
+#### Scenario: Review match-suggestion confidence buckets in the inbox
+- **GIVEN** the forwarder package inbox has loaded package records and match-suggestion summary metadata
+- **WHEN** the user requests match suggestions from the inbox
+- **THEN** Cabinet MUST show candidate count, scoped package count, high-confidence count, medium-confidence count, and low-confidence count from the API response without mutating package reconciliation links.
