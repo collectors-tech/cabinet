@@ -244,6 +244,12 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if payload.Summary["count"] != 1 || len(payload.Suggestions) != 1 {
 		t.Fatalf("expected one suggestion, got %+v", payload)
 	}
+	if payload.Summary["high_confidence"] != 1 || payload.Summary["medium_confidence"] != 0 || payload.Summary["low_confidence"] != 0 {
+		t.Fatalf("expected confidence-bucketed suggestion summary, got %+v", payload.Summary)
+	}
+	if payload.Summary["scoped_packages"] != 0 {
+		t.Fatalf("expected unscoped package suggestion summary, got %+v", payload.Summary)
+	}
 	suggestion := payload.Suggestions[0]
 	if suggestion["item_id"] != "fwd-match-item" || suggestion["confidence_label"] != "high" {
 		t.Fatalf("expected high confidence item suggestion, got %+v", suggestion)

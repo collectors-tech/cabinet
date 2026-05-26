@@ -161,3 +161,11 @@ Cabinet SHALL document the forwarder package import, CSV/email ingestion, reconc
 - **GIVEN** Cabinet exposes forwarding package endpoints for imports, links, audit events, and match suggestions
 - **WHEN** a developer reviews the OpenAPI specification
 - **THEN** the specification MUST include /api/forwarding/packages, /api/forwarding/packages/import-csv, /api/forwarding/packages/import-email, /api/forwarding/package-links, and /api/forwarding/package-match-suggestions with the persisted package, link, event, non-mutating suggestion, and row-error schemas used by the tested API responses.
+
+### Requirement INTEGRATION-050: Forwarder package match suggestions SHALL summarize confidence buckets
+Cabinet SHALL include deterministic review-summary metadata with non-mutating forwarder package match suggestions so reviewers and UI clients can see total candidate count, scoped-package state, and high/medium/low confidence buckets without re-scoring suggestion rows client-side.
+
+#### Scenario: Review confidence-bucketed match suggestions
+- **GIVEN** Cabinet has computed zero or more non-mutating package-to-purchase-arrival match suggestions for a profile or a scoped package
+- **WHEN** a client requests `/api/forwarding/package-match-suggestions`
+- **THEN** Cabinet MUST return `summary.count`, `summary.high_confidence`, `summary.medium_confidence`, `summary.low_confidence`, and `summary.scoped_packages` values derived from the returned suggestions while keeping the suggestion request non-mutating.
