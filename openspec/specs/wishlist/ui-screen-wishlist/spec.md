@@ -1,43 +1,55 @@
 ## Purpose
+
 Define Wishlist screen behavior built on shared task/collection table workflows.
 
 ## Requirements
+
 ### Requirement UI-SCREEN-WISHLIST-001: Wishlist screen SHALL support table filters and row/card view toggle
+
 Wishlist screen SHALL support status/priority filtering and rows/cards view mode toggle.
 
 #### Scenario: Toggle wishlist view mode
+
 - **GIVEN** wishlist route is loaded
 - **WHEN** user switches between `Rows` and `Cards`
 - **THEN** selected view mode MUST be applied and persisted for wishlist route context
 
 ### Requirement UI-SCREEN-WISHLIST-002: Wishlist screen SHALL support create and import entry workflows
+
 Wishlist screen SHALL expose primary actions for create and import dialogs.
 
 #### Scenario: Open wishlist create/import actions
+
 - **GIVEN** wishlist route is loaded
 - **WHEN** user clicks `Create` or `Import`
 - **THEN** corresponding drawer/dialog MUST open and allow user action completion or cancel
 
 ### Requirement UI-SCREEN-WISHLIST-003: Wishlist screen SHALL support selection and bulk action affordances
+
 Wishlist screen SHALL support row/card selection and bulk action controls.
 
 ### Requirement UI-SCREEN-WISHLIST-006: Wishlist table SHALL support title sorting
+
 Wishlist table rows view SHALL expose sortable `Title` column with deterministic ordering behavior.
 
 #### Scenario: Sort wishlist by title
+
 - **GIVEN** wishlist rows view is visible
 - **WHEN** user clicks `Title` column sort control
 - **THEN** wishlist entries MUST reorder by title with deterministic ascending/descending toggle behavior
 
 #### Scenario: Select multiple wishlist entries
+
 - **GIVEN** wishlist rows/cards are visible
 - **WHEN** user selects multiple entries
 - **THEN** bulk action controls MUST appear and selected state MUST remain consistent through pagination changes
 
 ### Requirement UI-SCREEN-WISHLIST-004: Wishlist screen SHALL expose compact icon header actions
+
 Wishlist SHALL provide compact icon-only header actions for creating a wishlist entry, creating a collection, and importing wishlist entries.
 
 #### Scenario: Wishlist compact header actions
+
 - **GIVEN** user is on `/wishlist`
 - **WHEN** user clicks the new-entry icon action
 - **THEN** primary create-wishlist-entry flow MUST open
@@ -45,15 +57,18 @@ Wishlist SHALL provide compact icon-only header actions for creating a wishlist 
 - **AND** Wishlist MUST NOT render an adjacent `Create` menu
 
 ### Requirement UI-SCREEN-WISHLIST-005: Wishlist collection creation SHALL use the header modal
+
 Wishlist SHALL support collection creation from the header collection icon and MUST NOT render inline collection creation controls inside the table toolbar.
 
 #### Scenario: Create collection from Wishlist header
+
 - **GIVEN** user is on `/wishlist`
 - **WHEN** user clicks the create-collection icon action
 - **THEN** a collection creation modal MUST open
 - **AND** saving a valid collection MUST persist it for shared collection filters
 
 #### Scenario: Blank collection modal submission shows validation
+
 - **GIVEN** Wishlist collection creation modal is open
 - **WHEN** user clicks `Save` with an empty collection name
 - **THEN** the modal MUST remain open
@@ -61,9 +76,11 @@ Wishlist SHALL support collection creation from the header collection icon and M
 - **AND** only an explicit cancel/dismiss action MAY close the modal without a create result
 
 ### Requirement UI-SCREEN-WISHLIST-007: Wishlist rows SHALL use collection semantics and MUST NOT leak task seed labels
+
 Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` records with `/api/wishlist` metadata overlays and MUST NOT render generic task IDs or task taxonomy labels.
 
 #### Scenario: Wishlist semantics in rows view
+
 - **GIVEN** `/api/items?status=wishlist` returns canonical wishlist item records and `/api/wishlist` returns wishlist metadata overlays
 - **WHEN** user opens wishlist rows view
 - **THEN** rendered IDs MUST align to wishlist `item_id` values
@@ -72,18 +89,22 @@ Wishlist rows/cards MUST be sourced from canonical `/api/items?status=wishlist` 
 - **AND** UI MUST NOT render generic task-template headers such as `Task` or task workflow labels such as `Backlog`
 
 ### Requirement UI-SCREEN-WISHLIST-008: Wishlist screen SHALL avoid stale planning summary controls
+
 Wishlist screen SHALL remain table-first and MUST NOT render the old planning summary cards or persisted planning-focus controls.
 
 #### Scenario: Stale planning controls are absent
+
 - **GIVEN** wishlist route is loaded with wishlist metadata overlays
 - **WHEN** the screen renders
 - **THEN** the old `All planned`, `High priority`, `Below target`, and `Steady watch` summary cards MUST NOT appear
 - **AND** `cabinet.wishlistPlanningFocus` MUST NOT be retained in local storage
 
 ### Requirement UI-SCREEN-WISHLIST-009: Wishlist rows SHALL capture purchase details without row-menu ownership hacks
+
 Wishlist rows SHALL expose owned state and purchase details through dedicated row fields and purchase dialog controls, not through a `Mark owned` row action.
 
 #### Scenario: Add purchase details
+
 - **GIVEN** wishlist route shows a wanted item with wishlist entry metadata
 - **WHEN** user clicks the row purchase action
 - **THEN** the purchase dialog MUST open with sensible defaults
@@ -101,10 +122,26 @@ Wishlist rows and cards SHALL render date context without implying that normal e
 - **AND** the UI MUST show `Updated` from the latest pricing history or refresh date
 - **AND** missing legacy date context MUST render a non-misleading empty value
 
+### Requirement UI-SCREEN-WISHLIST-017: Wishlist cost and quantity fields SHALL expose stable stepper controls
+
+Wishlist rows view SHALL expose accessible decrement/increment controls around inline Cost and Quantity numeric fields while preserving direct keyboard entry.
+
+#### Scenario: Edit cost and quantity with stepper controls
+
+- **GIVEN** wishlist rows view is visible with wishlist metadata overlays
+- **WHEN** user edits Cost or Quantity by typing numeric values or using adjacent decrement/increment controls
+- **THEN** the row MUST persist the corresponding wishlist metadata update
+- **AND** Cost MUST NOT decrement below zero
+- **AND** Quantity MUST NOT decrement below its valid minimum
+- **AND** native browser number spinner affordances MUST be hidden where supported
+- **AND** the controls MUST remain fixed-width in the table layout
+
 ## Use-Case IDs and E2E Mapping
-| UC ID | Flow | Expected Result | E2E Mapping |
-| --- | --- | --- | --- |
-| UC-WSH-01 | Filter wishlist and switch views | List updates and view mode persists | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-filter-view-toggle` |
-| UC-WSH-02 | Open create/import | Correct dialog/drawer opens | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-create-import` |
-| UC-WSH-03 | Bulk select wishlist entries | Bulk controls appear with stable selection state | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-bulk-actions` |
-| UC-WSH-04 | Sort wishlist by title | Title sort control reorders rows deterministically | planned: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `wishlist-title-sort` |
+
+| UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |
+| --------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UC-WSH-01 | Filter wishlist and switch views | List updates and view mode persists                                                                                    | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-filter-view-toggle`                                                                                 |
+| UC-WSH-02 | Open create/import               | Correct dialog/drawer opens                                                                                            | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-create-import`                                                                                      |
+| UC-WSH-03 | Bulk select wishlist entries     | Bulk controls appear with stable selection state                                                                       | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-bulk-actions`                                                                                       |
+| UC-WSH-04 | Sort wishlist by title           | Title sort control reorders rows deterministically                                                                     | planned: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `wishlist-title-sort`                                                             |
+| UC-WSH-17 | Edit wishlist Cost and Quantity  | Inline numeric fields support keyboard entry plus accessible fixed-width stepper controls with lower-bound constraints | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-017 edits cost and quantity with stable stepper controls` |
