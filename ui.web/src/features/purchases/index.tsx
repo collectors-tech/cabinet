@@ -1413,6 +1413,29 @@ export function Purchases() {
                     const links = packageLinks[pkg.id] ?? []
                     const events = packageLinkEvents[pkg.id] ?? []
                     const suggestions = packageSuggestions[pkg.id] ?? []
+                    const evidenceBadges = [
+                      {
+                        label:
+                          links.length === 1
+                            ? '1 active link'
+                            : links.length + ' active links',
+                        visible: links.length > 0,
+                      },
+                      {
+                        label:
+                          suggestions.length === 1
+                            ? '1 suggestion'
+                            : suggestions.length + ' suggestions',
+                        visible: suggestions.length > 0,
+                      },
+                      {
+                        label:
+                          events.length === 1
+                            ? '1 audit event'
+                            : events.length + ' audit events',
+                        visible: events.length > 0,
+                      },
+                    ].filter((badge) => badge.visible)
                     return (
                     <article
                       key={pkg.id}
@@ -1432,6 +1455,25 @@ export function Purchases() {
                         <span className='rounded-md border px-2 py-1 text-xs font-medium'>
                           {labelForStatus(pkg.status)}
                         </span>
+                      </div>
+                      <div
+                        className='mt-3 flex flex-wrap gap-2 text-xs'
+                        data-testid='forwarder-package-row-evidence'
+                      >
+                        {evidenceBadges.length > 0 ? (
+                          evidenceBadges.map((badge) => (
+                            <span
+                              key={badge.label}
+                              className='rounded-md border bg-muted/30 px-2 py-1 font-medium'
+                            >
+                              {badge.label}
+                            </span>
+                          ))
+                        ) : (
+                          <span className='text-muted-foreground'>
+                            No loaded reconciliation evidence
+                          </span>
+                        )}
                       </div>
                       <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-4'>
                         <div>
