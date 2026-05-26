@@ -21,6 +21,10 @@ type QuerySet = {
   condition?: string
   schedule_cron?: string
   enabled?: boolean
+  last_run_status?: 'never' | 'running' | 'succeeded' | 'failed'
+  last_run_at?: string
+  last_run_message?: string
+  last_candidate_count?: number
 }
 
 type Failure = {
@@ -233,7 +237,17 @@ export function Scanner() {
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
-      setRunMetaByQuerySet({})
+      setRunMetaByQuerySet(
+        Object.fromEntries(
+          (querySetPayload.query_sets ?? []).map((querySet) => [
+            querySet.id,
+            {
+              status: querySet.last_run_status ?? 'never',
+              ranAtISO: querySet.last_run_at,
+            },
+          ])
+        )
+      )
       setProviderHealth(healthPayload.status ?? 'unknown')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
@@ -701,6 +715,12 @@ export function Scanner() {
     const count = candidatesByQuerySet[querySetID]?.length ?? 0
     if (count > 0) {
       return `Candidates: ${count}`
+    }
+    const persistedCount =
+      querySets.find((querySet) => querySet.id === querySetID)
+        ?.last_candidate_count ?? 0
+    if (persistedCount > 0) {
+      return `Candidates: ${persistedCount}`
     }
     return 'No output'
   }
@@ -1483,6 +1503,18 @@ export function Scanner() {
                 <p className='text-xs text-muted-foreground'>
                   Last run status: {formatRunStatus(selectedOutputQuerySetID)}
                 </p>
+                {querySets.find(
+                  (querySet) => querySet.id === selectedOutputQuerySetID
+                )?.last_run_message ? (
+                  <p className='text-xs text-muted-foreground'>
+                    Latest failure:{' '}
+                    {
+                      querySets.find(
+                        (querySet) => querySet.id === selectedOutputQuerySetID
+                      )?.last_run_message
+                    }
+                  </p>
+                ) : null}
               </div>
               <Button
                 type='button'
