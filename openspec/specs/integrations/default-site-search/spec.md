@@ -35,6 +35,7 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **WHEN** user runs `Run Now` or triggers scheduled refresh
 - **THEN** runtime MUST execute matching query sets and return deterministic run summary payloads
 - **AND** UI MUST surface execution status and summary data for user verification
+- **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
 
 ### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries and Wishlist handoff
 Cabinet MUST provide workflow handoff from saved-search output into Discoveries and Wishlist actions.
