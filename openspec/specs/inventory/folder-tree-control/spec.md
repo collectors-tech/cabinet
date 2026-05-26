@@ -199,6 +199,26 @@ Users MUST be able to apply a root-level alphabetical sort without disturbing ch
 - **AND** selecting that folder MUST show the moved item in the corresponding filtered inventory view
 - **AND** refreshing the workspace MUST preserve the assignment outcome for the same active profile
 
+### Requirement UI-SCREEN-INVENTORY-FOLDER-TREE-018: Browse picker SHALL support searchable folder selection
+The inventory Browse popup MUST provide a compact folder search control above the picker tree so users can find folders in large hierarchies without leaving the selector context.
+
+#### Scenario: Search folder names in the Browse picker
+- **GIVEN** user opens the inventory Browse popup
+- **WHEN** they type a folder query into the picker search control
+- **THEN** matching folder entries MUST remain selectable in the popup tree
+- **AND** non-matching branches MUST be filtered out while preserving matching ancestor/child context
+- **AND** the search input MUST expose an accessible label for assistive technology
+
+#### Scenario: Clear Browse picker search
+- **GIVEN** the inventory Browse popup tree is filtered by a search query
+- **WHEN** user clears the query
+- **THEN** the full folder picker tree MUST be restored
+
+#### Scenario: No Browse picker search matches
+- **GIVEN** user searches the inventory Browse popup tree
+- **WHEN** no folder entry matches the query
+- **THEN** the popup MUST show a clear compact no-match state
+
 ## Implementation recommendation
 Preferred component strategy:
 - `@react-aria/tree` + `@react-stately/tree` for accessible tree semantics
