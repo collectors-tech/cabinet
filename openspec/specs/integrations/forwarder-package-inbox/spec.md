@@ -153,3 +153,11 @@ Cabinet SHALL show package-row reconciliation evidence labels derived from the c
 - **GIVEN** the forwarder package inbox has loaded package records plus package-link, match-suggestion, or decision audit event evidence
 - **WHEN** the user reviews the visible package rows after refreshing link or suggestion evidence
 - **THEN** Cabinet MUST show each visible package row's loaded active-link, suggestion, and audit-event counts, and MUST show an explicit no-evidence state when no reconciliation evidence is loaded for that package.
+
+### Requirement INTEGRATION-049: Forwarder package APIs SHALL be documented in OpenAPI
+Cabinet SHALL document the forwarder package import, CSV/email ingestion, reconciliation link decision, unlink, audit event, and match suggestion APIs in docs/api/openapi.yaml so integration clients can rely on the same request and response contract covered by app tests.
+
+#### Scenario: Review the forwarding API contract
+- **GIVEN** Cabinet exposes forwarding package endpoints for imports, links, audit events, and match suggestions
+- **WHEN** a developer reviews the OpenAPI specification
+- **THEN** the specification MUST include /api/forwarding/packages, /api/forwarding/packages/import-csv, /api/forwarding/packages/import-email, /api/forwarding/package-links, and /api/forwarding/package-match-suggestions with the persisted package, link, event, non-mutating suggestion, and row-error schemas used by the tested API responses.
