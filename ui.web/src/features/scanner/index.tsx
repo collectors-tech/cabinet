@@ -494,6 +494,7 @@ export function Scanner() {
         `Failures: ${payload.failures ?? 0}`,
       ],
     })
+    await loadScanner()
   }
 
   const handoffToDiscoveries = async (querySet: QuerySet) => {
@@ -724,6 +725,18 @@ export function Scanner() {
     }
     return 'No output'
   }
+
+  const latestRunHistory = useMemo(
+    () =>
+      querySets.map((querySet) => ({
+        id: querySet.id,
+        name: querySet.name,
+        status: formatRunStatus(querySet.id),
+        ranAt: formatRunTime(querySet.id),
+        output: formatOutputSummary(querySet.id),
+      })),
+    [querySets, runMetaByQuerySet, runSummaryByQuerySet, candidatesByQuerySet]
+  )
 
   const launchQuickScan = () => {
     const isMobileViewport =
@@ -1049,6 +1062,33 @@ export function Scanner() {
             </span>
           )}
         </section>
+        {latestRunHistory.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-run-history'
+          >
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>Latest run history</p>
+              <p className='text-xs text-muted-foreground'>
+                Hydrated from saved query metadata
+              </p>
+            </div>
+            <ul className='mt-2 divide-y text-xs'>
+              {latestRunHistory.map((row) => (
+                <li
+                  key={row.id}
+                  className='grid gap-1 py-2 md:grid-cols-[1.2fr_0.8fr_1fr_1fr]'
+                  data-testid={`market-watch-run-history-${row.id}`}
+                >
+                  <span className='font-medium'>{row.name}</span>
+                  <span className='capitalize'>{row.status}</span>
+                  <span className='text-muted-foreground'>{row.ranAt}</span>
+                  <span className='text-muted-foreground'>{row.output}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <section
           className='rounded-md border p-2 text-xs'
           data-testid='card-scanner-queue'
