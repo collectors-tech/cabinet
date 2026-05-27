@@ -209,6 +209,33 @@ describe("ui-screen-wishlist", () => {
     );
   });
 
+  it("UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails", () => {
+    signInToWishlist();
+
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-1"]')
+      .should("be.visible")
+      .and("have.attr", "aria-hidden", "true")
+      .and("have.attr", "data-thumbnail-key", "item-collector-1");
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-2"]')
+      .should("be.visible")
+      .and("have.attr", "aria-hidden", "true")
+      .and("have.attr", "data-thumbnail-key", "item-collector-2");
+
+    cy.get('[data-testid="wishlist-thumbnail-item-collector-1"]')
+      .invoke("attr", "style")
+      .then((firstStyle) => {
+        cy.get('[data-testid="wishlist-thumbnail-item-collector-2"]')
+          .invoke("attr", "style")
+          .should("not.eq", firstStyle);
+      });
+
+    cy.contains("tr", "AFX Mega-G+ Camaro Wildfire").within(() => {
+      cy.contains("AFX Mega-G+ Camaro Wildfire").should("be.visible");
+      cy.contains("22073").should("not.exist");
+    });
+  });
+
   it("UI-SCREEN-WISHLIST-003 supports multi-select with bulk action toolbar", () => {
     signInToWishlist();
 

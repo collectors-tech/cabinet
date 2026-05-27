@@ -52,6 +52,7 @@ type TasksProps = {
 type WishlistItemPayload = {
   id?: string
   title?: string
+  thumbnail_url?: string
   part_number?: string
   category?: string
   priority?: string
@@ -611,6 +612,7 @@ export function Tasks({
             item.title?.trim() ||
             item.part_number?.trim() ||
             `Wishlist item ${index + 1}`,
+          thumbnailUrl: item.thumbnail_url?.trim(),
           partNumber: item.part_number?.trim(),
           status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
           label: item.category?.trim() || 'collection',

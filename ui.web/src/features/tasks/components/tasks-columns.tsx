@@ -356,6 +356,54 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
   )
 }
 
+function hashWishlistThumbnailKey(value: string) {
+  return [...value].reduce((hash, char) => {
+    return (hash * 31 + char.charCodeAt(0)) % 360
+  }, 23)
+}
+
+function WishlistThumbnail({ task }: { task: Task }) {
+  const key = task.itemID?.trim() || task.id.trim() || task.title.trim()
+  const hue = hashWishlistThumbnailKey(key)
+  const accentHue = (hue + 46) % 360
+  const initials = task.title
+    .split(/\s+/)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  if (task.thumbnailUrl) {
+    return (
+      <img
+        src={task.thumbnailUrl}
+        alt=''
+        aria-hidden='true'
+        data-testid={`wishlist-thumbnail-${task.id}`}
+        data-thumbnail-key={key}
+        className='h-8 w-8 shrink-0 rounded-md border object-cover'
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-hidden='true'
+      data-testid={`wishlist-thumbnail-${task.id}`}
+      data-thumbnail-key={key}
+      className='relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border text-[0.625rem] font-semibold text-white shadow-sm'
+      style={{
+        background: `linear-gradient(135deg, hsl(${hue} 68% 42%), hsl(${accentHue} 72% 36%))`,
+      }}
+    >
+      <span className='absolute inset-x-0 top-0 h-1/3 bg-white/18' />
+      <span className='absolute right-0 bottom-0 h-4 w-4 rounded-tl-full bg-black/20' />
+      <span className='relative'>{initials || 'W'}</span>
+    </span>
+  )
+}
+
 function WishlistCostCell({
   task,
   onWishlistInlineUpdate,
@@ -717,23 +765,26 @@ export function getTasksColumns({
         const label = labels.find((label) => label.value === row.original.label)
 
         return (
-          <div className='flex min-w-0 flex-col gap-1'>
-            {!isInventoryRoute && !isWishlistRoute && label ? (
-              <Badge variant='outline'>{label.label}</Badge>
-            ) : null}
-            <div className='flex min-w-0 space-x-2'>
-              <span
-                className='block min-w-0 max-w-full truncate font-medium'
-                title={String(row.getValue('title'))}
-              >
-                {row.getValue('title')}
-              </span>
+          <div className='flex min-w-0 items-center gap-2'>
+            {isWishlistRoute ? <WishlistThumbnail task={row.original} /> : null}
+            <div className='flex min-w-0 flex-col gap-1'>
+              {!isInventoryRoute && !isWishlistRoute && label ? (
+                <Badge variant='outline'>{label.label}</Badge>
+              ) : null}
+              <div className='flex min-w-0 space-x-2'>
+                <span
+                  className='block min-w-0 max-w-full truncate font-medium'
+                  title={String(row.getValue('title'))}
+                >
+                  {row.getValue('title')}
+                </span>
+              </div>
+              {isWishlistRoute && row.original.notes ? (
+                <span className='truncate text-xs text-muted-foreground'>
+                  {row.original.notes}
+                </span>
+              ) : null}
             </div>
-            {isWishlistRoute && row.original.notes ? (
-              <span className='truncate text-xs text-muted-foreground'>
-                {row.original.notes}
-              </span>
-            ) : null}
           </div>
         )
       },

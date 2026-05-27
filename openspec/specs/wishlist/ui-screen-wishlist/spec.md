@@ -136,6 +136,19 @@ Wishlist rows view SHALL expose accessible decrement/increment controls around i
 - **AND** native browser number spinner affordances MUST be hidden where supported
 - **AND** the controls MUST remain fixed-width in the table layout
 
+### Requirement UI-SCREEN-WISHLIST-018: Wishlist rows SHALL render compact deterministic thumbnails
+
+Wishlist rows view SHALL render a compact thumbnail before each item title. When API thumbnail media is missing, the row MUST render a deterministic generated identicon-style fallback derived from the stable item identifier.
+
+#### Scenario: Wishlist row thumbnails render without duplicating the title
+
+- **GIVEN** wishlist rows view is loaded with canonical wishlist item records
+- **WHEN** an item has no thumbnail media
+- **THEN** the row MUST show a compact deterministic generated thumbnail before the title
+- **AND** fallback thumbnails for distinct sample rows MUST be visually distinct and stable for the same item identifier
+- **AND** the thumbnail MUST be decorative for assistive technology and MUST NOT duplicate the item title
+- **AND** the dense wishlist table layout MUST keep the title and notes readable on desktop and mobile widths
+
 ## Use-Case IDs and E2E Mapping
 
 | UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |
@@ -145,3 +158,4 @@ Wishlist rows view SHALL expose accessible decrement/increment controls around i
 | UC-WSH-03 | Bulk select wishlist entries     | Bulk controls appear with stable selection state                                                                       | planned: `cypress/e2e/ui/wishlist.cy.ts` `wishlist-bulk-actions`                                                                                       |
 | UC-WSH-04 | Sort wishlist by title           | Title sort control reorders rows deterministically                                                                     | planned: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `wishlist-title-sort`                                                             |
 | UC-WSH-17 | Edit wishlist Cost and Quantity  | Inline numeric fields support keyboard entry plus accessible fixed-width stepper controls with lower-bound constraints | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-017 edits cost and quantity with stable stepper controls` |
+| UC-WSH-18 | Show row thumbnails              | Rows render stable decorative thumbnails with deterministic fallback styling                                            | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails`        |
