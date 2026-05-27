@@ -188,6 +188,9 @@ describe('integrations/ui-screen-market-watch', () => {
             name: 'Bonza AFX Watch',
             keywords: ['AFX', 'Mega G+'],
             provider_scope: ['bonzaslotcars'],
+            last_run_status: 'succeeded',
+            last_run_at: '2026-05-26T06:41:00Z',
+            last_candidate_count: 3,
           },
           {
             id: 'qs-mw-table-2',
@@ -219,6 +222,8 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('th', 'Latest Output Summary').should('be.visible')
       cy.contains('td', 'Bonza AFX Watch').should('be.visible')
       cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', 'Candidates: 3').should('be.visible')
     })
   })
 

@@ -12,27 +12,32 @@ import (
 )
 
 type QuerySet struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Keywords      []string `json:"keywords"`
-	Exclusions    []string `json:"exclusions"`
-	ProviderScope []string `json:"provider_scope"`
-	ItemsPerPage  int      `json:"items_per_page"`
-	MaxPrice      float64  `json:"max_price"`
-	Region        string   `json:"region"`
-	Condition     string   `json:"condition"`
-	ScheduleCron  string   `json:"schedule_cron"`
-	Enabled       bool     `json:"enabled"`
-	RateLimitRPS  int      `json:"rate_limit_rps"`
-	MaxRetryCount int      `json:"max_retry_count"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Keywords           []string `json:"keywords"`
+	Exclusions         []string `json:"exclusions"`
+	ProviderScope      []string `json:"provider_scope"`
+	ItemsPerPage       int      `json:"items_per_page"`
+	MaxPrice           float64  `json:"max_price"`
+	Region             string   `json:"region"`
+	Condition          string   `json:"condition"`
+	ScheduleCron       string   `json:"schedule_cron"`
+	Enabled            bool     `json:"enabled"`
+	RateLimitRPS       int      `json:"rate_limit_rps"`
+	MaxRetryCount      int      `json:"max_retry_count"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
+	LastRunStatus      string   `json:"last_run_status,omitempty"`
+	LastRunAt          string   `json:"last_run_at,omitempty"`
+	LastRunMessage     string   `json:"last_run_message,omitempty"`
+	LastCandidateCount int      `json:"last_candidate_count,omitempty"`
 }
 
 type CandidateInput struct {
 	ListingID  string  `json:"listing_id"`
 	Title      string  `json:"title"`
 	Price      float64 `json:"price"`
+	Currency   string  `json:"currency,omitempty"`
 	Shipping   float64 `json:"shipping"`
 	URL        string  `json:"url"`
 	Image      string  `json:"image"`
@@ -215,7 +220,49 @@ func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id strin
 	}
 	q.ProviderScope = normalizeProviderScope(q.ProviderScope)
 	q.Enabled = enabled == 1
+	if err := s.populateQuerySetRunSnapshot(ctx, strings.TrimSpace(profileID), &q); err != nil {
+		return QuerySet{}, err
+	}
 	return q, nil
+}
+
+func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID string, q *QuerySet) error {
+	if q == nil || strings.TrimSpace(q.ID) == "" {
+		return nil
+	}
+	var candidateCount int
+	var latestCandidateAt sql.NullString
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*), MAX(last_seen)
+		FROM scanner_candidates
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateCount, &latestCandidateAt); err != nil {
+		return fmt.Errorf("query set run candidate snapshot: %w", err)
+	}
+	var failureMessage, failureAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT message, created_at
+		FROM scanner_failures
+		WHERE query_set_id = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, q.ID).Scan(&failureMessage, &failureAt)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("query set run failure snapshot: %w", err)
+	}
+
+	q.LastCandidateCount = candidateCount
+	q.LastRunStatus = "never"
+	if latestCandidateAt.Valid && strings.TrimSpace(latestCandidateAt.String) != "" {
+		q.LastRunStatus = "succeeded"
+		q.LastRunAt = latestCandidateAt.String
+	}
+	if failureAt != "" && (q.LastRunAt == "" || failureAt >= q.LastRunAt) {
+		q.LastRunStatus = "failed"
+		q.LastRunAt = failureAt
+		q.LastRunMessage = failureMessage
+	}
+	return nil
 }
 
 func defaultProviderScope(region string) []string {

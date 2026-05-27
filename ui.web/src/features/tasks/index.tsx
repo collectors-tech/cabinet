@@ -94,6 +94,8 @@ type WishlistEntryPayload = {
   purchase_condition?: string
   quantity?: number
   needed_quantity?: number
+  created_at?: string
+  updated_at?: string
 }
 
 type WishlistInlineChanges = {
@@ -631,6 +633,8 @@ export function Tasks({
           priceSampleCount: pricingSummary.priceSampleCount,
           priceFirstDate: pricingSummary.priceFirstDate,
           priceLatestDate: pricingSummary.priceLatestDate,
+          wishlistCreatedAt: wishlistEntry?.created_at?.trim(),
+          wishlistPriceUpdatedAt: pricingSummary.priceLatestDate,
           priceSources: pricingSummary.priceSources,
           priceStockCount: pricingSummary.priceStockCount,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),

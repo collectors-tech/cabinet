@@ -225,4 +225,113 @@ func TestScannerRunItemsPerPageSummaryAppliesSafeCap(t *testing.T) {
 	if warning == "" {
 		t.Fatalf("expected items_per_page_warning in run summary, got %#v", summary["items_per_page_warning"])
 	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list query sets after run status=%d body=%s", list.Code, list.Body.String())
+	}
+	var querySetPayload map[string][]map[string]any
+	if err := json.NewDecoder(list.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode query set list after run: %v", err)
+	}
+	if len(querySetPayload["query_sets"]) != 1 {
+		t.Fatalf("expected one query set after run, got %d", len(querySetPayload["query_sets"]))
+	}
+	listed := querySetPayload["query_sets"][0]
+	if got, _ := listed["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted last_run_status=succeeded, got %#v", listed["last_run_status"])
+	}
+	if got, ok := listed["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted last_candidate_count=1, got %#v", listed["last_candidate_count"])
+	}
+	if got, _ := listed["last_run_at"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("expected persisted last_run_at, got %#v", listed["last_run_at"])
+	}
+}
+
+func TestScannerRunMapsEbayAuthFailureToProviderErrorCode(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profile := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/profiles",
+		strings.NewReader(`{"name":"ebay-auth-profile"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if profile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profile.Code, profile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile payload: %v", err)
+	}
+	activate := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/active",
+		strings.NewReader(`{"profile_id":"`+p.ID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"invalid token"}]}`))
+	}))
+	defer ebayStub.Close()
+
+	saveSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"expired-token","ebay_marketplace":"EBAY_AU"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save ebay settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	create := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/scanner/query-sets",
+		strings.NewReader(`{"name":"eBay Auth Check","keywords":["pokemon"],"provider_scope":["ebay"],"enabled":true}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", create.Code, create.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create payload: %v", err)
+	}
+	querySetID, _ := created["id"].(string)
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/scanner/run",
+		strings.NewReader(`{"query_set_id":"`+querySetID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 auth failure, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode run error payload: %v", err)
+	}
+	if payload["error_code"] != "PROVIDER_AUTH_INVALID" || payload["provider"] != "ebay" {
+		t.Fatalf("unexpected provider auth payload: %+v", payload)
+	}
 }

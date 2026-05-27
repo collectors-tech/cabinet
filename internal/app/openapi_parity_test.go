@@ -5,21 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
 func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 	t.Parallel()
 
-	root, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	specPath := filepath.Clean(filepath.Join(root, "..", "..", "docs", "api", "openapi.yaml"))
-	raw, err := os.ReadFile(specPath)
-	if err != nil {
-		t.Fatalf("read openapi: %v", err)
-	}
+	specPath, raw := readOpenAPISpec(t)
 
 	requiredPaths := []string{
 		"/api/onboarding/sample-data",
@@ -40,11 +33,21 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/logs/debug",
 		"/api/ai/toggle",
 		"/api/ai/suggest/photo",
+		"/api/telegram/catalog-captures",
+		"/api/telegram/webhook/catalog-captures",
+		"/api/integrations/ebay/purchase-inbox/reviews",
+		"/api/integrations/ebay/purchase-inbox/actions",
+		"/api/forwarding/packages",
+		"/api/forwarding/packages/import-csv",
+		"/api/forwarding/packages/import-email",
+		"/api/forwarding/package-links",
+		"/api/forwarding/package-match-suggestions",
 		"/api/chat/threads",
 		"/api/chat/messages",
 		"/api/chat/attachments",
 		"/api/chat/actions/preview",
 		"/api/chat/actions/apply",
+		"/api/chat/actions/cancel",
 		"/api/data/export/json",
 		"/api/data/export/csv/items",
 		"/api/data/import/json/dry-run",
@@ -90,4 +93,57 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 			t.Fatalf("openapi missing %s path in %s", endpoint, specPath)
 		}
 	}
+}
+
+func TestOpenAPIOperationsDeclareClientErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	lines := regexp.MustCompile(`\r?\n`).Split(string(raw), -1)
+	operationPattern := regexp.MustCompile(`^    (get|post|put|patch|delete):\s*$`)
+	responsePattern := regexp.MustCompile(`^        ["']?([0-9]{3}|default)["']?:\s*$`)
+
+	var missing []string
+	for idx := 0; idx < len(lines); idx++ {
+		if !operationPattern.MatchString(lines[idx]) {
+			continue
+		}
+
+		operationLine := idx + 1
+		operation := lines[idx]
+		has4XX := false
+		for scan := idx + 1; scan < len(lines); scan++ {
+			line := lines[scan]
+			if line != "" && len(line)-len(strings.TrimLeft(line, " ")) <= 4 {
+				break
+			}
+			match := responsePattern.FindStringSubmatch(line)
+			if len(match) == 2 && strings.HasPrefix(match[1], "4") {
+				has4XX = true
+				break
+			}
+		}
+		if !has4XX {
+			missing = append(missing, fmt.Sprintf("line %d %s", operationLine, strings.TrimSpace(operation)))
+		}
+	}
+
+	if len(missing) > 0 {
+		t.Fatalf("openapi operations missing 4XX responses in %s: %v", specPath, missing)
+	}
+}
+
+func readOpenAPISpec(t *testing.T) (string, []byte) {
+	t.Helper()
+
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	specPath := filepath.Clean(filepath.Join(root, "..", "..", "docs", "api", "openapi.yaml"))
+	raw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("read openapi: %v", err)
+	}
+	return specPath, raw
 }

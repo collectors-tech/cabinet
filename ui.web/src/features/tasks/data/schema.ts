@@ -23,6 +23,8 @@ export const taskSchema = z.object({
   priceSampleCount: z.number().optional(),
   priceFirstDate: z.string().optional(),
   priceLatestDate: z.string().optional(),
+  wishlistCreatedAt: z.string().optional(),
+  wishlistPriceUpdatedAt: z.string().optional(),
   priceSources: z.array(z.string()).optional(),
   priceStockCount: z.number().optional(),
   highlightHit: z.boolean().optional(),
