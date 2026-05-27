@@ -89,6 +89,17 @@ Collections navigation and page identity SHALL continue to use the tag iconograp
 - **THEN** the Collections route entry MUST remain visible in navigation
 - **AND** the page identity area MUST render a visible tag icon
 
+### Requirement UI-SCREEN-COLLECTIONS-010: Collections SHALL expose inventory view navigation from each row
+The Collections management summary SHALL NOT expose a standalone Browse action. Each collection row SHALL expose an accessible View action that selects that row as the active collection context before navigating to Inventory.
+
+#### Scenario: View collection from row action
+- **GIVEN** collection rows are visible in the table
+- **WHEN** the user activates a row-level View action for a collection
+- **THEN** the collection MUST become the active collection context
+- **AND** the app MUST navigate to Inventory
+- **AND** the Inventory screen MUST show that collection as the active context
+- **AND** existing row edit and delete actions MUST remain available
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -110,3 +121,4 @@ Collections navigation and page identity SHALL continue to use the tag iconograp
 | UC-COL-07 | Assign item | Item appears in selected collection and survives refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-007 assigns an item into the selected collection and persists after refresh` |
 | UC-COL-08 | Move item | Item leaves source and appears in destination after refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-008 moves an assigned item between collections and persists after refresh` |
 | UC-COL-09 | Route iconography | Tag icon remains visible for collections route | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity` |
+| UC-COL-10 | View row in Inventory | Row View selects collection and navigates to Inventory | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions` |
