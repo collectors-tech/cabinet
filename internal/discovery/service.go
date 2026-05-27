@@ -98,9 +98,7 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	if a.Payload == nil {
 		a.Payload = map[string]any{}
 	}
-	if a.Type == ActionAddWishlist {
-		a.Payload = s.enrichWishlistHandoffPayload(ctx, a.CandidateID, a.Payload)
-	}
+	a.Payload = s.enrichDiscoveryActionPayload(ctx, a.CandidateID, a.Payload)
 	raw, _ := json.Marshal(a.Payload)
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO discovery_actions(id, candidate_id, action_type, payload_json)
@@ -195,7 +193,7 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 	return nil
 }
 
-func (s *Service) enrichWishlistHandoffPayload(ctx context.Context, candidateID string, payload map[string]any) map[string]any {
+func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID string, payload map[string]any) map[string]any {
 	enriched := make(map[string]any, len(payload)+4)
 	for key, value := range payload {
 		enriched[key] = value
