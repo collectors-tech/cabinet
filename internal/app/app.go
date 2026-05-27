@@ -2411,9 +2411,15 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		candidates := buildAmazonCandidateContract(qs)
+		run, err := scannerSvc.RunNowForProfile(r.Context(), strings.TrimSpace(active.ID), qs.ID, amazonContractProvider{candidates: candidates})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_run_amazon_provider"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id": qs.ID,
-			"candidates":   candidates,
+			"candidates":   buildAmazonCandidateResponseContract(candidates),
+			"run":          run,
 		})
 	})
 	mux.HandleFunc("/api/providers/bonza/run", func(w http.ResponseWriter, r *http.Request) {
@@ -7197,26 +7203,52 @@ func providerSettingsKeys(providerID string) providerSettingKeySet {
 	}
 }
 
-func buildAmazonCandidateContract(qs scanner.QuerySet) []map[string]any {
+type amazonContractProvider struct {
+	candidates []scanner.CandidateInput
+}
+
+func (p amazonContractProvider) Search(context.Context, scanner.QuerySet) ([]scanner.CandidateInput, error) {
+	return p.candidates, nil
+}
+
+func buildAmazonCandidateContract(qs scanner.QuerySet) []scanner.CandidateInput {
 	keyword := "collectible"
 	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
 		keyword = strings.TrimSpace(qs.Keywords[0])
 	}
-	return []map[string]any{
+	return []scanner.CandidateInput{
 		{
-			"listing_id": "amazon-" + strings.ToLower(strings.ReplaceAll(keyword, " ", "-")) + "-001",
-			"title":      "Amazon " + keyword + " listing",
-			"price": map[string]any{
-				"amount":   39.99,
-				"currency": "AUD",
-			},
-			"url":    "https://amazon.com/dp/example",
-			"seller": "amazon-marketplace",
-			"source": map[string]any{
-				"provider_id": "amazon",
-			},
+			ListingID:  "amazon-" + strings.ToLower(strings.ReplaceAll(keyword, " ", "-")) + "-001",
+			Title:      "Amazon " + keyword + " listing",
+			Price:      39.99,
+			Currency:   "AUD",
+			URL:        "https://amazon.com/dp/example",
+			Seller:     "amazon-marketplace",
+			Source:     "amazon",
+			StockState: "available",
+			StockCount: -1,
 		},
 	}
+}
+
+func buildAmazonCandidateResponseContract(candidates []scanner.CandidateInput) []map[string]any {
+	out := make([]map[string]any, 0, len(candidates))
+	for _, candidate := range candidates {
+		out = append(out, map[string]any{
+			"listing_id": candidate.ListingID,
+			"title":      candidate.Title,
+			"price": map[string]any{
+				"amount":   candidate.Price,
+				"currency": candidate.Currency,
+			},
+			"url":    candidate.URL,
+			"seller": candidate.Seller,
+			"source": map[string]any{
+				"provider_id": candidate.Source,
+			},
+		})
+	}
+	return out
 }
 
 type frontlineAlgoliaConfig struct {

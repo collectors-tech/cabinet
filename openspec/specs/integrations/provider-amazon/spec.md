@@ -23,6 +23,8 @@ Cabinet SHALL normalize Amazon listing payloads into candidate schema when provi
 - **GIVEN** Amazon provider mode is `program_api`, credentials are valid, and query set `q1` has keywords and region
 - **WHEN** scanner executes Amazon run for `q1`
 - **THEN** provider response MUST return `200` and MUST normalize to shared candidate fields (`listing_id`, `title`, `price.amount`, `price.currency`, `url`, `seller`, `source.provider_id`)
+- **AND** the run MUST persist deterministic Amazon candidates into the shared scanner candidate store with source `amazon`
+- **AND** the query-set reload MUST expose a succeeded latest-run snapshot and candidate count for the Amazon run
 
 ### Requirement INTEGRATION-010: Amazon provider MUST expose unsupported-state diagnostics when disabled
 Cabinet SHALL return explicit unsupported/disabled diagnostics when Amazon integration mode is unavailable.
