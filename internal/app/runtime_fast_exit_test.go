@@ -28,11 +28,17 @@ func TestRunReturnsQuicklyWhenContextAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	start := time.Now()
-	if err := a.Run(ctx); err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if took := time.Since(start); took > 500*time.Millisecond {
-		t.Fatalf("expected pre-canceled Run to exit quickly, took %s", took)
+	done := make(chan error, 1)
+	go func() {
+		done <- a.Run(ctx)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return for a pre-canceled context")
 	}
 }

@@ -990,7 +990,7 @@ export function SignIn() {
             log into your account
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='space-y-4'>
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>

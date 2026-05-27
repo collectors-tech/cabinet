@@ -49,6 +49,7 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 - **GIVEN** query sets exist
 - **WHEN** user switches to `Table` view
 - **THEN** table MUST list query name, provider scope, last run status, last run time, and latest output summary
+- **AND** last run status/time/output summary MUST hydrate from durable query-set metadata after reload, not only transient in-memory run state
 
 #### Scenario: Open run output details from table
 - **GIVEN** query row has prior run output
@@ -68,7 +69,7 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 | UC-MW-02 | Run scoped query | Runtime payload and results are provider-scoped | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-provider-scoped` |
 | UC-MW-03 | Handle run failure | Human-readable error + retry shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-failure-guidance` |
 | UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
-| UC-MW-05 | Query-set table review | Table shows saved queries with status/time/output summary columns | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection` |
+| UC-MW-05 | Query-set table review | Table shows saved queries with durable status/time/output summary columns across reloads | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection`; `TestScannerRunItemsPerPageSummaryAppliesSafeCap`; `TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot` |
 | UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action` |
 | UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |
 | UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |

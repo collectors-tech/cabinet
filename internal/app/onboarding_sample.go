@@ -21,13 +21,16 @@ import (
 const inventoryFolderItemAssignmentsSettingsKey = "inventory.folder-item-assignments.v1"
 
 type onboardingSampleSeedResult struct {
-	CreatedItems            int  `json:"created_items"`
-	CreatedInstances        int  `json:"created_instances"`
-	CreatedPhotos           int  `json:"created_photos"`
-	CreatedWishlistEntries  int  `json:"created_wishlist_entries"`
-	TotalItems              int  `json:"total_items"`
-	TotalWishlistEntries    int  `json:"total_wishlist_entries"`
-	AlreadySeededForProfile bool `json:"already_seeded_for_profile"`
+	DatasetKind             string `json:"dataset_kind"`
+	DatasetLabel            string `json:"dataset_label"`
+	SampleDataDisclosure    string `json:"sample_data_disclosure"`
+	CreatedItems            int    `json:"created_items"`
+	CreatedInstances        int    `json:"created_instances"`
+	CreatedPhotos           int    `json:"created_photos"`
+	CreatedWishlistEntries  int    `json:"created_wishlist_entries"`
+	TotalItems              int    `json:"total_items"`
+	TotalWishlistEntries    int    `json:"total_wishlist_entries"`
+	AlreadySeededForProfile bool   `json:"already_seeded_for_profile"`
 }
 
 type onboardingSampleSpec struct {
@@ -518,6 +521,9 @@ func seedOnboardingSampleData(
 	}
 
 	result := onboardingSampleSeedResult{
+		DatasetKind:             "sample_showcase",
+		DatasetLabel:            "Cabinet sample showcase data",
+		SampleDataDisclosure:    "Seeded example records for onboarding and demos; replace or delete before using this profile as a real working collection.",
 		AlreadySeededForProfile: alreadySeeded,
 	}
 
@@ -634,6 +640,9 @@ func seedOnboardingSampleData(
 	}
 	if err := profiles.PutSettings(ctx, active.ID, map[string]string{
 		"onboarding.sample_data_seeded":           "1",
+		"onboarding.sample_data.dataset_kind":     result.DatasetKind,
+		"onboarding.sample_data.dataset_label":    result.DatasetLabel,
+		"onboarding.sample_data.disclosure":       result.SampleDataDisclosure,
 		inventoryFolderItemAssignmentsSettingsKey: string(folderAssignmentsJSON),
 	}); err != nil {
 		return onboardingSampleSeedResult{}, fmt.Errorf("mark onboarding seeded: %w", err)

@@ -1,11 +1,11 @@
 package profile
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"context"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -78,6 +78,25 @@ func (r *Repository) GetSecret(ctx context.Context, profileID, key string) (stri
 		return decoded, nil
 	}
 	return value, nil
+}
+
+func (r *Repository) DeleteSecret(ctx context.Context, profileID, key string) error {
+	if _, err := r.GetByID(ctx, profileID); err != nil {
+		return err
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("secret key is required")
+	}
+	if isAPISecretKey(key) {
+		if err := securestore.Delete(profileID, key); err != nil && os.Getenv("CABINET_ALLOW_INSECURE_SECRET_FALLBACK") != "1" {
+			return fmt.Errorf("secure store delete failed: %w", err)
+		}
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM profile_secrets WHERE profile_id = ? AND key = ?`, profileID, key); err != nil {
+		return fmt.Errorf("delete secret: %w", err)
+	}
+	return nil
 }
 
 func isAPISecretKey(key string) bool {

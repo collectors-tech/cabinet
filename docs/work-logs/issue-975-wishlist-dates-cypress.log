@@ -1,0 +1,23 @@
+Issue #975 Wishlist date context validation log
+
+Branch: issue-975-wishlist-dates
+Commit before whitespace-log cleanup: 7b3b8dcd72fd16dcf219f1bc7612f1ddcedced2a
+Started: 2026-05-27T00:12:56+10:00
+
+Commands recorded for PR #979:
+- npm run build
+  Result: PASS
+- pwsh -NoLogo -NoProfile -File .\cypress.ps1 -Spec cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts -Browser electron -RequireE2EHooks
+  Final rerun result: PASS, 17 passing, 0 failing, duration 1m41s
+- pre-push OpenSpec validation
+  Result: PASS
+- pre-push fast API docs smoke test
+  Result: PASS
+
+Cypress final passing assertions included:
+- UI-SCREEN-WISHLIST-016 renders date added and price update context
+- Existing wishlist row/card view, collection filter, pricing trajectory, edit, and delete coverage
+
+Notes:
+- Earlier Cypress attempts in this run exposed stale runtime/build failures before the final rebuilt rerun passed.
+- This log was condensed to remove terminal formatting and whitespace artifacts so repository whitespace checks pass.
