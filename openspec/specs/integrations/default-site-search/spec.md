@@ -35,6 +35,7 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **WHEN** user runs `Run Now` or triggers scheduled refresh
 - **THEN** runtime MUST execute matching query sets and return deterministic run summary payloads
 - **AND** UI MUST surface execution status and summary data for user verification
+- **AND** provider-specific run routes for supported saved-search providers MUST persist normalized candidates into the shared scanner/Discoveries candidate store instead of returning transient-only output
 - **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
 - **AND** Market Watch MUST refresh its saved-query snapshots after scheduled refresh and render a latest-run history summary from durable query-set metadata
 

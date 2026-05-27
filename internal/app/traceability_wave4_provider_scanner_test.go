@@ -208,6 +208,51 @@ func TestWave4AmazonRunModeAndNormalizationContract(t *testing.T) {
 			t.Fatalf("normalized candidate missing %q: %+v", field, first)
 		}
 	}
+	source, ok := first["source"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected source provider object in provider run payload, got %+v", first["source"])
+	}
+	if got, _ := source["provider_id"].(string); got != "amazon" {
+		t.Fatalf("expected amazon source in provider run payload, got %+v", first["source"])
+	}
+
+	candidates := doRequest(t, a, http.MethodGet, "/api/scanner/candidates?query_set_id="+querySetID, nil, nil)
+	if candidates.Code != http.StatusOK {
+		t.Fatalf("list amazon candidates expected 200, got %d body=%s", candidates.Code, candidates.Body.String())
+	}
+	var candidatePayload struct {
+		Candidates []map[string]any `json:"candidates"`
+	}
+	if err := json.NewDecoder(candidates.Body).Decode(&candidatePayload); err != nil {
+		t.Fatalf("decode persisted amazon candidates: %v", err)
+	}
+	if len(candidatePayload.Candidates) != 1 {
+		t.Fatalf("expected one persisted amazon candidate, got %+v", candidatePayload.Candidates)
+	}
+	if got, _ := candidatePayload.Candidates[0]["source"].(string); got != "amazon" {
+		t.Fatalf("expected persisted amazon source, got %+v", candidatePayload.Candidates[0])
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets expected 200, got %d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode query sets after amazon run: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one query set after amazon run, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected amazon run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected amazon run to persist candidate count=1, got %+v", latest)
+	}
 
 	if _, err := a.db.Exec(`INSERT INTO app_state(key, value, updated_at) VALUES('provider.amazon.mode','disabled',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='disabled', updated_at=CURRENT_TIMESTAMP`); err != nil {
 		t.Fatalf("disable amazon mode: %v", err)
