@@ -56,6 +56,7 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 - **WHEN** user opens output detail action from table row
 - **THEN** UI MUST show deterministic run output details for testing/verification
 - **AND** output detail view MUST include provider attribution and run timestamp
+- **AND** Wishlist handoff from the output detail MUST persist enough state for the Wishlist route to render the handed-off result after reload
 
 #### Scenario: No query sets yet
 - **GIVEN** no query sets exist
@@ -70,6 +71,6 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 | UC-MW-03 | Handle run failure | Human-readable error + retry shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-failure-guidance` |
 | UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
 | UC-MW-05 | Query-set table review | Table shows saved queries with durable status/time/output summary columns across reloads | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection`; `TestScannerRunItemsPerPageSummaryAppliesSafeCap`; `TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot` |
-| UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action` |
+| UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification and handoff persistence | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows` |
 | UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |
 | UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |

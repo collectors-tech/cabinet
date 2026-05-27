@@ -47,3 +47,4 @@ Cabinet MUST provide workflow handoff from saved-search output into Discoveries 
 - **AND** UI MUST surface action feedback indicating handoff result
 - **AND** Discoveries actions for ignore, track, create-owned-item, and Wishlist handoff MUST preserve decision payload plus source provider, query-set id, query name, and saved provider scope in the durable discovery action audit record
 - **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope in both the Wishlist note and durable discovery action audit payload
+- **AND** a subsequent Wishlist route reload MUST render the handed-off item and preserved saved-search provenance from durable Wishlist/API state
