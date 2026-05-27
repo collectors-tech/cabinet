@@ -72,20 +72,30 @@ describe('integrations/default-site-search', () => {
   })
 
   it('DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh', () => {
-    cy.intercept('GET', '/api/scanner/query-sets', {
-      statusCode: 200,
-      body: {
-        query_sets: [
-          {
-            id: 'qs-dss-2',
-            name: 'Amazon Watch',
-            keywords: ['slot cars'],
-            provider_scope: ['amazon'],
-            schedule_cron: '0 */6 * * *',
-            enabled: true,
-          },
-        ],
-      },
+    let scheduledCompleted = false
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-dss-2',
+              name: 'Amazon Watch',
+              keywords: ['slot cars'],
+              provider_scope: ['amazon'],
+              schedule_cron: '0 */6 * * *',
+              enabled: true,
+              ...(scheduledCompleted
+                ? {
+                    last_run_status: 'succeeded',
+                    last_run_at: '2026-05-27T11:52:00Z',
+                    last_candidate_count: 1,
+                  }
+                : {}),
+            },
+          ],
+        },
+      })
     }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
@@ -107,14 +117,17 @@ describe('integrations/default-site-search', () => {
         ],
       },
     }).as('candidates')
-    cy.intercept('POST', '/api/scanner/run/scheduled', {
-      statusCode: 200,
-      body: {
-        run_id: 'scheduled-1',
-        query_sets_executed: 1,
-        candidates_collected: 1,
-        failures: 0,
-      },
+    cy.intercept('POST', '/api/scanner/run/scheduled', (req) => {
+      scheduledCompleted = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          run_id: 'scheduled-1',
+          query_sets_executed: 1,
+          candidates_collected: 1,
+          failures: 0,
+        },
+      })
     }).as('scheduledRefresh')
 
     signInToMarketWatch()
@@ -128,8 +141,15 @@ describe('integrations/default-site-search', () => {
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
     cy.wait('@scheduledRefresh')
+    cy.wait('@querySets')
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_completed_scheduled-1')
     cy.get('[data-testid="scanner-action-feedback"]').should('contain', 'Query sets executed: 1')
+    cy.get('[data-testid="market-watch-run-history-qs-dss-2"]')
+      .should('contain', 'Amazon Watch')
+      .and('contain', 'succeeded')
+      .and('contain', 'Candidates: 1')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').should('contain', 'Candidates: 1')
   })
 
   it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows', () => {
