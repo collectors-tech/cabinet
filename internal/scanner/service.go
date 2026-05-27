@@ -243,10 +243,10 @@ func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID str
 	err := s.db.QueryRowContext(ctx, `
 		SELECT message, created_at
 		FROM scanner_failures
-		WHERE query_set_id = ?
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
 		ORDER BY created_at DESC
 		LIMIT 1
-	`, q.ID).Scan(&failureMessage, &failureAt)
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&failureMessage, &failureAt)
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("query set run failure snapshot: %w", err)
 	}
@@ -395,7 +395,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			return result, persistErr
 		}
 		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
-		s.logFailure(ctx, qs.ID, "ebay", lastErr.Error())
+		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, "ebay", lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
 			if sleep < 100*time.Millisecond {
@@ -539,7 +539,17 @@ func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, queryS
 }
 
 func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT query_set_id, provider, message, created_at FROM scanner_failures ORDER BY created_at DESC LIMIT 100`)
+	return s.ListFailuresByProfile(ctx, "")
+}
+
+func (s *Service) ListFailuresByProfile(ctx context.Context, profileID string) ([]map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT query_set_id, provider, message, created_at
+		FROM scanner_failures
+		WHERE (? = '' OR profile_id = ?)
+		ORDER BY created_at DESC
+		LIMIT 100
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return nil, fmt.Errorf("list failures: %w", err)
 	}
@@ -588,11 +598,11 @@ func (s *Service) recordProviderHealth(ctx context.Context, provider, status, me
 	`, provider, status, message)
 }
 
-func (s *Service) logFailure(ctx context.Context, querySetID, provider, message string) {
+func (s *Service) logFailure(ctx context.Context, profileID, querySetID, provider, message string) {
 	_, _ = s.db.ExecContext(ctx, `
-		INSERT INTO scanner_failures(id, query_set_id, provider, message, created_at)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, uuid.NewString(), strings.TrimSpace(querySetID), provider, message)
+		INSERT INTO scanner_failures(id, profile_id, query_set_id, provider, message, created_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, uuid.NewString(), strings.TrimSpace(profileID), strings.TrimSpace(querySetID), provider, message)
 }
 
 func normalizeStockState(state string, count int) string {

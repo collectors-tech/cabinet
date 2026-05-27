@@ -2055,7 +2055,8 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
 		}
-		items, err := scannerSvc.ListFailures(r.Context())
+		active, _ := profiles.GetActiveProfile(r.Context())
+		items, err := scannerSvc.ListFailuresByProfile(r.Context(), strings.TrimSpace(active.ID))
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_list_failures"}`, http.StatusInternalServerError)
 			return
