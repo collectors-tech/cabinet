@@ -7,6 +7,7 @@ export const taskSchema = z.object({
   itemID: z.string().optional(),
   wishlistEntryID: z.string().optional(),
   title: z.string(),
+  thumbnailUrl: z.string().optional(),
   partNumber: z.string().optional(),
   status: z.string(),
   label: z.string(),

@@ -16,6 +16,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -35,7 +36,6 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { cn } from '@/lib/utils'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
@@ -52,6 +52,7 @@ type TasksProps = {
 type WishlistItemPayload = {
   id?: string
   title?: string
+  thumbnail_url?: string
   part_number?: string
   category?: string
   priority?: string
@@ -354,7 +355,9 @@ async function captureWishlistScreenshotDataUrl() {
 
   const mediaDevices = navigator.mediaDevices as
     | (MediaDevices & {
-        getDisplayMedia?: (constraints?: MediaStreamConstraints) => Promise<MediaStream>
+        getDisplayMedia?: (
+          constraints?: MediaStreamConstraints
+        ) => Promise<MediaStream>
       })
     | undefined
   if (typeof mediaDevices?.getDisplayMedia !== 'function') {
@@ -407,9 +410,7 @@ async function scanWishlistBarcodeValue() {
 
   const barcodeDetectorConstructor = (
     window as unknown as {
-      BarcodeDetector?: new (options?: {
-        formats?: string[]
-      }) => {
+      BarcodeDetector?: new (options?: { formats?: string[] }) => {
         detect: (
           source: HTMLVideoElement | HTMLCanvasElement
         ) => Promise<Array<{ rawValue?: string }>>
@@ -438,8 +439,7 @@ async function scanWishlistBarcodeValue() {
       formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'],
     })
     const results = await detector.detect(video)
-    const barcode = results.find((result) => result.rawValue?.trim())
-      ?.rawValue
+    const barcode = results.find((result) => result.rawValue?.trim())?.rawValue
     if (!barcode) {
       throw new Error('barcode_not_found')
     }
@@ -610,6 +610,7 @@ export function Tasks({
             item.title?.trim() ||
             item.part_number?.trim() ||
             `Wishlist item ${index + 1}`,
+          thumbnailUrl: item.thumbnail_url?.trim(),
           partNumber: item.part_number?.trim(),
           status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
           label: item.category?.trim() || 'collection',
@@ -1136,7 +1137,8 @@ export function Tasks({
 
   const handleWishlistPasteSave = useCallback(async () => {
     const content = wishlistPasteContent.trim()
-    const title = wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
+    const title =
+      wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
     if (!content || !title) {
       toast.error('Paste text or a URL before adding to wishlist.')
       return
@@ -1231,9 +1233,7 @@ export function Tasks({
       toast.success(`${title} added to wishlist with screenshot.`)
       handleWishlistScreenshotOpenChange(false)
     } catch {
-      setWishlistScreenshotError(
-        'Screenshot wishlist save failed. Try again.'
-      )
+      setWishlistScreenshotError('Screenshot wishlist save failed. Try again.')
       toast.error('Screenshot wishlist save failed. Try again.')
     } finally {
       setIsWishlistMutating(false)
@@ -1778,7 +1778,9 @@ export function Tasks({
         onDrop={handleWishlistImageDrop}
       >
         {isWishlistRoute &&
-        (wishlistImageDropActive || isWishlistMutating || wishlistImageDropMessage) ? (
+        (wishlistImageDropActive ||
+          isWishlistMutating ||
+          wishlistImageDropMessage) ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',

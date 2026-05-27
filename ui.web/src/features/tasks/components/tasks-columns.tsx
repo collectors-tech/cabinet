@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import {
-  BarcodeIcon,
-  ImageIcon,
-  PlusIcon,
-  TagsIcon,
-} from 'lucide-react'
+import { BarcodeIcon, ImageIcon, PlusIcon, TagsIcon } from 'lucide-react'
 import { Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -126,7 +121,7 @@ function WishlistPriceSparkline({
       <button
         type='button'
         data-testid={`wishlist-price-chart-open-${task.id}`}
-        className='rounded bg-slate-950/60 p-0 outline-none ring-offset-background transition-colors hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        className='rounded bg-slate-950/60 p-0 ring-offset-background transition-colors outline-none hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
         aria-label={`Open ${task.title} price graph`}
         title={accessibleLabel}
         onClick={(event) => {
@@ -225,9 +220,7 @@ function WishlistPriceSparkline({
             className='rounded-md border bg-card/40 p-3'
             data-testid={`wishlist-price-chart-points-${task.id}`}
           >
-            <p className='mb-2 text-sm font-semibold'>
-              Latest 10 price points
-            </p>
+            <p className='mb-2 text-sm font-semibold'>Latest 10 price points</p>
             <ul className='grid gap-1 text-sm sm:grid-cols-2'>
               {latestPointRows.map((point) => (
                 <li key={`${point.date}-${point.price}`}>
@@ -304,7 +297,7 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
       title={`${trendConfig.label}. ${sampleCount} points. ${dateText}. Sources: ${sourceText}. ${stockText}.`}
     >
       <span
-        className={`inline-flex w-4 justify-center text-sm font-semibold leading-none ${trendConfig.className}`}
+        className={`inline-flex w-4 justify-center text-sm leading-none font-semibold ${trendConfig.className}`}
         data-testid={`wishlist-price-trend-marker-${task.id}`}
         aria-hidden='true'
       >
@@ -327,6 +320,54 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
         {`${sampleCount} points ${dateText} ${sourceText} ${stockText}`}
       </span>
     </div>
+  )
+}
+
+function hashWishlistThumbnailKey(value: string) {
+  return [...value].reduce((hash, char) => {
+    return (hash * 31 + char.charCodeAt(0)) % 360
+  }, 23)
+}
+
+function WishlistThumbnail({ task }: { task: Task }) {
+  const key = task.itemID?.trim() || task.id.trim() || task.title.trim()
+  const hue = hashWishlistThumbnailKey(key)
+  const accentHue = (hue + 46) % 360
+  const initials = task.title
+    .split(/\s+/)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  if (task.thumbnailUrl) {
+    return (
+      <img
+        src={task.thumbnailUrl}
+        alt=''
+        aria-hidden='true'
+        data-testid={`wishlist-thumbnail-${task.id}`}
+        data-thumbnail-key={key}
+        className='h-8 w-8 shrink-0 rounded-md border object-cover'
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-hidden='true'
+      data-testid={`wishlist-thumbnail-${task.id}`}
+      data-thumbnail-key={key}
+      className='relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border text-[0.625rem] font-semibold text-white shadow-sm'
+      style={{
+        background: `linear-gradient(135deg, hsl(${hue} 68% 42%), hsl(${accentHue} 72% 36%))`,
+      }}
+    >
+      <span className='absolute inset-x-0 top-0 h-1/3 bg-white/18' />
+      <span className='absolute right-0 bottom-0 h-4 w-4 rounded-tl-full bg-black/20' />
+      <span className='relative'>{initials || 'W'}</span>
+    </span>
   )
 }
 
@@ -589,7 +630,7 @@ export function getTasksColumns({
       ),
       meta: {
         className: isWishlistRoute
-          ? 'ps-1 min-w-[12rem]'
+          ? 'ps-1 min-w-[10rem]'
           : 'ps-1 max-w-0 w-2/3',
         tdClassName: 'ps-4',
       },
@@ -597,20 +638,23 @@ export function getTasksColumns({
         const label = labels.find((label) => label.value === row.original.label)
 
         return (
-          <div className='flex min-w-0 flex-col gap-1'>
-            {!isInventoryRoute && !isWishlistRoute && label ? (
-              <Badge variant='outline'>{label.label}</Badge>
-            ) : null}
-            <div className='flex space-x-2'>
-              <span className='truncate font-medium'>
-                {row.getValue('title')}
-              </span>
+          <div className='flex min-w-0 items-center gap-2'>
+            {isWishlistRoute ? <WishlistThumbnail task={row.original} /> : null}
+            <div className='flex min-w-0 flex-col gap-1'>
+              {!isInventoryRoute && !isWishlistRoute && label ? (
+                <Badge variant='outline'>{label.label}</Badge>
+              ) : null}
+              <div className='flex space-x-2'>
+                <span className='truncate font-medium'>
+                  {row.getValue('title')}
+                </span>
+              </div>
+              {isWishlistRoute && row.original.notes ? (
+                <span className='truncate text-xs text-muted-foreground'>
+                  {row.original.notes}
+                </span>
+              ) : null}
             </div>
-            {isWishlistRoute && row.original.notes ? (
-              <span className='truncate text-xs text-muted-foreground'>
-                {row.original.notes}
-              </span>
-            ) : null}
           </div>
         )
       },

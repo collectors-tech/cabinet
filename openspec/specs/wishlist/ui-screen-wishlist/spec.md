@@ -90,6 +90,17 @@ Wishlist rows SHALL expose owned state and purchase details through dedicated ro
 - **AND** saving MUST persist owned state, price paid, quantity, condition, purchase date, and URL
 - **AND** Wishlist row actions MUST NOT include `Mark owned`
 
+### Requirement UI-SCREEN-WISHLIST-018: Wishlist rows SHALL render compact deterministic thumbnails
+Wishlist rows view SHALL render a compact thumbnail before each item title. When API thumbnail media is missing, the row MUST render a deterministic generated identicon-style fallback derived from the stable item identifier.
+
+#### Scenario: Wishlist row thumbnails render without duplicating the title
+- **GIVEN** wishlist rows view is loaded with canonical wishlist item records
+- **WHEN** an item has no thumbnail media
+- **THEN** the row MUST show a compact deterministic generated thumbnail before the title
+- **AND** fallback thumbnails for distinct sample rows MUST be visually distinct and stable for the same item identifier
+- **AND** the thumbnail MUST be decorative for assistive technology and MUST NOT duplicate the item title
+- **AND** the dense wishlist table layout MUST keep the title and notes readable on desktop and mobile widths
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
