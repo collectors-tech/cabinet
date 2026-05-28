@@ -2858,14 +2858,39 @@ func New(cfg config.Config) (*App, error) {
 		if fallbackUsed && strings.TrimSpace(warning) == "" {
 			warning = "doofinder discovery used cached config"
 		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			doofinderCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_doofinder_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_doofinder_candidates"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":    qs.ID,
 			"page":            page,
 			"page_size":       pageSize,
 			"total":           total,
-			"candidate_count": len(candidates),
-			"candidates":      candidates,
+			"candidate_count": len(persisted),
+			"candidates":      persisted,
 			"warning":         warning,
+			"run":             run,
+			"run_summary": map[string]any{
+				"page":                page,
+				"effective_page_size": pageSize,
+				"candidates_total":    run.Saved,
+			},
 			"discovery": map[string]any{
 				"store":    config.Store,
 				"zone":     config.Zone,
@@ -8600,6 +8625,10 @@ func hobbytechCandidatesForScanner(candidates []map[string]any) []scanner.Candid
 
 func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
 	return providerCandidatesForScanner(candidates, "frontlinehobbies")
+}
+
+func doofinderCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, providerDomain)
 }
 
 func providerCandidatesForScanner(candidates []map[string]any, defaultSource string) []scanner.CandidateInput {

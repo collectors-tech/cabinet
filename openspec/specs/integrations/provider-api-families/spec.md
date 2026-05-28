@@ -46,6 +46,7 @@ Doofinder-backed providers SHALL execute search via Doofinder search endpoint us
 - **WHEN** runtime executes query
 - **THEN** runtime MUST call Doofinder search endpoint with query/page/rpp params
 - **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
+- **AND** provider-specific run output MUST persist normalized candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
 
 #### Scenario: Doofinder discovery inputs
 - **GIVEN** onboarding detection scans provider assets
