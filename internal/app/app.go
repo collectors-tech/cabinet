@@ -2422,6 +2422,79 @@ func New(cfg config.Config) (*App, error) {
 			"run":          run,
 		})
 	})
+	mux.HandleFunc("/api/providers/ebay/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID string `json:"query_set_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		provider := ebay.NewProvider(ebay.ProviderConfig{
+			BaseURL:     settings["ebay_base_url"],
+			BearerToken: settings["ebay_bearer_token"],
+			Marketplace: settings["ebay_marketplace"],
+		})
+		run, err := scannerSvc.RunNowForProfile(r.Context(), profileID, qs.ID, provider)
+		if err != nil {
+			var providerErr *ebay.ProviderError
+			if errors.As(err, &providerErr) && providerErr.ErrorCode != "" {
+				status := providerErr.StatusCode
+				if status <= 0 {
+					status = http.StatusBadRequest
+				}
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "failed_to_run_ebay_provider",
+					"error_code":   providerErr.ErrorCode,
+					"provider":     "ebay",
+					"message":      providerErr.Error(),
+					"next_action":  "review_provider_credentials_and_health",
+					"query_set_id": qs.ID,
+				})
+				return
+			}
+			http.Error(w, `{"error":"failed_to_run_ebay_provider"}`, http.StatusBadRequest)
+			return
+		}
+		candidates, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_ebay_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id": qs.ID,
+			"provider":     "ebay",
+			"candidates":   candidates,
+			"run":          run,
+		})
+	})
 	mux.HandleFunc("/api/providers/bonza/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
