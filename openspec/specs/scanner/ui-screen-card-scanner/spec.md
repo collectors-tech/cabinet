@@ -40,6 +40,18 @@ Scanner SHALL never silently mutate data; user confirmation is required before c
 - **WHEN** user confirms create/update target (inventory or wishlist)
 - **THEN** runtime MUST persist record with media linkage and show auditable outcome
 
+### Requirement UI-SCREEN-CARD-SCANNER-009: Card Scanner UI SHALL preview scanner review writes before confirmed apply
+Card Scanner UI SHALL convert queued quick-scan uploads into scanner recognition review apply requests, request a non-mutating confirmation-required preview first, expose the selected target/candidate/confidence/provenance outcome, and only mark the scan linked after a confirmed apply response plus persistence reload.
+
+#### Scenario: Review and confirm scanner apply from UI
+- **GIVEN** a quick-scan upload has recognition candidates and the user selects Inventory or Wishlist as the write target
+- **WHEN** the user reviews apply
+- **THEN** Card Scanner MUST call scanner review apply with `confirmed=false`
+- **AND** the UI MUST show the returned confidence, target, and confirm-before-create state without marking the scan linked
+- **WHEN** the user confirms apply
+- **THEN** Card Scanner MUST call scanner review apply with `confirmed=true`
+- **AND** the UI MUST reload the target item collection and mark the scan linked only after the confirmed response
+
 ### Requirement UI-SCREEN-CARD-SCANNER-008: Scanner review apply API SHALL persist only confirmed writes
 Scanner review apply API SHALL accept normalized recognition candidates, build the same review preview contract, reject unconfirmed write attempts, and persist confirmed Inventory or Wishlist records with selected candidate, confidence, provenance, manual-override, media, and source metadata retained as auditable item evidence.
 
@@ -95,3 +107,4 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 | UC-CS-05 | View recent unlinked scans | Quick-category panel shows most-recent unlinked results in Cards and Table modes | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-005 shows recent unlinked scans in cards/table with deterministic newest-first ordering` |
 | UC-CS-06 | Quick Scan mobile/desktop capture | `Quick Scan` launches rapid capture flow on mobile and desktop with fallback path | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-006 provides quick-scan action for mobile and desktop with deterministic intake feedback` |
 | UC-CS-07 | Apply reviewed scan | API rejects unconfirmed writes and persists confirmed Inventory/Wishlist records with scanner evidence | implemented: `TestScannerRecognitionReviewApplyRequiresConfirmationAndDoesNotMutate`, `TestScannerRecognitionReviewApplyCreatesWishlistItemWithEvidence` (`internal/app/scanner_api_test.go`) |
+| UC-CS-09 | UI review and confirmed apply | Quick-scan UI previews scanner review apply, confirms explicit Wishlist/Inventory write, reloads persistence, and then marks scan linked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked` |

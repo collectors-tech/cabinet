@@ -71,6 +71,50 @@ type QuickScanQueueItem = {
   overrideUsed: boolean
 }
 
+type RecognitionCandidateInput = {
+  id: string
+  title: string
+  confidence: number
+  source: string
+  provenance: string
+  media_id?: string
+  media_url?: string
+  target?: 'inventory' | 'wishlist'
+  override_id?: string
+  override_by?: string
+  override_note?: string
+}
+
+type RecognitionReview = {
+  top_candidate: RecognitionCandidateInput
+  alternates: RecognitionCandidateInput[]
+  selected_candidate: RecognitionCandidateInput
+  confidence_label: string
+  requires_manual_review: boolean
+  confirm_before_create: boolean
+  target: 'inventory' | 'wishlist'
+  media_evidence?: Record<string, string>
+  provenance?: string[]
+  manual_override_applied: boolean
+}
+
+type ScannerReviewApplyResult = {
+  confirmation_state: 'required' | 'confirmed'
+  target: 'inventory' | 'wishlist'
+  review: RecognitionReview
+  item?: {
+    id: string
+    title: string
+    part_number?: string
+    status?: string
+  }
+  wishlist_entry?: {
+    id: string
+    item_id: string
+    owned: boolean
+  }
+}
+
 const MARKET_WATCH_PROVIDER_OPTIONS = [
   'ebay',
   'amazon',
@@ -201,6 +245,15 @@ export function Scanner() {
   const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(
     null
   )
+  const [quickApplyTargetByScanID, setQuickApplyTargetByScanID] = useState<
+    Record<string, 'inventory' | 'wishlist'>
+  >({})
+  const [quickReviewByScanID, setQuickReviewByScanID] = useState<
+    Record<string, RecognitionReview>
+  >({})
+  const [quickApplyResultByScanID, setQuickApplyResultByScanID] = useState<
+    Record<string, ScannerReviewApplyResult>
+  >({})
   const [quickCategoryView, setQuickCategoryView] = useState<'cards' | 'table'>(
     'cards'
   )
@@ -820,15 +873,108 @@ export function Scanner() {
     )
   }
 
-  const reviewQuickScanApply = (itemID: string) => {
+  const markQuickScanLinked = (itemID: string) => {
+    setQuickScanQueue((current) =>
+      current.map((item) =>
+        item.id === itemID
+          ? { ...item, linkedToInventory: true, status: 'Linked' }
+          : item
+      )
+    )
+    setQuickScanStatus('Scan marked linked after explicit review.')
+  }
+
+  const quickScanCandidatesForApply = (
+    item: QuickScanQueueItem,
+    target: 'inventory' | 'wishlist'
+  ): RecognitionCandidateInput[] =>
+    item.suggestions.map((suggestion, index) => ({
+      id: `${item.fileName}-${index + 1}`.replace(/\s+/g, '-'),
+      title: suggestion,
+      confidence: Math.max(0.1, (item.confidencePct - index * 12) / 100),
+      source: index === 0 ? 'quick-scan-upload' : 'quick-scan-alternate',
+      provenance: index === 0 ? 'ui-upload-preview' : 'ui-manual-review',
+      media_id: `quick-scan:${item.id}`,
+      media_url: `cabinet://quick-scan/${encodeURIComponent(item.fileName)}`,
+      target,
+      ...(suggestion === item.selectedSuggestion && item.overrideUsed
+        ? {
+            override_id: `${item.fileName}-${index + 1}`.replace(/\s+/g, '-'),
+            override_by: 'scanner-reviewer',
+            override_note: 'Selected alternate before confirmed apply',
+          }
+        : {}),
+    }))
+
+  const reviewQuickScanApply = async (itemID: string) => {
+    const item = quickScanQueue.find((scan) => scan.id === itemID)
+    if (!item) {
+      return
+    }
+    const target = quickApplyTargetByScanID[itemID] ?? 'inventory'
     setPendingApplyScanID(itemID)
+    setQuickScanStatus('Reviewing scanner apply preview before any write.')
+    const response = await fetch('/api/scanner/recognition-review/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        confirmed: false,
+        candidates: quickScanCandidatesForApply(item, target),
+      }),
+    })
+    const payload = (await response.json()) as
+      | ScannerReviewApplyResult
+      | { review?: RecognitionReview; error?: string }
+    if (response.status !== 409 || !('review' in payload) || !payload.review) {
+      setQuickScanStatus(
+        `Review preview failed: ${
+          'error' in payload && payload.error ? payload.error : response.status
+        }`
+      )
+      return
+    }
+    setQuickReviewByScanID((current) => ({
+      ...current,
+      [itemID]: payload.review as RecognitionReview,
+    }))
     setQuickScanStatus(
-      'Reviewing apply mutation. Confirm to link scan to inventory.'
+      'Confirmation required. Review confidence, provenance, and selected target before applying.'
     )
   }
 
-  const confirmQuickScanApply = () => {
+  const confirmQuickScanApply = async () => {
     if (!pendingApplyScanID) {
+      return
+    }
+    const item = quickScanQueue.find((scan) => scan.id === pendingApplyScanID)
+    if (!item) {
+      return
+    }
+    const target = quickApplyTargetByScanID[pendingApplyScanID] ?? 'inventory'
+    const response = await fetch('/api/scanner/recognition-review/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        confirmed: true,
+        candidates: quickScanCandidatesForApply(item, target),
+      }),
+    })
+    if (!response.ok) {
+      setQuickScanStatus(`Confirmed scanner apply failed: ${response.status}`)
+      return
+    }
+    const result = (await response.json()) as ScannerReviewApplyResult
+    const reloadResponse = await fetch(
+      `/api/items?status=${encodeURIComponent(
+        target === 'wishlist' ? 'wishlist' : 'owned'
+      )}`
+    )
+    if (!reloadResponse.ok) {
+      setQuickScanStatus(
+        `Confirmed scanner apply saved, but ${target} reload failed: ${reloadResponse.status}`
+      )
       return
     }
     setQuickScanQueue((current) =>
@@ -838,8 +984,12 @@ export function Scanner() {
           : item
       )
     )
+    setQuickApplyResultByScanID((current) => ({
+      ...current,
+      [pendingApplyScanID]: result,
+    }))
     setQuickScanStatus(
-      'Inventory mutation applied after explicit confirmation.'
+      `Scanner ${target} write applied after explicit confirmation.`
     )
     setPendingApplyScanID(null)
   }
@@ -1110,6 +1260,15 @@ export function Scanner() {
                 >
                   <span>{item.fileName}</span>
                   <span className='text-muted-foreground'>{item.status}</span>
+                  {quickApplyResultByScanID[item.id]?.item ? (
+                    <span
+                      className='basis-full text-[11px] text-muted-foreground'
+                      data-testid={`card-scanner-apply-result-${item.id}`}
+                    >
+                      Created {quickApplyResultByScanID[item.id].target} item:{' '}
+                      {quickApplyResultByScanID[item.id].item?.title}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -1174,11 +1333,59 @@ export function Scanner() {
                       >
                         Suggestion: {item.selectedSuggestion}
                       </p>
+                      {quickReviewByScanID[item.id] ? (
+                        <p
+                          className='text-[11px] text-muted-foreground'
+                          data-testid={`card-scanner-review-summary-${item.id}`}
+                        >
+                          Review: {quickReviewByScanID[item.id].confidence_label}{' '}
+                          confidence, target{' '}
+                          {quickReviewByScanID[item.id].target},{' '}
+                          {quickReviewByScanID[item.id].confirm_before_create
+                            ? 'confirm-before-create required'
+                            : 'confirmation not required'}
+                        </p>
+                      ) : null}
+                      {quickApplyResultByScanID[item.id]?.item ? (
+                        <p
+                          className='text-[11px] text-muted-foreground'
+                          data-testid={`card-scanner-apply-result-${item.id}`}
+                        >
+                          Created{' '}
+                          {quickApplyResultByScanID[item.id].target} item:{' '}
+                          {quickApplyResultByScanID[item.id].item?.title}
+                        </p>
+                      ) : null}
                       <p className='text-[11px] text-muted-foreground'>
                         Queued: {new Date(item.queuedAtISO).toLocaleString()}
                       </p>
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>
+                      <select
+                        className='h-8 rounded-md border bg-background px-2 text-xs'
+                        value={quickApplyTargetByScanID[item.id] ?? 'inventory'}
+                        data-testid={`card-scanner-apply-target-${item.id}`}
+                        onChange={(event) =>
+                          setQuickApplyTargetByScanID((current) => ({
+                            ...current,
+                            [item.id]: event.target.value as
+                              | 'inventory'
+                              | 'wishlist',
+                          }))
+                        }
+                      >
+                        <option value='inventory'>Inventory</option>
+                        <option value='wishlist'>Wishlist</option>
+                      </select>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid={`card-scanner-mark-linked-${item.fileName}`}
+                        onClick={() => markQuickScanLinked(item.id)}
+                      >
+                        Mark Linked
+                      </Button>
                       <Button
                         type='button'
                         size='sm'
@@ -1193,7 +1400,7 @@ export function Scanner() {
                         size='sm'
                         variant='outline'
                         data-testid={`card-scanner-review-apply-${item.id}`}
-                        onClick={() => reviewQuickScanApply(item.id)}
+                        onClick={() => void reviewQuickScanApply(item.id)}
                       >
                         Review Apply
                       </Button>
@@ -1221,7 +1428,7 @@ export function Scanner() {
                           type='button'
                           size='sm'
                           data-testid={`card-scanner-confirm-apply-${item.id}`}
-                          onClick={confirmQuickScanApply}
+                          onClick={() => void confirmQuickScanApply()}
                         >
                           Confirm Apply
                         </Button>
