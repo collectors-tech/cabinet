@@ -2,13 +2,20 @@
 Define Market Watch screen behavior for provider-scoped query set creation, execution, and result triage.
 
 ## Requirements
-### Requirement UI-SCREEN-MARKET-WATCH-001: Market Watch SHALL expose provider selector for query creation
-Market Watch SHALL require selecting at least one provider before creating a query set.
+### Requirement UI-SCREEN-MARKET-WATCH-001: Market Watch SHALL expose provider selector and saved-query lifecycle controls
+Market Watch SHALL require selecting at least one provider before creating a query set, and SHALL let users edit and delete saved query sets without losing provider scope metadata.
 
 #### Scenario: Create provider-scoped query set
 - **GIVEN** user is on `/market-watch`
 - **WHEN** user enters query name/keywords and selects provider scope
 - **THEN** query set MUST persist with provider scope metadata
+
+#### Scenario: Edit and delete provider-scoped query set
+- **GIVEN** a provider-scoped query set exists
+- **WHEN** user edits name, keywords, or schedule and saves
+- **THEN** query set MUST persist the edited fields while preserving provider scope metadata
+- **AND WHEN** user deletes the saved query set
+- **THEN** the query set MUST be removed from the visible Market Watch list
 
 ### Requirement UI-SCREEN-MARKET-WATCH-002: Market Watch SHALL execute runs scoped to selected provider(s)
 `Run Now` MUST execute only against query set provider scope.
@@ -67,7 +74,7 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-provider-scoped-query` |
+| UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls` |
 | UC-MW-02 | Run scoped query | Runtime payload and results are provider-scoped | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-provider-scoped` |
 | UC-MW-03 | Handle run failure | Human-readable error + retry shown | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action` |
 | UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
@@ -75,3 +82,4 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 | UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification and handoff persistence | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows` |
 | UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |
 | UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |
+| UC-MW-09 | Edit and delete provider-scoped query set | Edited name/keywords/schedule persist while provider scope remains intact, then delete removes the saved query | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle` |

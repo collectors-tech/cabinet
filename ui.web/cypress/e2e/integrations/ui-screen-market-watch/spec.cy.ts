@@ -48,6 +48,104 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle', () => {
+    let querySets: Array<{
+      id: string
+      name: string
+      keywords: string[]
+      provider_scope: string[]
+      schedule_cron?: string
+      enabled?: boolean
+    }> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', () => ({
+      statusCode: 200,
+      body: { query_sets: querySets },
+    })).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/query-sets', (req) => {
+      expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
+      expect(req.body.schedule_cron).to.equal('0 */6 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 201, body: querySets[0] })
+    }).as('createQuerySet')
+    cy.intercept('PUT', '/api/scanner/query-sets/qs-mw-lifecycle', (req) => {
+      expect(req.body.name).to.equal('Bonza AFX Edited')
+      expect(req.body.keywords).to.deep.equal(['AFX', 'Mega G+'])
+      expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
+      expect(req.body.schedule_cron).to.equal('15 */4 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 200, body: querySets[0] })
+    }).as('updateQuerySet')
+    cy.intercept('DELETE', '/api/scanner/query-sets/qs-mw-lifecycle', (req) => {
+      querySets = []
+      req.reply({ statusCode: 204, body: '' })
+    }).as('deleteQuerySet')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-provider-single"]').select('bonzaslotcars')
+    cy.get('[data-testid="scanner-new-query-name"]').type('Bonza AFX')
+    cy.get('[data-testid="scanner-new-query-keywords"]').type('AFX')
+    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.wait('@createQuerySet')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-lifecycle"]').should(
+      'contain',
+      'bonzaslotcars'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-lifecycle"]').should(
+      'contain',
+      '0 */6 * * *'
+    )
+
+    cy.get('[data-testid="scanner-edit-qs-mw-lifecycle"]').click()
+    cy.get('[data-testid="scanner-edit-name-qs-mw-lifecycle"]').clear().type('Bonza AFX Edited')
+    cy.get('[data-testid="scanner-edit-keywords-qs-mw-lifecycle"]').clear().type('AFX, Mega G+')
+    cy.get('[data-testid="scanner-edit-schedule-qs-mw-lifecycle"]').clear().type('15 */4 * * *')
+    cy.get('[data-testid="scanner-save-qs-mw-lifecycle"]').click()
+    cy.wait('@updateQuerySet')
+    cy.contains('Bonza AFX Edited').should('be.visible')
+    cy.contains('AFX, Mega G+').should('be.visible')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-lifecycle"]').should(
+      'contain',
+      'bonzaslotcars'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-lifecycle"]').should(
+      'contain',
+      '15 */4 * * *'
+    )
+
+    cy.get('[data-testid="scanner-delete-qs-mw-lifecycle"]').click()
+    cy.wait('@deleteQuerySet')
+    cy.contains('Bonza AFX Edited').should('not.exist')
+    cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-002 sends provider scope in run payload and shows provider-attributed results', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
