@@ -118,3 +118,93 @@ func TestRunScheduled(t *testing.T) {
 		t.Fatalf("expected 1 scheduled run, got %d", ran)
 	}
 }
+
+func TestBuildRecognitionReviewNormalizesCandidatesAndRequiresConfirmation(t *testing.T) {
+	t.Parallel()
+
+	review, err := BuildRecognitionReview([]RecognitionCandidateInput{
+		{
+			ID:         "low",
+			Title:      "Fuzzy slot car",
+			Confidence: 0.41,
+			Source:     "camera",
+			Provenance: "ocr-v1",
+			MediaID:    "media-1",
+			Target:     "wishlist",
+		},
+		{
+			ID:         "top",
+			Title:      "AFX Camaro",
+			Confidence: 0.93,
+			Source:     "catalog",
+			Provenance: "matcher-v2",
+			MediaURL:   "https://example.test/scan.jpg",
+			Target:     "inventory",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildRecognitionReview() error = %v", err)
+	}
+	if review.TopCandidate.ID != "top" || review.SelectedCandidate.ID != "top" {
+		t.Fatalf("expected top candidate selected, got %+v", review)
+	}
+	if review.ConfidenceLabel != "high" || review.RequiresManualReview {
+		t.Fatalf("expected high confidence without manual review, got %+v", review)
+	}
+	if !review.ConfirmBeforeCreate || review.Target != "inventory" {
+		t.Fatalf("expected confirm-before-create inventory preview, got %+v", review)
+	}
+	if got := review.MediaEvidence["media_url"]; got != "https://example.test/scan.jpg" {
+		t.Fatalf("expected selected media evidence, got %+v", review.MediaEvidence)
+	}
+	if len(review.Alternates) != 1 || review.Alternates[0].ID != "low" {
+		t.Fatalf("expected lower-confidence alternate retained, got %+v", review.Alternates)
+	}
+	if len(review.Provenance) != 4 {
+		t.Fatalf("expected unique source/provenance evidence, got %+v", review.Provenance)
+	}
+}
+
+func TestBuildRecognitionReviewPreservesManualOverridePreview(t *testing.T) {
+	t.Parallel()
+
+	review, err := BuildRecognitionReview([]RecognitionCandidateInput{
+		{
+			ID:         "auto",
+			Title:      "Auto match",
+			Confidence: 0.96,
+			Source:     "catalog",
+			Provenance: "matcher",
+			MediaID:    "media-2",
+		},
+		{
+			ID:           "manual",
+			Title:        "Manual override",
+			Confidence:   0.72,
+			Source:       "user",
+			Provenance:   "manual-search",
+			OverrideID:   "manual",
+			OverrideBy:   "reviewer",
+			OverrideNote: "selected exact variant",
+			Target:       "wishlist",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildRecognitionReview() error = %v", err)
+	}
+	if review.TopCandidate.ID != "auto" {
+		t.Fatalf("expected auto top candidate retained, got %+v", review.TopCandidate)
+	}
+	if review.SelectedCandidate.ID != "manual" || !review.ManualOverrideApplied {
+		t.Fatalf("expected manual override selected, got %+v", review)
+	}
+	if review.ConfidenceLabel != "medium" || !review.RequiresManualReview {
+		t.Fatalf("expected medium-confidence manual review, got %+v", review)
+	}
+	if review.Target != "wishlist" || !review.ConfirmBeforeCreate {
+		t.Fatalf("expected wishlist confirm-before-create preview, got %+v", review)
+	}
+	if len(review.Alternates) != 1 || review.Alternates[0].ID != "auto" {
+		t.Fatalf("expected original top as alternate, got %+v", review.Alternates)
+	}
+}

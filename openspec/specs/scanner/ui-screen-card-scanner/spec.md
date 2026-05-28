@@ -43,6 +43,19 @@ Scanner SHALL never silently mutate data; user confirmation is required before c
 ### Requirement UI-SCREEN-CARD-SCANNER-004: Card Scanner SHALL support deterministic error/retry behavior
 Scanner SHALL surface human-readable failure states with retry guidance.
 
+### Requirement UI-SCREEN-CARD-SCANNER-007: Scanner recognition review SHALL normalize candidates before writes
+Scanner recognition review SHALL normalize candidate payloads into a non-mutating preview that preserves top match, alternates, confidence label, provenance, media evidence, manual override state, target record type, and a required confirm-before-create boundary.
+
+#### Scenario: Normalize scan candidates for review
+- **GIVEN** recognition returns one or more candidate matches with confidence, provenance, and media evidence
+- **WHEN** Cabinet builds the scanner review preview
+- **THEN** Cabinet MUST choose the highest-confidence top candidate, retain alternates, classify confidence, preserve source/provenance/media evidence, and set `confirm_before_create=true` without writing Inventory or Wishlist records
+
+#### Scenario: Preserve manual override in review preview
+- **GIVEN** a reviewer manually selects an alternate recognition candidate
+- **WHEN** Cabinet builds the scanner review preview
+- **THEN** Cabinet MUST keep the automatic top match as evidence, select the manual override, mark manual review as required, preserve the requested Inventory/Wishlist target, and still require explicit confirmation before any create/update write
+
 ### Requirement UI-SCREEN-CARD-SCANNER-005: Scanner quick-category panel SHALL support card-list and table views for unlinked recent scans
 Scanner SHALL provide a quick-category area showing most recently added scan results not yet linked to inventory, with toggleable `Cards` and `Table` views.
 

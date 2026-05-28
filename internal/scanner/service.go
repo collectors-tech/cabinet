@@ -60,6 +60,34 @@ type Candidate struct {
 	StockCount int     `json:"stock_count"`
 }
 
+type RecognitionCandidateInput struct {
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Confidence   float64  `json:"confidence"`
+	Source       string   `json:"source"`
+	Provenance   string   `json:"provenance"`
+	Alternates   []string `json:"alternates,omitempty"`
+	MediaID      string   `json:"media_id,omitempty"`
+	MediaURL     string   `json:"media_url,omitempty"`
+	Target       string   `json:"target,omitempty"`
+	OverrideID   string   `json:"override_id,omitempty"`
+	OverrideBy   string   `json:"override_by,omitempty"`
+	OverrideNote string   `json:"override_note,omitempty"`
+}
+
+type RecognitionReview struct {
+	TopCandidate          RecognitionCandidateInput   `json:"top_candidate"`
+	Alternates            []RecognitionCandidateInput `json:"alternates"`
+	SelectedCandidate     RecognitionCandidateInput   `json:"selected_candidate"`
+	ConfidenceLabel       string                      `json:"confidence_label"`
+	RequiresManualReview  bool                        `json:"requires_manual_review"`
+	ConfirmBeforeCreate   bool                        `json:"confirm_before_create"`
+	Target                string                      `json:"target"`
+	MediaEvidence         map[string]string           `json:"media_evidence"`
+	Provenance            []string                    `json:"provenance"`
+	ManualOverrideApplied bool                        `json:"manual_override_applied"`
+}
+
 type RunResult struct {
 	Attempts              int    `json:"attempts"`
 	Saved                 int    `json:"saved"`
@@ -250,6 +278,119 @@ func normalizeProviderScope(values []string) []string {
 	}
 	if len(out) == 0 {
 		return []string{"ebay", "amazon"}
+	}
+	return out
+}
+
+func BuildRecognitionReview(candidates []RecognitionCandidateInput) (RecognitionReview, error) {
+	normalized := make([]RecognitionCandidateInput, 0, len(candidates))
+	for _, candidate := range candidates {
+		candidate.ID = strings.TrimSpace(candidate.ID)
+		candidate.Title = strings.TrimSpace(candidate.Title)
+		candidate.Source = strings.TrimSpace(candidate.Source)
+		candidate.Provenance = strings.TrimSpace(candidate.Provenance)
+		candidate.MediaID = strings.TrimSpace(candidate.MediaID)
+		candidate.MediaURL = strings.TrimSpace(candidate.MediaURL)
+		candidate.Target = normalizeRecognitionTarget(candidate.Target)
+		candidate.OverrideID = strings.TrimSpace(candidate.OverrideID)
+		candidate.OverrideBy = strings.TrimSpace(candidate.OverrideBy)
+		candidate.OverrideNote = strings.TrimSpace(candidate.OverrideNote)
+		if candidate.Confidence < 0 {
+			candidate.Confidence = 0
+		}
+		if candidate.Confidence > 1 {
+			candidate.Confidence = 1
+		}
+		if candidate.ID == "" || candidate.Title == "" {
+			continue
+		}
+		normalized = append(normalized, candidate)
+	}
+	if len(normalized) == 0 {
+		return RecognitionReview{}, fmt.Errorf("recognition candidate is required")
+	}
+
+	top := normalized[0]
+	for _, candidate := range normalized {
+		if candidate.Confidence > top.Confidence {
+			top = candidate
+		}
+	}
+	selected := top
+	manualOverride := false
+	for _, candidate := range normalized {
+		if candidate.OverrideID != "" {
+			selected = candidate
+			manualOverride = true
+			break
+		}
+	}
+	alternates := make([]RecognitionCandidateInput, 0, len(normalized)-1)
+	for _, candidate := range normalized {
+		if candidate.ID != selected.ID {
+			alternates = append(alternates, candidate)
+		}
+	}
+	target := selected.Target
+	if target == "" {
+		target = "inventory"
+	}
+	review := RecognitionReview{
+		TopCandidate:          top,
+		Alternates:            alternates,
+		SelectedCandidate:     selected,
+		ConfidenceLabel:       confidenceLabel(selected.Confidence),
+		RequiresManualReview:  selected.Confidence < 0.85 || manualOverride,
+		ConfirmBeforeCreate:   true,
+		Target:                target,
+		MediaEvidence:         map[string]string{},
+		Provenance:            recognitionProvenance(normalized),
+		ManualOverrideApplied: manualOverride,
+	}
+	if selected.MediaID != "" {
+		review.MediaEvidence["media_id"] = selected.MediaID
+	}
+	if selected.MediaURL != "" {
+		review.MediaEvidence["media_url"] = selected.MediaURL
+	}
+	return review, nil
+}
+
+func normalizeRecognitionTarget(target string) string {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "wishlist":
+		return "wishlist"
+	default:
+		return "inventory"
+	}
+}
+
+func confidenceLabel(confidence float64) string {
+	switch {
+	case confidence >= 0.85:
+		return "high"
+	case confidence >= 0.6:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func recognitionProvenance(candidates []RecognitionCandidateInput) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		for _, value := range []string{candidate.Source, candidate.Provenance} {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
 	}
 	return out
 }
