@@ -58,6 +58,11 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **AND** global inventory search MUST match item type, condition, category, and packaging grade values as well as title and part number
 - **AND** saved inventory views MUST preserve taxonomy filters and sorting choices
 
+#### Scenario: Document taxonomy workflow in Help Center
+- **GIVEN** users need to understand profile-scoped collector taxonomy behavior
+- **WHEN** they read Help Center Inventory, Wishlist, and Settings section guides
+- **THEN** the guides MUST explain item type, item type condition scale, packaging grade, wishlist preservation, inventory search/filter/saved-view behavior, and `invalid_taxonomy_value` correction paths
+
 ### Requirement INVENTORY-GRADING-002: Item records SHALL support grading and collector classification fields
 Cabinet SHALL persist grading fields per item/instance including grading status and collector classification.
 
