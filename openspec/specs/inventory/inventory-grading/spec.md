@@ -39,6 +39,12 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **THEN** the editor MUST expose item type, condition, and packaging grade controls from the configured taxonomy
 - **AND** saving the item MUST persist the selected item type and packaging grade values on the inventory record
 
+#### Scenario: Preserve taxonomy from wishlist planning
+- **GIVEN** profile-scoped item type condition scales and packaging grade enums exist
+- **WHEN** user creates or edits a wishlist entry before owning the item
+- **THEN** the wishlist editor MUST expose item type, condition, and packaging grade controls from the configured taxonomy
+- **AND** saving the wishlist entry MUST persist the selected taxonomy values on the linked inventory record so later conversion keeps the same classification
+
 ### Requirement INVENTORY-GRADING-002: Item records SHALL support grading and collector classification fields
 Cabinet SHALL persist grading fields per item/instance including grading status and collector classification.
 

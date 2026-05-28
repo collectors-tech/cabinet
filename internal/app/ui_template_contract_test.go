@@ -759,6 +759,52 @@ func TestInventoryEditorTaxonomyFieldsContract(t *testing.T) {
 	}
 }
 
+func TestWishlistTaxonomyFieldsContract(t *testing.T) {
+	t.Parallel()
+
+	files := []struct {
+		path     string
+		required []string
+	}{
+		{
+			path: "../../ui.web/src/features/tasks/index.tsx",
+			required: []string{
+				"loadWishlistItemTypeConditionScales",
+				"loadWishlistPackagingGrades",
+				"item_type: draft.itemType",
+				"packaging_grade_type: draft.packagingGradeType",
+				"condition: draft.condition",
+				"itemType: item.item_type?.trim()",
+				"packagingGradeType: item.packaging_grade_type?.trim()",
+				"condition: item.condition?.trim()",
+			},
+		},
+		{
+			path: "../../ui.web/src/features/tasks/components/tasks-mutate-drawer.tsx",
+			required: []string{
+				"data-testid='wishlist-item-type'",
+				"data-testid='wishlist-condition'",
+				"data-testid='wishlist-packaging-grade'",
+				"itemType: data.itemType.trim()",
+				"packagingGradeType: data.packagingGradeType.trim()",
+				"condition: data.condition.trim()",
+			},
+		},
+	}
+	for _, file := range files {
+		b, err := os.ReadFile(file.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", file.path, err)
+		}
+		src := string(b)
+		for _, token := range file.required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s wishlist taxonomy fields contract missing token: %s", file.path, token)
+			}
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 

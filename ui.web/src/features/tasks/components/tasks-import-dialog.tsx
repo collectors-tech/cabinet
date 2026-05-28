@@ -99,6 +99,10 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
       title,
       partNumber: cells[columnIndex('part_number')]?.trim() ?? '',
       category: cells[columnIndex('category')]?.trim() ?? '',
+      itemType: cells[columnIndex('item_type')]?.trim() ?? '',
+      packagingGradeType:
+        cells[columnIndex('packaging_grade_type')]?.trim() ?? '',
+      condition: cells[columnIndex('condition')]?.trim() ?? '',
       priority: cells[columnIndex('priority')]?.trim() || 'medium',
       notes: cells[columnIndex('notes')]?.trim() ?? '',
       targetPrice: cells[columnIndex('target_price')]?.trim() ?? '',

@@ -24,6 +24,9 @@ type TasksDialogsProps = {
   onWishlistDelete?: (currentRow: Task) => Promise<void>
   onWishlistImport?: (entries: WishlistEntryDraft[]) => Promise<void>
   isWishlistMutating?: boolean
+  wishlistItemTypeOptions?: string[]
+  wishlistPackagingGradeOptions?: string[]
+  wishlistConditionOptions?: string[]
 }
 
 export function TasksDialogs({
@@ -37,6 +40,9 @@ export function TasksDialogs({
   onWishlistDelete,
   onWishlistImport,
   isWishlistMutating = false,
+  wishlistItemTypeOptions = [],
+  wishlistPackagingGradeOptions = [],
+  wishlistConditionOptions = [],
 }: TasksDialogsProps) {
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
   const clearCurrentRowTimerRef = useRef<number | null>(null)
@@ -98,6 +104,9 @@ export function TasksDialogs({
         routePath={routePath}
         onWishlistSubmit={onWishlistSubmit}
         isLoading={isWishlistMutating}
+        wishlistItemTypeOptions={wishlistItemTypeOptions}
+        wishlistPackagingGradeOptions={wishlistPackagingGradeOptions}
+        wishlistConditionOptions={wishlistConditionOptions}
       />
 
       <TasksImportDialog
@@ -136,6 +145,9 @@ export function TasksDialogs({
             canNavigateNext={canNavigateNext}
             onNavigatePrevious={() => navigateCurrentRow(-1)}
             onNavigateNext={() => navigateCurrentRow(1)}
+            wishlistItemTypeOptions={wishlistItemTypeOptions}
+            wishlistPackagingGradeOptions={wishlistPackagingGradeOptions}
+            wishlistConditionOptions={wishlistConditionOptions}
           />
 
           <ConfirmDialog
