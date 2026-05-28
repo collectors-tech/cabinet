@@ -993,6 +993,48 @@ export function getTasksColumns({
           } satisfies ColumnDef<Task>,
         ]
       : []),
+    ...(isInventoryRoute
+      ? [
+          {
+            accessorKey: 'itemType',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Item type' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-item-type'
+                title={row.original.itemType || 'Unclassified'}
+              >
+                {row.original.itemType || 'Unclassified'}
+              </span>
+            ),
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'packagingGradeType',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Packaging' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-packaging-grade'
+                title={row.original.packagingGradeType || 'Unset'}
+              >
+                {row.original.packagingGradeType || 'Unset'}
+              </span>
+            ),
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
+          } satisfies ColumnDef<Task>,
+        ]
+      : []),
     {
       accessorKey: 'priority',
       header: ({ column }) => (

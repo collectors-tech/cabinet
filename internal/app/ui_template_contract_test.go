@@ -759,6 +759,58 @@ func TestInventoryEditorTaxonomyFieldsContract(t *testing.T) {
 	}
 }
 
+func TestInventoryTaxonomySearchFilterSortContract(t *testing.T) {
+	t.Parallel()
+
+	files := []struct {
+		path     string
+		required []string
+	}{
+		{
+			path: "../../ui.web/src/features/collection/index.tsx",
+			required: []string{
+				"itemType: item.item_type",
+				"packagingGradeType: item.packaging_grade_type",
+				"condition: item.condition",
+			},
+		},
+		{
+			path: "../../ui.web/src/features/tasks/components/tasks-table.tsx",
+			required: []string{
+				"itemTypeFilters",
+				"packagingGradeFilters",
+				"columnId: 'itemType'",
+				"columnId: 'packagingGradeType'",
+				"Filter by title, part number, type, condition, or packaging...",
+				"testIdPrefix: 'inventory-table-item-type'",
+				"testIdPrefix: 'inventory-table-packaging'",
+			},
+		},
+		{
+			path: "../../ui.web/src/features/tasks/components/tasks-columns.tsx",
+			required: []string{
+				"accessorKey: 'itemType'",
+				"accessorKey: 'packagingGradeType'",
+				"data-testid='inventory-row-item-type'",
+				"data-testid='inventory-row-packaging-grade'",
+			},
+		},
+	}
+
+	for _, file := range files {
+		b, err := os.ReadFile(file.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", file.path, err)
+		}
+		src := string(b)
+		for _, token := range file.required {
+			if !strings.Contains(src, token) {
+				t.Fatalf("%s inventory taxonomy search/filter/sort contract missing token: %s", file.path, token)
+			}
+		}
+	}
+}
+
 func TestWishlistTaxonomyFieldsContract(t *testing.T) {
 	t.Parallel()
 
