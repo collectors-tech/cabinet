@@ -33,6 +33,12 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **THEN** condition choices MUST come from the selected item type condition scale
 - **AND** changing item type MUST update the available condition choices
 
+#### Scenario: Use configured taxonomy in inventory editor
+- **GIVEN** profile-scoped item type condition scales and packaging grade enums exist
+- **WHEN** user creates or edits an inventory item
+- **THEN** the editor MUST expose item type, condition, and packaging grade controls from the configured taxonomy
+- **AND** saving the item MUST persist the selected item type and packaging grade values on the inventory record
+
 ### Requirement INVENTORY-GRADING-002: Item records SHALL support grading and collector classification fields
 Cabinet SHALL persist grading fields per item/instance including grading status and collector classification.
 
