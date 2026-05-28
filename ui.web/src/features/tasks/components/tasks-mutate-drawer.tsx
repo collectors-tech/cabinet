@@ -31,6 +31,9 @@ export type WishlistEntryDraft = {
   title: string
   partNumber: string
   category: string
+  itemType: string
+  packagingGradeType: string
+  condition: string
   priority: string
   notes: string
   targetPrice: string
@@ -57,6 +60,9 @@ type TaskMutateDrawerProps = {
   canNavigateNext?: boolean
   onNavigatePrevious?: () => void
   onNavigateNext?: () => void
+  wishlistItemTypeOptions?: string[]
+  wishlistPackagingGradeOptions?: string[]
+  wishlistConditionOptions?: string[]
 }
 
 const taskFormSchema = z.object({
@@ -70,6 +76,9 @@ const wishlistFormSchema = z.object({
   title: z.string().trim().min(1, 'Title is required.'),
   partNumber: z.string(),
   category: z.string(),
+  itemType: z.string(),
+  packagingGradeType: z.string(),
+  condition: z.string(),
   priority: z.string().trim().min(1, 'Please choose a priority.'),
   notes: z.string(),
   owned: z.boolean(),
@@ -115,6 +124,9 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
     title: currentRow?.title ?? '',
     partNumber: currentRow?.partNumber ?? '',
     category: currentRow?.label ?? '',
+    itemType: currentRow?.itemType ?? '',
+    packagingGradeType: currentRow?.packagingGradeType ?? '',
+    condition: currentRow?.condition ?? '',
     priority: currentRow?.priority ?? 'medium',
     notes: currentRow?.notes ?? '',
     owned: Boolean(currentRow?.owned),
@@ -152,6 +164,9 @@ export function TasksMutateDrawer({
   canNavigateNext = false,
   onNavigatePrevious,
   onNavigateNext,
+  wishlistItemTypeOptions = [],
+  wishlistPackagingGradeOptions = [],
+  wishlistConditionOptions = [],
 }: TaskMutateDrawerProps) {
   const isUpdate = !!currentRow
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
@@ -199,6 +214,9 @@ export function TasksMutateDrawer({
         title: data.title.trim(),
         partNumber: data.partNumber.trim(),
         category: data.category.trim(),
+        itemType: data.itemType.trim(),
+        packagingGradeType: data.packagingGradeType.trim(),
+        condition: data.condition.trim(),
         priority: data.priority.trim(),
         notes: data.notes.trim(),
         targetPrice: data.targetPrice.trim(),
@@ -306,6 +324,77 @@ export function TasksMutateDrawer({
                   </FormItem>
                 )}
               />
+              <div className='grid gap-4 sm:grid-cols-3'>
+                <FormField
+                  control={wishlistForm.control}
+                  name='itemType'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item Type</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-item-type'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose item type</option>
+                        {wishlistItemTypeOptions.map((itemType) => (
+                          <option key={itemType} value={itemType}>
+                            {itemType}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='condition'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Condition</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-condition'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose condition</option>
+                        {wishlistConditionOptions.map((condition) => (
+                          <option key={condition} value={condition}>
+                            {condition}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={wishlistForm.control}
+                  name='packagingGradeType'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Packaging Grade</FormLabel>
+                      <select
+                        className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                        data-testid='wishlist-packaging-grade'
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value=''>Choose packaging grade</option>
+                        {wishlistPackagingGradeOptions.map((packagingGrade) => (
+                          <option key={packagingGrade} value={packagingGrade}>
+                            {packagingGrade}
+                          </option>
+                        ))}
+                      </select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               {currentRow ? (
                 <div className='rounded-md border p-3 text-sm'>
                   <p data-testid='wishlist-edit-item-id'>
