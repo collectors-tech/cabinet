@@ -32,6 +32,8 @@ Results and errors SHALL clearly indicate source provider and actionable recover
 - **GIVEN** provider run fails
 - **WHEN** failure response is returned
 - **THEN** UI MUST show human-readable error guidance (not raw error keys) with retry path
+- **AND WHEN** retry is requested for the failed query set
+- **THEN** UI MUST show retry-request feedback, reload durable query-set/failure state, clear stale failure entries when recovered, and show the recovered latest-run snapshot
 
 ### Requirement UI-SCREEN-MARKET-WATCH-004: Market Watch SHALL support deterministic states
 Screen SHALL support loading, empty, ready, and error states with retry controls.
@@ -76,7 +78,7 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 | --- | --- | --- | --- |
 | UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls` |
 | UC-MW-02 | Run scoped query | Runtime payload and results are provider-scoped | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-provider-scoped` |
-| UC-MW-03 | Handle run failure | Human-readable error + retry shown | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action` |
+| UC-MW-03 | Handle run failure | Human-readable error + retry shown, then durable failure/query-set state reloads after recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action` |
 | UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
 | UC-MW-05 | Query-set table review | Table shows saved queries with durable status/time/output summary columns across reloads and scheduled-refresh snapshot reloads | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection`; `UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh`; `TestScannerRunItemsPerPageSummaryAppliesSafeCap`; `TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot` |
 | UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification and handoff persistence | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows` |
