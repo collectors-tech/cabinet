@@ -1753,8 +1753,9 @@ func New(cfg config.Config) (*App, error) {
 				return
 			}
 			active, _ := profiles.GetActiveProfile(r.Context())
+			settings := map[string]string{}
 			if strings.TrimSpace(active.ID) != "" {
-				settings, _ := profiles.GetSettings(r.Context(), active.ID)
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
 				if strings.TrimSpace(req.GradingStatus) == "" {
 					if v := strings.TrimSpace(settings["grading.defaults.grading_status"]); v != "" {
 						req.GradingStatus = strings.ToLower(v)
@@ -1765,6 +1766,10 @@ func New(cfg config.Config) (*App, error) {
 						req.Priority = strings.ToLower(v)
 					}
 				}
+			}
+			if validationErr := validateInventoryItemTaxonomy(req, nil, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
+				return
 			}
 			created, err := collectionRepo.CreateItemForProfile(r.Context(), active.ID, req)
 			if err != nil {
@@ -5187,6 +5192,14 @@ func New(cfg config.Config) (*App, error) {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 				return
 			}
+			settings := map[string]string{}
+			if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
+			}
+			if validationErr := validateInventoryItemTaxonomy(req.Changes, nil, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
+				return
+			}
 			result, err := collectionRepo.BulkEditItems(r.Context(), req.ItemIDs, req.Changes)
 			if err != nil {
 				http.Error(w, `{"error":"invalid_bulk_edit"}`, http.StatusBadRequest)
@@ -5260,6 +5273,15 @@ func New(cfg config.Config) (*App, error) {
 			var req collection.Item
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+				return
+			}
+			settings := map[string]string{}
+			if active, activeErr := profiles.GetActiveProfile(r.Context()); activeErr == nil && strings.TrimSpace(active.ID) != "" {
+				settings, _ = profiles.GetSettings(r.Context(), active.ID)
+			}
+			current, _ := collectionRepo.GetItemByID(r.Context(), itemID)
+			if validationErr := validateInventoryItemTaxonomy(req, &current, settings); validationErr != nil {
+				writeInventoryTaxonomyValidationError(w, validationErr)
 				return
 			}
 			updated, err := collectionRepo.UpdateItem(r.Context(), itemID, req)
@@ -7132,6 +7154,101 @@ func normalizeStringList(input []string, fallback []string) []string {
 		return append([]string(nil), fallback...)
 	}
 	return out
+}
+
+type inventoryTaxonomyValidationError struct {
+	Field   string
+	Value   string
+	Message string
+}
+
+func (e *inventoryTaxonomyValidationError) Error() string {
+	return e.Message
+}
+
+func writeInventoryTaxonomyValidationError(w http.ResponseWriter, validationErr *inventoryTaxonomyValidationError) {
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":   "invalid_taxonomy_value",
+		"field":   validationErr.Field,
+		"value":   validationErr.Value,
+		"message": validationErr.Message,
+	})
+}
+
+func validateInventoryItemTaxonomy(item collection.Item, existing *collection.Item, settings map[string]string) *inventoryTaxonomyValidationError {
+	scales := parseItemTypeConditionScalesSetting(settings["grading.enums.item_type_condition_scales"])
+	packagingGrades := parseStringArraySetting(settings["grading.enums.packaging"], defaultPackagingGrades())
+
+	itemType := strings.TrimSpace(item.ItemType)
+	if itemType == "" && existing != nil {
+		itemType = strings.TrimSpace(existing.ItemType)
+	}
+	if strings.TrimSpace(item.ItemType) != "" && !itemTypeExists(scales, item.ItemType) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "item_type",
+			Value:   strings.TrimSpace(item.ItemType),
+			Message: "item_type must match a configured item type condition scale for the active profile",
+		}
+	}
+
+	condition := strings.TrimSpace(item.Condition)
+	if condition != "" && !conditionExistsForItemType(scales, itemType, condition) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "condition",
+			Value:   condition,
+			Message: "condition must match the configured condition scale for the selected item type",
+		}
+	}
+
+	packagingGrade := strings.TrimSpace(item.PackagingGradeType)
+	if packagingGrade != "" && !displayListContains(packagingGrades, packagingGrade) {
+		return &inventoryTaxonomyValidationError{
+			Field:   "packaging_grade_type",
+			Value:   packagingGrade,
+			Message: "packaging_grade_type must match a configured packaging grade for the active profile",
+		}
+	}
+	return nil
+}
+
+func itemTypeExists(scales []itemTypeConditionScale, value string) bool {
+	clean := strings.TrimSpace(value)
+	for _, scale := range scales {
+		if strings.EqualFold(strings.TrimSpace(scale.ItemType), clean) {
+			return true
+		}
+	}
+	return false
+}
+
+func conditionExistsForItemType(scales []itemTypeConditionScale, itemType string, condition string) bool {
+	clean := strings.TrimSpace(condition)
+	selectedType := strings.TrimSpace(itemType)
+	if selectedType == "" {
+		for _, scale := range scales {
+			if displayListContains(scale.Conditions, clean) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, scale := range scales {
+		if strings.EqualFold(strings.TrimSpace(scale.ItemType), selectedType) {
+			return displayListContains(scale.Conditions, clean)
+		}
+	}
+	return false
+}
+
+func displayListContains(values []string, value string) bool {
+	clean := strings.TrimSpace(value)
+	for _, candidate := range values {
+		if strings.EqualFold(strings.TrimSpace(candidate), clean) {
+			return true
+		}
+	}
+	return false
 }
 
 func clerkWebhookPlanTransition(payload map[string]any) (string, string, error) {
