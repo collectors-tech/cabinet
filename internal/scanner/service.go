@@ -440,6 +440,28 @@ func (s *Service) persistCandidates(ctx context.Context, querySetID string, item
 	return s.persistCandidatesForProfile(ctx, "", querySetID, items, attempts, 0, 0, "")
 }
 
+func (s *Service) PersistCandidatesForProfile(
+	ctx context.Context,
+	profileID,
+	querySetID string,
+	items []CandidateInput,
+	attempts int,
+	requestedItemsPerPage int,
+	effectiveItemsPerPage int,
+	itemsPerPageWarning string,
+) (RunResult, error) {
+	return s.persistCandidatesForProfile(
+		ctx,
+		strings.TrimSpace(profileID),
+		strings.TrimSpace(querySetID),
+		items,
+		attempts,
+		requestedItemsPerPage,
+		effectiveItemsPerPage,
+		itemsPerPageWarning,
+	)
+}
+
 func (s *Service) persistCandidatesForProfile(
 	ctx context.Context,
 	profileID,
