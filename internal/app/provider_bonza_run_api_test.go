@@ -79,11 +79,12 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 	}
 
 	var payload struct {
-		QuerySetID       string                   `json:"query_set_id"`
-		PageCount        int                      `json:"page_count"`
-		ObservedPageSize int                      `json:"observed_page_size"`
-		Candidates       []map[string]any         `json:"candidates"`
-		RunSummary       map[string]any           `json:"run_summary"`
+		QuerySetID       string           `json:"query_set_id"`
+		PageCount        int              `json:"page_count"`
+		ObservedPageSize int              `json:"observed_page_size"`
+		Candidates       []map[string]any `json:"candidates"`
+		Run              map[string]any   `json:"run"`
+		RunSummary       map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode bonza payload: %v", err)
@@ -100,12 +101,19 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 	if len(payload.Candidates) != 3 {
 		t.Fatalf("expected 3 deduplicated candidates, got=%d payload=%+v", len(payload.Candidates), payload.Candidates)
 	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 3 {
+		t.Fatalf("expected persisted run saved=3, got %+v", payload.Run)
+	}
 
 	var enriched bool
 	for _, candidate := range payload.Candidates {
 		listingID, _ := candidate["listing_id"].(string)
 		if listingID == "bonza-1002" {
 			state, _ := candidate["stock_state"].(string)
+			source, _ := candidate["source"].(string)
+			if source != "bonzaslotcars" {
+				t.Fatalf("expected persisted bonza source, got %+v", candidate)
+			}
 			if state == "low_stock" {
 				enriched = true
 			}
@@ -113,5 +121,26 @@ func TestBonzaRunAggregatesPagesAndEnrichesWatchedStock(t *testing.T) {
 	}
 	if !enriched {
 		t.Fatalf("expected fallback detail stock enrichment for bonza-1002, payload=%+v", payload.Candidates)
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one reloaded query set, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected bonza run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 3 {
+		t.Fatalf("expected bonza run to persist candidate count=3, got %+v", latest)
 	}
 }

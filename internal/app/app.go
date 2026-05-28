@@ -2542,16 +2542,36 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_run_bonza"}`, http.StatusBadRequest)
 			return
 		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			bonzaCandidatesForScanner(searchResult.Candidates),
+			1,
+			requested,
+			searchResult.ItemsPerPageUsed,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_bonza_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_bonza_candidates"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":        qs.ID,
 			"page_count":          searchResult.PageCount,
 			"observed_page_size":  searchResult.ObservedPageSize,
 			"items_per_page_used": searchResult.ItemsPerPageUsed,
-			"candidates":          searchResult.Candidates,
+			"candidates":          persisted,
+			"run":                 run,
 			"run_summary": map[string]any{
 				"page_count":         searchResult.PageCount,
 				"observed_page_size": searchResult.ObservedPageSize,
-				"candidates_total":   len(searchResult.Candidates),
+				"candidates_total":   run.Saved,
 			},
 		})
 	})
@@ -8317,6 +8337,55 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		ItemsPerPageUsed: itemsPerPage,
 		Candidates:       candidates,
 	}, nil
+}
+
+func bonzaCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	out := make([]scanner.CandidateInput, 0, len(candidates))
+	for _, candidate := range candidates {
+		listingID := strings.TrimSpace(fmt.Sprint(candidate["listing_id"]))
+		if listingID == "" {
+			continue
+		}
+		out = append(out, scanner.CandidateInput{
+			ListingID:  listingID,
+			Title:      stringCandidateValue(candidate["title"]),
+			Price:      numericCandidateValue(candidate["price"]),
+			URL:        stringCandidateValue(candidate["url"]),
+			Seller:     stringCandidateValue(candidate["seller"]),
+			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), "bonzaslotcars"),
+			StockState: stringCandidateValue(candidate["stock_state"]),
+			StockCount: int(numericCandidateValue(candidate["stock_count"])),
+		})
+	}
+	return out
+}
+
+func stringCandidateValue(raw any) string {
+	if raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
+func numericCandidateValue(raw any) float64 {
+	switch value := raw.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case json.Number:
+		parsed, _ := value.Float64()
+		return parsed
+	case string:
+		parsed, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		return parsed
+	default:
+		return 0
+	}
 }
 
 func normalizeBonzaURL(baseURL, raw string) string {
