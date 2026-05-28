@@ -124,6 +124,81 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Select at least one provider')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-failure',
+            name: 'eBay Auth Recovery',
+            keywords: ['pokemon'],
+            provider_scope: ['ebay'],
+            last_run_status: 'failed',
+            last_run_at: '2026-05-28T03:51:00Z',
+            last_run_message: 'eBay credentials need attention',
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: {
+        failures: [
+          {
+            id: 'failure-mw-1',
+            query_set_id: 'qs-mw-failure',
+            provider: 'ebay',
+            message: 'eBay credentials need attention',
+            created_at: '2026-05-28T03:51:00Z',
+          },
+        ],
+      },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'degraded', message: 'Auth refresh required' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run', {
+      statusCode: 500,
+      body: { error: 'PROVIDER_AUTH_INVALID' },
+    }).as('runFailure')
+    cy.intercept('POST', '/api/scanner/failures/retry', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-failure')
+      req.reply({ statusCode: 200, body: { status: 'retry_requested' } })
+    }).as('retryFailure')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-provider-health"]').should('contain', 'degraded')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'eBay Auth Recovery').should('be.visible')
+      cy.contains('td', 'failed').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-open-output-qs-mw-failure"]').click()
+    cy.get('[data-testid="market-watch-output-detail"]')
+      .should('contain', 'Latest failure: eBay credentials need attention')
+      .and('contain', 'Last run status: failed')
+
+    cy.get('[data-testid="market-watch-view-mode-cards"]').click()
+    cy.get('[data-testid="scanner-run-qs-mw-failure"]').click()
+    cy.wait('@runFailure')
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Market Watch service is temporarily unavailable.')
+      .and('contain', 'Check diagnostics for provider/runtime health.')
+      .and('contain', 'PROVIDER_AUTH_INVALID')
+
+    cy.get('[data-testid="scanner-failures"]').within(() => {
+      cy.contains('ebay').should('be.visible')
+      cy.contains('eBay credentials need attention').should('be.visible')
+      cy.get('[data-testid="scanner-retry-qs-mw-failure"]').click()
+    })
+    cy.wait('@retryFailure')
+    cy.get('[data-testid="scanner-action-feedback"]').should('not.exist')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
