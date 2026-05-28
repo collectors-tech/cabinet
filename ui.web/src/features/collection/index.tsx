@@ -94,6 +94,10 @@ import {
   type InventoryItemTypeConditionScale,
 } from '@/features/inventory/item-type-condition-scales'
 import {
+  defaultInventoryPackagingGrades,
+  parsePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
+import {
   TasksDialogs,
   type TasksDialogType,
 } from '@/features/tasks/components/tasks-dialogs'
@@ -154,6 +158,7 @@ type InventoryItem = {
   condition: string
   category: string
   item_type: string
+  packaging_grade_type: string
   brand: string
   priority: string
   description: string
@@ -168,6 +173,7 @@ type InventoryItemDraft = {
   brand: string
   category: string
   item_type: string
+  packaging_grade_type: string
   description: string
   notes: string
   tags: string
@@ -530,6 +536,7 @@ function emptyInventoryItemDraft(): InventoryItemDraft {
     brand: '',
     category: '',
     item_type: '',
+    packaging_grade_type: '',
     description: '',
     notes: '',
     tags: '',
@@ -544,6 +551,7 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     brand: item.brand,
     category: item.category,
     item_type: item.item_type,
+    packaging_grade_type: item.packaging_grade_type,
     description: item.description,
     notes: item.notes,
     tags: item.tags.join(', '),
@@ -599,6 +607,8 @@ function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
     draft.title,
     draft.brand,
     draft.category,
+    draft.item_type,
+    draft.packaging_grade_type,
     draft.description,
     draft.notes,
     draft.tags,
@@ -667,6 +677,7 @@ function normalizeInventoryCreatePayload(
     brand: draft.brand.trim(),
     category: draft.category.trim(),
     item_type: draft.item_type.trim(),
+    packaging_grade_type: draft.packaging_grade_type.trim(),
     description: draft.description.trim(),
     notes: draft.notes.trim(),
     tags: draft.tags.trim(),
@@ -689,6 +700,7 @@ function normalizeInventoryCreatePayload(
     item_type:
       trimmed.item_type ||
       inferItemTypeFromCategory(trimmed.category || 'General'),
+    packaging_grade_type: trimmed.packaging_grade_type,
     description: trimmed.description,
     notes: trimmed.notes,
     tags: trimmed.tags,
@@ -1059,6 +1071,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         brand: 'Unknown',
         category: 'General',
         item_type: inferItemTypeFromCategory('General'),
+        packaging_grade_type: '',
         description: buildPasteCreateDescription(
           [{ kind: 'url', value: source }],
           source
@@ -1079,6 +1092,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     brand: 'Unknown',
     category: 'General',
     item_type: inferItemTypeFromCategory('General'),
+    packaging_grade_type: '',
     description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
     notes: '',
     tags: '',
@@ -1625,6 +1639,19 @@ async function loadInventoryItemTypeConditionScales(): Promise<
   )
 }
 
+async function loadInventoryPackagingGrades(): Promise<string[]> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryPackagingGrades
+  }
+  const payload = (await response.json()) as {
+    packaging_grades?: string[]
+  }
+  return parsePackagingGradeOptions(
+    JSON.stringify(payload.packaging_grades ?? [])
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1882,6 +1909,9 @@ export function Collection({
   const [itemTypeConditionScales, setItemTypeConditionScales] = useState<
     InventoryItemTypeConditionScale[]
   >(defaultInventoryItemTypeConditionScales)
+  const [inventoryPackagingGrades, setInventoryPackagingGrades] = useState<
+    string[]
+  >(defaultInventoryPackagingGrades)
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<
     string | null
@@ -2289,6 +2319,7 @@ export function Collection({
             condition?: string
             category?: string
             item_type?: string
+            packaging_grade_type?: string
             brand?: string
             priority?: string
             description?: string
@@ -2308,6 +2339,7 @@ export function Collection({
             item_type:
               item.item_type?.trim() ||
               inferItemTypeFromCategory(item.category?.trim() || 'General'),
+            packaging_grade_type: item.packaging_grade_type?.trim() ?? '',
             brand: item.brand?.trim() || 'Unknown',
             priority: item.priority?.trim() || 'medium',
             description: item.description?.trim() ?? '',
@@ -3775,6 +3807,8 @@ export function Collection({
           await loadProfileInventoryCategoryOptions(activeProfileID)
         const remoteItemTypeConditionScales =
           await loadInventoryItemTypeConditionScales()
+        const remoteInventoryPackagingGrades =
+          await loadInventoryPackagingGrades()
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
@@ -3795,6 +3829,7 @@ export function Collection({
         setItemFolderAssignments(nextAssignments)
         setCategoryOptions(nextCategories)
         setItemTypeConditionScales(remoteItemTypeConditionScales)
+        setInventoryPackagingGrades(remoteInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3811,6 +3846,7 @@ export function Collection({
         setItemFolderAssignments(localAssignments)
         setCategoryOptions(defaultInventoryCategoryOptions)
         setItemTypeConditionScales(defaultInventoryItemTypeConditionScales)
+        setInventoryPackagingGrades(defaultInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3854,6 +3890,7 @@ export function Collection({
       brand: itemDraft.brand.trim(),
       category: itemDraft.category.trim(),
       item_type: itemDraft.item_type.trim(),
+      packaging_grade_type: itemDraft.packaging_grade_type.trim(),
       description: itemDraft.description.trim(),
       notes: itemDraft.notes.trim(),
       tags: itemDraft.tags.trim(),
@@ -4474,6 +4511,9 @@ export function Collection({
             item_type: shouldHydrateIdentity
               ? generatedDraft.item_type
               : current.item_type,
+            packaging_grade_type: shouldHydrateIdentity
+              ? generatedDraft.packaging_grade_type
+              : current.packaging_grade_type,
             description: buildPasteCreateDescription(nextHistory, sourceURL),
             notes: current.notes,
             tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
@@ -5707,6 +5747,36 @@ export function Collection({
                             ))}
                           </select>
                         </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         {itemEditorMode === 'edit' ? (
                           <>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
@@ -6176,6 +6246,36 @@ export function Collection({
                               ))}
                             </select>
                           </div>
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-panel-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-panel-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className='space-y-2'>
                           <label

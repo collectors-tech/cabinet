@@ -733,6 +733,32 @@ func TestSettingsCategoriesTaxonomyControlsContract(t *testing.T) {
 	}
 }
 
+func TestInventoryEditorTaxonomyFieldsContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/collection/index.tsx")
+	if err != nil {
+		t.Fatalf("read inventory collection feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"loadInventoryItemTypeConditionScales",
+		"loadInventoryPackagingGrades",
+		"inventoryItemTypeOptions",
+		"inventoryConditionOptions",
+		"inventoryPackagingGrades",
+		"data-testid='inventory-item-type'",
+		"data-testid='inventory-instance-condition'",
+		"data-testid='inventory-item-packaging-grade'",
+		"packaging_grade_type: itemDraft.packaging_grade_type.trim()",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("inventory editor taxonomy fields contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
