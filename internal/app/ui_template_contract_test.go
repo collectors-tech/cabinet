@@ -707,6 +707,32 @@ func TestIntegrationsEbayLandedCostPlannerPanelContract(t *testing.T) {
 	}
 }
 
+func TestSettingsCategoriesTaxonomyControlsContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/settings/categories/index.tsx")
+	if err != nil {
+		t.Fatalf("read settings categories: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"inventoryPackagingGradesSettingsKey",
+		"settings-packaging-grade-new",
+		"settings-packaging-grade-add",
+		"settings-packaging-grades-list",
+		"settings-packaging-grade-remove-",
+		"settings-item-type-scales-list",
+		"settings-item-type-conditions-",
+		"Saved categories, packaging grades, and item type condition scales.",
+		"Save taxonomy settings",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("settings categories taxonomy contract missing token: %s", token)
+		}
+	}
+}
+
 func TestGeneralErrorChunkRecoveryContract(t *testing.T) {
 	t.Parallel()
 
