@@ -135,6 +135,7 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **WHEN** runtime fetches configured discovery asset path(s)
 - **THEN** parser MUST extract Algolia application ID, public search key, and index names from script content
 - **AND** discovery output MUST be versioned and timestamped in provider metadata
+- **AND** saved-search run output MUST persist normalized `source="frontlinehobbies"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
 
 #### Scenario: Config drift/fallback handling
 - **GIVEN** asset parsing fails or values change unexpectedly
