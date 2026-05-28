@@ -3000,14 +3000,40 @@ func New(cfg config.Config) (*App, error) {
 			candidates = out
 		}
 
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			bigCommerceCandidatesForScanner(candidates, providerDomain),
+			1,
+			pageSize,
+			pageSize,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_bigcommerce_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_bigcommerce_candidates"}`, http.StatusBadRequest)
+			return
+		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":      qs.ID,
 			"provider_domain":   providerDomain,
 			"auth_mode":         authMode,
 			"data_depth_source": dataDepthSource,
 			"capability_limits": capabilityLimits,
-			"candidate_count":   len(candidates),
-			"candidates":        candidates,
+			"candidate_count":   len(persisted),
+			"candidates":        persisted,
+			"run":               run,
+			"run_summary": map[string]any{
+				"auth_mode":         authMode,
+				"data_depth_source": dataDepthSource,
+				"candidates_total":  run.Saved,
+			},
 		})
 	})
 	mux.HandleFunc("/api/providers/hobbytech/run", func(w http.ResponseWriter, r *http.Request) {
@@ -8628,6 +8654,10 @@ func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.Candid
 }
 
 func doofinderCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, providerDomain)
+}
+
+func bigCommerceCandidatesForScanner(candidates []map[string]any, providerDomain string) []scanner.CandidateInput {
 	return providerCandidatesForScanner(candidates, providerDomain)
 }
 

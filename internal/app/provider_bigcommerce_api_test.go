@@ -68,7 +68,7 @@ func TestBigCommerceRegistryExposesFamilyAndActiveMode(t *testing.T) {
 	}
 }
 
-func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
+func TestBigCommerceRunStorefrontModePersistsCandidatesAndSnapshot(t *testing.T) {
 	t.Parallel()
 
 	storefrontServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +127,7 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 		AuthMode         string           `json:"auth_mode"`
 		DataDepthSource  string           `json:"data_depth_source"`
 		CapabilityLimits []string         `json:"capability_limits"`
+		CandidateCount   int              `json:"candidate_count"`
 		Candidates       []map[string]any `json:"candidates"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
@@ -143,6 +144,39 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 	}
 	if len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got=%d", len(payload.Candidates))
+	}
+	if payload.CandidateCount != 1 {
+		t.Fatalf("expected candidate_count=1, got=%d", payload.CandidateCount)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected persisted BigCommerce candidate source=voglers.com.au, got %#v", payload.Candidates[0]["source"])
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	var latest map[string]any
+	for _, item := range querySetPayload.QuerySets {
+		if fmt.Sprintf("%v", item["id"]) == qs.ID {
+			latest = item
+			break
+		}
+	}
+	if latest == nil {
+		t.Fatalf("expected query set %s in reloaded response: %+v", qs.ID, querySetPayload.QuerySets)
+	}
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted last_run_status=succeeded, got %#v", latest["last_run_status"])
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted last_candidate_count=1, got %#v", latest["last_candidate_count"])
 	}
 }
 
