@@ -48,6 +48,104 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle', () => {
+    let querySets: Array<{
+      id: string
+      name: string
+      keywords: string[]
+      provider_scope: string[]
+      schedule_cron?: string
+      enabled?: boolean
+    }> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', () => ({
+      statusCode: 200,
+      body: { query_sets: querySets },
+    })).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/query-sets', (req) => {
+      expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
+      expect(req.body.schedule_cron).to.equal('0 */6 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 201, body: querySets[0] })
+    }).as('createQuerySet')
+    cy.intercept('PUT', '/api/scanner/query-sets/qs-mw-lifecycle', (req) => {
+      expect(req.body.name).to.equal('Bonza AFX Edited')
+      expect(req.body.keywords).to.deep.equal(['AFX', 'Mega G+'])
+      expect(req.body.provider_scope).to.deep.equal(['bonzaslotcars'])
+      expect(req.body.schedule_cron).to.equal('15 */4 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 200, body: querySets[0] })
+    }).as('updateQuerySet')
+    cy.intercept('DELETE', '/api/scanner/query-sets/qs-mw-lifecycle', (req) => {
+      querySets = []
+      req.reply({ statusCode: 204, body: '' })
+    }).as('deleteQuerySet')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-provider-single"]').select('bonzaslotcars')
+    cy.get('[data-testid="scanner-new-query-name"]').type('Bonza AFX')
+    cy.get('[data-testid="scanner-new-query-keywords"]').type('AFX')
+    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.wait('@createQuerySet')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-lifecycle"]').should(
+      'contain',
+      'bonzaslotcars'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-lifecycle"]').should(
+      'contain',
+      '0 */6 * * *'
+    )
+
+    cy.get('[data-testid="scanner-edit-qs-mw-lifecycle"]').click()
+    cy.get('[data-testid="scanner-edit-name-qs-mw-lifecycle"]').clear().type('Bonza AFX Edited')
+    cy.get('[data-testid="scanner-edit-keywords-qs-mw-lifecycle"]').clear().type('AFX, Mega G+')
+    cy.get('[data-testid="scanner-edit-schedule-qs-mw-lifecycle"]').clear().type('15 */4 * * *')
+    cy.get('[data-testid="scanner-save-qs-mw-lifecycle"]').click()
+    cy.wait('@updateQuerySet')
+    cy.contains('Bonza AFX Edited').should('be.visible')
+    cy.contains('AFX, Mega G+').should('be.visible')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-lifecycle"]').should(
+      'contain',
+      'bonzaslotcars'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-lifecycle"]').should(
+      'contain',
+      '15 */4 * * *'
+    )
+
+    cy.get('[data-testid="scanner-delete-qs-mw-lifecycle"]').click()
+    cy.wait('@deleteQuerySet')
+    cy.contains('Bonza AFX Edited').should('not.exist')
+    cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-002 sends provider scope in run payload and shows provider-attributed results', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
@@ -124,6 +222,104 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Select at least one provider')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action', () => {
+    let retryRequested = false
+
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-mw-failure',
+              name: 'eBay Auth Recovery',
+              keywords: ['pokemon'],
+              provider_scope: ['ebay'],
+              last_run_status: retryRequested ? 'succeeded' : 'failed',
+              last_run_at: retryRequested
+                ? '2026-05-28T04:03:00Z'
+                : '2026-05-28T03:51:00Z',
+              last_run_message: retryRequested
+                ? 'Retry completed successfully'
+                : 'eBay credentials need attention',
+              last_candidate_count: retryRequested ? 2 : 0,
+            },
+          ],
+        },
+      })
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          failures: retryRequested
+            ? []
+            : [
+                {
+                  id: 'failure-mw-1',
+                  query_set_id: 'qs-mw-failure',
+                  provider: 'ebay',
+                  message: 'eBay credentials need attention',
+                  created_at: '2026-05-28T03:51:00Z',
+                },
+              ],
+        },
+      })
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'degraded', message: 'Auth refresh required' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run', {
+      statusCode: 500,
+      body: { error: 'PROVIDER_AUTH_INVALID' },
+    }).as('runFailure')
+    cy.intercept('POST', '/api/scanner/failures/retry', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-failure')
+      retryRequested = true
+      req.reply({ statusCode: 200, body: { status: 'retry_requested' } })
+    }).as('retryFailure')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-provider-health"]').should('contain', 'degraded')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'eBay Auth Recovery').should('be.visible')
+      cy.contains('td', 'failed').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-open-output-qs-mw-failure"]').click()
+    cy.get('[data-testid="market-watch-output-detail"]')
+      .should('contain', 'Latest failure: eBay credentials need attention')
+      .and('contain', 'Last run status: failed')
+
+    cy.get('[data-testid="market-watch-view-mode-cards"]').click()
+    cy.get('[data-testid="scanner-run-qs-mw-failure"]').click()
+    cy.wait('@runFailure')
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Market Watch service is temporarily unavailable.')
+      .and('contain', 'Check diagnostics for provider/runtime health.')
+      .and('contain', 'PROVIDER_AUTH_INVALID')
+
+    cy.get('[data-testid="scanner-failures"]').within(() => {
+      cy.contains('ebay').should('be.visible')
+      cy.contains('eBay credentials need attention').should('be.visible')
+      cy.get('[data-testid="scanner-retry-qs-mw-failure"]').click()
+    })
+    cy.wait('@retryFailure')
+    cy.wait(['@querySets', '@failures'])
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Retry requested.')
+      .and('contain', 'Refreshing Market Watch failure state.')
+    cy.get('[data-testid="scanner-failures"]').should('not.exist')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', 'Candidates: 2').should('be.visible')
+    })
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
@@ -188,6 +384,9 @@ describe('integrations/ui-screen-market-watch', () => {
             name: 'Bonza AFX Watch',
             keywords: ['AFX', 'Mega G+'],
             provider_scope: ['bonzaslotcars'],
+            last_run_status: 'succeeded',
+            last_run_at: '2026-05-26T06:41:00Z',
+            last_candidate_count: 3,
           },
           {
             id: 'qs-mw-table-2',
@@ -219,7 +418,86 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('th', 'Latest Output Summary').should('be.visible')
       cy.contains('td', 'Bonza AFX Watch').should('be.visible')
       cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', 'Candidates: 3').should('be.visible')
     })
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh', () => {
+    let scheduledCompleted = false
+
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-mw-scheduled',
+              name: 'Scheduled AFX Watch',
+              keywords: ['AFX'],
+              provider_scope: ['bonzaslotcars'],
+              schedule_cron: '0 */6 * * *',
+              enabled: true,
+              ...(scheduledCompleted
+                ? {
+                    last_run_status: 'succeeded',
+                    last_run_at: '2026-05-28T07:58:00Z',
+                    last_candidate_count: 4,
+                  }
+                : {}),
+            },
+          ],
+        },
+      })
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run/scheduled', (req) => {
+      scheduledCompleted = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          run_id: 'scheduled-mw-1',
+          query_sets_executed: 1,
+          candidates_collected: 4,
+          failures: 0,
+        },
+      })
+    }).as('scheduledRefresh')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Scheduled AFX Watch').should('be.visible')
+      cy.contains('td', 'never').should('be.visible')
+      cy.contains('td', 'No output').should('be.visible')
+    })
+
+    cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
+    cy.wait('@scheduledRefresh')
+    cy.wait('@querySets')
+    cy.get('[data-testid="scanner-action-status"]').should(
+      'contain',
+      'scheduled_run_completed_scheduled-mw-1'
+    )
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Scheduled refresh completed.')
+      .and('contain', 'Candidates collected: 4')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', 'Candidates: 4').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-run-history-qs-mw-scheduled"]')
+      .should('contain', 'Scheduled AFX Watch')
+      .and('contain', 'succeeded')
+      .and('contain', 'Candidates: 4')
   })
 
   it('UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action', () => {

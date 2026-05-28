@@ -21,6 +21,10 @@ type QuerySet = {
   condition?: string
   schedule_cron?: string
   enabled?: boolean
+  last_run_status?: 'never' | 'running' | 'succeeded' | 'failed'
+  last_run_at?: string
+  last_run_message?: string
+  last_candidate_count?: number
 }
 
 type Failure = {
@@ -233,7 +237,17 @@ export function Scanner() {
       setFailures(failuresPayload.failures ?? [])
       setCandidatesByQuerySet({})
       setRunSummaryByQuerySet({})
-      setRunMetaByQuerySet({})
+      setRunMetaByQuerySet(
+        Object.fromEntries(
+          (querySetPayload.query_sets ?? []).map((querySet) => [
+            querySet.id,
+            {
+              status: querySet.last_run_status ?? 'never',
+              ranAtISO: querySet.last_run_at,
+            },
+          ])
+        )
+      )
       setProviderHealth(healthPayload.status ?? 'unknown')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'scanner_load_failed')
@@ -480,6 +494,7 @@ export function Scanner() {
         `Failures: ${payload.failures ?? 0}`,
       ],
     })
+    await loadScanner()
   }
 
   const handoffToDiscoveries = async (querySet: QuerySet) => {
@@ -665,7 +680,13 @@ export function Scanner() {
       return
     }
     setActionStatus(`retry_requested_${querySetID}`)
-    setActionFeedback(null)
+    setActionFeedback({
+      summary: 'Retry requested.',
+      actions: [
+        'Refreshing Market Watch failure state.',
+        'Review provider health if the query remains failed.',
+      ],
+    })
     setRunMetaByQuerySet((current) => ({
       ...current,
       [querySetID]: { status: 'running' },
@@ -702,8 +723,26 @@ export function Scanner() {
     if (count > 0) {
       return `Candidates: ${count}`
     }
+    const persistedCount =
+      querySets.find((querySet) => querySet.id === querySetID)
+        ?.last_candidate_count ?? 0
+    if (persistedCount > 0) {
+      return `Candidates: ${persistedCount}`
+    }
     return 'No output'
   }
+
+  const latestRunHistory = useMemo(
+    () =>
+      querySets.map((querySet) => ({
+        id: querySet.id,
+        name: querySet.name,
+        status: formatRunStatus(querySet.id),
+        ranAt: formatRunTime(querySet.id),
+        output: formatOutputSummary(querySet.id),
+      })),
+    [querySets, runMetaByQuerySet, runSummaryByQuerySet, candidatesByQuerySet]
+  )
 
   const launchQuickScan = () => {
     const isMobileViewport =
@@ -1029,6 +1068,33 @@ export function Scanner() {
             </span>
           )}
         </section>
+        {latestRunHistory.length > 0 ? (
+          <section
+            className='rounded-md border p-3 text-sm'
+            data-testid='market-watch-run-history'
+          >
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>Latest run history</p>
+              <p className='text-xs text-muted-foreground'>
+                Hydrated from saved query metadata
+              </p>
+            </div>
+            <ul className='mt-2 divide-y text-xs'>
+              {latestRunHistory.map((row) => (
+                <li
+                  key={row.id}
+                  className='grid gap-1 py-2 md:grid-cols-[1.2fr_0.8fr_1fr_1fr]'
+                  data-testid={`market-watch-run-history-${row.id}`}
+                >
+                  <span className='font-medium'>{row.name}</span>
+                  <span className='capitalize'>{row.status}</span>
+                  <span className='text-muted-foreground'>{row.ranAt}</span>
+                  <span className='text-muted-foreground'>{row.output}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <section
           className='rounded-md border p-2 text-xs'
           data-testid='card-scanner-queue'
@@ -1483,6 +1549,18 @@ export function Scanner() {
                 <p className='text-xs text-muted-foreground'>
                   Last run status: {formatRunStatus(selectedOutputQuerySetID)}
                 </p>
+                {querySets.find(
+                  (querySet) => querySet.id === selectedOutputQuerySetID
+                )?.last_run_message ? (
+                  <p className='text-xs text-muted-foreground'>
+                    Latest failure:{' '}
+                    {
+                      querySets.find(
+                        (querySet) => querySet.id === selectedOutputQuerySetID
+                      )?.last_run_message
+                    }
+                  </p>
+                ) : null}
               </div>
               <Button
                 type='button'

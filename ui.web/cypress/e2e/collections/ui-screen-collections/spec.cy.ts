@@ -336,16 +336,20 @@ describe('ui-screen-collections', () => {
     )
   })
 
-  it('UI-SCREEN-COLLECTIONS-019 exposes active collection Browse control', () => {
+  it('UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as('saveCollectionSelection')
 
-    cy.get('[data-testid="collections-row-watch-list"]').click()
-    cy.wait('@saveCollectionSelection')
-    cy.get('[data-testid="collections-active-browse-control"]')
+    cy.get('[data-testid="collections-active-browse-control"]').should('not.exist')
+    cy.get('[data-testid="collections-active-browse"]').should('not.exist')
+    cy.get('[data-testid="collections-row-watch-list"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-edit-watch-list"]').should('be.visible')
+    cy.get('[data-testid="collections-row-delete-watch-list"]').should('be.visible')
+    cy.get('[data-testid="collections-row-view-watch-list"]')
       .should('be.visible')
-      .and('contain.text', 'Watch List')
-    cy.get('[data-testid="collections-active-browse"]').click()
+      .and('have.attr', 'aria-label', 'View Watch List in inventory')
+      .click()
+    cy.wait('@saveCollectionSelection')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
     cy.get('[data-testid="collection-active-context"]').should(
       'contain.text',

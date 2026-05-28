@@ -86,4 +86,21 @@ describe('general/ui-shell-workspaces', () => {
     cy.get('[data-testid="shell-inbox-open-assistant-workspace"]').should('be.visible').click()
     cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
   })
+
+  it('UI-SHELL-WORKSPACES-006 persists the selected workspace to the active profile across reload and section changes', () => {
+    openInventory()
+    cy.get('[data-testid="shell-workspace-inbox"]').click()
+    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
+    cy.window().its('localStorage').invoke('getItem', 'cabinet.shell.workspace.active.e2e-profile-001').should('eq', 'inbox')
+
+    cy.reload()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
+    cy.contains('[data-testid="shell-inbox-workspace"]', 'Notifications and asynchronous assistant outcomes').should('exist')
+
+    cy.visit('/settings/profile')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
+    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
+    cy.contains('Profile settings').should('be.visible')
+  })
 })

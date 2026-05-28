@@ -11,7 +11,7 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { Pencil, Plus, Tag, Trash2 } from 'lucide-react'
+import { Eye, Pencil, Plus, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -74,6 +74,7 @@ type CollectionMemberRow = WorkspaceCollectionItem
 const tableClassName = 'w-full table-fixed'
 const tableCellClassName = 'max-w-0 truncate'
 const tableHeaderClassName = 'max-w-0 truncate'
+const actionsCellClassName = 'w-[17rem] min-w-[17rem]'
 
 type InventoryCatalogItem = {
   id?: string
@@ -119,9 +120,11 @@ function collectionMemberFromInventoryItem(
 }
 
 function buildCollectionColumns({
+  onView,
   onEdit,
   onDelete,
 }: {
+  onView: (row: CollectionRow) => void
   onEdit: (row: CollectionRow) => void
   onDelete: (row: CollectionRow) => void
 }): ColumnDef<CollectionRow>[] {
@@ -179,9 +182,23 @@ function buildCollectionColumns({
     },
     {
       id: 'actions',
-      header: 'Actions',
+      header: () => <div className='text-right'>Actions</div>,
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-2'>
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            data-testid={`collections-row-view-${row.original.key}`}
+            aria-label={`View ${row.original.name} in inventory`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onView(row.original)
+            }}
+          >
+            <Eye className='mr-2 h-4 w-4' />
+            View
+          </Button>
           <Button
             type='button'
             size='sm'
@@ -378,6 +395,22 @@ export function Collections() {
     [memberRows, selectedCollectionName]
   )
 
+  const handleSelectCollection = useCallback(
+    async (row: CollectionRow) => {
+      setSelectedCollectionID(row.key)
+      await setActiveWorkspaceCollection(row.name)
+    },
+    [setActiveWorkspaceCollection]
+  )
+
+  const handleViewCollection = useCallback(
+    async (row: CollectionRow) => {
+      await handleSelectCollection(row)
+      window.location.assign('/inventory/')
+    },
+    [handleSelectCollection]
+  )
+
   const openEditPanel = useCallback((row: CollectionRow) => {
     setSelectedCollectionID(row.key)
     setEditValue(row.name)
@@ -387,13 +420,16 @@ export function Collections() {
   const columns = useMemo(
     () =>
       buildCollectionColumns({
+        onView: (row) => {
+          void handleViewCollection(row)
+        },
         onEdit: openEditPanel,
         onDelete: (row) => {
           setSelectedCollectionID(row.key)
           setDeleteOpen(true)
         },
       }),
-    [openEditPanel]
+    [handleViewCollection, openEditPanel]
   )
   const memberColumns = useMemo(() => buildCollectionMemberColumns(), [])
 
@@ -479,11 +515,6 @@ export function Collections() {
     }
     setSelectedCollectionID(nextRow.key)
     setEditValue(nextRow.name)
-  }
-
-  async function handleSelectCollection(row: CollectionRow) {
-    setSelectedCollectionID(row.key)
-    await setActiveWorkspaceCollection(row.name)
   }
 
   async function handleCreateCollection() {
@@ -595,23 +626,8 @@ export function Collections() {
                   data-testid='collections-management-summary'
                 >
                   <span>Showing {filteredCount} of {rows.length} collections.</span>
-                  <span
-                    className='inline-flex items-center gap-2'
-                    data-testid='collections-active-browse-control'
-                  >
-                    <span data-testid='collections-active-context'>
-                      {selectedCollectionName}
-                    </span>
-                    <Button
-                      asChild
-                      type='button'
-                      size='sm'
-                      variant='outline'
-                      data-testid='collections-active-browse'
-                      aria-label={`Browse ${selectedCollectionName} in inventory`}
-                    >
-                      <a href='/inventory/'>Browse</a>
-                    </Button>
+                  <span data-testid='collections-active-context'>
+                    {selectedCollectionName}
                   </span>
                 </div>
               </div>
@@ -628,7 +644,11 @@ export function Collections() {
                         {headerGroup.headers.map((header) => (
                           <TableHead
                             key={header.id}
-                            className={tableHeaderClassName}
+                            className={
+                              header.column.id === 'actions'
+                                ? actionsCellClassName
+                                : tableHeaderClassName
+                            }
                           >
                             {header.isPlaceholder
                               ? null
@@ -661,7 +681,11 @@ export function Collections() {
                             {row.getVisibleCells().map((cell) => (
                               <TableCell
                                 key={cell.id}
-                                className={tableCellClassName}
+                                className={
+                                  cell.column.id === 'actions'
+                                    ? actionsCellClassName
+                                    : tableCellClassName
+                                }
                               >
                                 {flexRender(
                                   cell.column.columnDef.cell,

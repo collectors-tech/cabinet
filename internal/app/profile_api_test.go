@@ -82,6 +82,14 @@ func TestProfileStorageSecretAndLicenseEndpoints(t *testing.T) {
 	if getSecret.Code != http.StatusOK {
 		t.Fatalf("get secret status=%d body=%s", getSecret.Code, getSecret.Body.String())
 	}
+	deleteSecret := doRequest(t, a, http.MethodDelete, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if deleteSecret.Code != http.StatusNoContent {
+		t.Fatalf("delete secret status=%d body=%s", deleteSecret.Code, deleteSecret.Body.String())
+	}
+	missingSecret := doRequest(t, a, http.MethodGet, "/api/profiles/"+p.ID+"/secrets?key=openai_api_key", nil, nil)
+	if missingSecret.Code != http.StatusBadRequest {
+		t.Fatalf("expected deleted secret lookup to fail, status=%d body=%s", missingSecret.Code, missingSecret.Body.String())
+	}
 
 	putLicense := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/license", strings.NewReader(`{"license_json":"{\"tier\":\"pro\"}"}`), map[string]string{"Content-Type": "application/json"})
 	if putLicense.Code != http.StatusOK {
@@ -114,6 +122,13 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	if reindex.Code != http.StatusOK {
 		t.Fatalf("reindex status=%d body=%s", reindex.Code, reindex.Body.String())
 	}
+	var reindexPayload map[string]any
+	if err := json.NewDecoder(reindex.Body).Decode(&reindexPayload); err != nil {
+		t.Fatalf("decode reindex response: %v", err)
+	}
+	if reindexPayload["ok"] != true || reindexPayload["operation"] != "reindex_search" || reindexPayload["rebuilt_search_index"] != true || strings.TrimSpace(reindexPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected reindex metadata, got %+v", reindexPayload)
+	}
 
 	rebuild := doRequest(t, a, http.MethodPost, "/api/data/rebuild-thumbnails", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
 	if rebuild.Code != http.StatusOK {
@@ -140,5 +155,8 @@ func TestStorageMaintenanceEndpoints(t *testing.T) {
 	}
 	if strings.TrimSpace(repairPayload["integrity_check"].(string)) == "" {
 		t.Fatalf("expected integrity check result, got %+v", repairPayload)
+	}
+	if repairPayload["ok"] != true || repairPayload["operation"] != "integrity_check" || strings.TrimSpace(repairPayload["completed_at"].(string)) == "" {
+		t.Fatalf("expected repair metadata, got %+v", repairPayload)
 	}
 }

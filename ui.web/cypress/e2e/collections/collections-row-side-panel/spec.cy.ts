@@ -51,13 +51,18 @@ describe('collections-row-side-panel', () => {
     cy.wait('@saveCollectionSettings')
 
     cy.contains('Store 2 renamed to Store 2 Panel.').should('be.visible')
-    cy.get('[data-testid="collections-row-store-2-panel"]').should(
-      'be.visible'
+    cy.get('[data-testid="collections-row-store-2-panel"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-store-2-panel"]').should('exist')
+    cy.get('[data-testid="collections-row-name-store-2-panel"]').should(
+      'contain.text',
+      'Store 2 Panel'
     )
     cy.reload()
     cy.wait('@loadCollectionSettings')
-    cy.get('[data-testid="collections-row-store-2-panel"]').should(
-      'be.visible'
+    cy.get('[data-testid="collections-row-store-2-panel"]').scrollIntoView()
+    cy.get('[data-testid="collections-row-name-store-2-panel"]').should(
+      'contain.text',
+      'Store 2 Panel'
     )
   })
 })

@@ -72,20 +72,30 @@ describe('integrations/default-site-search', () => {
   })
 
   it('DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh', () => {
-    cy.intercept('GET', '/api/scanner/query-sets', {
-      statusCode: 200,
-      body: {
-        query_sets: [
-          {
-            id: 'qs-dss-2',
-            name: 'Amazon Watch',
-            keywords: ['slot cars'],
-            provider_scope: ['amazon'],
-            schedule_cron: '0 */6 * * *',
-            enabled: true,
-          },
-        ],
-      },
+    let scheduledCompleted = false
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-dss-2',
+              name: 'Amazon Watch',
+              keywords: ['slot cars'],
+              provider_scope: ['amazon'],
+              schedule_cron: '0 */6 * * *',
+              enabled: true,
+              ...(scheduledCompleted
+                ? {
+                    last_run_status: 'succeeded',
+                    last_run_at: '2026-05-27T11:52:00Z',
+                    last_candidate_count: 1,
+                  }
+                : {}),
+            },
+          ],
+        },
+      })
     }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
@@ -107,14 +117,17 @@ describe('integrations/default-site-search', () => {
         ],
       },
     }).as('candidates')
-    cy.intercept('POST', '/api/scanner/run/scheduled', {
-      statusCode: 200,
-      body: {
-        run_id: 'scheduled-1',
-        query_sets_executed: 1,
-        candidates_collected: 1,
-        failures: 0,
-      },
+    cy.intercept('POST', '/api/scanner/run/scheduled', (req) => {
+      scheduledCompleted = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          run_id: 'scheduled-1',
+          query_sets_executed: 1,
+          candidates_collected: 1,
+          failures: 0,
+        },
+      })
     }).as('scheduledRefresh')
 
     signInToMarketWatch()
@@ -128,11 +141,21 @@ describe('integrations/default-site-search', () => {
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
     cy.wait('@scheduledRefresh')
+    cy.wait('@querySets')
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'scheduled_run_completed_scheduled-1')
     cy.get('[data-testid="scanner-action-feedback"]').should('contain', 'Query sets executed: 1')
+    cy.get('[data-testid="market-watch-run-history-qs-dss-2"]')
+      .should('contain', 'Amazon Watch')
+      .and('contain', 'succeeded')
+      .and('contain', 'Candidates: 1')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').should('contain', 'Candidates: 1')
   })
 
-  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and wishlist flows', () => {
+  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -176,8 +199,56 @@ describe('integrations/default-site-search', () => {
     cy.intercept('POST', '/api/discovery/action', (req) => {
       expect(req.body.candidate_id).to.equal('cand-dss-3')
       expect(req.body.type).to.equal('add_to_wishlist')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-dss-3',
+      })
+      wishlistEntries = [
+        {
+          id: 'wish-dss-3',
+          item_id: 'item-dss-3',
+          priority: 'medium',
+          target_price: 0,
+          notes:
+            'source_provider=ebay; query_set_id=qs-dss-3; query_name=eBay Handoff; provider_scope=ebay',
+          created_at: '2026-05-27T10:44:00Z',
+          updated_at: '2026-05-27T10:44:00Z',
+        },
+      ]
+      wishlistItems = [
+        {
+          id: 'item-dss-3',
+          title: 'eBay Handoff Car',
+          part_number: 'ebay-1',
+          status: 'wishlist',
+          category: 'Slot Cars',
+          priority: 'medium',
+        },
+      ]
       req.reply({ statusCode: 200, body: { ok: true } })
     }).as('wishlistHandoff')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { min: 0, median: 0, latest: 0 },
+    }).as('wishlistPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('wishlistPriceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=item-dss-3', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('wishlistPriceHistory')
 
     signInToMarketWatch()
     cy.wait(['@querySets', '@failures', '@providerHealth'])
@@ -195,5 +266,13 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="scanner-handoff-wishlist-qs-dss-3"]').click()
     cy.wait('@wishlistHandoff')
     cy.get('[data-testid="scanner-handoff-status"]').should('contain', 'wishlist_handoff_ok')
+
+    cy.visit('/wishlist/')
+    cy.wait(['@wishlistEntries', '@wishlistItems'])
+    cy.contains('eBay Handoff Car').should('be.visible')
+    cy.contains('source_provider=ebay').should('be.visible')
+    cy.contains('query_set_id=qs-dss-3').should('be.visible')
+    cy.contains('query_name=eBay Handoff').should('be.visible')
+    cy.contains('provider_scope=ebay').should('be.visible')
   })
 })

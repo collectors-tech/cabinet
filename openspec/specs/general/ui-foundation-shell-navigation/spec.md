@@ -69,12 +69,13 @@ Selecting a different database profile from switcher MUST change active data con
 - **THEN** runtime MUST switch active profile context and reload data views from selected DB without cross-profile leakage
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-010: App SHALL provide a seeded Showcase DB profile
-Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content.
+Cabinet SHALL support a pre-seeded showcase database profile for demos/testing with sample content and SHALL distinguish it from normal working databases in the shell switcher.
 
 #### Scenario: Open showcase profile
 - **GIVEN** showcase profile is provisioned
 - **WHEN** user switches to `Showcase DB`
 - **THEN** inventory, wishlist, media, and account/demo context MUST be populated with sample seed content suitable for end-to-end demos
+- **AND** the switcher MUST label Showcase DB as sample/demo context rather than a generic working database
 
 ### Requirement UI-FOUNDATION-SHELL-NAVIGATION-007: Navigation edit dialog SHALL reflect live item order during reordering
 When user reorders items in nav edit mode through move buttons or a drag handle, edit dialog list order MUST update immediately to match resulting navigation order.
@@ -120,3 +121,31 @@ Authenticated shell routes SHALL keep `document.title` in the format `Cabinet - 
 - **WHEN** the active route changes
 - **THEN** the browser title MUST update to `Cabinet - <Page Title>` for that route
 - **AND** the title MUST NOT be blank or leak raw route ids/translation keys
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-014: Database switcher SHALL recover from active profile load failure
+The database/profile switcher SHALL make active profile load failures visible and SHALL provide a retry action that restores the active database label when the profile endpoint recovers.
+
+#### Scenario: Retry profile loading from shell switcher
+- **GIVEN** the authenticated shell cannot load the active profile/database context
+- **WHEN** the user opens the database switcher and retries profile loading
+- **THEN** the shell SHALL show the profile load failure before retry
+- **AND** the recovered active database label SHALL replace the failure guidance after retry succeeds
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-015: Database switcher SHALL create and activate profiles
+The database/profile switcher add action SHALL create a new database profile, activate it, and refresh the shell against that profile context.
+
+#### Scenario: Add database profile from switcher
+- **GIVEN** the authenticated shell database switcher is visible
+- **WHEN** the user chooses Add Database and supplies a profile name
+- **THEN** the switcher SHALL call the profile create API with that name
+- **AND** the switcher SHALL activate the created profile through the active profile API
+- **AND** the shell SHALL reload with the created profile label as active database context
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-016: Existing database selection SHALL carry across core app sections
+The shell database/profile switcher SHALL keep an existing selected database profile visible as the active context while the user moves through core authenticated sections.
+
+#### Scenario: Existing database profile selection across sections
+- **GIVEN** the authenticated shell has loaded multiple database profiles
+- **WHEN** the user selects an existing non-active database profile
+- **THEN** the active profile API SHALL report the selected profile
+- **AND** the selected database label SHALL remain visible in Inventory, Wishlist, Collections, Settings, Chats, and Integrations

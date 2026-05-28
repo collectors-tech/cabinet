@@ -135,6 +135,7 @@ openspec validate --changes --strict --no-interactive
 - `GET /api/profiles/{profileID}/storage`
 - `PUT /api/profiles/{profileID}/secrets` with `{ "key": "...", "value": "..." }`
 - `GET /api/profiles/{profileID}/secrets?key=<key>`
+- `DELETE /api/profiles/{profileID}/secrets?key=<key>`
 - `PUT /api/profiles/{profileID}/license` with `{ "license_json": "{...}" }`
 - `GET /api/profiles/{profileID}/license`
 - `GET /api/items`

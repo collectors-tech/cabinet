@@ -12,27 +12,32 @@ import (
 )
 
 type QuerySet struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Keywords      []string `json:"keywords"`
-	Exclusions    []string `json:"exclusions"`
-	ProviderScope []string `json:"provider_scope"`
-	ItemsPerPage  int      `json:"items_per_page"`
-	MaxPrice      float64  `json:"max_price"`
-	Region        string   `json:"region"`
-	Condition     string   `json:"condition"`
-	ScheduleCron  string   `json:"schedule_cron"`
-	Enabled       bool     `json:"enabled"`
-	RateLimitRPS  int      `json:"rate_limit_rps"`
-	MaxRetryCount int      `json:"max_retry_count"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Keywords           []string `json:"keywords"`
+	Exclusions         []string `json:"exclusions"`
+	ProviderScope      []string `json:"provider_scope"`
+	ItemsPerPage       int      `json:"items_per_page"`
+	MaxPrice           float64  `json:"max_price"`
+	Region             string   `json:"region"`
+	Condition          string   `json:"condition"`
+	ScheduleCron       string   `json:"schedule_cron"`
+	Enabled            bool     `json:"enabled"`
+	RateLimitRPS       int      `json:"rate_limit_rps"`
+	MaxRetryCount      int      `json:"max_retry_count"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
+	LastRunStatus      string   `json:"last_run_status,omitempty"`
+	LastRunAt          string   `json:"last_run_at,omitempty"`
+	LastRunMessage     string   `json:"last_run_message,omitempty"`
+	LastCandidateCount int      `json:"last_candidate_count,omitempty"`
 }
 
 type CandidateInput struct {
 	ListingID  string  `json:"listing_id"`
 	Title      string  `json:"title"`
 	Price      float64 `json:"price"`
+	Currency   string  `json:"currency,omitempty"`
 	Shipping   float64 `json:"shipping"`
 	URL        string  `json:"url"`
 	Image      string  `json:"image"`
@@ -243,7 +248,49 @@ func (s *Service) GetQuerySetForProfile(ctx context.Context, profileID, id strin
 	}
 	q.ProviderScope = normalizeProviderScope(q.ProviderScope)
 	q.Enabled = enabled == 1
+	if err := s.populateQuerySetRunSnapshot(ctx, strings.TrimSpace(profileID), &q); err != nil {
+		return QuerySet{}, err
+	}
 	return q, nil
+}
+
+func (s *Service) populateQuerySetRunSnapshot(ctx context.Context, profileID string, q *QuerySet) error {
+	if q == nil || strings.TrimSpace(q.ID) == "" {
+		return nil
+	}
+	var candidateCount int
+	var latestCandidateAt sql.NullString
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*), MAX(last_seen)
+		FROM scanner_candidates
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&candidateCount, &latestCandidateAt); err != nil {
+		return fmt.Errorf("query set run candidate snapshot: %w", err)
+	}
+	var failureMessage, failureAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT message, created_at
+		FROM scanner_failures
+		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, q.ID, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&failureMessage, &failureAt)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("query set run failure snapshot: %w", err)
+	}
+
+	q.LastCandidateCount = candidateCount
+	q.LastRunStatus = "never"
+	if latestCandidateAt.Valid && strings.TrimSpace(latestCandidateAt.String) != "" {
+		q.LastRunStatus = "succeeded"
+		q.LastRunAt = latestCandidateAt.String
+	}
+	if failureAt != "" && (q.LastRunAt == "" || failureAt >= q.LastRunAt) {
+		q.LastRunStatus = "failed"
+		q.LastRunAt = failureAt
+		q.LastRunMessage = failureMessage
+	}
+	return nil
 }
 
 func defaultProviderScope(region string) []string {
@@ -489,7 +536,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			return result, persistErr
 		}
 		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
-		s.logFailure(ctx, qs.ID, "ebay", lastErr.Error())
+		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, "ebay", lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
 			if sleep < 100*time.Millisecond {
@@ -532,6 +579,28 @@ func (s *Service) RunScheduledForProfile(ctx context.Context, profileID string, 
 
 func (s *Service) persistCandidates(ctx context.Context, querySetID string, items []CandidateInput, attempts int) (RunResult, error) {
 	return s.persistCandidatesForProfile(ctx, "", querySetID, items, attempts, 0, 0, "")
+}
+
+func (s *Service) PersistCandidatesForProfile(
+	ctx context.Context,
+	profileID,
+	querySetID string,
+	items []CandidateInput,
+	attempts int,
+	requestedItemsPerPage int,
+	effectiveItemsPerPage int,
+	itemsPerPageWarning string,
+) (RunResult, error) {
+	return s.persistCandidatesForProfile(
+		ctx,
+		strings.TrimSpace(profileID),
+		strings.TrimSpace(querySetID),
+		items,
+		attempts,
+		requestedItemsPerPage,
+		effectiveItemsPerPage,
+		itemsPerPageWarning,
+	)
 }
 
 func (s *Service) persistCandidatesForProfile(
@@ -633,7 +702,17 @@ func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, queryS
 }
 
 func (s *Service) ListFailures(ctx context.Context) ([]map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT query_set_id, provider, message, created_at FROM scanner_failures ORDER BY created_at DESC LIMIT 100`)
+	return s.ListFailuresByProfile(ctx, "")
+}
+
+func (s *Service) ListFailuresByProfile(ctx context.Context, profileID string) ([]map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT query_set_id, provider, message, created_at
+		FROM scanner_failures
+		WHERE (? = '' OR profile_id = ?)
+		ORDER BY created_at DESC
+		LIMIT 100
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 	if err != nil {
 		return nil, fmt.Errorf("list failures: %w", err)
 	}
@@ -682,11 +761,11 @@ func (s *Service) recordProviderHealth(ctx context.Context, provider, status, me
 	`, provider, status, message)
 }
 
-func (s *Service) logFailure(ctx context.Context, querySetID, provider, message string) {
+func (s *Service) logFailure(ctx context.Context, profileID, querySetID, provider, message string) {
 	_, _ = s.db.ExecContext(ctx, `
-		INSERT INTO scanner_failures(id, query_set_id, provider, message, created_at)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, uuid.NewString(), strings.TrimSpace(querySetID), provider, message)
+		INSERT INTO scanner_failures(id, profile_id, query_set_id, provider, message, created_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, uuid.NewString(), strings.TrimSpace(profileID), strings.TrimSpace(querySetID), provider, message)
 }
 
 func normalizeStockState(state string, count int) string {

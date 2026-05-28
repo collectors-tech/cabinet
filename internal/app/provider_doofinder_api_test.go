@@ -211,6 +211,8 @@ window.doofinder_config = {
 		Total          int              `json:"total"`
 		Candidates     []map[string]any `json:"candidates"`
 		Discovery      map[string]any   `json:"discovery"`
+		Run            map[string]any   `json:"run"`
+		RunSummary     map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode run payload: %v", err)
@@ -232,11 +234,43 @@ window.doofinder_config = {
 	if payload.Discovery["source"] == "" {
 		t.Fatalf("expected discovery source in telemetry, got=%v", payload.Discovery)
 	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 2 {
+		t.Fatalf("expected persisted run saved=2, got %+v", payload.Run)
+	}
+	if total, ok := payload.RunSummary["candidates_total"].(float64); !ok || int(total) != 2 {
+		t.Fatalf("expected run summary candidates_total=2, got %+v", payload.RunSummary)
+	}
+	for _, candidate := range payload.Candidates {
+		source, _ := candidate["source"].(string)
+		if source != "mrtoys.com.au" {
+			t.Fatalf("expected persisted Doofinder candidate source=mrtoys.com.au, got %+v", candidate)
+		}
+	}
 	if lastOrigin != "https://www.mrtoys.com.au" {
 		t.Fatalf("expected origin header to match provider domain, got=%q", lastOrigin)
 	}
 	if !strings.HasPrefix(lastReferer, "https://www.mrtoys.com.au") {
 		t.Fatalf("expected referer header to match provider domain, got=%q", lastReferer)
 	}
-}
 
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one reloaded query set, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected Doofinder run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 2 {
+		t.Fatalf("expected Doofinder run to persist candidate count=2, got %+v", latest)
+	}
+}
