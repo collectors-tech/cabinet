@@ -51,6 +51,13 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **THEN** Cabinet MUST reject the request with an actionable `invalid_taxonomy_value` error that names the invalid field
 - **AND** valid taxonomy values MUST continue to save without breaking existing records that omit optional taxonomy fields
 
+#### Scenario: Search filter and sort inventory taxonomy fields
+- **GIVEN** inventory records include configured item type, condition, category, and packaging grade values
+- **WHEN** user searches, filters, saves a view, or sorts the inventory table
+- **THEN** item type and packaging grade MUST be available as table columns and URL-backed filters
+- **AND** global inventory search MUST match item type, condition, category, and packaging grade values as well as title and part number
+- **AND** saved inventory views MUST preserve taxonomy filters and sorting choices
+
 ### Requirement INVENTORY-GRADING-002: Item records SHALL support grading and collector classification fields
 Cabinet SHALL persist grading fields per item/instance including grading status and collector classification.
 
