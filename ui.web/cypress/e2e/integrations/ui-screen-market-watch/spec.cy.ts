@@ -400,6 +400,83 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh', () => {
+    let scheduledCompleted = false
+
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_sets: [
+            {
+              id: 'qs-mw-scheduled',
+              name: 'Scheduled AFX Watch',
+              keywords: ['AFX'],
+              provider_scope: ['bonzaslotcars'],
+              schedule_cron: '0 */6 * * *',
+              enabled: true,
+              ...(scheduledCompleted
+                ? {
+                    last_run_status: 'succeeded',
+                    last_run_at: '2026-05-28T07:58:00Z',
+                    last_candidate_count: 4,
+                  }
+                : {}),
+            },
+          ],
+        },
+      })
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run/scheduled', (req) => {
+      scheduledCompleted = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          run_id: 'scheduled-mw-1',
+          query_sets_executed: 1,
+          candidates_collected: 4,
+          failures: 0,
+        },
+      })
+    }).as('scheduledRefresh')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Scheduled AFX Watch').should('be.visible')
+      cy.contains('td', 'never').should('be.visible')
+      cy.contains('td', 'No output').should('be.visible')
+    })
+
+    cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
+    cy.wait('@scheduledRefresh')
+    cy.wait('@querySets')
+    cy.get('[data-testid="scanner-action-status"]').should(
+      'contain',
+      'scheduled_run_completed_scheduled-mw-1'
+    )
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Scheduled refresh completed.')
+      .and('contain', 'Candidates collected: 4')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', 'Candidates: 4').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-run-history-qs-mw-scheduled"]')
+      .should('contain', 'Scheduled AFX Watch')
+      .and('contain', 'succeeded')
+      .and('contain', 'Candidates: 4')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
