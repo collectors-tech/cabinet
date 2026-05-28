@@ -266,6 +266,111 @@ func TestWave4AmazonRunModeAndNormalizationContract(t *testing.T) {
 	}
 }
 
+func TestWave4EbayRunPersistsSavedSearchCandidates(t *testing.T) {
+	t.Parallel()
+
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("expected bearer token header, got %q", got)
+		}
+		if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_AU" {
+			t.Fatalf("expected EBAY_AU marketplace header, got %q", got)
+		}
+		if got := r.URL.Query().Get("q"); got != "afx" {
+			t.Fatalf("expected query q=afx, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"ebay-1001","title":"AFX Slot Car eBay Listing","price":{"value":"29.95","currency":"AUD"},"itemWebUrl":"https://www.ebay.com.au/itm/ebay-1001","image":{"imageUrl":"https://example.test/ebay-1001.jpg"},"seller":{"username":"seller-one"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
+	}))
+	defer ebayStub.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Wave4Ebay"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	saveSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"test-token","ebay_marketplace":"EBAY_AU"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save ebay settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"eBay Saved Search","keywords":["afx"],"provider_scope":["ebay"],"region":"AU","enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs map[string]any
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+	querySetID, _ := qs["id"].(string)
+	if querySetID == "" {
+		t.Fatal("expected query set id")
+	}
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"`+querySetID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusOK {
+		t.Fatalf("ebay run expected 200, got %d body=%s", run.Code, run.Body.String())
+	}
+	var runPayload struct {
+		Provider   string           `json:"provider"`
+		Candidates []map[string]any `json:"candidates"`
+		Run        map[string]any   `json:"run"`
+	}
+	if err := json.NewDecoder(run.Body).Decode(&runPayload); err != nil {
+		t.Fatalf("decode ebay run payload: %v", err)
+	}
+	if runPayload.Provider != "ebay" {
+		t.Fatalf("expected provider ebay, got %+v", runPayload)
+	}
+	if len(runPayload.Candidates) != 1 {
+		t.Fatalf("expected one persisted ebay candidate in run payload, got %+v", runPayload.Candidates)
+	}
+	if got, _ := runPayload.Candidates[0]["source"].(string); got != "ebay" {
+		t.Fatalf("expected persisted ebay source, got %+v", runPayload.Candidates[0])
+	}
+	if got, _ := runPayload.Candidates[0]["stock_state"].(string); got != "low_stock" {
+		t.Fatalf("expected low_stock persistence, got %+v", runPayload.Candidates[0])
+	}
+	if got, ok := runPayload.Run["saved"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected run saved=1, got %+v", runPayload.Run)
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets expected 200, got %d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode query sets after ebay run: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one query set after ebay run, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected ebay run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected ebay run to persist candidate count=1, got %+v", latest)
+	}
+}
+
 func TestWave4AUWebshopStockExtractionContract(t *testing.T) {
 	t.Parallel()
 
