@@ -10,6 +10,12 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **WHEN** admin saves grade lists for car and packaging
 - **THEN** updated enum values MUST be available in inventory create/edit forms
 
+#### Scenario: Manage packaging grades from taxonomy settings
+- **GIVEN** admin user opens Settings > Categories for the active profile
+- **WHEN** admin adds or removes packaging grade values and saves taxonomy settings
+- **THEN** Cabinet MUST persist those values in the profile-scoped packaging grade enum setting
+- **AND** Inventory item grading controls MUST use the saved packaging grade values without losing existing item records
+
 #### Scenario: Persist item type condition scale
 - **GIVEN** admin user opens inventory taxonomy settings
 - **WHEN** admin saves an item type with ordered condition values
