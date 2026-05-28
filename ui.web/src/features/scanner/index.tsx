@@ -680,7 +680,13 @@ export function Scanner() {
       return
     }
     setActionStatus(`retry_requested_${querySetID}`)
-    setActionFeedback(null)
+    setActionFeedback({
+      summary: 'Retry requested.',
+      actions: [
+        'Refreshing Market Watch failure state.',
+        'Review provider health if the query remains failed.',
+      ],
+    })
     setRunMetaByQuerySet((current) => ({
       ...current,
       [querySetID]: { status: 'running' },
