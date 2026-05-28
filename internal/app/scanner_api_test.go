@@ -335,3 +335,123 @@ func TestScannerRunMapsEbayAuthFailureToProviderErrorCode(t *testing.T) {
 		t.Fatalf("unexpected provider auth payload: %+v", payload)
 	}
 }
+
+func TestScannerRecognitionReviewApplyRequiresConfirmationAndDoesNotMutate(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createScannerApplyProfile(t, a, "scanner-review-confirmation-profile")
+	body := `{
+		"target":"inventory",
+		"confirmed":false,
+		"candidates":[
+			{"id":"SCAN-001","title":"Scanned Card","confidence":0.91,"source":"camera","provenance":"ocr-v1","media_id":"media-1","media_url":"https://example.test/scan-1.jpg"}
+		]
+	}`
+	resp := doRequest(t, a, http.MethodPost, "/api/scanner/recognition-review/apply", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected confirmation-required conflict, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"scanner_review_confirmation_required"`) || !strings.Contains(resp.Body.String(), `"confirm_before_create":true`) {
+		t.Fatalf("expected confirmation-required review payload, body=%s", resp.Body.String())
+	}
+	items := doRequest(t, a, http.MethodGet, "/api/items", nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if strings.Contains(items.Body.String(), "SCAN-001") {
+		t.Fatalf("unconfirmed scanner apply must not create items, body=%s", items.Body.String())
+	}
+}
+
+func TestScannerRecognitionReviewApplyCreatesWishlistItemWithEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createScannerApplyProfile(t, a, "scanner-review-wishlist-profile")
+	body := `{
+		"target":"wishlist",
+		"confirmed":true,
+		"candidates":[
+			{"id":"SCAN-WISH-001","title":"Wishlist Scanner Card","confidence":0.72,"source":"camera","provenance":"ocr-v1","media_id":"media-wish-1","media_url":"https://example.test/wish-scan.jpg"},
+			{"id":"SCAN-WISH-ALT","title":"Wishlist Scanner Alternate","confidence":0.64,"source":"catalog","provenance":"matcher-v2","override_id":"SCAN-WISH-ALT","override_note":"selected exact parallel"}
+		]
+	}`
+	resp := doRequest(t, a, http.MethodPost, "/api/scanner/recognition-review/apply", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected created scanner review apply, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Target string `json:"target"`
+		Item   struct {
+			ID         string   `json:"id"`
+			PartNumber string   `json:"part_number"`
+			Title      string   `json:"title"`
+			Status     string   `json:"status"`
+			Notes      string   `json:"notes"`
+			SourceURLs []string `json:"source_urls"`
+		} `json:"item"`
+		WishlistEntry struct {
+			ID     string `json:"id"`
+			ItemID string `json:"item_id"`
+			Owned  bool   `json:"owned"`
+		} `json:"wishlist_entry"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode scanner apply payload: %v", err)
+	}
+	if payload.Target != "wishlist" || payload.Item.ID == "" || payload.WishlistEntry.ID == "" || payload.WishlistEntry.ItemID != payload.Item.ID {
+		t.Fatalf("expected wishlist item and entry, got %+v", payload)
+	}
+	if payload.Item.PartNumber != "SCAN-WISH-ALT" || payload.Item.Title != "Wishlist Scanner Alternate" || payload.Item.Status != "wishlist" {
+		t.Fatalf("expected manual override wishlist item, got %+v", payload.Item)
+	}
+	if payload.WishlistEntry.Owned {
+		t.Fatalf("scanner wishlist apply must not mark wishlist entry owned, got %+v", payload.WishlistEntry)
+	}
+	for _, want := range []string{"manual_override=true", "media_id=media-wish-1", "provenance=camera|ocr-v1|catalog|matcher-v2"} {
+		if !strings.Contains(payload.Item.Notes, want) {
+			t.Fatalf("expected item notes to contain %q, got %q", want, payload.Item.Notes)
+		}
+	}
+	if len(payload.Item.SourceURLs) != 1 || payload.Item.SourceURLs[0] != "https://example.test/wish-scan.jpg" {
+		t.Fatalf("expected scanner media URL source evidence, got %+v", payload.Item.SourceURLs)
+	}
+	items := doRequest(t, a, http.MethodGet, "/api/items?status=wishlist", nil, nil)
+	if items.Code != http.StatusOK || !strings.Contains(items.Body.String(), "SCAN-WISH-ALT") {
+		t.Fatalf("expected created wishlist item to reload, status=%d body=%s", items.Code, items.Body.String())
+	}
+}
+
+func createScannerApplyProfile(t *testing.T, a *App, name string) string {
+	t.Helper()
+	profile := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/profiles",
+		strings.NewReader(`{"name":"`+name+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if profile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profile.Code, profile.Body.String())
+	}
+	var payload struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profile.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode profile payload: %v", err)
+	}
+	activate := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/active",
+		strings.NewReader(`{"profile_id":"`+payload.ID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	return payload.ID
+}

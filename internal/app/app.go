@@ -2049,6 +2049,84 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": items})
 	})
+	mux.HandleFunc("/api/scanner/recognition-review/apply", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Candidates []scanner.RecognitionCandidateInput `json:"candidates"`
+			Target     string                              `json:"target"`
+			Confirmed  bool                                `json:"confirmed"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		target := normalizeScannerReviewApplyTarget(req.Target)
+		for i := range req.Candidates {
+			if strings.TrimSpace(req.Candidates[i].Target) == "" {
+				req.Candidates[i].Target = target
+			}
+		}
+		review, err := scanner.BuildRecognitionReview(req.Candidates)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_recognition_review"}`, http.StatusBadRequest)
+			return
+		}
+		review.Target = target
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		if !req.Confirmed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":              "scanner_review_confirmation_required",
+				"confirmation_state": "required",
+				"review":             review,
+			})
+			return
+		}
+
+		itemInput := scannerReviewApplyItem(review)
+		createdItem, err := collectionRepo.CreateItemForProfile(r.Context(), strings.TrimSpace(active.ID), itemInput)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_create_scanner_item"}`, http.StatusBadRequest)
+			return
+		}
+		result := map[string]any{
+			"mode":               "scanner_review_apply",
+			"profile_id":         strings.TrimSpace(active.ID),
+			"target":             target,
+			"confirmation_state": "confirmed",
+			"review":             review,
+			"item":               createdItem,
+		}
+		if target == "wishlist" {
+			entry, err := wishlistSvc.CreateForProfile(r.Context(), strings.TrimSpace(active.ID), wishlist.Entry{
+				ItemID:       createdItem.ID,
+				Priority:     "medium",
+				Notes:        scannerReviewApplyEvidenceNote(review),
+				HighlightHit: true,
+				Owned:        false,
+			})
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_create_scanner_wishlist_entry"}`, http.StatusBadRequest)
+				return
+			}
+			result["wishlist_entry"] = entry
+		}
+		logSvc.Log(r.Context(), "info", "scanner_review_apply_confirmed", map[string]any{
+			"profile_id": strings.TrimSpace(active.ID),
+			"target":     target,
+			"item_id":    createdItem.ID,
+		})
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/scanner/failures", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -8680,6 +8758,73 @@ func providerCandidatesForScanner(candidates []map[string]any, defaultSource str
 		})
 	}
 	return out
+}
+
+func normalizeScannerReviewApplyTarget(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "wishlist") {
+		return "wishlist"
+	}
+	return "inventory"
+}
+
+func scannerReviewApplyItem(review scanner.RecognitionReview) collection.Item {
+	selected := review.SelectedCandidate
+	status := "active"
+	if review.Target == "wishlist" {
+		status = "wishlist"
+	}
+	return collection.Item{
+		Brand:      "Unknown",
+		Category:   "Cards",
+		ItemType:   "Trading Cards",
+		PartNumber: selected.ID,
+		Title:      selected.Title,
+		Status:     status,
+		Notes:      scannerReviewApplyEvidenceNote(review),
+		SourceURLs: scannerReviewApplySourceURLs(review),
+		Tags:       []string{"scanner-review"},
+	}
+}
+
+func scannerReviewApplyEvidenceNote(review scanner.RecognitionReview) string {
+	selected := review.SelectedCandidate
+	values := []string{
+		"scanner_review_apply",
+		"selected_candidate=" + selected.ID,
+		"confidence=" + strconv.FormatFloat(selected.Confidence, 'f', 2, 64),
+		"confidence_label=" + review.ConfidenceLabel,
+		"target=" + review.Target,
+	}
+	if review.ManualOverrideApplied {
+		values = append(values, "manual_override=true")
+	}
+	if selected.OverrideNote != "" {
+		values = append(values, "override_note="+selected.OverrideNote)
+	}
+	if mediaID := strings.TrimSpace(review.MediaEvidence["media_id"]); mediaID != "" {
+		values = append(values, "media_id="+mediaID)
+	} else if mediaID := strings.TrimSpace(review.TopCandidate.MediaID); mediaID != "" {
+		values = append(values, "media_id="+mediaID)
+	}
+	if mediaURL := strings.TrimSpace(review.MediaEvidence["media_url"]); mediaURL != "" {
+		values = append(values, "media_url="+mediaURL)
+	} else if mediaURL := strings.TrimSpace(review.TopCandidate.MediaURL); mediaURL != "" {
+		values = append(values, "media_url="+mediaURL)
+	}
+	if len(review.Provenance) > 0 {
+		values = append(values, "provenance="+strings.Join(review.Provenance, "|"))
+	}
+	return strings.Join(values, "; ")
+}
+
+func scannerReviewApplySourceURLs(review scanner.RecognitionReview) []string {
+	if value := strings.TrimSpace(review.MediaEvidence["media_url"]); value != "" {
+		return []string{value}
+	}
+	if value := strings.TrimSpace(review.TopCandidate.MediaURL); value != "" {
+		return []string{value}
+	}
+	return nil
 }
 
 func stringCandidateValue(raw any) string {
