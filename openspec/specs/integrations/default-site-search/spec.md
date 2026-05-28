@@ -37,6 +37,7 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **AND** UI MUST surface execution status and summary data for user verification
 - **AND** provider-specific run routes for supported saved-search providers MUST persist normalized candidates into the shared scanner/Discoveries candidate store instead of returning transient-only output
 - **AND** Bonza saved-search runs MUST persist normalized `source="bonzaslotcars"` candidates and latest-run snapshot metadata from the provider-specific run route
+- **AND** Hobbytech saved-search runs MUST persist normalized `source="hobbytechtoys"` candidates and latest-run snapshot metadata from the provider-specific run route
 - **AND** eBay saved-search runs MUST expose the same provider-specific persistence contract as the Amazon route, including persisted `source="ebay"` candidates and latest-run snapshot hydration from query-set reloads
 - **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
 - **AND** Market Watch MUST refresh its saved-query snapshots after scheduled refresh and render a latest-run history summary from durable query-set metadata

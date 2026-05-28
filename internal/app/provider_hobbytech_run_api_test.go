@@ -72,9 +72,11 @@ const config = { shop: 'hobbytechtoys.com.au', sid: 'SID-1', template: 'search',
 		t.Fatalf("hobbytech run status=%d body=%s", run.Code, run.Body.String())
 	}
 	var payload struct {
-		PageCount     int              `json:"page_count"`
-		Candidates    []map[string]any `json:"candidates"`
-		DriftRecovered bool            `json:"drift_recovered"`
+		PageCount      int              `json:"page_count"`
+		Candidates     []map[string]any `json:"candidates"`
+		DriftRecovered bool             `json:"drift_recovered"`
+		Run            map[string]any   `json:"run"`
+		RunSummary     map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
@@ -87,6 +89,39 @@ const config = { shop: 'hobbytechtoys.com.au', sid: 'SID-1', template: 'search',
 	}
 	if payload.DriftRecovered {
 		t.Fatal("expected drift_recovered=false for healthy run")
+	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 2 {
+		t.Fatalf("expected persisted run saved=2, got %+v", payload.Run)
+	}
+	if total, ok := payload.RunSummary["candidates_total"].(float64); !ok || int(total) != 2 {
+		t.Fatalf("expected run summary candidates_total=2, got %+v", payload.RunSummary)
+	}
+	for _, candidate := range payload.Candidates {
+		source, _ := candidate["source"].(string)
+		if source != "hobbytechtoys" {
+			t.Fatalf("expected persisted hobbytech source, got %+v", candidate)
+		}
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	if len(querySetPayload.QuerySets) != 1 {
+		t.Fatalf("expected one reloaded query set, got %+v", querySetPayload.QuerySets)
+	}
+	latest := querySetPayload.QuerySets[0]
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected hobbytech run to persist succeeded snapshot, got %+v", latest)
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 2 {
+		t.Fatalf("expected hobbytech run to persist candidate count=2, got %+v", latest)
 	}
 }
 
@@ -172,4 +207,3 @@ func TestHobbytechRunRecoversFromSessionDriftWithFallbackDiscovery(t *testing.T)
 		t.Fatalf("expected one candidate after recovery got=%d", len(payload.Candidates))
 	}
 }
-

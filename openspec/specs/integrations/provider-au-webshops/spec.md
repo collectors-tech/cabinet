@@ -122,6 +122,7 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **WHEN** runtime calls Boost/mybcapps search endpoint
 - **THEN** response parsing MUST extract product candidates from structured fields and/or returned HTML payload blocks
 - **AND** pagination MUST honor provider limit/page parameters until terminal page
+- **AND** saved-search run output MUST persist normalized `source="hobbytechtoys"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
 
 #### Scenario: Hobbytech config/session drift fallback
 - **GIVEN** required session/template parameters drift or expire

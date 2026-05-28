@@ -2981,13 +2981,37 @@ func New(cfg config.Config) (*App, error) {
 		if discoveryFallbackUsed && strings.TrimSpace(warning) == "" {
 			warning = "hobbytech discovery used cached config"
 		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			hobbytechCandidatesForScanner(candidates),
+			1,
+			itemsPerPage,
+			itemsPerPage,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_hobbytech_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_hobbytech_candidates"}`, http.StatusBadRequest)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"query_set_id":     qs.ID,
 			"page_count":       pageCount,
-			"candidates":       candidates,
+			"candidates":       persisted,
 			"drift_recovered":  driftRecovered,
 			"warning":          warning,
 			"discovery_config": cfg,
+			"run":              run,
+			"run_summary": map[string]any{
+				"page_count":       pageCount,
+				"candidates_total": run.Saved,
+			},
 		})
 	})
 	mux.HandleFunc("/api/providers/au-webshops/parse-stock", func(w http.ResponseWriter, r *http.Request) {
@@ -8340,6 +8364,14 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 }
 
 func bonzaCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "bonzaslotcars")
+}
+
+func hobbytechCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "hobbytechtoys")
+}
+
+func providerCandidatesForScanner(candidates []map[string]any, defaultSource string) []scanner.CandidateInput {
 	out := make([]scanner.CandidateInput, 0, len(candidates))
 	for _, candidate := range candidates {
 		listingID := strings.TrimSpace(fmt.Sprint(candidate["listing_id"]))
@@ -8352,7 +8384,7 @@ func bonzaCandidatesForScanner(candidates []map[string]any) []scanner.CandidateI
 			Price:      numericCandidateValue(candidate["price"]),
 			URL:        stringCandidateValue(candidate["url"]),
 			Seller:     stringCandidateValue(candidate["seller"]),
-			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), "bonzaslotcars"),
+			Source:     firstNonEmptyString(stringCandidateValue(candidate["source"]), defaultSource),
 			StockState: stringCandidateValue(candidate["stock_state"]),
 			StockCount: int(numericCandidateValue(candidate["stock_count"])),
 		})
