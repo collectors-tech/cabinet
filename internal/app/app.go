@@ -2611,6 +2611,114 @@ func New(cfg config.Config) (*App, error) {
 			"warning":       warning,
 		})
 	})
+	mux.HandleFunc("/api/providers/frontline/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			QuerySetID                 string   `json:"query_set_id"`
+			DiscoveryAssetURL          string   `json:"discovery_asset_url"`
+			FallbackDiscoveryAssetURLs []string `json:"fallback_discovery_asset_urls"`
+			SearchURL                  string   `json:"search_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
+		if req.QuerySetID == "" {
+			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		profileID := strings.TrimSpace(active.ID)
+		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), profileID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.frontlinehobbies.base_url"])
+		if baseURL == "" {
+			baseURL = "https://frontlinehobbies.com.au"
+		}
+		itemsPerPage := parsePositiveInt(settings["integration.frontlinehobbies.items_per_page"], 24)
+		if itemsPerPage > 50 {
+			itemsPerPage = 50
+		}
+		discoveryAssetURL := strings.TrimSpace(req.DiscoveryAssetURL)
+		if discoveryAssetURL == "" {
+			discoveryAssetURL = strings.TrimRight(baseURL, "/") + "/assets/pd-search.js"
+		}
+		cfg, fallbackUsed, warning, err := discoverFrontlineAlgoliaConfig(
+			r.Context(),
+			conn,
+			http.DefaultClient,
+			discoveryAssetURL,
+			req.FallbackDiscoveryAssetURLs,
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_discover_frontline_config"}`, http.StatusBadRequest)
+			return
+		}
+		searchURL := strings.TrimSpace(req.SearchURL)
+		if searchURL == "" {
+			searchURL = defaultFrontlineAlgoliaSearchURL(cfg)
+		}
+		candidates, total, runErr := runFrontlineAlgoliaSearch(r.Context(), http.DefaultClient, searchURL, qs, cfg, baseURL, itemsPerPage)
+		if runErr != nil {
+			http.Error(w, `{"error":"failed_to_run_frontline_provider"}`, http.StatusBadRequest)
+			return
+		}
+		if fallbackUsed && strings.TrimSpace(warning) == "" {
+			warning = "frontline discovery used cached config"
+		}
+		run, err := scannerSvc.PersistCandidatesForProfile(
+			r.Context(),
+			profileID,
+			qs.ID,
+			frontlineCandidatesForScanner(candidates),
+			1,
+			itemsPerPage,
+			itemsPerPage,
+			"",
+		)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_persist_frontline_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		persisted, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_list_frontline_candidates"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"query_set_id": qs.ID,
+			"total":        total,
+			"candidates":   persisted,
+			"warning":      warning,
+			"discovery_config": map[string]any{
+				"application_id": cfg.ApplicationID,
+				"index_names":    cfg.IndexNames,
+				"source":         cfg.Source,
+			},
+			"run": run,
+			"run_summary": map[string]any{
+				"candidates_total": run.Saved,
+				"total":            total,
+			},
+		})
+	})
 	mux.HandleFunc("/api/providers/doofinder/discovery", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -7647,6 +7755,125 @@ func readFrontlineAlgoliaCache(ctx context.Context, conn *sql.DB) (frontlineAlgo
 	return config, nil
 }
 
+func defaultFrontlineAlgoliaSearchURL(config frontlineAlgoliaConfig) string {
+	appID := strings.ToLower(strings.TrimSpace(config.ApplicationID))
+	index := ""
+	if len(config.IndexNames) > 0 {
+		index = strings.TrimSpace(config.IndexNames[0])
+	}
+	if appID == "" || index == "" {
+		return ""
+	}
+	return "https://" + appID + "-dsn.algolia.net/1/indexes/" + url.PathEscape(index) + "/query"
+}
+
+func runFrontlineAlgoliaSearch(
+	ctx context.Context,
+	client *http.Client,
+	searchURL string,
+	qs scanner.QuerySet,
+	config frontlineAlgoliaConfig,
+	baseURL string,
+	itemsPerPage int,
+) ([]map[string]any, int, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if strings.TrimSpace(searchURL) == "" {
+		return nil, 0, fmt.Errorf("frontline search url is required")
+	}
+	query := strings.TrimSpace(qs.Name)
+	if len(qs.Keywords) > 0 && strings.TrimSpace(qs.Keywords[0]) != "" {
+		query = strings.TrimSpace(qs.Keywords[0])
+	}
+	if query == "" {
+		query = "collectible"
+	}
+	if itemsPerPage <= 0 {
+		itemsPerPage = 24
+	}
+	if itemsPerPage > 50 {
+		itemsPerPage = 50
+	}
+	requestBody, err := json.Marshal(map[string]string{
+		"params": url.Values{
+			"query":       []string{query},
+			"hitsPerPage": []string{strconv.Itoa(itemsPerPage)},
+			"page":        []string{"0"},
+		}.Encode(),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal frontline search request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(searchURL), bytes.NewReader(requestBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("build frontline search request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Algolia-Application-Id", strings.TrimSpace(config.ApplicationID))
+	req.Header.Set("X-Algolia-API-Key", strings.TrimSpace(config.SearchKey))
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech/cabinet)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("run frontline search request: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("frontline search returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, 0, fmt.Errorf("read frontline search response: %w", err)
+	}
+	var payload struct {
+		Hits   []map[string]any `json:"hits"`
+		NBHits int              `json:"nbHits"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, 0, fmt.Errorf("decode frontline response: %w", err)
+	}
+	candidates := make([]map[string]any, 0, len(payload.Hits))
+	for _, hit := range payload.Hits {
+		id := firstNonEmptyString(
+			stringCandidateValue(hit["objectID"]),
+			stringCandidateValue(hit["id"]),
+			stringCandidateValue(hit["sku"]),
+		)
+		if id == "" {
+			continue
+		}
+		title := firstNonEmptyString(
+			stringCandidateValue(hit["title"]),
+			stringCandidateValue(hit["name"]),
+			stringCandidateValue(hit["product_name"]),
+		)
+		link := firstNonEmptyString(
+			stringCandidateValue(hit["url"]),
+			stringCandidateValue(hit["link"]),
+			stringCandidateValue(hit["handle"]),
+		)
+		if link != "" && !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
+			link = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(link, "/")
+		}
+		candidates = append(candidates, map[string]any{
+			"listing_id": "frontline-" + id,
+			"title":      title,
+			"url":        link,
+			"price":      numericCandidateValue(firstNonNil(hit["price"], hit["price_value"], hit["sale_price"])),
+			"image":      firstNonEmptyString(stringCandidateValue(hit["image"]), stringCandidateValue(hit["image_url"])),
+			"source":     "frontlinehobbies",
+			"seller":     "frontlinehobbies.com.au",
+		})
+	}
+	total := payload.NBHits
+	if total == 0 {
+		total = len(candidates)
+	}
+	return candidates, total, nil
+}
+
 func discoverDoofinderConfig(
 	ctx context.Context,
 	conn *sql.DB,
@@ -8371,6 +8598,10 @@ func hobbytechCandidatesForScanner(candidates []map[string]any) []scanner.Candid
 	return providerCandidatesForScanner(candidates, "hobbytechtoys")
 }
 
+func frontlineCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
+	return providerCandidatesForScanner(candidates, "frontlinehobbies")
+}
+
 func providerCandidatesForScanner(candidates []map[string]any, defaultSource string) []scanner.CandidateInput {
 	out := make([]scanner.CandidateInput, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -8397,6 +8628,15 @@ func stringCandidateValue(raw any) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
+func firstNonNil(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func numericCandidateValue(raw any) float64 {
