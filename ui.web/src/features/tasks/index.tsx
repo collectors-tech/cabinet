@@ -16,6 +16,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -35,8 +36,18 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { cn } from '@/lib/utils'
 import { useWorkspaceCollections } from '@/features/collections/use-workspace-collections'
+import {
+  conditionsForItemType,
+  defaultInventoryItemTypeConditionScales,
+  itemTypeOptions,
+  parseItemTypeConditionScales,
+  type InventoryItemTypeConditionScale,
+} from '@/features/inventory/item-type-condition-scales'
+import {
+  defaultInventoryPackagingGrades,
+  parsePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
 import { TasksDialogs, type TasksDialogType } from './components/tasks-dialogs'
 import { type WishlistEntryDraft } from './components/tasks-mutate-drawer'
 import { TasksTable } from './components/tasks-table'
@@ -52,8 +63,12 @@ type TasksProps = {
 type WishlistItemPayload = {
   id?: string
   title?: string
+  thumbnail_url?: string
   part_number?: string
   category?: string
+  item_type?: string
+  packaging_grade_type?: string
+  condition?: string
   priority?: string
 }
 
@@ -78,6 +93,34 @@ type WishlistPricingSummary = {
   priceStockCount?: number
 }
 
+async function loadWishlistItemTypeConditionScales(): Promise<
+  InventoryItemTypeConditionScale[]
+> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryItemTypeConditionScales
+  }
+  const payload = (await response.json()) as {
+    item_type_condition_scales?: InventoryItemTypeConditionScale[]
+  }
+  return parseItemTypeConditionScales(
+    JSON.stringify(payload.item_type_condition_scales ?? [])
+  )
+}
+
+async function loadWishlistPackagingGrades(): Promise<string[]> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryPackagingGrades
+  }
+  const payload = (await response.json()) as {
+    packaging_grades?: string[]
+  }
+  return parsePackagingGradeOptions(
+    JSON.stringify(payload.packaging_grades ?? [])
+  )
+}
+
 type WishlistEntryPayload = {
   id?: string
   item_id?: string
@@ -93,6 +136,15 @@ type WishlistEntryPayload = {
   purchase_condition?: string
   quantity?: number
   needed_quantity?: number
+  created_at?: string
+  updated_at?: string
+}
+
+type WishlistInstancePayload = {
+  id?: string
+  condition?: string
+  status?: string
+  quantity?: number
 }
 
 type WishlistInlineChanges = {
@@ -354,7 +406,9 @@ async function captureWishlistScreenshotDataUrl() {
 
   const mediaDevices = navigator.mediaDevices as
     | (MediaDevices & {
-        getDisplayMedia?: (constraints?: MediaStreamConstraints) => Promise<MediaStream>
+        getDisplayMedia?: (
+          constraints?: MediaStreamConstraints
+        ) => Promise<MediaStream>
       })
     | undefined
   if (typeof mediaDevices?.getDisplayMedia !== 'function') {
@@ -407,9 +461,7 @@ async function scanWishlistBarcodeValue() {
 
   const barcodeDetectorConstructor = (
     window as unknown as {
-      BarcodeDetector?: new (options?: {
-        formats?: string[]
-      }) => {
+      BarcodeDetector?: new (options?: { formats?: string[] }) => {
         detect: (
           source: HTMLVideoElement | HTMLCanvasElement
         ) => Promise<Array<{ rawValue?: string }>>
@@ -438,8 +490,7 @@ async function scanWishlistBarcodeValue() {
       formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'],
     })
     const results = await detector.detect(video)
-    const barcode = results.find((result) => result.rawValue?.trim())
-      ?.rawValue
+    const barcode = results.find((result) => result.rawValue?.trim())?.rawValue
     if (!barcode) {
       throw new Error('barcode_not_found')
     }
@@ -575,6 +626,48 @@ export function Tasks({
   const [wishlistBarcodeError, setWishlistBarcodeError] = useState('')
   const [wishlistImageDropActive, setWishlistImageDropActive] = useState(false)
   const [wishlistImageDropMessage, setWishlistImageDropMessage] = useState('')
+  const [wishlistItemTypeConditionScales, setWishlistItemTypeConditionScales] =
+    useState<InventoryItemTypeConditionScale[]>(
+      defaultInventoryItemTypeConditionScales
+    )
+  const [wishlistPackagingGrades, setWishlistPackagingGrades] = useState<
+    string[]
+  >(defaultInventoryPackagingGrades)
+  const wishlistItemTypeOptions = useMemo(
+    () => itemTypeOptions(wishlistItemTypeConditionScales),
+    [wishlistItemTypeConditionScales]
+  )
+  const wishlistConditionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          wishlistItemTypeOptions.flatMap((itemType) =>
+            conditionsForItemType(wishlistItemTypeConditionScales, itemType)
+          )
+        )
+      ),
+    [wishlistItemTypeConditionScales, wishlistItemTypeOptions]
+  )
+
+  useEffect(() => {
+    if (!isWishlistRoute) {
+      return
+    }
+    let cancelled = false
+    void Promise.all([
+      loadWishlistItemTypeConditionScales(),
+      loadWishlistPackagingGrades(),
+    ]).then(([conditionScales, packagingGrades]) => {
+      if (cancelled) {
+        return
+      }
+      setWishlistItemTypeConditionScales(conditionScales)
+      setWishlistPackagingGrades(packagingGrades)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isWishlistRoute])
   const loadWishlistData = useCallback(async () => {
     const [wishlistResponse, itemsResponse] = await Promise.all([
       fetch('/api/wishlist'),
@@ -610,7 +703,11 @@ export function Tasks({
             item.title?.trim() ||
             item.part_number?.trim() ||
             `Wishlist item ${index + 1}`,
+          thumbnailUrl: item.thumbnail_url?.trim(),
           partNumber: item.part_number?.trim(),
+          itemType: item.item_type?.trim(),
+          packagingGradeType: item.packaging_grade_type?.trim(),
+          condition: item.condition?.trim(),
           status: wishlistEntry?.below_target_now ? 'discovered' : 'wishlist',
           label: item.category?.trim() || 'collection',
           priority:
@@ -630,6 +727,8 @@ export function Tasks({
           priceSampleCount: pricingSummary.priceSampleCount,
           priceFirstDate: pricingSummary.priceFirstDate,
           priceLatestDate: pricingSummary.priceLatestDate,
+          wishlistCreatedAt: wishlistEntry?.created_at?.trim(),
+          wishlistPriceUpdatedAt: pricingSummary.priceLatestDate,
           priceSources: pricingSummary.priceSources,
           priceStockCount: pricingSummary.priceStockCount,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
@@ -698,6 +797,9 @@ export function Tasks({
               title: draft.title,
               part_number: draft.partNumber,
               category: draft.category,
+              item_type: draft.itemType,
+              packaging_grade_type: draft.packagingGradeType,
+              condition: draft.condition,
             }),
           })
         : await fetch('/api/items', {
@@ -707,6 +809,9 @@ export function Tasks({
               title: draft.title,
               part_number: draft.partNumber,
               category: draft.category,
+              item_type: draft.itemType,
+              packaging_grade_type: draft.packagingGradeType,
+              condition: draft.condition,
               priority: normalizeWishlistPriority(draft.priority),
             }),
           })
@@ -719,6 +824,38 @@ export function Tasks({
       const itemID = currentRow?.itemID ?? savedItem.id?.trim()
       if (!itemID) {
         throw new Error('wishlist_item_id_missing')
+      }
+
+      if (draft.condition.trim() !== '') {
+        const instancesResponse = await fetch(
+          `/api/items/${encodeURIComponent(itemID)}/instances`
+        )
+        if (!instancesResponse.ok) {
+          throw new Error('wishlist_condition_read_failed')
+        }
+        const instancesPayload = (await instancesResponse.json()) as {
+          instances?: WishlistInstancePayload[]
+        }
+        const primaryInstance = (instancesPayload.instances ?? [])[0]
+        const conditionResponse = await fetch(
+          primaryInstance?.id
+            ? `/api/items/${encodeURIComponent(
+                itemID
+              )}/instances/${encodeURIComponent(primaryInstance.id)}`
+            : `/api/items/${encodeURIComponent(itemID)}/instances`,
+          {
+            method: primaryInstance?.id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              condition: draft.condition,
+              status: primaryInstance?.status ?? 'custom',
+              quantity: primaryInstance?.quantity ?? 1,
+            }),
+          }
+        )
+        if (!conditionResponse.ok) {
+          throw new Error('wishlist_condition_save_failed')
+        }
       }
 
       const wishlistResponse = await fetch('/api/wishlist', {
@@ -1136,7 +1273,8 @@ export function Tasks({
 
   const handleWishlistPasteSave = useCallback(async () => {
     const content = wishlistPasteContent.trim()
-    const title = wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
+    const title =
+      wishlistPasteTitle.trim() || inferWishlistTitleFromPaste(content)
     if (!content || !title) {
       toast.error('Paste text or a URL before adding to wishlist.')
       return
@@ -1146,6 +1284,9 @@ export function Tasks({
       title,
       partNumber: '',
       category: '',
+      itemType: '',
+      packagingGradeType: '',
+      condition: '',
       priority: 'medium',
       notes: content,
       targetPrice: '',
@@ -1199,6 +1340,9 @@ export function Tasks({
         title,
         partNumber: '',
         category: 'Screenshot',
+        itemType: '',
+        packagingGradeType: '',
+        condition: '',
         priority: 'medium',
         notes: 'Created from screenshot.',
         targetPrice: '',
@@ -1231,9 +1375,7 @@ export function Tasks({
       toast.success(`${title} added to wishlist with screenshot.`)
       handleWishlistScreenshotOpenChange(false)
     } catch {
-      setWishlistScreenshotError(
-        'Screenshot wishlist save failed. Try again.'
-      )
+      setWishlistScreenshotError('Screenshot wishlist save failed. Try again.')
       toast.error('Screenshot wishlist save failed. Try again.')
     } finally {
       setIsWishlistMutating(false)
@@ -1256,6 +1398,9 @@ export function Tasks({
           title,
           partNumber: '',
           category: 'Image',
+          itemType: '',
+          packagingGradeType: '',
+          condition: '',
           priority: 'medium',
           notes: `Created from dropped image: ${file.name}`,
           targetPrice: '',
@@ -1376,6 +1521,9 @@ export function Tasks({
         title,
         partNumber: barcode,
         category: 'Barcode',
+        itemType: '',
+        packagingGradeType: '',
+        condition: '',
         priority: 'medium',
         notes: `Created from barcode ${barcode}.`,
         targetPrice: '',
@@ -1778,7 +1926,9 @@ export function Tasks({
         onDrop={handleWishlistImageDrop}
       >
         {isWishlistRoute &&
-        (wishlistImageDropActive || isWishlistMutating || wishlistImageDropMessage) ? (
+        (wishlistImageDropActive ||
+          isWishlistMutating ||
+          wishlistImageDropMessage) ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',
@@ -1917,6 +2067,9 @@ export function Tasks({
         onWishlistDelete={isWishlistRoute ? handleWishlistDelete : undefined}
         onWishlistImport={isWishlistRoute ? handleWishlistImport : undefined}
         isWishlistMutating={isWishlistMutating}
+        wishlistItemTypeOptions={wishlistItemTypeOptions}
+        wishlistPackagingGradeOptions={wishlistPackagingGrades}
+        wishlistConditionOptions={wishlistConditionOptions}
       />
     </>
   )

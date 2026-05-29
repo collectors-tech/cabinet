@@ -3,6 +3,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
   ImageIcon,
+  MinusIcon,
   PlusIcon,
   TagsIcon,
 } from 'lucide-react'
@@ -70,12 +71,39 @@ function formatMoney(value: number | undefined) {
   }).format(value)
 }
 
+function formatWishlistDate(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return '-'
+  }
+  const datePart = trimmed.split('T')[0]?.split(' ')[0] ?? trimmed
+  const parts = datePart.split('-').map((part) => Number(part))
+  if (
+    parts.length === 3 &&
+    Number.isInteger(parts[0]) &&
+    Number.isInteger(parts[1]) &&
+    Number.isInteger(parts[2])
+  ) {
+    const [year, month, day] = parts
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return trimmed
+}
+
 function formatCostDraft(value: number | undefined) {
-  if (typeof value !== 'number' || value <= 0) {
+  if (typeof value !== 'number' || value < 0) {
     return ''
   }
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
+
+const wishlistStepperInputClassName =
+  'h-8 border-x-0 rounded-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 function buildWishlistPricePointRows(task: Task, values: number[]) {
   const dates = task.priceHistoryDates ?? []
@@ -126,7 +154,7 @@ function WishlistPriceSparkline({
       <button
         type='button'
         data-testid={`wishlist-price-chart-open-${task.id}`}
-        className='rounded bg-slate-950/60 p-0 outline-none ring-offset-background transition-colors hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        className='rounded bg-slate-950/60 p-0 ring-offset-background transition-colors outline-none hover:bg-slate-900 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
         aria-label={`Open ${task.title} price graph`}
         title={accessibleLabel}
         onClick={(event) => {
@@ -225,9 +253,7 @@ function WishlistPriceSparkline({
             className='rounded-md border bg-card/40 p-3'
             data-testid={`wishlist-price-chart-points-${task.id}`}
           >
-            <p className='mb-2 text-sm font-semibold'>
-              Latest 10 price points
-            </p>
+            <p className='mb-2 text-sm font-semibold'>Latest 10 price points</p>
             <ul className='grid gap-1 text-sm sm:grid-cols-2'>
               {latestPointRows.map((point) => (
                 <li key={`${point.date}-${point.price}`}>
@@ -304,7 +330,7 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
       title={`${trendConfig.label}. ${sampleCount} points. ${dateText}. Sources: ${sourceText}. ${stockText}.`}
     >
       <span
-        className={`inline-flex w-4 justify-center text-sm font-semibold leading-none ${trendConfig.className}`}
+        className={`inline-flex w-4 justify-center text-sm leading-none font-semibold ${trendConfig.className}`}
         data-testid={`wishlist-price-trend-marker-${task.id}`}
         aria-hidden='true'
       >
@@ -330,6 +356,54 @@ function WishlistPriceTrendCell({ task }: { task: Task }) {
   )
 }
 
+function hashWishlistThumbnailKey(value: string) {
+  return [...value].reduce((hash, char) => {
+    return (hash * 31 + char.charCodeAt(0)) % 360
+  }, 23)
+}
+
+function WishlistThumbnail({ task }: { task: Task }) {
+  const key = task.itemID?.trim() || task.id.trim() || task.title.trim()
+  const hue = hashWishlistThumbnailKey(key)
+  const accentHue = (hue + 46) % 360
+  const initials = task.title
+    .split(/\s+/)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  if (task.thumbnailUrl) {
+    return (
+      <img
+        src={task.thumbnailUrl}
+        alt=''
+        aria-hidden='true'
+        data-testid={`wishlist-thumbnail-${task.id}`}
+        data-thumbnail-key={key}
+        className='h-8 w-8 shrink-0 rounded-md border object-cover'
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-hidden='true'
+      data-testid={`wishlist-thumbnail-${task.id}`}
+      data-thumbnail-key={key}
+      className='relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border text-[0.625rem] font-semibold text-white shadow-sm'
+      style={{
+        background: `linear-gradient(135deg, hsl(${hue} 68% 42%), hsl(${accentHue} 72% 36%))`,
+      }}
+    >
+      <span className='absolute inset-x-0 top-0 h-1/3 bg-white/18' />
+      <span className='absolute right-0 bottom-0 h-4 w-4 rounded-tl-full bg-black/20' />
+      <span className='relative'>{initials || 'W'}</span>
+    </span>
+  )
+}
+
 function WishlistCostCell({
   task,
   onWishlistInlineUpdate,
@@ -346,8 +420,8 @@ function WishlistCostCell({
     setDraft(formatCostDraft(task.targetPrice))
   }, [task.targetPrice])
 
-  const persist = async () => {
-    const trimmed = draft.trim()
+  const persistValue = async (rawValue: string) => {
+    const trimmed = rawValue.trim()
     const nextValue = trimmed === '' ? 0 : Number(trimmed)
     if (Number.isNaN(nextValue) || nextValue < 0) {
       setDraft(formatCostDraft(task.targetPrice))
@@ -359,29 +433,69 @@ function WishlistCostCell({
     await onWishlistInlineUpdate?.(task, { targetPrice: nextValue })
   }
 
+  const persist = () => persistValue(draft)
+
+  const stepCost = (direction: -1 | 1) => {
+    const parsed = Number(draft.trim())
+    const base = Number.isFinite(parsed) ? parsed : (task.targetPrice ?? 0)
+    const nextValue = Math.max(0, Number((base + direction * 0.01).toFixed(2)))
+    const nextDraft = formatCostDraft(nextValue)
+    setDraft(nextDraft)
+    void persistValue(nextDraft)
+  }
+
   return (
-    <Input
-      type='number'
-      min='0'
-      step='0.01'
-      inputMode='decimal'
-      value={draft}
-      data-testid={`wishlist-cost-input-${task.id}`}
-      aria-label={`Cost for ${task.title}`}
-      className='h-8 w-[6.5rem]'
+    <div
+      data-testid={`wishlist-cost-stepper-${task.id}`}
+      className='flex w-[8.75rem] items-center'
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        void persist()
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          event.currentTarget.blur()
-        }
-      }}
-    />
+    >
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-r-none'
+        data-testid={`wishlist-cost-decrease-${task.id}`}
+        aria-label={`Decrease cost for ${task.title}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => stepCost(-1)}
+      >
+        <MinusIcon className='h-4 w-4' />
+      </Button>
+      <Input
+        type='number'
+        min='0'
+        step='0.01'
+        inputMode='decimal'
+        value={draft}
+        data-testid={`wishlist-cost-input-${task.id}`}
+        aria-label={`Cost for ${task.title}`}
+        className={wishlistStepperInputClassName}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          void persist()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-l-none'
+        data-testid={`wishlist-cost-increase-${task.id}`}
+        aria-label={`Increase cost for ${task.title}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => stepCost(1)}
+      >
+        <PlusIcon className='h-4 w-4' />
+      </Button>
+    </div>
   )
 }
 
@@ -467,27 +581,30 @@ function WishlistNumberCell({
   field,
   label,
   value,
+  minValue,
   onWishlistInlineUpdate,
 }: {
   task: Task
   field: 'quantity' | 'neededQuantity'
   label: string
   value: number | undefined
+  minValue: number
   onWishlistInlineUpdate?: (
     task: Task,
     changes: WishlistInlineChanges
   ) => Promise<void>
 }) {
-  const [draft, setDraft] = useState(String(value ?? 0))
+  const normalizedValue = value ?? minValue
+  const [draft, setDraft] = useState(String(normalizedValue))
 
   useEffect(() => {
-    setDraft(String(value ?? 0))
-  }, [value])
+    setDraft(String(normalizedValue))
+  }, [normalizedValue])
 
-  const persist = async () => {
-    const parsed = Number(draft.trim())
-    if (!Number.isInteger(parsed) || parsed < 0) {
-      setDraft(String(value ?? 0))
+  const persistValue = async (rawValue: string) => {
+    const parsed = Number(rawValue.trim())
+    if (!Number.isInteger(parsed) || parsed < minValue) {
+      setDraft(String(value ?? minValue))
       return
     }
     if ((value ?? 0) === parsed) {
@@ -496,33 +613,71 @@ function WishlistNumberCell({
     await onWishlistInlineUpdate?.(task, { [field]: parsed })
   }
 
+  const persist = () => persistValue(draft)
+
+  const stepNumber = (direction: -1 | 1) => {
+    const parsed = Number(draft.trim())
+    const base = Number.isInteger(parsed) ? parsed : (value ?? minValue)
+    const nextValue = Math.max(minValue, base + direction)
+    const nextDraft = String(nextValue)
+    setDraft(nextDraft)
+    void persistValue(nextDraft)
+  }
+
+  const testIDPrefix = field === 'quantity' ? 'wishlist-qty' : 'wishlist-needs'
+
   return (
-    <Input
-      type='number'
-      min='0'
-      step='1'
-      inputMode='numeric'
-      value={draft}
-      data-testid={
-        field === 'quantity'
-          ? `wishlist-qty-input-${task.id}`
-          : `wishlist-needs-input-${task.id}`
-      }
-      aria-label={`${label} for ${task.title}`}
-      className='h-8 w-[4.5rem]'
+    <div
+      data-testid={`${testIDPrefix}-stepper-${task.id}`}
+      className='flex w-[7rem] items-center'
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        void persist()
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          event.currentTarget.blur()
-        }
-      }}
-    />
+    >
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-r-none'
+        data-testid={`${testIDPrefix}-decrease-${task.id}`}
+        aria-label={`Decrease ${label.toLowerCase()} for ${task.title}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => stepNumber(-1)}
+      >
+        <MinusIcon className='h-4 w-4' />
+      </Button>
+      <Input
+        type='number'
+        min={String(minValue)}
+        step='1'
+        inputMode='numeric'
+        value={draft}
+        data-testid={`${testIDPrefix}-input-${task.id}`}
+        aria-label={`${label} for ${task.title}`}
+        className={wishlistStepperInputClassName}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          void persist()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      <Button
+        type='button'
+        variant='outline'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-l-none'
+        data-testid={`${testIDPrefix}-increase-${task.id}`}
+        aria-label={`Increase ${label.toLowerCase()} for ${task.title}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => stepNumber(1)}
+      >
+        <PlusIcon className='h-4 w-4' />
+      </Button>
+    </div>
   )
 }
 
@@ -561,6 +716,7 @@ export function getTasksColumns({
           className='translate-y-[2px]'
         />
       ),
+      meta: { className: 'w-12' },
       enableSorting: false,
       enableHiding: false,
     },
@@ -575,8 +731,20 @@ export function getTasksColumns({
                 title={isInventoryRoute ? 'Part #' : 'Task'}
               />
             ),
+            meta: isInventoryRoute
+              ? {
+                  className: 'w-[14rem] max-w-[14rem]',
+                  tdClassName: 'max-w-0',
+                }
+              : undefined,
             cell: ({ row }) => (
-              <div className='w-[120px]'>{row.getValue('id')}</div>
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-part-number'
+                title={String(row.getValue('id'))}
+              >
+                {row.getValue('id')}
+              </span>
             ),
             enableSorting: false,
             enableHiding: false,
@@ -597,20 +765,26 @@ export function getTasksColumns({
         const label = labels.find((label) => label.value === row.original.label)
 
         return (
-          <div className='flex min-w-0 flex-col gap-1'>
-            {!isInventoryRoute && !isWishlistRoute && label ? (
-              <Badge variant='outline'>{label.label}</Badge>
-            ) : null}
-            <div className='flex space-x-2'>
-              <span className='truncate font-medium'>
-                {row.getValue('title')}
-              </span>
+          <div className='flex min-w-0 items-center gap-2'>
+            {isWishlistRoute ? <WishlistThumbnail task={row.original} /> : null}
+            <div className='flex min-w-0 flex-col gap-1'>
+              {!isInventoryRoute && !isWishlistRoute && label ? (
+                <Badge variant='outline'>{label.label}</Badge>
+              ) : null}
+              <div className='flex min-w-0 space-x-2'>
+                <span
+                  className='block min-w-0 max-w-full truncate font-medium'
+                  title={String(row.getValue('title'))}
+                >
+                  {row.getValue('title')}
+                </span>
+              </div>
+              {isWishlistRoute && row.original.notes ? (
+                <span className='truncate text-xs text-muted-foreground'>
+                  {row.original.notes}
+                </span>
+              ) : null}
             </div>
-            {isWishlistRoute && row.original.notes ? (
-              <span className='truncate text-xs text-muted-foreground'>
-                {row.original.notes}
-              </span>
-            ) : null}
           </div>
         )
       },
@@ -640,8 +814,8 @@ export function getTasksColumns({
             cell: ({ row }) => {
               if (isInventoryRoute) {
                 return (
-                  <div className='flex min-w-[100px] items-center gap-2'>
-                    <span className='capitalize'>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    <span className='block max-w-full truncate capitalize'>
                       {String(row.getValue('status'))}
                     </span>
                   </div>
@@ -731,6 +905,37 @@ export function getTasksColumns({
             ),
           } satisfies ColumnDef<Task>,
           {
+            accessorKey: 'wishlistCreatedAt',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Date added' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='text-sm whitespace-nowrap'
+                data-testid={`wishlist-date-added-${row.original.id}`}
+              >
+                {formatWishlistDate(row.original.wishlistCreatedAt)}
+              </span>
+            ),
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'wishlistPriceUpdatedAt',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Updated' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='text-sm whitespace-nowrap'
+                data-testid={`wishlist-date-updated-${row.original.id}`}
+                title='Latest pricing refresh date'
+              >
+                {formatWishlistDate(row.original.wishlistPriceUpdatedAt)}
+              </span>
+            ),
+          } satisfies ColumnDef<Task>,
+          {
             accessorKey: 'priceTrend',
             header: ({ column }) => (
               <DataTableColumnHeader column={column} title='Price Graph' />
@@ -764,6 +969,7 @@ export function getTasksColumns({
                 field='quantity'
                 label='Quantity'
                 value={row.original.quantity}
+                minValue={0}
                 onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
             ),
@@ -780,9 +986,52 @@ export function getTasksColumns({
                 field='neededQuantity'
                 label='Needs'
                 value={row.original.neededQuantity}
+                minValue={1}
                 onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
             ),
+          } satisfies ColumnDef<Task>,
+        ]
+      : []),
+    ...(isInventoryRoute
+      ? [
+          {
+            accessorKey: 'itemType',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Item type' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-item-type'
+                title={row.original.itemType || 'Unclassified'}
+              >
+                {row.original.itemType || 'Unclassified'}
+              </span>
+            ),
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'packagingGradeType',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Packaging' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span
+                className='block max-w-full truncate'
+                data-testid='inventory-row-packaging-grade'
+                title={row.original.packagingGradeType || 'Unset'}
+              >
+                {row.original.packagingGradeType || 'Unset'}
+              </span>
+            ),
+            filterFn: (row, id, value) => {
+              return value.includes(row.getValue(id))
+            },
           } satisfies ColumnDef<Task>,
         ]
       : []),
@@ -797,7 +1046,11 @@ export function getTasksColumns({
       meta: { className: 'ps-1', tdClassName: 'ps-3' },
       cell: ({ row }) => {
         if (isInventoryRoute) {
-          return <span>{row.original.label || 'Uncategorized'}</span>
+          return (
+            <span className='block max-w-full truncate'>
+              {row.original.label || 'Uncategorized'}
+            </span>
+          )
         }
 
         if (isWishlistRoute) {
@@ -839,6 +1092,10 @@ export function getTasksColumns({
     },
     {
       id: 'actions',
+      meta: {
+        className: isInventoryRoute ? 'w-40' : undefined,
+        tdClassName: isInventoryRoute ? 'max-w-none' : undefined,
+      },
       cell: ({ row }) => (
         <div className='flex items-center justify-end gap-1'>
           {isInventoryRoute ? (

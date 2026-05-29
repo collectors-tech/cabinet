@@ -163,6 +163,68 @@ func TestInventoryGradingFieldsPersistOnItemUpdate(t *testing.T) {
 	}
 }
 
+func TestInventoryRejectsInvalidTaxonomyValues(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileCreate := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Invalid Taxonomy"}`), map[string]string{"Content-Type": "application/json"})
+	if profileCreate.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileCreate.Code, profileCreate.Body.String())
+	}
+	var createdProfile map[string]any
+	if err := json.Unmarshal(profileCreate.Body.Bytes(), &createdProfile); err != nil {
+		t.Fatalf("decode profile create: %v", err)
+	}
+	profileID, _ := createdProfile["id"].(string)
+	if profileID == "" {
+		t.Fatalf("missing profile id in payload: %v", createdProfile)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profileID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	saveEnums := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/inventory/grading/enums",
+		strings.NewReader(`{"condition_grades":["New sealed"],"packaging_grades":["boxed"],"item_type_condition_scales":[{"item_type":"Model Kits","conditions":["New sealed","Built clean"]}]}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveEnums.Code != http.StatusOK {
+		t.Fatalf("save taxonomy status=%d body=%s", saveEnums.Code, saveEnums.Body.String())
+	}
+
+	invalidItemType := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"TAX-001","title":"Invalid type","item_type":"Slot Cars"}`), map[string]string{"Content-Type": "application/json"})
+	if invalidItemType.Code != http.StatusBadRequest || !strings.Contains(invalidItemType.Body.String(), `"field":"item_type"`) {
+		t.Fatalf("expected invalid item_type rejection, status=%d body=%s", invalidItemType.Code, invalidItemType.Body.String())
+	}
+
+	validCreate := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"TAX-002","title":"Valid taxonomy","item_type":"Model Kits","condition":"New sealed","packaging_grade_type":"boxed"}`), map[string]string{"Content-Type": "application/json"})
+	if validCreate.Code != http.StatusCreated {
+		t.Fatalf("valid taxonomy create status=%d body=%s", validCreate.Code, validCreate.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(validCreate.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode valid create: %v", err)
+	}
+	itemID, _ := created["id"].(string)
+	if itemID == "" {
+		t.Fatalf("missing created item id in payload: %v", created)
+	}
+
+	invalidCondition := doRequest(t, a, http.MethodPut, "/api/items/"+itemID, strings.NewReader(`{"condition":"Played"}`), map[string]string{"Content-Type": "application/json"})
+	if invalidCondition.Code != http.StatusBadRequest || !strings.Contains(invalidCondition.Body.String(), `"field":"condition"`) {
+		t.Fatalf("expected invalid condition rejection, status=%d body=%s", invalidCondition.Code, invalidCondition.Body.String())
+	}
+
+	invalidPackaging := doRequest(t, a, http.MethodPut, "/api/items/"+itemID, strings.NewReader(`{"packaging_grade_type":"loose"}`), map[string]string{"Content-Type": "application/json"})
+	if invalidPackaging.Code != http.StatusBadRequest || !strings.Contains(invalidPackaging.Body.String(), `"field":"packaging_grade_type"`) {
+		t.Fatalf("expected invalid packaging rejection, status=%d body=%s", invalidPackaging.Code, invalidPackaging.Body.String())
+	}
+}
+
 func TestInventoryGradingDefaultsApplyOnCreate(t *testing.T) {
 	t.Parallel()
 

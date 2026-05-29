@@ -165,3 +165,81 @@ Cabinet SHALL support high-speed intake on mobile via batch picker and capture-n
 - **GIVEN** user completes a mobile camera capture
 - **WHEN** user chooses `capture next`
 - **THEN** flow MUST return to camera without leaving context and append each accepted photo to same upload queue
+
+### Requirement UI-SCREEN-MEDIA-006: Media workspace shell SHALL be discoverable from authenticated navigation
+Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary navigation with a page title, card-first asset grid, unlinked filter, operational metadata, and visible action controls before backend ingestion and assignment slices are complete.
+
+#### Scenario: Open Media workspace shell from navigation
+- **GIVEN** user is signed in on an authenticated Cabinet route
+- **WHEN** user opens the primary Media navigation item
+- **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a card-first media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.
+
+### Requirement UI-SCREEN-MEDIA-007: Media workspace API SHALL expose profile-scoped assets and preview-only assignment/download contracts
+Cabinet SHALL expose a deterministic backend contract for the Media workspace that scopes media assets to the active profile, classifies linkage state, supports the unlinked filter, and previews assignment/download actions without mutating linkage records until confirmed implementation slices exist.
+
+#### Scenario: List profile-scoped Media workspace assets
+- **GIVEN** the active profile has inventory-linked photos and unlinked media evidence
+- **WHEN** UI requests `/api/media/assets`
+- **THEN** runtime MUST return only active-profile assets with stable `linkage_state`, source, upload metadata, thumbnail/download hints, and summary counts for total, unlinked, and linked states.
+
+#### Scenario: Filter unlinked Media workspace assets
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** UI requests `/api/media/assets?filter=unlinked`
+- **THEN** runtime MUST return only unlinked assets while retaining summary counts for the full active-profile scope.
+
+#### Scenario: Preview assignment and download actions
+- **GIVEN** a media asset exists in the active profile
+- **WHEN** UI requests assignment or download preview contracts
+- **THEN** runtime MUST return deterministic projected linkage, confirmation, blocker/audit, and filename details without creating links, duplicating binaries, or streaming files in the preview request.
+
+### Requirement UI-SCREEN-MEDIA-008: Media workspace UI SHALL render API-backed asset states and download previews
+Cabinet SHALL wire the authenticated Media workspace to the profile-scoped media API instead of static UI fixtures.
+
+#### Scenario: Render API-backed media list
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** the user opens `/media`
+- **THEN** the UI MUST request `/api/media/assets`, render returned asset cards, summary counts, linkage badges, filenames, thumbnails where available, and keep the unlinked tab backed by `/api/media/assets?filter=unlinked`.
+
+#### Scenario: Handle empty and unavailable media API states
+- **GIVEN** the media API returns no assets or a recoverable error
+- **WHEN** the user opens or retries the Media workspace
+- **THEN** the UI MUST show deterministic empty, error, and retry states without falling back to stale fixture cards.
+
+#### Scenario: Preview selected downloads from the UI
+- **GIVEN** one or more media cards are selected
+- **WHEN** the user previews selected downloads
+- **THEN** the UI MUST call `/api/media/downloads/preview` with the selected asset IDs and current filter, then display returned human-readable filenames without streaming files or mutating media state.
+
+### Requirement UI-SCREEN-MEDIA-009: Media workspace download API SHALL stream selected profile-scoped assets
+Cabinet SHALL provide an authenticated Media workspace download endpoint that returns selected asset bytes from the active profile with human-readable filenames.
+
+#### Scenario: Download selected media payload
+- **GIVEN** the active profile has inventory-linked media and unlinked evidence assets with stored bytes
+- **WHEN** the user requests `/api/media/downloads` with selected asset IDs and the current filter
+- **THEN** the API MUST reject assets outside the active profile or current filter, return a single selected asset with its human-readable filename and content type, and return multiple selected assets as a zip archive preserving each human-readable filename.
+
+### Requirement UI-SCREEN-MEDIA-010: Media workspace assignment API SHALL persist scoped media links
+Cabinet SHALL provide a confirmed assignment endpoint for linking Media workspace assets to inventory or wishlist targets without duplicating source binaries.
+
+#### Scenario: Assign unlinked media to wishlist
+- **GIVEN** the active profile has an unlinked media asset and a wishlist entry
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST persist a profile-scoped media link, preserve the original media asset provenance, update the asset linkage state to `linked_wishlist`, and update unlinked/wishlist summary counts on the next `/api/media/assets` response.
+
+#### Scenario: Reject out-of-scope media assignment
+- **GIVEN** a media asset or assignment target belongs to another profile
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST reject the request and MUST NOT create a media link.
+
+### Requirement UI-SCREEN-MEDIA-011: Media workspace UI SHALL confirm assignments through the API
+Cabinet SHALL route Media workspace assignment actions through a preview-first confirmation UI backed by the confirmed assignment API.
+
+#### Scenario: Confirm media assignment from card action
+- **GIVEN** the active profile has an unlinked media asset and a valid assignment target
+- **WHEN** the user opens the card assignment action, previews the target, and confirms assignment
+- **THEN** the UI MUST call `/api/media/assignments/preview`, display the projected linkage and audit/provenance summary, call `/api/media/assignments` only after confirmation, refresh `/api/media/assets`, and render the updated linkage state without stale unlinked controls.
+
+#### Scenario: Assignment preview or apply fails
+- **GIVEN** the assignment target is invalid or the assignment endpoint rejects the request
+- **WHEN** the user previews or confirms assignment
+- **THEN** the UI MUST show a deterministic error state and MUST NOT update card linkage state until the refreshed API state confirms the assignment.

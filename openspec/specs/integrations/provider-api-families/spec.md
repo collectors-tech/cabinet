@@ -46,6 +46,7 @@ Doofinder-backed providers SHALL execute search via Doofinder search endpoint us
 - **WHEN** runtime executes query
 - **THEN** runtime MUST call Doofinder search endpoint with query/page/rpp params
 - **AND** runtime MUST include origin/referrer headers where required to avoid forbidden responses
+- **AND** provider-specific run output MUST persist normalized candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
 
 #### Scenario: Doofinder discovery inputs
 - **GIVEN** onboarding detection scans provider assets
@@ -63,6 +64,7 @@ Doofinder-backed providers SHALL execute search via Doofinder search endpoint us
 - **WHEN** query run executes
 - **THEN** runtime MAY use GraphQL Storefront and/or Management API paths for richer catalog/stock fields
 - **AND** run summary MUST declare auth mode and data depth source
+- **AND** token-enabled run output MUST persist normalized provider-domain candidates into the shared scanner/Discoveries candidate store and hydrate latest-run snapshot metadata on query-set reload
 
 #### Scenario: URL-based family detection
 - **GIVEN** user enters provider homepage URL
@@ -94,6 +96,6 @@ Doofinder-backed providers SHALL execute search via Doofinder search endpoint us
 | UC-PF-04 | Unified normalization | Family-specific payloads normalize to common run-summary fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-normalization` |
 | UC-PF-05 | URL auto-detection | Entered provider URL returns proposed family + confidence + evidence markers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-url-autodetect` |
 | UC-PF-06 | Manual override after detection | User can override detected family before provider save | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `provider-family-autodetect-override` |
-| UC-PF-07 | BigCommerce storefront-access mode | Provider run works with storefront-accessible data paths and declares limits | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-storefront-mode` |
-| UC-PF-08 | BigCommerce token-enabled mode | Provider uses token-enabled API paths for deeper stock/catalog fields | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-token-enabled-mode` |
+| UC-PF-07 | BigCommerce storefront-access mode | Provider run works with storefront-accessible data paths, declares limits, persists provider-domain candidates, and hydrates latest-run snapshots | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-storefront-mode` |
+| UC-PF-08 | BigCommerce token-enabled mode | Provider uses token-enabled API paths for deeper stock/catalog fields, returns persisted candidate rows, and hydrates latest-run snapshots | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `bigcommerce-token-enabled-mode` |
 | UC-PF-09 | Doofinder hashid search | Provider executes Doofinder search with discovered hashid and origin-aware headers | planned: `ui.web/cypress/e2e/integrations/provider-families/spec.cy.ts` `doofinder-hashid-search-contract` |

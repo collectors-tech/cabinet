@@ -85,4 +85,87 @@ describe('scanner/ui-screen-card-scanner', () => {
       cy.contains('photo-2.jpg').should('not.exist')
     })
   })
+
+  it('UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked', () => {
+    cy.intercept('POST', '/api/scanner/recognition-review/apply', (req) => {
+      const selected = req.body.candidates.find((candidate: { override_id?: string }) =>
+        Boolean(candidate.override_id)
+      ) ?? req.body.candidates[0]
+      const review = {
+        top_candidate: req.body.candidates[0],
+        alternates: req.body.candidates.slice(1),
+        selected_candidate: selected,
+        confidence_label: selected.confidence >= 0.85 ? 'high' : 'medium',
+        requires_manual_review: true,
+        confirm_before_create: true,
+        target: req.body.target,
+        media_evidence: { media_id: selected.media_id, media_url: selected.media_url },
+        provenance: ['quick-scan-upload|ui-upload-preview'],
+        manual_override_applied: Boolean(selected.override_id),
+      }
+      if (!req.body.confirmed) {
+        req.reply({
+          statusCode: 409,
+          body: {
+            error: 'scanner_review_confirmation_required',
+            confirmation_state: 'required',
+            review,
+          },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 201,
+        body: {
+          confirmation_state: 'confirmed',
+          target: req.body.target,
+          review,
+          item: {
+            id: 'item-scan-1',
+            title: selected.title,
+            part_number: selected.id,
+            status: req.body.target,
+          },
+          wishlist_entry: {
+            id: 'wish-scan-1',
+            item_id: 'item-scan-1',
+            owned: false,
+          },
+        },
+      })
+    }).as('scannerApply')
+    cy.intercept('GET', '/api/items?status=wishlist', {
+      statusCode: 200,
+      body: { items: [{ id: 'item-scan-1', title: 'photo-1 (alt: foil variant)' }] },
+    }).as('wishlistReload')
+
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-quick-file-input"]').selectFile(
+      'cypress/fixtures/photo-1.jpg',
+      { force: true }
+    )
+    cy.get('[data-testid^="card-scanner-apply-target-"]').select('wishlist')
+    cy.get('[data-testid^="card-scanner-override-"]').click()
+    cy.get('[data-testid^="card-scanner-review-apply-"]').click()
+
+    cy.wait('@scannerApply')
+      .its('request.body')
+      .should('include', { confirmed: false, target: 'wishlist' })
+    cy.get('[data-testid^="card-scanner-review-summary-"]')
+      .should('be.visible')
+      .and('contain', 'medium confidence')
+      .and('contain', 'confirm-before-create required')
+
+    cy.get('[data-testid^="card-scanner-confirm-apply-"]').click()
+    cy.wait('@scannerApply')
+      .its('request.body')
+      .should('include', { confirmed: true, target: 'wishlist' })
+    cy.wait('@wishlistReload')
+    cy.get('[data-testid="card-scanner-queue"]').should('contain', 'Linked')
+    cy.get('[data-testid^="card-scanner-apply-result-"]')
+      .should('be.visible')
+      .and('contain', 'Created wishlist item')
+  })
 })

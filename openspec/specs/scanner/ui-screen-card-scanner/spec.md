@@ -40,8 +40,48 @@ Scanner SHALL never silently mutate data; user confirmation is required before c
 - **WHEN** user confirms create/update target (inventory or wishlist)
 - **THEN** runtime MUST persist record with media linkage and show auditable outcome
 
+### Requirement UI-SCREEN-CARD-SCANNER-009: Card Scanner UI SHALL preview scanner review writes before confirmed apply
+Card Scanner UI SHALL convert queued quick-scan uploads into scanner recognition review apply requests, request a non-mutating confirmation-required preview first, expose the selected target/candidate/confidence/provenance outcome, and only mark the scan linked after a confirmed apply response plus persistence reload.
+
+#### Scenario: Review and confirm scanner apply from UI
+- **GIVEN** a quick-scan upload has recognition candidates and the user selects Inventory or Wishlist as the write target
+- **WHEN** the user reviews apply
+- **THEN** Card Scanner MUST call scanner review apply with `confirmed=false`
+- **AND** the UI MUST show the returned confidence, target, and confirm-before-create state without marking the scan linked
+- **WHEN** the user confirms apply
+- **THEN** Card Scanner MUST call scanner review apply with `confirmed=true`
+- **AND** the UI MUST reload the target item collection and mark the scan linked only after the confirmed response
+
+### Requirement UI-SCREEN-CARD-SCANNER-008: Scanner review apply API SHALL persist only confirmed writes
+Scanner review apply API SHALL accept normalized recognition candidates, build the same review preview contract, reject unconfirmed write attempts, and persist confirmed Inventory or Wishlist records with selected candidate, confidence, provenance, manual-override, media, and source metadata retained as auditable item evidence.
+
+#### Scenario: Reject unconfirmed scanner review apply
+- **GIVEN** a scanner recognition review has a selected candidate
+- **WHEN** the client asks to apply the review without `confirmed=true`
+- **THEN** Cabinet MUST return a confirmation-required response and MUST NOT create Inventory or Wishlist records
+
+#### Scenario: Confirm scanner review apply to inventory or wishlist
+- **GIVEN** a scanner recognition review has a selected candidate with media and provenance evidence
+- **WHEN** the client confirms the apply target
+- **THEN** Cabinet MUST create the target Inventory or Wishlist record for the active profile
+- **AND** the created item MUST retain scanner media/provenance/confidence evidence and source URL metadata for audit
+- **AND** Wishlist targets MUST create both the canonical item and a wishlist entry without marking the item as owned inventory
+
 ### Requirement UI-SCREEN-CARD-SCANNER-004: Card Scanner SHALL support deterministic error/retry behavior
 Scanner SHALL surface human-readable failure states with retry guidance.
+
+### Requirement UI-SCREEN-CARD-SCANNER-007: Scanner recognition review SHALL normalize candidates before writes
+Scanner recognition review SHALL normalize candidate payloads into a non-mutating preview that preserves top match, alternates, confidence label, provenance, media evidence, manual override state, target record type, and a required confirm-before-create boundary.
+
+#### Scenario: Normalize scan candidates for review
+- **GIVEN** recognition returns one or more candidate matches with confidence, provenance, and media evidence
+- **WHEN** Cabinet builds the scanner review preview
+- **THEN** Cabinet MUST choose the highest-confidence top candidate, retain alternates, classify confidence, preserve source/provenance/media evidence, and set `confirm_before_create=true` without writing Inventory or Wishlist records
+
+#### Scenario: Preserve manual override in review preview
+- **GIVEN** a reviewer manually selects an alternate recognition candidate
+- **WHEN** Cabinet builds the scanner review preview
+- **THEN** Cabinet MUST keep the automatic top match as evidence, select the manual override, mark manual review as required, preserve the requested Inventory/Wishlist target, and still require explicit confirmation before any create/update write
 
 ### Requirement UI-SCREEN-CARD-SCANNER-005: Scanner quick-category panel SHALL support card-list and table views for unlinked recent scans
 Scanner SHALL provide a quick-category area showing most recently added scan results not yet linked to inventory, with toggleable `Cards` and `Table` views.
@@ -66,3 +106,5 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 | UC-CS-04 | Recognition error | Retry/manual guidance shown | planned: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `card-scanner-error-guidance` |
 | UC-CS-05 | View recent unlinked scans | Quick-category panel shows most-recent unlinked results in Cards and Table modes | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-005 shows recent unlinked scans in cards/table with deterministic newest-first ordering` |
 | UC-CS-06 | Quick Scan mobile/desktop capture | `Quick Scan` launches rapid capture flow on mobile and desktop with fallback path | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-006 provides quick-scan action for mobile and desktop with deterministic intake feedback` |
+| UC-CS-07 | Apply reviewed scan | API rejects unconfirmed writes and persists confirmed Inventory/Wishlist records with scanner evidence | implemented: `TestScannerRecognitionReviewApplyRequiresConfirmationAndDoesNotMutate`, `TestScannerRecognitionReviewApplyCreatesWishlistItemWithEvidence` (`internal/app/scanner_api_test.go`) |
+| UC-CS-09 | UI review and confirmed apply | Quick-scan UI previews scanner review apply, confirms explicit Wishlist/Inventory write, reloads persistence, and then marks scan linked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked` |

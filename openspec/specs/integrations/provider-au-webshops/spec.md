@@ -122,6 +122,7 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **WHEN** runtime calls Boost/mybcapps search endpoint
 - **THEN** response parsing MUST extract product candidates from structured fields and/or returned HTML payload blocks
 - **AND** pagination MUST honor provider limit/page parameters until terminal page
+- **AND** saved-search run output MUST persist normalized `source="hobbytechtoys"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
 
 #### Scenario: Hobbytech config/session drift fallback
 - **GIVEN** required session/template parameters drift or expire
@@ -134,6 +135,7 @@ Hobbytech integration SHALL support Shopify-backed search using Boost Commerce e
 - **WHEN** runtime fetches configured discovery asset path(s)
 - **THEN** parser MUST extract Algolia application ID, public search key, and index names from script content
 - **AND** discovery output MUST be versioned and timestamped in provider metadata
+- **AND** saved-search run output MUST persist normalized `source="frontlinehobbies"` candidates into the shared scanner/Discoveries candidate store and hydrate latest-run query-set snapshot metadata after reload
 
 #### Scenario: Config drift/fallback handling
 - **GIVEN** asset parsing fails or values change unexpectedly

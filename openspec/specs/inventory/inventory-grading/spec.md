@@ -3,12 +3,65 @@ Define collector grading, packaging grades, and classification metadata for inve
 
 ## Requirements
 ### Requirement INVENTORY-GRADING-001: Inventory SHALL support configurable condition and packaging grade enums
-Cabinet SHALL support admin-managed enum sets for car condition grade and packaging grade.
+Cabinet SHALL support admin-managed enum sets for packaging grades and admin-managed condition scales scoped by single-select item type.
 
 #### Scenario: Persist grading enums
 - **GIVEN** admin user opens grading settings with enum management permission
 - **WHEN** admin saves grade lists for car and packaging
 - **THEN** updated enum values MUST be available in inventory create/edit forms
+
+#### Scenario: Manage packaging grades from taxonomy settings
+- **GIVEN** admin user opens Settings > Categories for the active profile
+- **WHEN** admin adds or removes packaging grade values and saves taxonomy settings
+- **THEN** Cabinet MUST persist those values in the profile-scoped packaging grade enum setting
+- **AND** Inventory item grading controls MUST use the saved packaging grade values without losing existing item records
+
+#### Scenario: Persist item type condition scale
+- **GIVEN** admin user opens inventory taxonomy settings
+- **WHEN** admin saves an item type with ordered condition values
+- **THEN** updated item type and condition values MUST be available in inventory create/edit forms
+
+#### Scenario: Seed collector condition scales
+- **WHEN** a profile has no custom item type condition scale settings
+- **THEN** Cabinet MUST provide Slot Cars and Trading Cards item type defaults
+- **AND** Slot Cars MUST include numeric condition values from `10+` through `1`
+- **AND** Trading Cards MUST include `Mint (M)`, `Near Mint (NM)`, `Excellent (EX)`, `Good (GD)`, `Light Played (LP)`, `Played (PL)`, and `Poor (PO)`
+
+#### Scenario: Scope condition choices by item type
+- **GIVEN** an inventory item is assigned an item type
+- **WHEN** user edits condition for that item
+- **THEN** condition choices MUST come from the selected item type condition scale
+- **AND** changing item type MUST update the available condition choices
+
+#### Scenario: Use configured taxonomy in inventory editor
+- **GIVEN** profile-scoped item type condition scales and packaging grade enums exist
+- **WHEN** user creates or edits an inventory item
+- **THEN** the editor MUST expose item type, condition, and packaging grade controls from the configured taxonomy
+- **AND** saving the item MUST persist the selected item type and packaging grade values on the inventory record
+
+#### Scenario: Preserve taxonomy from wishlist planning
+- **GIVEN** profile-scoped item type condition scales and packaging grade enums exist
+- **WHEN** user creates or edits a wishlist entry before owning the item
+- **THEN** the wishlist editor MUST expose item type, condition, and packaging grade controls from the configured taxonomy
+- **AND** saving the wishlist entry MUST persist the selected taxonomy values on the linked inventory record so later conversion keeps the same classification
+
+#### Scenario: Reject invalid taxonomy values
+- **GIVEN** profile-scoped item type condition scales and packaging grade enums exist
+- **WHEN** API clients create, update, or bulk edit inventory items with item type, condition, or packaging grade values outside the configured taxonomy
+- **THEN** Cabinet MUST reject the request with an actionable `invalid_taxonomy_value` error that names the invalid field
+- **AND** valid taxonomy values MUST continue to save without breaking existing records that omit optional taxonomy fields
+
+#### Scenario: Search filter and sort inventory taxonomy fields
+- **GIVEN** inventory records include configured item type, condition, category, and packaging grade values
+- **WHEN** user searches, filters, saves a view, or sorts the inventory table
+- **THEN** item type and packaging grade MUST be available as table columns and URL-backed filters
+- **AND** global inventory search MUST match item type, condition, category, and packaging grade values as well as title and part number
+- **AND** saved inventory views MUST preserve taxonomy filters and sorting choices
+
+#### Scenario: Document taxonomy workflow in Help Center
+- **GIVEN** users need to understand profile-scoped collector taxonomy behavior
+- **WHEN** they read Help Center Inventory, Wishlist, and Settings section guides
+- **THEN** the guides MUST explain item type, item type condition scale, packaging grade, wishlist preservation, inventory search/filter/saved-view behavior, and `invalid_taxonomy_value` correction paths
 
 ### Requirement INVENTORY-GRADING-002: Item records SHALL support grading and collector classification fields
 Cabinet SHALL persist grading fields per item/instance including grading status and collector classification.

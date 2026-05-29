@@ -98,6 +98,8 @@ type InventorySavedView = {
   globalFilter: string
   statusFilters: string[]
   categoryFilters: string[]
+  itemTypeFilters: string[]
+  packagingGradeFilters: string[]
   sorting: Array<{ id: string; desc: boolean }>
   viewMode: ViewMode
 }
@@ -173,6 +175,10 @@ function parseInventorySavedViews(
               : '',
           statusFilters: normalizeStringArray(candidate.statusFilters),
           categoryFilters: normalizeStringArray(candidate.categoryFilters),
+          itemTypeFilters: normalizeStringArray(candidate.itemTypeFilters),
+          packagingGradeFilters: normalizeStringArray(
+            candidate.packagingGradeFilters
+          ),
           sorting,
           viewMode: candidate.viewMode === 'cards' ? 'cards' : 'rows',
         },
@@ -191,6 +197,8 @@ function serializeInventorySavedViews(views: InventorySavedView[]) {
       globalFilter: view.globalFilter,
       statusFilters: view.statusFilters,
       categoryFilters: view.categoryFilters,
+      itemTypeFilters: view.itemTypeFilters,
+      packagingGradeFilters: view.packagingGradeFilters,
       sorting: view.sorting,
       viewMode: view.viewMode,
     }))
@@ -205,6 +213,30 @@ function formatWishlistStatus(status: string) {
     return 'Below target'
   }
   return status
+}
+
+function formatWishlistDate(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return '-'
+  }
+  const datePart = trimmed.split('T')[0]?.split(' ')[0] ?? trimmed
+  const parts = datePart.split('-').map((part) => Number(part))
+  if (
+    parts.length === 3 &&
+    Number.isInteger(parts[0]) &&
+    Number.isInteger(parts[1]) &&
+    Number.isInteger(parts[2])
+  ) {
+    const [year, month, day] = parts
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return trimmed
 }
 
 function formatMoneyDraft(value: number | undefined) {
@@ -365,6 +397,20 @@ export function TasksTable({
         searchKey: 'collection',
         type: 'array' as const,
       },
+      ...(isInventoryRoute
+        ? [
+            {
+              columnId: 'itemType',
+              searchKey: 'itemType',
+              type: 'array' as const,
+            },
+            {
+              columnId: 'packagingGradeType',
+              searchKey: 'packagingGrade',
+              type: 'array' as const,
+            },
+          ]
+        : []),
     ],
   })
   const [wishlistStatusFilters, setWishlistStatusFilters] = useState<string[]>(
@@ -466,11 +512,21 @@ export function TasksTable({
       const id = row.original.id.toLowerCase()
       const partNumber = (row.original.partNumber ?? '').toLowerCase()
       const title = String(row.getValue('title')).toLowerCase()
+      const itemType = (row.original.itemType ?? '').toLowerCase()
+      const condition = (row.original.condition ?? '').toLowerCase()
+      const packagingGrade = (
+        row.original.packagingGradeType ?? ''
+      ).toLowerCase()
+      const category = (row.original.label ?? '').toLowerCase()
       const searchValue = String(filterValue).toLowerCase()
       return (
         id.includes(searchValue) ||
         partNumber.includes(searchValue) ||
-        title.includes(searchValue)
+        title.includes(searchValue) ||
+        itemType.includes(searchValue) ||
+        condition.includes(searchValue) ||
+        packagingGrade.includes(searchValue) ||
+        category.includes(searchValue)
       )
     },
     getCoreRowModel: getCoreRowModel(),
@@ -636,6 +692,8 @@ export function TasksTable({
       globalFilter: (globalFilter ?? '').trim(),
       statusFilters: getArrayColumnFilterValue('status'),
       categoryFilters: getArrayColumnFilterValue('priority'),
+      itemTypeFilters: getArrayColumnFilterValue('itemType'),
+      packagingGradeFilters: getArrayColumnFilterValue('packagingGradeType'),
       sorting: sorting.map((entry) => ({
         id: entry.id,
         desc: Boolean(entry.desc),
@@ -664,6 +722,12 @@ export function TasksTable({
           : []),
         ...(view.categoryFilters.length > 0
           ? [{ id: 'priority', value: view.categoryFilters }]
+          : []),
+        ...(view.itemTypeFilters.length > 0
+          ? [{ id: 'itemType', value: view.itemTypeFilters }]
+          : []),
+        ...(view.packagingGradeFilters.length > 0
+          ? [{ id: 'packagingGradeType', value: view.packagingGradeFilters }]
           : []),
       ])
       setSorting(view.sorting)
@@ -774,6 +838,24 @@ export function TasksTable({
         )
       ).map((value) => ({ label: value, value }))
     : priorities
+  const itemTypeFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .map((task) => task.itemType)
+            .filter((value): value is string => Boolean(value?.trim()))
+        )
+      ).map((value) => ({ label: value, value }))
+    : []
+  const packagingGradeFilterOptions = isInventoryRoute
+    ? Array.from(
+        new Set(
+          data
+            .map((task) => task.packagingGradeType)
+            .filter((value): value is string => Boolean(value?.trim()))
+        )
+      ).map((value) => ({ label: value, value }))
+    : []
   const wishlistCollectionFilterOptions =
     routePath === '/_authenticated/wishlist/'
       ? [
@@ -851,7 +933,7 @@ export function TasksTable({
         }
         searchPlaceholder={
           isInventoryRoute
-            ? 'Filter by title or part number...'
+            ? 'Filter by title, part number, type, condition, or packaging...'
             : 'Filter by title or part number...'
         }
         filters={
@@ -866,6 +948,18 @@ export function TasksTable({
                   columnId: 'priority',
                   title: 'Category',
                   options: categoryFilterOptions,
+                },
+                {
+                  columnId: 'itemType',
+                  title: 'Item type',
+                  options: itemTypeFilterOptions,
+                  testIdPrefix: 'inventory-table-item-type',
+                },
+                {
+                  columnId: 'packagingGradeType',
+                  title: 'Packaging',
+                  options: packagingGradeFilterOptions,
+                  testIdPrefix: 'inventory-table-packaging',
                 },
               ]
             : [
@@ -1020,12 +1114,15 @@ export function TasksTable({
         <div
           className='min-h-0 flex-1 overflow-auto rounded-md border'
           data-testid={
-            isInventoryRoute ? 'inventory-table-surface' : 'wishlist-table-surface'
+            isInventoryRoute
+              ? 'inventory-table-surface'
+              : 'wishlist-table-surface'
           }
         >
           <Table
             className={cn(
               'min-w-[42rem]',
+              isInventoryRoute ? 'table-fixed' : '',
               routePath === '/_authenticated/wishlist/' ? 'min-w-[56rem]' : ''
             )}
           >
@@ -1093,6 +1190,9 @@ export function TasksTable({
                       <TableCell
                         key={cell.id}
                         className={cn(
+                          isInventoryRoute
+                            ? 'max-w-0 overflow-hidden text-ellipsis'
+                            : undefined,
                           cell.column.columnDef.meta?.className,
                           cell.column.columnDef.meta?.tdClassName
                         )}
@@ -1174,6 +1274,25 @@ export function TasksTable({
                   </span>
                   <span>Priority: {row.original.priority}</span>
                   <span>Type: {row.original.label}</span>
+                  {routePath === '/_authenticated/wishlist/' ? (
+                    <>
+                      <span
+                        data-testid={`wishlist-card-date-added-${row.original.id}`}
+                      >
+                        Date added:{' '}
+                        {formatWishlistDate(row.original.wishlistCreatedAt)}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-date-updated-${row.original.id}`}
+                        title='Latest pricing refresh date'
+                      >
+                        Updated:{' '}
+                        {formatWishlistDate(
+                          row.original.wishlistPriceUpdatedAt
+                        )}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
                 {routePath === '/_authenticated/wishlist/' &&
                 row.original.notes ? (

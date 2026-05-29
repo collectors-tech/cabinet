@@ -68,7 +68,7 @@ func TestBigCommerceRegistryExposesFamilyAndActiveMode(t *testing.T) {
 	}
 }
 
-func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
+func TestBigCommerceRunStorefrontModePersistsCandidatesAndSnapshot(t *testing.T) {
 	t.Parallel()
 
 	storefrontServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +127,7 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 		AuthMode         string           `json:"auth_mode"`
 		DataDepthSource  string           `json:"data_depth_source"`
 		CapabilityLimits []string         `json:"capability_limits"`
+		CandidateCount   int              `json:"candidate_count"`
 		Candidates       []map[string]any `json:"candidates"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
@@ -143,6 +144,39 @@ func TestBigCommerceRunStorefrontModeDeclaresCapabilityLimits(t *testing.T) {
 	}
 	if len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got=%d", len(payload.Candidates))
+	}
+	if payload.CandidateCount != 1 {
+		t.Fatalf("expected candidate_count=1, got=%d", payload.CandidateCount)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected persisted BigCommerce candidate source=voglers.com.au, got %#v", payload.Candidates[0]["source"])
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	var latest map[string]any
+	for _, item := range querySetPayload.QuerySets {
+		if fmt.Sprintf("%v", item["id"]) == qs.ID {
+			latest = item
+			break
+		}
+	}
+	if latest == nil {
+		t.Fatalf("expected query set %s in reloaded response: %+v", qs.ID, querySetPayload.QuerySets)
+	}
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted last_run_status=succeeded, got %#v", latest["last_run_status"])
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted last_candidate_count=1, got %#v", latest["last_candidate_count"])
 	}
 }
 
@@ -233,7 +267,10 @@ func TestBigCommerceRunTokenModeUnlocksRicherDepth(t *testing.T) {
 		AuthMode         string           `json:"auth_mode"`
 		DataDepthSource  string           `json:"data_depth_source"`
 		CapabilityLimits []string         `json:"capability_limits"`
+		CandidateCount   int              `json:"candidate_count"`
 		Candidates       []map[string]any `json:"candidates"`
+		Run              map[string]any   `json:"run"`
+		RunSummary       map[string]any   `json:"run_summary"`
 	}
 	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode run payload: %v", err)
@@ -249,5 +286,53 @@ func TestBigCommerceRunTokenModeUnlocksRicherDepth(t *testing.T) {
 	}
 	if len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got=%d", len(payload.Candidates))
+	}
+	if payload.CandidateCount != 1 {
+		t.Fatalf("expected candidate_count=1, got=%d", payload.CandidateCount)
+	}
+	if got, _ := payload.Candidates[0]["source"].(string); got != "voglers.com.au" {
+		t.Fatalf("expected persisted BigCommerce candidate source=voglers.com.au, got %#v", payload.Candidates[0]["source"])
+	}
+	if got, _ := payload.Candidates[0]["title"].(string); got != "AFX Mega G+ Corvette" {
+		t.Fatalf("expected persisted token-mode candidate title, got %#v", payload.Candidates[0]["title"])
+	}
+	if saved, ok := payload.Run["saved"].(float64); !ok || int(saved) != 1 {
+		t.Fatalf("expected persisted token-mode run saved=1, got %+v", payload.Run)
+	}
+	if got, _ := payload.RunSummary["auth_mode"].(string); got != "token_enabled" {
+		t.Fatalf("expected run summary auth_mode=token_enabled, got %#v", payload.RunSummary["auth_mode"])
+	}
+	if got, _ := payload.RunSummary["data_depth_source"].(string); got != "token_enabled" {
+		t.Fatalf("expected run summary data_depth_source=token_enabled, got %#v", payload.RunSummary["data_depth_source"])
+	}
+	if total, ok := payload.RunSummary["candidates_total"].(float64); !ok || int(total) != 1 {
+		t.Fatalf("expected run summary candidates_total=1, got %+v", payload.RunSummary)
+	}
+
+	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)
+	if reloaded.Code != http.StatusOK {
+		t.Fatalf("reload query sets status=%d body=%s", reloaded.Code, reloaded.Body.String())
+	}
+	var querySetPayload struct {
+		QuerySets []map[string]any `json:"query_sets"`
+	}
+	if err := json.NewDecoder(reloaded.Body).Decode(&querySetPayload); err != nil {
+		t.Fatalf("decode reloaded query sets: %v", err)
+	}
+	var latest map[string]any
+	for _, item := range querySetPayload.QuerySets {
+		if fmt.Sprintf("%v", item["id"]) == qs.ID {
+			latest = item
+			break
+		}
+	}
+	if latest == nil {
+		t.Fatalf("expected query set %s in reloaded response: %+v", qs.ID, querySetPayload.QuerySets)
+	}
+	if got, _ := latest["last_run_status"].(string); got != "succeeded" {
+		t.Fatalf("expected persisted token-mode last_run_status=succeeded, got %#v", latest["last_run_status"])
+	}
+	if got, ok := latest["last_candidate_count"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected persisted token-mode last_candidate_count=1, got %#v", latest["last_candidate_count"])
 	}
 }

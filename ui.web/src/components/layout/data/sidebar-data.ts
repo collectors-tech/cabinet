@@ -8,6 +8,8 @@ import {
   Heart,
   PlugZap,
   HelpCircle,
+  Inbox,
+  Images,
   Bell,
   Palette,
   Settings,
@@ -60,6 +62,12 @@ export const sidebarData: SidebarData = {
           icon: ListChecks,
         },
         {
+          title: 'Media',
+          testIdKey: 'media',
+          url: '/media',
+          icon: Images,
+        },
+        {
           title: 'Collections',
           testIdKey: 'collections',
           url: '/collections',
@@ -82,6 +90,12 @@ export const sidebarData: SidebarData = {
           testIdKey: 'market-watch',
           url: '/scanner',
           icon: ScanSearch,
+        },
+        {
+          title: 'Purchase Inbox',
+          testIdKey: 'purchase-inbox',
+          url: '/inbox',
+          icon: Inbox,
         },
         {
           title: 'Integrations',

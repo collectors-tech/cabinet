@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { flushSync } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -28,6 +27,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
+import { flushSync } from 'react-dom'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -76,14 +76,6 @@ import {
   useWorkspaceCollections,
 } from '@/features/collections/use-workspace-collections'
 import {
-  TasksDialogs,
-  type TasksDialogType,
-} from '@/features/tasks/components/tasks-dialogs'
-import { TasksProvider } from '@/features/tasks/components/tasks-provider'
-import { TasksTable } from '@/features/tasks/components/tasks-table'
-import { type Task } from '@/features/tasks/data/schema'
-import { tasks } from '@/features/tasks/data/tasks'
-import {
   defaultInventoryCategoryOptions,
   inventoryCategoryOptionsSettingsKey,
   joinCategoryValue,
@@ -101,6 +93,18 @@ import {
   parseItemTypeConditionScales,
   type InventoryItemTypeConditionScale,
 } from '@/features/inventory/item-type-condition-scales'
+import {
+  defaultInventoryPackagingGrades,
+  parsePackagingGradeOptions,
+} from '@/features/inventory/packaging-grade-options'
+import {
+  TasksDialogs,
+  type TasksDialogType,
+} from '@/features/tasks/components/tasks-dialogs'
+import { TasksProvider } from '@/features/tasks/components/tasks-provider'
+import { TasksTable } from '@/features/tasks/components/tasks-table'
+import { type Task } from '@/features/tasks/data/schema'
+import { tasks } from '@/features/tasks/data/tasks'
 
 type CollectionWorkspaceProps = {
   title?: string
@@ -154,6 +158,7 @@ type InventoryItem = {
   condition: string
   category: string
   item_type: string
+  packaging_grade_type: string
   brand: string
   priority: string
   description: string
@@ -168,6 +173,7 @@ type InventoryItemDraft = {
   brand: string
   category: string
   item_type: string
+  packaging_grade_type: string
   description: string
   notes: string
   tags: string
@@ -214,6 +220,7 @@ type FolderDropTarget =
 type FolderTreeRenderOptions = {
   showActions?: boolean
   showDragHandles?: boolean
+  forceExpandAll?: boolean
 }
 
 function folderDropTargetsEqual(
@@ -252,6 +259,41 @@ function findFolderNodeByID(
     }
   }
   return null
+}
+
+function filterFolderTreeByQuery(
+  nodes: FolderNode[],
+  rawQuery: string
+): FolderNode[] {
+  const query = rawQuery.trim().toLowerCase()
+  if (!query) {
+    return nodes
+  }
+
+  return nodes.flatMap((node) => {
+    const filteredChildren = filterFolderTreeByQuery(node.children ?? [], query)
+    const nodeText = [
+      node.name,
+      node.category,
+      node.secondaryLabel,
+      node.statusBadge,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    const matchesNode = nodeText.includes(query)
+
+    if (!matchesNode && filteredChildren.length === 0) {
+      return []
+    }
+
+    return [
+      {
+        ...node,
+        children: matchesNode ? node.children : filteredChildren,
+      },
+    ]
+  })
 }
 
 const inventoryTreeStorageKey = 'cabinet.inventory.tree-state'
@@ -494,6 +536,7 @@ function emptyInventoryItemDraft(): InventoryItemDraft {
     brand: '',
     category: '',
     item_type: '',
+    packaging_grade_type: '',
     description: '',
     notes: '',
     tags: '',
@@ -508,6 +551,7 @@ function inventoryItemToDraft(item: InventoryItem): InventoryItemDraft {
     brand: item.brand,
     category: item.category,
     item_type: item.item_type,
+    packaging_grade_type: item.packaging_grade_type,
     description: item.description,
     notes: item.notes,
     tags: item.tags.join(', '),
@@ -563,6 +607,8 @@ function hasInventoryDraftValue(draft: InventoryItemDraft): boolean {
     draft.title,
     draft.brand,
     draft.category,
+    draft.item_type,
+    draft.packaging_grade_type,
     draft.description,
     draft.notes,
     draft.tags,
@@ -631,6 +677,7 @@ function normalizeInventoryCreatePayload(
     brand: draft.brand.trim(),
     category: draft.category.trim(),
     item_type: draft.item_type.trim(),
+    packaging_grade_type: draft.packaging_grade_type.trim(),
     description: draft.description.trim(),
     notes: draft.notes.trim(),
     tags: draft.tags.trim(),
@@ -653,6 +700,7 @@ function normalizeInventoryCreatePayload(
     item_type:
       trimmed.item_type ||
       inferItemTypeFromCategory(trimmed.category || 'General'),
+    packaging_grade_type: trimmed.packaging_grade_type,
     description: trimmed.description,
     notes: trimmed.notes,
     tags: trimmed.tags,
@@ -905,8 +953,8 @@ function InventoryItemPriceHistoryChart({
         <div>
           <h4 className='text-sm font-semibold'>Price history</h4>
           <p className='text-xs text-muted-foreground'>
-            {points.length} price {points.length === 1 ? 'point' : 'points'} from{' '}
-            {firstPoint.date} to {lastPoint.date}
+            {points.length} price {points.length === 1 ? 'point' : 'points'}{' '}
+            from {firstPoint.date} to {lastPoint.date}
           </p>
         </div>
         <div className='text-right text-xs text-muted-foreground'>
@@ -1023,6 +1071,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
         brand: 'Unknown',
         category: 'General',
         item_type: inferItemTypeFromCategory('General'),
+        packaging_grade_type: '',
         description: buildPasteCreateDescription(
           [{ kind: 'url', value: source }],
           source
@@ -1043,6 +1092,7 @@ function buildQuickCreateDraft(value: string): InventoryItemDraft {
     brand: 'Unknown',
     category: 'General',
     item_type: inferItemTypeFromCategory('General'),
+    packaging_grade_type: '',
     description: buildPasteCreateDescription([{ kind: 'text', value: source }]),
     notes: '',
     tags: '',
@@ -1064,6 +1114,9 @@ function inventoryItemToTask(item: InventoryItem): Task {
     id: item.part_number || item.id,
     itemID: item.id,
     title: item.title || 'Untitled item',
+    itemType: item.item_type,
+    packagingGradeType: item.packaging_grade_type,
+    condition: item.condition,
     status: item.condition || item.status || 'todo',
     label: item.category || 'feature',
     priority: item.priority || 'medium',
@@ -1105,7 +1158,7 @@ function applyInventoryFolderCounts(
       itemCount:
         node.name === 'All Items'
           ? rows.length
-          : countsByFolderName.get(node.name) ?? 0,
+          : (countsByFolderName.get(node.name) ?? 0),
       children: node.children ? walk(node.children) : undefined,
     }))
 
@@ -1589,6 +1642,19 @@ async function loadInventoryItemTypeConditionScales(): Promise<
   )
 }
 
+async function loadInventoryPackagingGrades(): Promise<string[]> {
+  const response = await fetch('/api/inventory/grading/enums')
+  if (!response.ok) {
+    return defaultInventoryPackagingGrades
+  }
+  const payload = (await response.json()) as {
+    packaging_grades?: string[]
+  }
+  return parsePackagingGradeOptions(
+    JSON.stringify(payload.packaging_grades ?? [])
+  )
+}
+
 function savePersistedWorkspaceSnapshot(
   profileID: string,
   folderTree: FolderNode[]
@@ -1832,6 +1898,8 @@ export function Collection({
   )
   const [inventoryFolderBrowserOpen, setInventoryFolderBrowserOpen] =
     useState(false)
+  const [inventoryFolderBrowserQuery, setInventoryFolderBrowserQuery] =
+    useState('')
   const [expandedNodeIDs, setExpandedNodeIDs] = useState<Set<string>>(
     () => loadInventoryTreeState().expandedNodeIDs
   )
@@ -1844,6 +1912,9 @@ export function Collection({
   const [itemTypeConditionScales, setItemTypeConditionScales] = useState<
     InventoryItemTypeConditionScale[]
   >(defaultInventoryItemTypeConditionScales)
+  const [inventoryPackagingGrades, setInventoryPackagingGrades] = useState<
+    string[]
+  >(defaultInventoryPackagingGrades)
   const [folderCreateOpen, setFolderCreateOpen] = useState(false)
   const [folderCreateParentID, setFolderCreateParentID] = useState<
     string | null
@@ -2191,14 +2262,13 @@ export function Collection({
 
   const selectInventoryFolder = useCallback(
     (nextFolder: string) => {
-      const safeFolder =
-        selectionExistsInInventoryFolders(
-          workspaceCollections,
-          folderTree,
-          nextFolder
-        )
-          ? nextFolder
-          : 'All Items'
+      const safeFolder = selectionExistsInInventoryFolders(
+        workspaceCollections,
+        folderTree,
+        nextFolder
+      )
+        ? nextFolder
+        : 'All Items'
       setActiveFolder(safeFolder)
       setInventoryFolderBrowserOpen(false)
       if (workspaceCollections.includes(safeFolder)) {
@@ -2252,6 +2322,7 @@ export function Collection({
             condition?: string
             category?: string
             item_type?: string
+            packaging_grade_type?: string
             brand?: string
             priority?: string
             description?: string
@@ -2271,6 +2342,7 @@ export function Collection({
             item_type:
               item.item_type?.trim() ||
               inferItemTypeFromCategory(item.category?.trim() || 'General'),
+            packaging_grade_type: item.packaging_grade_type?.trim() ?? '',
             brand: item.brand?.trim() || 'Unknown',
             priority: item.priority?.trim() || 'medium',
             description: item.description?.trim() ?? '',
@@ -2928,17 +3000,14 @@ export function Collection({
   )
 
   const renderFolderTree = useCallback(
-    (
-      nodes: FolderNode[],
-      level = 1,
-      options: FolderTreeRenderOptions = {}
-    ) => {
+    (nodes: FolderNode[], level = 1, options: FolderTreeRenderOptions = {}) => {
       const showActions = options.showActions ?? true
       const showDragHandles = options.showDragHandles ?? true
-      return (
-      nodes.map((node) => {
+      const forceExpandAll = options.forceExpandAll ?? false
+      return nodes.map((node) => {
         const hasChildren = Boolean(node.children?.length)
-        const expanded = hasChildren && expandedNodeIDs.has(node.id)
+        const expanded =
+          hasChildren && (forceExpandAll || expandedNodeIDs.has(node.id))
         const isActive = activeFolder === node.name
         const isChildDropTarget =
           dragTarget?.kind === 'child' && dragTarget.nodeID === node.id
@@ -3323,7 +3392,6 @@ export function Collection({
           </div>
         )
       })
-      )
     },
     [
       activeFolder,
@@ -3357,6 +3425,11 @@ export function Collection({
         : folderTree,
     [folderTree, isInventoryRoute, itemFolderAssignments, tableData]
   )
+  const inventoryFolderBrowserQueryTrimmed = inventoryFolderBrowserQuery.trim()
+  const inventoryFolderBrowserTree = useMemo(
+    () => filterFolderTreeByQuery(folderTree, inventoryFolderBrowserQuery),
+    [folderTree, inventoryFolderBrowserQuery]
+  )
   const activeFolderIsAvailable =
     activeFolder === 'All Items' ||
     folderTreeContainsName(folderTree, activeFolder)
@@ -3388,7 +3461,9 @@ export function Collection({
   )
   const selectedItemTypeForCondition =
     itemDraft.item_type.trim() ||
-    inferItemTypeFromCategory(itemDraft.category || selectedInventoryItem?.category || '')
+    inferItemTypeFromCategory(
+      itemDraft.category || selectedInventoryItem?.category || ''
+    )
   const inventoryConditionOptions = useMemo(
     () =>
       conditionsForItemType(
@@ -3735,6 +3810,8 @@ export function Collection({
           await loadProfileInventoryCategoryOptions(activeProfileID)
         const remoteItemTypeConditionScales =
           await loadInventoryItemTypeConditionScales()
+        const remoteInventoryPackagingGrades =
+          await loadInventoryPackagingGrades()
         const localTree = loadPersistedWorkspaceSnapshot(activeProfileID)
         const localAssignments = loadInventoryItemFolderAssignments()
         const nextTree = remoteTree ?? localTree ?? initialFolderTree
@@ -3755,6 +3832,7 @@ export function Collection({
         setItemFolderAssignments(nextAssignments)
         setCategoryOptions(nextCategories)
         setItemTypeConditionScales(remoteItemTypeConditionScales)
+        setInventoryPackagingGrades(remoteInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3771,6 +3849,7 @@ export function Collection({
         setItemFolderAssignments(localAssignments)
         setCategoryOptions(defaultInventoryCategoryOptions)
         setItemTypeConditionScales(defaultInventoryItemTypeConditionScales)
+        setInventoryPackagingGrades(defaultInventoryPackagingGrades)
         setActiveFolder((previous) =>
           folderTreeContainsName(nextTree, previous) ? previous : 'All Items'
         )
@@ -3814,6 +3893,7 @@ export function Collection({
       brand: itemDraft.brand.trim(),
       category: itemDraft.category.trim(),
       item_type: itemDraft.item_type.trim(),
+      packaging_grade_type: itemDraft.packaging_grade_type.trim(),
       description: itemDraft.description.trim(),
       notes: itemDraft.notes.trim(),
       tags: itemDraft.tags.trim(),
@@ -3874,7 +3954,8 @@ export function Collection({
     try {
       let instancePayload: InventoryInstance | null = null
       const shouldSaveInstance =
-        primaryInstance !== null || hasInventoryInstanceDraftValue(itemInstanceDraft)
+        primaryInstance !== null ||
+        hasInventoryInstanceDraftValue(itemInstanceDraft)
       if (shouldSaveInstance) {
         const priceText = itemInstanceDraft.acquisition_price.trim()
         const quantityText = itemInstanceDraft.quantity.trim()
@@ -4433,6 +4514,9 @@ export function Collection({
             item_type: shouldHydrateIdentity
               ? generatedDraft.item_type
               : current.item_type,
+            packaging_grade_type: shouldHydrateIdentity
+              ? generatedDraft.packaging_grade_type
+              : current.packaging_grade_type,
             description: buildPasteCreateDescription(nextHistory, sourceURL),
             notes: current.notes,
             tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
@@ -4666,7 +4750,7 @@ export function Collection({
         onDragLeave={handleInventoryImageDragLeave}
         onDrop={handleInventoryImageDrop}
       >
-        {(imageDropActive || imageDropBusy || imageDropMessage) ? (
+        {imageDropActive || imageDropBusy || imageDropMessage ? (
           <div
             className={cn(
               'rounded-lg border border-dashed px-4 py-3 text-sm',
@@ -5068,7 +5152,12 @@ export function Collection({
                       <DropdownMenu
                         modal={false}
                         open={inventoryFolderBrowserOpen}
-                        onOpenChange={setInventoryFolderBrowserOpen}
+                        onOpenChange={(open) => {
+                          setInventoryFolderBrowserOpen(open)
+                          if (!open) {
+                            setInventoryFolderBrowserQuery('')
+                          }
+                        }}
                       >
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -5084,8 +5173,19 @@ export function Collection({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align='start'
-                          className='w-[min(32rem,92vw)] p-2'
+                          className='w-[min(32rem,92vw)] space-y-2 p-2'
                         >
+                          <Input
+                            type='search'
+                            value={inventoryFolderBrowserQuery}
+                            aria-label='Search inventory folders'
+                            placeholder='Search folders'
+                            data-testid='inventory-folder-browser-search'
+                            className='h-8'
+                            onChange={(event) =>
+                              setInventoryFolderBrowserQuery(event.target.value)
+                            }
+                          />
                           <div
                             role='tree'
                             aria-label='Inventory folder filter'
@@ -5121,10 +5221,30 @@ export function Collection({
                                   Drop here to move folder to the root level
                                 </div>
                               ) : null}
-                              {renderFolderTree(folderTree, 1, {
-                                showActions: false,
-                                showDragHandles: false,
-                              })}
+                              {inventoryFolderBrowserTree.length > 0 ? (
+                                renderFolderTree(
+                                  inventoryFolderBrowserTree,
+                                  1,
+                                  {
+                                    showActions: false,
+                                    showDragHandles: false,
+                                    forceExpandAll:
+                                      inventoryFolderBrowserQueryTrimmed.length >
+                                      0,
+                                  }
+                                )
+                              ) : (
+                                <div
+                                  className='rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground'
+                                  data-testid='inventory-folder-browser-empty'
+                                >
+                                  No folders match
+                                  {inventoryFolderBrowserQueryTrimmed
+                                    ? ` "${inventoryFolderBrowserQueryTrimmed}"`
+                                    : ''}
+                                  .
+                                </div>
+                              )}
                             </div>
                           </div>
                         </DropdownMenuContent>
@@ -5630,6 +5750,36 @@ export function Collection({
                             ))}
                           </select>
                         </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         {itemEditorMode === 'edit' ? (
                           <>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
@@ -5894,10 +6044,7 @@ export function Collection({
                                     )
                                   }
                                 >
-                                  <RotateCcw
-                                    className='size-4'
-                                    aria-hidden
-                                  />
+                                  <RotateCcw className='size-4' aria-hidden />
                                 </Button>
                                 <Button
                                   type='button'
@@ -6102,6 +6249,36 @@ export function Collection({
                               ))}
                             </select>
                           </div>
+                        </div>
+                        <div className='space-y-2'>
+                          <label
+                            className='text-sm font-medium'
+                            htmlFor='inventory-panel-item-packaging-grade'
+                          >
+                            Packaging grade
+                          </label>
+                          <select
+                            id='inventory-panel-item-packaging-grade'
+                            data-testid='inventory-item-packaging-grade'
+                            className='h-9 w-full rounded-md border bg-background px-2 text-sm'
+                            value={itemDraft.packaging_grade_type}
+                            onChange={(event) =>
+                              setItemDraft((current) => ({
+                                ...current,
+                                packaging_grade_type: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value=''>Choose packaging grade</option>
+                            {inventoryPackagingGrades.map((packagingGrade) => (
+                              <option
+                                key={packagingGrade}
+                                value={packagingGrade}
+                              >
+                                {packagingGrade}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className='space-y-2'>
                           <label

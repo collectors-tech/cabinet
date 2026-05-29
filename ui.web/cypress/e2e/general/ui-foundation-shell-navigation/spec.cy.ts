@@ -110,6 +110,7 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-discoveries',
@@ -136,6 +137,7 @@ describe('ui-foundation-shell-navigation', () => {
           expect(ids).to.deep.equal([
             'sidebar-nav-edit-item-dashboard',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
@@ -158,6 +160,7 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
@@ -177,6 +180,7 @@ describe('ui-foundation-shell-navigation', () => {
         .should('deep.equal', [
           'sidebar-nav-link-dashboard',
           'sidebar-nav-link-inventory',
+          'sidebar-nav-link-media',
           'sidebar-nav-link-wishlist',
           'sidebar-nav-link-collections',
           'sidebar-nav-link-discoveries',
@@ -208,6 +212,7 @@ describe('ui-foundation-shell-navigation', () => {
           expect(ids).to.deep.equal([
             'sidebar-nav-edit-item-dashboard',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
@@ -232,6 +237,7 @@ describe('ui-foundation-shell-navigation', () => {
             'sidebar-nav-edit-item-dashboard',
             'sidebar-nav-edit-item-wishlist',
             'sidebar-nav-edit-item-inventory',
+            'sidebar-nav-edit-item-media',
             'sidebar-nav-edit-item-collections',
             'sidebar-nav-edit-item-discoveries',
             'sidebar-nav-edit-item-market-watch',
@@ -251,6 +257,7 @@ describe('ui-foundation-shell-navigation', () => {
         'sidebar-nav-link-dashboard',
         'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
@@ -297,6 +304,7 @@ describe('ui-foundation-shell-navigation', () => {
           'sidebar-nav-edit-item-dashboard',
           'sidebar-nav-edit-item-wishlist',
           'sidebar-nav-edit-item-inventory',
+          'sidebar-nav-edit-item-media',
           'sidebar-nav-edit-item-collections',
           'sidebar-nav-edit-item-discoveries',
           'sidebar-nav-edit-item-market-watch',
@@ -318,6 +326,7 @@ describe('ui-foundation-shell-navigation', () => {
         'sidebar-nav-link-dashboard',
         'sidebar-nav-link-wishlist',
         'sidebar-nav-link-inventory',
+        'sidebar-nav-link-media',
         'sidebar-nav-link-collections',
         'sidebar-nav-link-discoveries',
         'sidebar-nav-link-market-watch',
@@ -461,10 +470,19 @@ describe('ui-foundation-shell-navigation', () => {
 
     signInTo('/inventory/')
     visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-primary-db-plan"]').should('contain', 'Database')
+    cy.get('[data-testid="team-option-showcase-db-plan"]').should(
+      'contain',
+      'Showcase sample data'
+    )
     cy.get('[data-testid="team-option-showcase-db"]').click()
     cy.contains('Showcase Seed One', { timeout: 20000 }).should('be.visible')
     cy.contains('Showcase Seed Two').should('be.visible')
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
+    cy.get('[data-testid="active-profile-status"]').should(
+      'contain',
+      'Showcase sample data'
+    )
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-011 fills available shell width on wide desktop viewport by default', () => {
