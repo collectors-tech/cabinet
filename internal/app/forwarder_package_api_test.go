@@ -224,6 +224,14 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if createPackage.Code != http.StatusOK {
 		t.Fatalf("create package status=%d body=%s", createPackage.Code, createPackage.Body.String())
 	}
+	var packagePayload struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createPackage.Body).Decode(&packagePayload); err != nil {
+		t.Fatalf("decode package payload: %v", err)
+	}
 	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-medium-item', ?, 'AFX', 'Slot', 'AFX-902', 'Medium match item')`, profileID); err != nil {
 		t.Fatalf("seed medium item: %v", err)
 	}
@@ -303,6 +311,27 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	}
 	if filteredPayload.Suggestions[0]["item_id"] != "fwd-medium-item" || filteredPayload.Suggestions[0]["confidence_label"] != "medium" {
 		t.Fatalf("expected medium confidence item suggestion, got %+v", filteredPayload.Suggestions[0])
+	}
+	scopedResp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?package_id="+packagePayload.Package.ID+"&confidence_label=high", nil, nil)
+	if scopedResp.Code != http.StatusOK {
+		t.Fatalf("scoped suggestions status=%d body=%s", scopedResp.Code, scopedResp.Body.String())
+	}
+	var scopedPayload struct {
+		ConfidenceFilter string           `json:"confidence_filter"`
+		Suggestions      []map[string]any `json:"suggestions"`
+		Summary          map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(scopedResp.Body).Decode(&scopedPayload); err != nil {
+		t.Fatalf("decode scoped suggestions payload: %v", err)
+	}
+	if scopedPayload.ConfidenceFilter != "high" || len(scopedPayload.Suggestions) != 1 {
+		t.Fatalf("expected one scoped high-confidence suggestion, got %+v", scopedPayload)
+	}
+	if scopedPayload.Summary["count"] != 1 || scopedPayload.Summary["scoped_packages"] != 1 || scopedPayload.Summary["high_confidence"] != 1 || scopedPayload.Summary["medium_confidence"] != 0 {
+		t.Fatalf("expected scoped filtered summary, got %+v", scopedPayload.Summary)
+	}
+	if scopedPayload.Suggestions[0]["package_id"] != packagePayload.Package.ID || scopedPayload.Suggestions[0]["confidence_label"] != "high" {
+		t.Fatalf("expected scoped package high-confidence suggestion, got %+v", scopedPayload.Suggestions[0])
 	}
 	invalidFilter := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?confidence_label=certain", nil, nil)
 	if invalidFilter.Code != http.StatusBadRequest {
