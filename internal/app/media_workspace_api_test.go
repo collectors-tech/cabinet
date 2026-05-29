@@ -96,7 +96,7 @@ func TestMediaWorkspaceAssetsAPIScopesActiveProfileAndFiltersUnlinked(t *testing
 	}
 }
 
-func TestMediaWorkspacePreviewAPIsAreExplicitlyNonMutating(t *testing.T) {
+func TestMediaWorkspaceAssignmentAPIPersistsConfirmedLinks(t *testing.T) {
 	t.Parallel()
 
 	a := newTestApp(t)
@@ -146,8 +146,49 @@ func TestMediaWorkspacePreviewAPIsAreExplicitlyNonMutating(t *testing.T) {
 	if err := json.NewDecoder(assignResp.Body).Decode(&assign); err != nil {
 		t.Fatalf("decode assignment preview: %v", err)
 	}
-	if assign.Allowed || !assign.RequiresConfirmation || assign.ProjectedLinkageState != "linked_wishlist" || assign.BlockedReason == "" {
+	if !assign.Allowed || !assign.RequiresConfirmation || assign.ProjectedLinkageState != "linked_wishlist" || assign.BlockedReason != "" {
 		t.Fatalf("unexpected assignment preview: %+v", assign)
+	}
+
+	applyResp := doRequest(t, a, http.MethodPost, "/api/media/assignments", strings.NewReader(`{"asset_id":"media-preview-attachment","target_type":"wishlist","target_id":"media-preview-wish"}`), map[string]string{"Content-Type": "application/json"})
+	if applyResp.Code != http.StatusOK {
+		t.Fatalf("assignment apply status=%d body=%s", applyResp.Code, applyResp.Body.String())
+	}
+	var applied struct {
+		Applied             bool   `json:"applied"`
+		CurrentLinkageState string `json:"current_linkage_state"`
+		AuditSummary        string `json:"audit_summary"`
+	}
+	if err := json.NewDecoder(applyResp.Body).Decode(&applied); err != nil {
+		t.Fatalf("decode assignment apply: %v", err)
+	}
+	if !applied.Applied || applied.CurrentLinkageState != "linked_wishlist" || applied.AuditSummary == "" {
+		t.Fatalf("unexpected assignment apply response: %+v", applied)
+	}
+
+	assetsResp := doRequest(t, a, http.MethodGet, "/api/media/assets", nil, nil)
+	if assetsResp.Code != http.StatusOK {
+		t.Fatalf("media assets after assignment status=%d body=%s", assetsResp.Code, assetsResp.Body.String())
+	}
+	var assetsAfter struct {
+		Assets []struct {
+			ID           string `json:"id"`
+			LinkageState string `json:"linkage_state"`
+			WishlistID   string `json:"wishlist_id"`
+		} `json:"assets"`
+		Summary struct {
+			Unlinked       int `json:"unlinked"`
+			LinkedWishlist int `json:"linked_wishlist"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(assetsResp.Body).Decode(&assetsAfter); err != nil {
+		t.Fatalf("decode media assets after assignment: %v", err)
+	}
+	if len(assetsAfter.Assets) != 1 || assetsAfter.Assets[0].ID != "media-preview-attachment" || assetsAfter.Assets[0].LinkageState != "linked_wishlist" || assetsAfter.Assets[0].WishlistID != "media-preview-wish" {
+		t.Fatalf("assignment did not update media asset linkage: %+v", assetsAfter)
+	}
+	if assetsAfter.Summary.Unlinked != 0 || assetsAfter.Summary.LinkedWishlist != 1 {
+		t.Fatalf("assignment did not update media summary: %+v", assetsAfter.Summary)
 	}
 
 	downloadResp := doRequest(t, a, http.MethodPost, "/api/media/downloads/preview", strings.NewReader(`{"asset_ids":["media-preview-attachment"],"filter":"all"}`), map[string]string{"Content-Type": "application/json"})

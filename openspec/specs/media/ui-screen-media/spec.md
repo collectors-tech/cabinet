@@ -217,3 +217,16 @@ Cabinet SHALL provide an authenticated Media workspace download endpoint that re
 - **GIVEN** the active profile has inventory-linked media and unlinked evidence assets with stored bytes
 - **WHEN** the user requests `/api/media/downloads` with selected asset IDs and the current filter
 - **THEN** the API MUST reject assets outside the active profile or current filter, return a single selected asset with its human-readable filename and content type, and return multiple selected assets as a zip archive preserving each human-readable filename.
+
+### Requirement UI-SCREEN-MEDIA-010: Media workspace assignment API SHALL persist scoped media links
+Cabinet SHALL provide a confirmed assignment endpoint for linking Media workspace assets to inventory or wishlist targets without duplicating source binaries.
+
+#### Scenario: Assign unlinked media to wishlist
+- **GIVEN** the active profile has an unlinked media asset and a wishlist entry
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST persist a profile-scoped media link, preserve the original media asset provenance, update the asset linkage state to `linked_wishlist`, and update unlinked/wishlist summary counts on the next `/api/media/assets` response.
+
+#### Scenario: Reject out-of-scope media assignment
+- **GIVEN** a media asset or assignment target belongs to another profile
+- **WHEN** the user confirms assignment through `/api/media/assignments`
+- **THEN** the API MUST reject the request and MUST NOT create a media link.
