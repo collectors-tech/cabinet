@@ -413,8 +413,12 @@ func TestAssistantContentListingGenerationRunsStayPreviewFirst(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
 
-	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"GEN-001","title":"Original catalog title","brand":"AFX","category":"Cars","condition":"Used"}`), map[string]string{"Content-Type": "application/json"})
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"GEN-001","title":"Original catalog title","brand":"AFX","category":"Cars","item_type":"Slot Cars","condition":"10+ - New, in packaging"}`), map[string]string{"Content-Type": "application/json"})
 	if itemResp.Code != http.StatusCreated {
 		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
 	}

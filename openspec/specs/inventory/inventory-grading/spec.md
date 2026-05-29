@@ -22,6 +22,7 @@ Cabinet SHALL support admin-managed enum sets for packaging grades and admin-man
 - **THEN** updated item type and condition values MUST be available in inventory create/edit forms
 
 #### Scenario: Seed collector condition scales
+- **GIVEN** a profile has no custom item type condition scale settings
 - **WHEN** a profile has no custom item type condition scale settings
 - **THEN** Cabinet MUST provide Slot Cars and Trading Cards item type defaults
 - **AND** Slot Cars MUST include numeric condition values from `10+` through `1`
