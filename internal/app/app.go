@@ -2658,6 +2658,88 @@ func New(cfg config.Config) (*App, error) {
 			},
 		})
 	})
+	mux.HandleFunc("/api/providers/product-url/ingest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		route, err := detectProviderProductURL(req.URL)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":  "provider_product_url_ingest",
+				"error": "unsupported_provider_url",
+			})
+			return
+		}
+		if route.Provider == "bonzaslotcars" && route.Action != "ingest_product_url" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":     "provider_product_url_ingest",
+				"error":    "supported_provider_unsupported_page",
+				"provider": route.Provider,
+				"family":   route.Family,
+				"route":    route,
+			})
+			return
+		}
+		if route.Provider != "bonzaslotcars" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":  "provider_product_url_ingest",
+				"error": "unsupported_provider_url",
+			})
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			return
+		}
+		settings, err := profiles.GetSettings(r.Context(), strings.TrimSpace(active.ID))
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			return
+		}
+		baseURL := strings.TrimSpace(settings["integration.bonzaslotcars.base_url"])
+		if baseURL == "" {
+			baseURL = "https://bonzaslotcars.com.au"
+		}
+		draft, err := ingestBonzaProductURL(r.Context(), http.DefaultClient, baseURL, route)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"mode":     "provider_product_url_ingest",
+				"error":    "failed_to_ingest_bonza_product_url",
+				"provider": route.Provider,
+				"family":   route.Family,
+				"route":    route,
+			})
+			return
+		}
+		existingItems, err := collectionRepo.ListItemsByProfile(r.Context(), strings.TrimSpace(active.ID))
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_check_provider_product_duplicates"}`, http.StatusInternalServerError)
+			return
+		}
+		duplicates := providerProductDuplicateCandidates(existingItems, route, draft)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":       "provider_product_url_ingest",
+			"provider":   route.Provider,
+			"family":     route.Family,
+			"route":      route,
+			"draft":      draft,
+			"evidence":   draft.Evidence,
+			"duplicates": duplicates,
+		})
+	})
 	mux.HandleFunc("/api/providers/frontline/discovery", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -7884,12 +7966,17 @@ type hobbytechBoostConfig struct {
 }
 
 type bonzaProductResponse struct {
-	ID                int    `json:"id"`
-	Name              string `json:"name"`
-	Permalink         string `json:"permalink"`
-	Price             string `json:"prices"`
-	IsInStock         *bool  `json:"is_in_stock"`
-	LowStockRemaining *int   `json:"low_stock_remaining"`
+	ID                int                     `json:"id"`
+	Name              string                  `json:"name"`
+	Slug              string                  `json:"slug"`
+	Permalink         string                  `json:"permalink"`
+	Description       string                  `json:"description"`
+	Prices            bonzaProductPrices      `json:"prices"`
+	IsInStock         *bool                   `json:"is_in_stock"`
+	LowStockRemaining *int                    `json:"low_stock_remaining"`
+	Categories        []bonzaProductName      `json:"categories"`
+	Attributes        []bonzaProductAttribute `json:"attributes"`
+	Images            []bonzaProductImage     `json:"images"`
 }
 
 type bonzaSearchResult struct {
@@ -7897,6 +7984,51 @@ type bonzaSearchResult struct {
 	ObservedPageSize int              `json:"observed_page_size"`
 	ItemsPerPageUsed int              `json:"items_per_page_used"`
 	Candidates       []map[string]any `json:"candidates"`
+}
+
+type bonzaProductPrices struct {
+	CurrencyCode string `json:"currency_code"`
+	Price        string `json:"price"`
+}
+
+type bonzaProductName struct {
+	Name string `json:"name"`
+}
+
+type bonzaProductAttribute struct {
+	Name    string   `json:"name"`
+	Terms   []string `json:"terms"`
+	Options []string `json:"options"`
+}
+
+type bonzaProductImage struct {
+	Src string `json:"src"`
+}
+
+type providerProductURLRoute struct {
+	OriginalURL   string `json:"original_url"`
+	NormalizedURL string `json:"normalized_url"`
+	Host          string `json:"host"`
+	Path          string `json:"path"`
+	Provider      string `json:"provider"`
+	Family        string `json:"family"`
+	Slug          string `json:"slug,omitempty"`
+	Action        string `json:"action"`
+}
+
+type providerProductDraft struct {
+	ProviderProductID string            `json:"provider_product_id"`
+	Title             string            `json:"title"`
+	SourceURL         string            `json:"source_url"`
+	Description       string            `json:"description"`
+	Price             float64           `json:"price"`
+	Currency          string            `json:"currency"`
+	StockState        string            `json:"stock_state"`
+	StockCount        int               `json:"stock_count"`
+	Categories        []string          `json:"categories"`
+	Attributes        map[string]string `json:"attributes"`
+	ImageURLs         []string          `json:"image_urls"`
+	Evidence          map[string]any    `json:"evidence"`
 }
 
 const frontlineAlgoliaCacheKey = "frontline_algolia_last_known_good"
@@ -8965,6 +9097,318 @@ func runBonzaSearch(ctx context.Context, client *http.Client, baseURL string, qs
 		ItemsPerPageUsed: itemsPerPage,
 		Candidates:       candidates,
 	}, nil
+}
+
+func detectProviderProductURL(raw string) (providerProductURLRoute, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return providerProductURLRoute{}, fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return providerProductURLRoute{}, fmt.Errorf("invalid provider url")
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Hostname(), "www."))
+	pathValue := "/" + strings.Trim(strings.TrimSpace(parsed.EscapedPath()), "/")
+	if pathValue == "/" {
+		pathValue = "/"
+	}
+	route := providerProductURLRoute{
+		OriginalURL: strings.TrimSpace(raw),
+		Host:        host,
+		Path:        pathValue,
+	}
+	switch host {
+	case "bonzaslotcars.com.au":
+		route.Provider = "bonzaslotcars"
+		route.Family = "woocommerce"
+	default:
+		return providerProductURLRoute{}, fmt.Errorf("unsupported provider host")
+	}
+	parts := strings.Split(strings.Trim(pathValue, "/"), "/")
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "product") && strings.TrimSpace(parts[1]) != "" {
+		route.Slug = strings.TrimSpace(parts[1])
+		route.Action = "ingest_product_url"
+		route.NormalizedURL = "https://" + host + "/product/" + route.Slug + "/"
+		return route, nil
+	}
+	route.Action = "unsupported_page"
+	route.NormalizedURL = "https://" + host + pathValue
+	if !strings.HasSuffix(route.NormalizedURL, "/") {
+		route.NormalizedURL += "/"
+	}
+	return route, nil
+}
+
+func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL string, route providerProductURLRoute) (providerProductDraft, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	search := strings.ReplaceAll(strings.TrimSpace(route.Slug), "-", " ")
+	requestURL := fmt.Sprintf("%s/wp-json/wc/store/v1/products?search=%s&per_page=5",
+		strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		url.QueryEscape(search),
+	)
+	products, err := fetchBonzaProductURLProducts(ctx, client, requestURL)
+	if err != nil {
+		return providerProductDraft{}, err
+	}
+	for _, product := range products {
+		if !bonzaProductMatchesRoute(product, route) {
+			continue
+		}
+		return bonzaProductDraft(product, route), nil
+	}
+	return providerProductDraft{}, fmt.Errorf("bonza product %q not found", route.Slug)
+}
+
+func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requestURL string) ([]bonzaProductResponse, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	requestClient := *client
+	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build bonza product ingest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
+	resp, err := requestClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request bonza product ingest: %w", err)
+	}
+	challengeBody, readChallenge := readBonzaSucuriChallenge(resp)
+	if readChallenge {
+		cookie, cookieErr := bonzaSucuriChallengeCookie(challengeBody)
+		if cookieErr == nil && cookie != "" {
+			req, err = http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+			if err != nil {
+				return nil, fmt.Errorf("build bonza product ingest retry request: %w", err)
+			}
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
+			req.Header.Set("Cookie", cookie)
+			resp, err = requestClient.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("retry bonza product ingest after challenge: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("solve bonza product ingest challenge: %w", cookieErr)
+		}
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bonza product ingest returned status %d", resp.StatusCode)
+	}
+	var products []bonzaProductResponse
+	decodeErr := json.NewDecoder(resp.Body).Decode(&products)
+	resp.Body.Close()
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode bonza product ingest response: %w", decodeErr)
+	}
+	return products, nil
+}
+
+func readBonzaSucuriChallenge(resp *http.Response) (string, bool) {
+	if resp == nil || resp.Body == nil || resp.StatusCode < http.StatusMultipleChoices || resp.StatusCode >= http.StatusBadRequest {
+		return "", false
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", false
+	}
+	content := string(body)
+	return content, strings.Contains(content, "sucuri_cloudproxy_js") && strings.Contains(content, "S='")
+}
+
+func bonzaSucuriChallengeCookie(body string) (string, error) {
+	scriptMatch := regexp.MustCompile(`S='([^']+)'`).FindStringSubmatch(body)
+	if len(scriptMatch) != 2 {
+		return "", fmt.Errorf("missing challenge script")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(scriptMatch[1])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge script: %w", err)
+	}
+	challenge := string(decoded)
+	assignment := regexp.MustCompile(`^([A-Za-z])=(.+?);document\.cookie=(.+)$`).FindStringSubmatch(challenge)
+	if len(assignment) != 4 {
+		return "", fmt.Errorf("unsupported challenge assignment")
+	}
+	value, err := evalSucuriConcatExpression(assignment[2])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge value: %w", err)
+	}
+	cookiePattern := regexp.MustCompile(`\+\s*["']=["']\s*\+\s*` + regexp.QuoteMeta(assignment[1]) + `\s*\+`)
+	cookieParts := cookiePattern.Split(assignment[3], 2)
+	if len(cookieParts) != 2 {
+		return "", fmt.Errorf("unsupported challenge cookie expression")
+	}
+	name, err := evalSucuriConcatExpression(cookieParts[0])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge cookie name: %w", err)
+	}
+	if name == "" || value == "" {
+		return "", fmt.Errorf("empty challenge cookie")
+	}
+	return name + "=" + value, nil
+}
+
+func evalSucuriConcatExpression(expr string) (string, error) {
+	parts := strings.Split(expr, "+")
+	var out strings.Builder
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		if len(trimmed) >= 2 && ((trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'') || (trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"')) {
+			out.WriteString(trimmed[1 : len(trimmed)-1])
+			continue
+		}
+		match := regexp.MustCompile(`^String\.fromCharCode\((\d+)\)$`).FindStringSubmatch(trimmed)
+		if len(match) == 2 {
+			codepoint, err := strconv.Atoi(match[1])
+			if err != nil {
+				return "", err
+			}
+			out.WriteRune(rune(codepoint))
+			continue
+		}
+		return "", fmt.Errorf("unsupported concat token %q", trimmed)
+	}
+	return out.String(), nil
+}
+
+func bonzaProductMatchesRoute(product bonzaProductResponse, route providerProductURLRoute) bool {
+	if strings.EqualFold(strings.TrimSpace(product.Slug), strings.TrimSpace(route.Slug)) {
+		return true
+	}
+	permalink := strings.TrimRight(strings.ToLower(strings.TrimSpace(product.Permalink)), "/")
+	normalized := strings.TrimRight(strings.ToLower(strings.TrimSpace(route.NormalizedURL)), "/")
+	return permalink != "" && permalink == normalized
+}
+
+func bonzaProductDraft(product bonzaProductResponse, route providerProductURLRoute) providerProductDraft {
+	rawStock, stockState, stockCount := deriveBonzaStockSignal(context.Background(), nil, "", product)
+	_ = rawStock
+	if product.IsInStock != nil && *product.IsInStock && stockCount > 0 {
+		stockState = "in_stock"
+	}
+	categories := make([]string, 0, len(product.Categories))
+	for _, category := range product.Categories {
+		if value := strings.TrimSpace(category.Name); value != "" {
+			categories = append(categories, value)
+		}
+	}
+	attributes := map[string]string{}
+	for _, attribute := range product.Attributes {
+		name := strings.TrimSpace(attribute.Name)
+		if name == "" {
+			continue
+		}
+		values := append([]string{}, attribute.Terms...)
+		values = append(values, attribute.Options...)
+		for _, value := range values {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				attributes[name] = trimmed
+				break
+			}
+		}
+	}
+	images := make([]string, 0, len(product.Images))
+	for _, image := range product.Images {
+		if src := strings.TrimSpace(image.Src); src != "" {
+			images = append(images, src)
+		}
+	}
+	observedAt := time.Now().UTC().Format(time.RFC3339)
+	return providerProductDraft{
+		ProviderProductID: strconv.Itoa(product.ID),
+		Title:             strings.TrimSpace(product.Name),
+		SourceURL:         route.NormalizedURL,
+		Description:       stripHTMLText(product.Description),
+		Price:             parseWooCommerceMinorUnitPrice(product.Prices.Price),
+		Currency:          strings.TrimSpace(product.Prices.CurrencyCode),
+		StockState:        stockState,
+		StockCount:        stockCount,
+		Categories:        categories,
+		Attributes:        attributes,
+		ImageURLs:         images,
+		Evidence: map[string]any{
+			"provider":            "bonzaslotcars",
+			"family":              "woocommerce",
+			"extraction_method":   "store_api",
+			"provider_product_id": strconv.Itoa(product.ID),
+			"original_url":        route.OriginalURL,
+			"normalized_url":      route.NormalizedURL,
+			"observed_at":         observedAt,
+			"source_summary":      "WooCommerce Store API product detail",
+		},
+	}
+}
+
+type providerProductDuplicateCandidate struct {
+	ItemID     string   `json:"item_id"`
+	Title      string   `json:"title"`
+	SourceURLs []string `json:"source_urls"`
+	Reasons    []string `json:"reasons"`
+}
+
+func providerProductDuplicateCandidates(items []collection.Item, route providerProductURLRoute, draft providerProductDraft) []providerProductDuplicateCandidate {
+	normalizedSource := strings.TrimRight(strings.ToLower(strings.TrimSpace(firstNonEmptyString(draft.SourceURL, route.NormalizedURL))), "/")
+	providerProductID := strings.TrimSpace(draft.ProviderProductID)
+	out := make([]providerProductDuplicateCandidate, 0)
+	for _, item := range items {
+		reasons := make([]string, 0, 2)
+		for _, sourceURL := range item.SourceURLs {
+			if normalizedSource != "" && strings.TrimRight(strings.ToLower(strings.TrimSpace(sourceURL)), "/") == normalizedSource {
+				reasons = append(reasons, "source_url")
+				break
+			}
+		}
+		if providerProductID != "" && strings.Contains(strings.ToLower(item.Notes), strings.ToLower("provider_product_id="+providerProductID)) {
+			reasons = append(reasons, "provider_product_id")
+		}
+		if len(reasons) == 0 {
+			continue
+		}
+		out = append(out, providerProductDuplicateCandidate{
+			ItemID:     item.ID,
+			Title:      item.Title,
+			SourceURLs: item.SourceURLs,
+			Reasons:    reasons,
+		})
+	}
+	if out == nil {
+		return []providerProductDuplicateCandidate{}
+	}
+	return out
+}
+
+func parseWooCommerceMinorUnitPrice(raw string) float64 {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0
+	}
+	if strings.Contains(value, ".") {
+		parsed, _ := strconv.ParseFloat(value, 64)
+		return parsed
+	}
+	cents, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
+	return cents / 100
+}
+
+func stripHTMLText(raw string) string {
+	withoutTags := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(raw, " ")
+	return strings.Join(strings.Fields(withoutTags), " ")
 }
 
 func bonzaCandidatesForScanner(candidates []map[string]any) []scanner.CandidateInput {
