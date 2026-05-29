@@ -1,0 +1,163 @@
+package app
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestMediaWorkspaceAssetsAPIScopesActiveProfileAndFiltersUnlinked(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Media API"}`), map[string]string{"Content-Type": "application/json"})
+	if profileResp.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileResp.Code, profileResp.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profileResp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activeResp := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activeResp.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", activeResp.Code, activeResp.Body.String())
+	}
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"MEDIA-API-1","title":"Media API Item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	body, contentType := buildMultipartPhoto(t, "front.jpg", sampleJPEG(t))
+	photoResp := doRequest(t, a, http.MethodPost, "/api/items/"+item.ID+"/photos", body, map[string]string{"Content-Type": contentType})
+	if photoResp.Code != http.StatusCreated {
+		t.Fatalf("upload photo status=%d body=%s", photoResp.Code, photoResp.Body.String())
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('media-api-thread', ?, 'Media API');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('media-api-attachment', ?, 'media-api-thread', 'loose-reference.jpg', 'image/jpeg', 123, '/tmp/loose-reference.jpg');
+	`, profile.ID, profile.ID); err != nil {
+		t.Fatalf("seed chat attachment: %v", err)
+	}
+
+	allResp := doRequest(t, a, http.MethodGet, "/api/media/assets", nil, nil)
+	if allResp.Code != http.StatusOK {
+		t.Fatalf("media assets status=%d body=%s", allResp.Code, allResp.Body.String())
+	}
+	var all struct {
+		Assets []struct {
+			ID           string `json:"id"`
+			LinkageState string `json:"linkage_state"`
+		} `json:"assets"`
+		Summary struct {
+			Total           int `json:"total"`
+			Unlinked        int `json:"unlinked"`
+			LinkedInventory int `json:"linked_inventory"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(allResp.Body).Decode(&all); err != nil {
+		t.Fatalf("decode media assets: %v", err)
+	}
+	if len(all.Assets) != 2 || all.Summary.Total != 2 || all.Summary.Unlinked != 1 || all.Summary.LinkedInventory != 1 {
+		t.Fatalf("unexpected media assets response: %+v", all)
+	}
+
+	unlinkedResp := doRequest(t, a, http.MethodGet, "/api/media/assets?filter=unlinked", nil, nil)
+	if unlinkedResp.Code != http.StatusOK {
+		t.Fatalf("unlinked media status=%d body=%s", unlinkedResp.Code, unlinkedResp.Body.String())
+	}
+	var unlinked struct {
+		Assets []struct {
+			ID           string `json:"id"`
+			LinkageState string `json:"linkage_state"`
+		} `json:"assets"`
+		Summary struct {
+			Total int `json:"total"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(unlinkedResp.Body).Decode(&unlinked); err != nil {
+		t.Fatalf("decode unlinked media assets: %v", err)
+	}
+	if len(unlinked.Assets) != 1 || unlinked.Assets[0].ID != "media-api-attachment" || unlinked.Assets[0].LinkageState != "unlinked" || unlinked.Summary.Total != 2 {
+		t.Fatalf("unexpected unlinked media response: %+v", unlinked)
+	}
+}
+
+func TestMediaWorkspacePreviewAPIsAreExplicitlyNonMutating(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Media Preview"}`), map[string]string{"Content-Type": "application/json"})
+	if profileResp.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileResp.Code, profileResp.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profileResp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activeResp := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activeResp.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", activeResp.Code, activeResp.Body.String())
+	}
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"MEDIA-PREV-1","title":"Media Preview Item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO wishlist_entries (id, profile_id, item_id) VALUES ('media-preview-wish', ?, ?);
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('media-preview-thread', ?, 'Media Preview');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('media-preview-attachment', ?, 'media-preview-thread', 'wishlist-reference.jpg', 'image/jpeg', 123, '/tmp/wishlist-reference.jpg');
+	`, profile.ID, item.ID, profile.ID, profile.ID); err != nil {
+		t.Fatalf("seed preview data: %v", err)
+	}
+
+	assignResp := doRequest(t, a, http.MethodPost, "/api/media/assignments/preview", strings.NewReader(`{"asset_id":"media-preview-attachment","target_type":"wishlist","target_id":"media-preview-wish"}`), map[string]string{"Content-Type": "application/json"})
+	if assignResp.Code != http.StatusOK {
+		t.Fatalf("assignment preview status=%d body=%s", assignResp.Code, assignResp.Body.String())
+	}
+	var assign struct {
+		Allowed               bool   `json:"allowed"`
+		RequiresConfirmation  bool   `json:"requires_confirmation"`
+		ProjectedLinkageState string `json:"projected_linkage_state"`
+		BlockedReason         string `json:"blocked_reason"`
+	}
+	if err := json.NewDecoder(assignResp.Body).Decode(&assign); err != nil {
+		t.Fatalf("decode assignment preview: %v", err)
+	}
+	if assign.Allowed || !assign.RequiresConfirmation || assign.ProjectedLinkageState != "linked_wishlist" || assign.BlockedReason == "" {
+		t.Fatalf("unexpected assignment preview: %+v", assign)
+	}
+
+	downloadResp := doRequest(t, a, http.MethodPost, "/api/media/downloads/preview", strings.NewReader(`{"asset_ids":["media-preview-attachment"],"filter":"all"}`), map[string]string{"Content-Type": "application/json"})
+	if downloadResp.Code != http.StatusOK {
+		t.Fatalf("download preview status=%d body=%s", downloadResp.Code, downloadResp.Body.String())
+	}
+	var download struct {
+		Allowed   bool     `json:"allowed"`
+		Count     int      `json:"count"`
+		Filenames []string `json:"filenames"`
+	}
+	if err := json.NewDecoder(downloadResp.Body).Decode(&download); err != nil {
+		t.Fatalf("decode download preview: %v", err)
+	}
+	if !download.Allowed || download.Count != 1 || download.Filenames[0] != "wishlist-reference-jpg-media-pr.jpg" {
+		t.Fatalf("unexpected download preview: %+v", download)
+	}
+}

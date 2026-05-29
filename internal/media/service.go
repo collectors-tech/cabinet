@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -35,6 +36,54 @@ type Service struct {
 
 func NewService(db *sql.DB, mediaDir string) *Service {
 	return &Service{db: db, mediaDir: mediaDir}
+}
+
+type WorkspaceAsset struct {
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Filename         string `json:"filename"`
+	UploadedAt       string `json:"uploaded_at"`
+	LinkageState     string `json:"linkage_state"`
+	AnalysisStatus   string `json:"analysis_status"`
+	Source           string `json:"source"`
+	ItemID           string `json:"item_id,omitempty"`
+	WishlistID       string `json:"wishlist_id,omitempty"`
+	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
+	DownloadFilename string `json:"download_filename"`
+}
+
+type WorkspaceSummary struct {
+	Total           int `json:"total"`
+	Unlinked        int `json:"unlinked"`
+	LinkedInventory int `json:"linked_inventory"`
+	LinkedWishlist  int `json:"linked_wishlist"`
+	LinkedBoth      int `json:"linked_both"`
+	ReadyForReview  int `json:"ready_for_review"`
+}
+
+type WorkspaceList struct {
+	Assets  []WorkspaceAsset `json:"assets"`
+	Summary WorkspaceSummary `json:"summary"`
+	Filter  string           `json:"filter"`
+}
+
+type AssignmentPreview struct {
+	AssetID               string `json:"asset_id"`
+	TargetType            string `json:"target_type"`
+	TargetID              string `json:"target_id"`
+	CurrentLinkageState   string `json:"current_linkage_state"`
+	ProjectedLinkageState string `json:"projected_linkage_state"`
+	RequiresConfirmation  bool   `json:"requires_confirmation"`
+	Allowed               bool   `json:"allowed"`
+	BlockedReason         string `json:"blocked_reason"`
+	AuditSummary          string `json:"audit_summary"`
+}
+
+type DownloadPreview struct {
+	AssetIDs  []string `json:"asset_ids"`
+	Count     int      `json:"count"`
+	Filenames []string `json:"filenames"`
+	Allowed   bool     `json:"allowed"`
 }
 
 func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Reader) (Photo, error) {
@@ -104,6 +153,194 @@ func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Read
 	}
 
 	return s.GetByID(ctx, photoID)
+}
+
+func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter string) (WorkspaceList, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return WorkspaceList{}, fmt.Errorf("profile_id is required")
+	}
+	filter = strings.ToLower(strings.TrimSpace(filter))
+	if filter == "" {
+		filter = "all"
+	}
+	if filter != "all" && filter != "unlinked" {
+		return WorkspaceList{}, fmt.Errorf("filter must be all or unlinked")
+	}
+
+	assets := make([]WorkspaceAsset, 0)
+	photoRows, err := s.db.QueryContext(ctx, `
+		SELECT ip.id, ip.filename, ip.created_at, ci.id, ci.part_number, ci.title
+		FROM item_photos ip
+		INNER JOIN canonical_items ci ON ci.id = ip.item_id
+		WHERE ci.profile_id = ?
+		ORDER BY ip.created_at DESC, ip.display_order ASC, ip.id ASC
+	`, profileID)
+	if err != nil {
+		return WorkspaceList{}, fmt.Errorf("list inventory media assets: %w", err)
+	}
+	for photoRows.Next() {
+		var assetID, filename, createdAt, itemID, partNumber, title string
+		if err := photoRows.Scan(&assetID, &filename, &createdAt, &itemID, &partNumber, &title); err != nil {
+			photoRows.Close()
+			return WorkspaceList{}, fmt.Errorf("scan inventory media asset: %w", err)
+		}
+		displayTitle := strings.TrimSpace(title)
+		if displayTitle == "" {
+			displayTitle = strings.TrimSpace(filename)
+		}
+		assets = append(assets, WorkspaceAsset{
+			ID:               assetID,
+			Title:            displayTitle,
+			Filename:         filename,
+			UploadedAt:       createdAt,
+			LinkageState:     "linked_inventory",
+			AnalysisStatus:   "not_analyzed",
+			Source:           "Inventory photo",
+			ItemID:           itemID,
+			ThumbnailURL:     "/api/items/" + itemID + "/photos/" + assetID + "/file?variant=thumbnail",
+			DownloadFilename: friendlyMediaFilename(partNumber, displayTitle, filename, assetID),
+		})
+	}
+	if err := photoRows.Err(); err != nil {
+		photoRows.Close()
+		return WorkspaceList{}, fmt.Errorf("iterate inventory media assets: %w", err)
+	}
+	photoRows.Close()
+
+	attachmentRows, err := s.db.QueryContext(ctx, `
+		SELECT id, filename, created_at
+		FROM chat_attachments
+		WHERE profile_id = ?
+		ORDER BY created_at DESC, id ASC
+	`, profileID)
+	if err != nil {
+		return WorkspaceList{}, fmt.Errorf("list unlinked media assets: %w", err)
+	}
+	for attachmentRows.Next() {
+		var assetID, filename, createdAt string
+		if err := attachmentRows.Scan(&assetID, &filename, &createdAt); err != nil {
+			attachmentRows.Close()
+			return WorkspaceList{}, fmt.Errorf("scan unlinked media asset: %w", err)
+		}
+		assets = append(assets, WorkspaceAsset{
+			ID:               assetID,
+			Title:            strings.TrimSpace(filename),
+			Filename:         filename,
+			UploadedAt:       createdAt,
+			LinkageState:     "unlinked",
+			AnalysisStatus:   "pending",
+			Source:           "Chat attachment",
+			DownloadFilename: friendlyMediaFilename("", filename, filename, assetID),
+		})
+	}
+	if err := attachmentRows.Err(); err != nil {
+		attachmentRows.Close()
+		return WorkspaceList{}, fmt.Errorf("iterate unlinked media assets: %w", err)
+	}
+	attachmentRows.Close()
+
+	allAssets := assets
+	if filter == "unlinked" {
+		assets = make([]WorkspaceAsset, 0)
+		for _, asset := range allAssets {
+			if asset.LinkageState == "unlinked" {
+				assets = append(assets, asset)
+			}
+		}
+	}
+	return WorkspaceList{Assets: assets, Summary: summarizeWorkspaceAssets(allAssets), Filter: filter}, nil
+}
+
+func (s *Service) PreviewAssignment(ctx context.Context, profileID, assetID, targetType, targetID string) (AssignmentPreview, error) {
+	profileID = strings.TrimSpace(profileID)
+	assetID = strings.TrimSpace(assetID)
+	targetType = strings.ToLower(strings.TrimSpace(targetType))
+	targetID = strings.TrimSpace(targetID)
+	if profileID == "" || assetID == "" || targetType == "" || targetID == "" {
+		return AssignmentPreview{}, fmt.Errorf("profile_id, asset_id, target_type, and target_id are required")
+	}
+	if targetType != "inventory" && targetType != "wishlist" {
+		return AssignmentPreview{}, fmt.Errorf("target_type must be inventory or wishlist")
+	}
+	list, err := s.ListWorkspaceAssets(ctx, profileID, "all")
+	if err != nil {
+		return AssignmentPreview{}, err
+	}
+	var asset WorkspaceAsset
+	found := false
+	for _, item := range list.Assets {
+		if item.ID == assetID {
+			asset = item
+			found = true
+			break
+		}
+	}
+	if !found {
+		return AssignmentPreview{}, fmt.Errorf("media asset not found")
+	}
+	if err := s.assertTargetExists(ctx, profileID, targetType, targetID); err != nil {
+		return AssignmentPreview{}, err
+	}
+	projected := projectedLinkageState(asset.LinkageState, targetType)
+	return AssignmentPreview{
+		AssetID:               assetID,
+		TargetType:            targetType,
+		TargetID:              targetID,
+		CurrentLinkageState:   asset.LinkageState,
+		ProjectedLinkageState: projected,
+		RequiresConfirmation:  true,
+		Allowed:               false,
+		BlockedReason:         "assignment mutation is not implemented in this preview-only contract",
+		AuditSummary:          "Would preserve media asset " + assetID + " provenance while linking to " + targetType + " target " + targetID + ".",
+	}, nil
+}
+
+func (s *Service) PreviewDownload(ctx context.Context, profileID string, assetIDs []string, filter string) (DownloadPreview, error) {
+	list, err := s.ListWorkspaceAssets(ctx, profileID, filter)
+	if err != nil {
+		return DownloadPreview{}, err
+	}
+	requested := make(map[string]bool, len(assetIDs))
+	for _, id := range assetIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = true
+		}
+	}
+	out := DownloadPreview{Allowed: true}
+	for _, asset := range list.Assets {
+		if len(requested) > 0 && !requested[asset.ID] {
+			continue
+		}
+		out.AssetIDs = append(out.AssetIDs, asset.ID)
+		out.Filenames = append(out.Filenames, asset.DownloadFilename)
+	}
+	out.Count = len(out.AssetIDs)
+	if len(requested) > 0 && out.Count != len(requested) {
+		return DownloadPreview{}, fmt.Errorf("one or more media assets were not found in current scope")
+	}
+	return out, nil
+}
+
+func (s *Service) assertTargetExists(ctx context.Context, profileID, targetType, targetID string) error {
+	var count int
+	var err error
+	switch targetType {
+	case "inventory":
+		err = s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM canonical_items WHERE id = ? AND profile_id = ?`, targetID, profileID).Scan(&count)
+	case "wishlist":
+		err = s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM wishlist_entries WHERE id = ? AND profile_id = ?`, targetID, profileID).Scan(&count)
+	default:
+		return fmt.Errorf("target_type must be inventory or wishlist")
+	}
+	if err != nil {
+		return fmt.Errorf("check assignment target: %w", err)
+	}
+	if count == 0 {
+		return fmt.Errorf("assignment target not found")
+	}
+	return nil
 }
 
 func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (string, error) {
@@ -510,4 +747,70 @@ func scaleToFit(src image.Image, maxSize int) *image.RGBA {
 		}
 	}
 	return dst
+}
+
+func summarizeWorkspaceAssets(assets []WorkspaceAsset) WorkspaceSummary {
+	var summary WorkspaceSummary
+	for _, asset := range assets {
+		summary.Total++
+		switch asset.LinkageState {
+		case "unlinked":
+			summary.Unlinked++
+		case "linked_inventory":
+			summary.LinkedInventory++
+		case "linked_wishlist":
+			summary.LinkedWishlist++
+		case "linked_both":
+			summary.LinkedBoth++
+		}
+		if asset.AnalysisStatus == "ready" || asset.AnalysisStatus == "pending" {
+			summary.ReadyForReview++
+		}
+	}
+	return summary
+}
+
+func projectedLinkageState(current, targetType string) string {
+	switch targetType {
+	case "inventory":
+		if current == "linked_wishlist" || current == "linked_both" {
+			return "linked_both"
+		}
+		return "linked_inventory"
+	case "wishlist":
+		if current == "linked_inventory" || current == "linked_both" {
+			return "linked_both"
+		}
+		return "linked_wishlist"
+	default:
+		return current
+	}
+}
+
+var mediaFilenameUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
+
+func friendlyMediaFilename(partNumber, title, filename, assetID string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == "" {
+		ext = ".jpg"
+	}
+	baseParts := []string{strings.TrimSpace(partNumber), strings.TrimSpace(title)}
+	base := strings.TrimSpace(strings.Join(baseParts, " "))
+	if base == "" {
+		base = strings.TrimSuffix(strings.TrimSpace(filename), filepath.Ext(filename))
+	}
+	base = strings.ToLower(base)
+	base = mediaFilenameUnsafe.ReplaceAllString(base, "-")
+	base = strings.Trim(base, "-")
+	if base == "" {
+		base = "media"
+	}
+	token := strings.TrimSpace(assetID)
+	if len(token) > 8 {
+		token = token[:8]
+	}
+	if token != "" {
+		base += "-" + strings.ToLower(token)
+	}
+	return base + ext
 }
