@@ -1,11 +1,14 @@
 package media
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -109,6 +112,118 @@ func TestPreviewAssignmentAndDownloadKeepMediaWorkspacePreviewOnly(t *testing.T)
 	}
 	if !download.Allowed || download.Count != 1 || download.AssetIDs[0] != "attach-1" || download.Filenames[0] != "loose-reference-jpg-attach-1.jpg" {
 		t.Fatalf("unexpected download preview: %+v", download)
+	}
+}
+
+func TestBuildDownloadReturnsScopedSingleAssetPayload(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	attachmentPath := filepath.Join(base, "loose-reference.jpg")
+	attachmentBytes := []byte("cabinet loose reference bytes")
+	if err := os.WriteFile(attachmentPath, attachmentBytes, 0o644); err != nil {
+		t.Fatalf("write attachment fixture: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One'), ('profile-2','Two');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Media'), ('thread-2','profile-2','Other');
+	`); err != nil {
+		t.Fatalf("seed profile/thread data: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path) VALUES
+			('attach-1','profile-1','thread-1','loose-reference.jpg','image/jpeg',123,?),
+			('attach-2','profile-2','thread-2','other-reference.jpg','image/jpeg',123,?)
+	`, attachmentPath, filepath.Join(base, "other-reference.jpg")); err != nil {
+		t.Fatalf("seed attachment data: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	bundle, err := svc.BuildDownload(context.Background(), "profile-1", []string{"attach-1"}, "all")
+	if err != nil {
+		t.Fatalf("BuildDownload() error = %v", err)
+	}
+	if bundle.Filename != "loose-reference-jpg-attach-1.jpg" || bundle.ContentType != "image/jpeg" || !bytes.Equal(bundle.Bytes, attachmentBytes) {
+		t.Fatalf("unexpected single download bundle: %+v bytes=%q", bundle, string(bundle.Bytes))
+	}
+	if _, err := svc.BuildDownload(context.Background(), "profile-1", []string{"attach-2"}, "all"); err == nil {
+		t.Fatal("BuildDownload() should reject another profile's asset")
+	}
+}
+
+func TestBuildDownloadZipsMultipleSelectedAssets(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	attachmentPath := filepath.Join(base, "loose-reference.jpg")
+	attachmentBytes := []byte("cabinet attachment bytes")
+	if err := os.WriteFile(attachmentPath, attachmentBytes, 0o644); err != nil {
+		t.Fatalf("write attachment fixture: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-1','profile-1','AFX','Slot Car','AFX-1','Mustang Front');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Media');
+	`); err != nil {
+		t.Fatalf("seed profile/item/thread data: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path) VALUES
+			('attach-1','profile-1','thread-1','loose-reference.jpg','image/jpeg',123,?)
+	`, attachmentPath); err != nil {
+		t.Fatalf("seed workspace attachment: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	photo, err := svc.Upload(context.Background(), "item-1", "front.jpg", bytes.NewReader(sampleJPEG(t)))
+	if err != nil {
+		t.Fatalf("Upload() error = %v", err)
+	}
+
+	bundle, err := svc.BuildDownload(context.Background(), "profile-1", []string{photo.ID, "attach-1"}, "all")
+	if err != nil {
+		t.Fatalf("BuildDownload() error = %v", err)
+	}
+	if bundle.Filename != "cabinet-media-download.zip" || bundle.ContentType != "application/zip" || len(bundle.AssetIDs) != 2 {
+		t.Fatalf("unexpected zip bundle metadata: %+v", bundle)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(bundle.Bytes), int64(len(bundle.Bytes)))
+	if err != nil {
+		t.Fatalf("open zip bundle: %v", err)
+	}
+	entries := map[string][]byte{}
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry: %v", err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read zip entry: %v", err)
+		}
+		entries[file.Name] = data
+	}
+	if _, ok := entries["afx-1-mustang-front-"+photo.ID[:8]+".jpg"]; !ok {
+		t.Fatalf("inventory photo friendly filename missing from zip: %v", entries)
+	}
+	if !bytes.Equal(entries["loose-reference-jpg-attach-1.jpg"], attachmentBytes) {
+		t.Fatalf("attachment bytes missing from zip: %v", entries)
 	}
 }
 

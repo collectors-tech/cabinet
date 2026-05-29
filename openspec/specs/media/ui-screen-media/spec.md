@@ -209,3 +209,11 @@ Cabinet SHALL wire the authenticated Media workspace to the profile-scoped media
 - **GIVEN** one or more media cards are selected
 - **WHEN** the user previews selected downloads
 - **THEN** the UI MUST call `/api/media/downloads/preview` with the selected asset IDs and current filter, then display returned human-readable filenames without streaming files or mutating media state.
+
+### Requirement UI-SCREEN-MEDIA-009: Media workspace download API SHALL stream selected profile-scoped assets
+Cabinet SHALL provide an authenticated Media workspace download endpoint that returns selected asset bytes from the active profile with human-readable filenames.
+
+#### Scenario: Download selected media payload
+- **GIVEN** the active profile has inventory-linked media and unlinked evidence assets with stored bytes
+- **WHEN** the user requests `/api/media/downloads` with selected asset IDs and the current filter
+- **THEN** the API MUST reject assets outside the active profile or current filter, return a single selected asset with its human-readable filename and content type, and return multiple selected assets as a zip archive preserving each human-readable filename.

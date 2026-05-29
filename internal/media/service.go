@@ -1,6 +1,8 @@
 package media
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -50,6 +52,7 @@ type WorkspaceAsset struct {
 	WishlistID       string `json:"wishlist_id,omitempty"`
 	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
 	DownloadFilename string `json:"download_filename"`
+	StoredPath       string `json:"-"`
 }
 
 type WorkspaceSummary struct {
@@ -84,6 +87,13 @@ type DownloadPreview struct {
 	Count     int      `json:"count"`
 	Filenames []string `json:"filenames"`
 	Allowed   bool     `json:"allowed"`
+}
+
+type DownloadBundle struct {
+	Filename    string
+	ContentType string
+	Bytes       []byte
+	AssetIDs    []string
 }
 
 func (s *Service) Upload(ctx context.Context, itemID, filename string, r io.Reader) (Photo, error) {
@@ -170,7 +180,7 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 
 	assets := make([]WorkspaceAsset, 0)
 	photoRows, err := s.db.QueryContext(ctx, `
-		SELECT ip.id, ip.filename, ip.created_at, ci.id, ci.part_number, ci.title
+		SELECT ip.id, ip.filename, ip.created_at, ip.original_path, ci.id, ci.part_number, ci.title
 		FROM item_photos ip
 		INNER JOIN canonical_items ci ON ci.id = ip.item_id
 		WHERE ci.profile_id = ?
@@ -180,8 +190,8 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		return WorkspaceList{}, fmt.Errorf("list inventory media assets: %w", err)
 	}
 	for photoRows.Next() {
-		var assetID, filename, createdAt, itemID, partNumber, title string
-		if err := photoRows.Scan(&assetID, &filename, &createdAt, &itemID, &partNumber, &title); err != nil {
+		var assetID, filename, createdAt, originalPath, itemID, partNumber, title string
+		if err := photoRows.Scan(&assetID, &filename, &createdAt, &originalPath, &itemID, &partNumber, &title); err != nil {
 			photoRows.Close()
 			return WorkspaceList{}, fmt.Errorf("scan inventory media asset: %w", err)
 		}
@@ -200,6 +210,7 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 			ItemID:           itemID,
 			ThumbnailURL:     "/api/items/" + itemID + "/photos/" + assetID + "/file?variant=thumbnail",
 			DownloadFilename: friendlyMediaFilename(partNumber, displayTitle, filename, assetID),
+			StoredPath:       originalPath,
 		})
 	}
 	if err := photoRows.Err(); err != nil {
@@ -209,7 +220,7 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 	photoRows.Close()
 
 	attachmentRows, err := s.db.QueryContext(ctx, `
-		SELECT id, filename, created_at
+		SELECT id, filename, stored_path, created_at
 		FROM chat_attachments
 		WHERE profile_id = ?
 		ORDER BY created_at DESC, id ASC
@@ -218,8 +229,8 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		return WorkspaceList{}, fmt.Errorf("list unlinked media assets: %w", err)
 	}
 	for attachmentRows.Next() {
-		var assetID, filename, createdAt string
-		if err := attachmentRows.Scan(&assetID, &filename, &createdAt); err != nil {
+		var assetID, filename, storedPath, createdAt string
+		if err := attachmentRows.Scan(&assetID, &filename, &storedPath, &createdAt); err != nil {
 			attachmentRows.Close()
 			return WorkspaceList{}, fmt.Errorf("scan unlinked media asset: %w", err)
 		}
@@ -232,6 +243,7 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 			AnalysisStatus:   "pending",
 			Source:           "Chat attachment",
 			DownloadFilename: friendlyMediaFilename("", filename, filename, assetID),
+			StoredPath:       storedPath,
 		})
 	}
 	if err := attachmentRows.Err(); err != nil {
@@ -297,9 +309,78 @@ func (s *Service) PreviewAssignment(ctx context.Context, profileID, assetID, tar
 }
 
 func (s *Service) PreviewDownload(ctx context.Context, profileID string, assetIDs []string, filter string) (DownloadPreview, error) {
-	list, err := s.ListWorkspaceAssets(ctx, profileID, filter)
+	assets, err := s.resolveDownloadAssets(ctx, profileID, assetIDs, filter)
 	if err != nil {
 		return DownloadPreview{}, err
+	}
+	out := DownloadPreview{Allowed: true}
+	for _, asset := range assets {
+		out.AssetIDs = append(out.AssetIDs, asset.ID)
+		out.Filenames = append(out.Filenames, asset.DownloadFilename)
+	}
+	out.Count = len(out.AssetIDs)
+	return out, nil
+}
+
+func (s *Service) BuildDownload(ctx context.Context, profileID string, assetIDs []string, filter string) (DownloadBundle, error) {
+	assets, err := s.resolveDownloadAssets(ctx, profileID, assetIDs, filter)
+	if err != nil {
+		return DownloadBundle{}, err
+	}
+	if len(assets) == 0 {
+		return DownloadBundle{}, fmt.Errorf("no media assets selected for download")
+	}
+	if len(assets) == 1 {
+		asset := assets[0]
+		data, err := os.ReadFile(asset.StoredPath)
+		if err != nil {
+			return DownloadBundle{}, fmt.Errorf("read media asset %s: %w", asset.ID, err)
+		}
+		return DownloadBundle{
+			Filename:    asset.DownloadFilename,
+			ContentType: contentTypeForFilename(asset.Filename),
+			Bytes:       data,
+			AssetIDs:    []string{asset.ID},
+		}, nil
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	usedNames := map[string]int{}
+	bundleAssetIDs := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		data, err := os.ReadFile(asset.StoredPath)
+		if err != nil {
+			_ = zw.Close()
+			return DownloadBundle{}, fmt.Errorf("read media asset %s: %w", asset.ID, err)
+		}
+		name := uniqueDownloadName(asset.DownloadFilename, usedNames)
+		entry, err := zw.Create(name)
+		if err != nil {
+			_ = zw.Close()
+			return DownloadBundle{}, fmt.Errorf("create media archive entry: %w", err)
+		}
+		if _, err := entry.Write(data); err != nil {
+			_ = zw.Close()
+			return DownloadBundle{}, fmt.Errorf("write media archive entry: %w", err)
+		}
+		bundleAssetIDs = append(bundleAssetIDs, asset.ID)
+	}
+	if err := zw.Close(); err != nil {
+		return DownloadBundle{}, fmt.Errorf("close media archive: %w", err)
+	}
+	return DownloadBundle{
+		Filename:    "cabinet-media-download.zip",
+		ContentType: "application/zip",
+		Bytes:       buf.Bytes(),
+		AssetIDs:    bundleAssetIDs,
+	}, nil
+}
+
+func (s *Service) resolveDownloadAssets(ctx context.Context, profileID string, assetIDs []string, filter string) ([]WorkspaceAsset, error) {
+	list, err := s.ListWorkspaceAssets(ctx, profileID, filter)
+	if err != nil {
+		return nil, err
 	}
 	requested := make(map[string]bool, len(assetIDs))
 	for _, id := range assetIDs {
@@ -308,17 +389,18 @@ func (s *Service) PreviewDownload(ctx context.Context, profileID string, assetID
 			requested[id] = true
 		}
 	}
-	out := DownloadPreview{Allowed: true}
+	out := make([]WorkspaceAsset, 0, len(list.Assets))
 	for _, asset := range list.Assets {
 		if len(requested) > 0 && !requested[asset.ID] {
 			continue
 		}
-		out.AssetIDs = append(out.AssetIDs, asset.ID)
-		out.Filenames = append(out.Filenames, asset.DownloadFilename)
+		if strings.TrimSpace(asset.StoredPath) == "" {
+			return nil, fmt.Errorf("media asset %s has no stored path", asset.ID)
+		}
+		out = append(out, asset)
 	}
-	out.Count = len(out.AssetIDs)
-	if len(requested) > 0 && out.Count != len(requested) {
-		return DownloadPreview{}, fmt.Errorf("one or more media assets were not found in current scope")
+	if len(requested) > 0 && len(out) != len(requested) {
+		return nil, fmt.Errorf("one or more media assets were not found in current scope")
 	}
 	return out, nil
 }
@@ -813,4 +895,33 @@ func friendlyMediaFilename(partNumber, title, filename, assetID string) string {
 		base += "-" + strings.ToLower(token)
 	}
 	return base + ext
+}
+
+func contentTypeForFilename(filename string) string {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func uniqueDownloadName(filename string, used map[string]int) string {
+	name := strings.TrimSpace(filename)
+	if name == "" {
+		name = "media"
+	}
+	used[name]++
+	if used[name] == 1 {
+		return name
+	}
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	return fmt.Sprintf("%s-%d%s", base, used[name], ext)
 }
