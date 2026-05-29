@@ -230,3 +230,16 @@ Cabinet SHALL provide a confirmed assignment endpoint for linking Media workspac
 - **GIVEN** a media asset or assignment target belongs to another profile
 - **WHEN** the user confirms assignment through `/api/media/assignments`
 - **THEN** the API MUST reject the request and MUST NOT create a media link.
+
+### Requirement UI-SCREEN-MEDIA-011: Media workspace UI SHALL confirm assignments through the API
+Cabinet SHALL route Media workspace assignment actions through a preview-first confirmation UI backed by the confirmed assignment API.
+
+#### Scenario: Confirm media assignment from card action
+- **GIVEN** the active profile has an unlinked media asset and a valid assignment target
+- **WHEN** the user opens the card assignment action, previews the target, and confirms assignment
+- **THEN** the UI MUST call `/api/media/assignments/preview`, display the projected linkage and audit/provenance summary, call `/api/media/assignments` only after confirmation, refresh `/api/media/assets`, and render the updated linkage state without stale unlinked controls.
+
+#### Scenario: Assignment preview or apply fails
+- **GIVEN** the assignment target is invalid or the assignment endpoint rejects the request
+- **WHEN** the user previews or confirms assignment
+- **THEN** the UI MUST show a deterministic error state and MUST NOT update card linkage state until the refreshed API state confirms the assignment.
