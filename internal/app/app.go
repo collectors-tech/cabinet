@@ -5177,6 +5177,39 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
+	mux.HandleFunc("/api/media/downloads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetIDs []string `json:"asset_ids"`
+			Filter   string   `json:"filter"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"invalid_media_download"}`, http.StatusBadRequest)
+			return
+		}
+		bundle, err := mediaService.BuildDownload(r.Context(), active.ID, req.AssetIDs, req.Filter)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"media_download_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", bundle.ContentType)
+		w.Header().Set("Content-Disposition", contentDispositionAttachment(bundle.Filename))
+		w.Header().Set("X-Cabinet-Media-Asset-Count", strconv.Itoa(len(bundle.AssetIDs)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bundle.Bytes)
+	})
 	mux.HandleFunc("/api/data/repair", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -9628,6 +9661,16 @@ func cleanReason(reason string) string {
 		return "shutdown"
 	}
 	return reason
+}
+
+func contentDispositionAttachment(filename string) string {
+	name := strings.TrimSpace(filename)
+	if name == "" {
+		name = "download"
+	}
+	name = strings.ReplaceAll(name, `\`, "_")
+	name = strings.ReplaceAll(name, `"`, "_")
+	return `attachment; filename="` + name + `"`
 }
 
 type telegramCatalogCaptureRequest struct {

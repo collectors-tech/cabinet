@@ -1,8 +1,13 @@
 package app
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -159,5 +164,98 @@ func TestMediaWorkspacePreviewAPIsAreExplicitlyNonMutating(t *testing.T) {
 	}
 	if !download.Allowed || download.Count != 1 || download.Filenames[0] != "wishlist-reference-jpg-media-pr.jpg" {
 		t.Fatalf("unexpected download preview: %+v", download)
+	}
+}
+
+func TestMediaWorkspaceDownloadAPIReturnsScopedZipPayload(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Media Download"}`), map[string]string{"Content-Type": "application/json"})
+	if profileResp.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileResp.Code, profileResp.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profileResp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activeResp := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activeResp.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", activeResp.Code, activeResp.Body.String())
+	}
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"MEDIA-DL-1","title":"Media Download Item","brand":"AFX","category":"Slot"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	body, contentType := buildMultipartPhoto(t, "front.jpg", sampleJPEG(t))
+	photoResp := doRequest(t, a, http.MethodPost, "/api/items/"+item.ID+"/photos", body, map[string]string{"Content-Type": contentType})
+	if photoResp.Code != http.StatusCreated {
+		t.Fatalf("upload photo status=%d body=%s", photoResp.Code, photoResp.Body.String())
+	}
+	var photo struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(photoResp.Body).Decode(&photo); err != nil {
+		t.Fatalf("decode photo: %v", err)
+	}
+	attachmentPath := filepath.Join(t.TempDir(), "loose-reference.jpg")
+	attachmentBytes := []byte("api attachment bytes")
+	if err := os.WriteFile(attachmentPath, attachmentBytes, 0o644); err != nil {
+		t.Fatalf("write attachment fixture: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO chat_threads (id, profile_id, title) VALUES ('media-download-thread', ?, 'Media Download')`, profile.ID); err != nil {
+		t.Fatalf("seed chat thread: %v", err)
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('media-download-attachment', ?, 'media-download-thread', 'loose-reference.jpg', 'image/jpeg', 123, ?)
+	`, profile.ID, attachmentPath); err != nil {
+		t.Fatalf("seed chat attachment: %v", err)
+	}
+
+	downloadResp := doRequest(t, a, http.MethodPost, "/api/media/downloads", strings.NewReader(`{"asset_ids":["`+photo.ID+`","media-download-attachment"],"filter":"all"}`), map[string]string{"Content-Type": "application/json"})
+	if downloadResp.Code != http.StatusOK {
+		assetsResp := doRequest(t, a, http.MethodGet, "/api/media/assets", nil, nil)
+		t.Fatalf("download status=%d body=%s assets=%s", downloadResp.Code, downloadResp.Body.String(), assetsResp.Body.String())
+	}
+	if got := downloadResp.Header().Get("Content-Type"); !strings.Contains(got, "application/zip") {
+		t.Fatalf("download content type = %q", got)
+	}
+	if got := downloadResp.Header().Get("Content-Disposition"); !strings.Contains(got, "cabinet-media-download.zip") {
+		t.Fatalf("download disposition = %q", got)
+	}
+	if got := downloadResp.Header().Get("X-Cabinet-Media-Asset-Count"); got != "2" {
+		t.Fatalf("asset count header = %q", got)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(downloadResp.Body.Bytes()), int64(downloadResp.Body.Len()))
+	if err != nil {
+		t.Fatalf("open zip response: %v", err)
+	}
+	entries := map[string][]byte{}
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry: %v", err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read zip entry: %v", err)
+		}
+		entries[file.Name] = data
+	}
+	if _, ok := entries["media-dl-1-media-download-item-"+photo.ID[:8]+".jpg"]; !ok {
+		t.Fatalf("inventory photo missing from zip: %v", entries)
+	}
+	if !bytes.Equal(entries["loose-reference-jpg-media-do.jpg"], attachmentBytes) {
+		t.Fatalf("attachment missing from zip: %v", entries)
 	}
 }
