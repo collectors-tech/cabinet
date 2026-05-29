@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Archive,
   Download,
@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -29,53 +30,65 @@ import { ThemeSwitch } from '@/components/theme-switch'
 type MediaAsset = {
   id: string
   title: string
-  uploadedAt: string
-  linkageState: 'unlinked' | 'linked_inventory' | 'linked_wishlist'
-  analysisStatus: 'ready' | 'pending' | 'not_analyzed'
-  confidence?: string
+  filename: string
+  uploaded_at: string
+  linkage_state:
+    | 'unlinked'
+    | 'linked_inventory'
+    | 'linked_wishlist'
+    | 'linked_both'
+  analysis_status: 'ready' | 'pending' | 'not_analyzed'
   source: string
+  item_id?: string
+  wishlist_id?: string
+  thumbnail_url?: string
+  download_filename: string
 }
 
-const MEDIA_ASSETS: MediaAsset[] = [
-  {
-    id: 'media-slot-car-front',
-    title: 'AFX Mustang front view',
-    uploadedAt: '2026-05-25 10:20',
-    linkageState: 'unlinked',
-    analysisStatus: 'ready',
-    confidence: '92%',
-    source: 'Scanner intake',
-  },
-  {
-    id: 'media-porsche-box',
-    title: 'Porsche 917 box side',
-    uploadedAt: '2026-05-24 16:45',
-    linkageState: 'linked_inventory',
-    analysisStatus: 'pending',
-    source: 'Inventory photo',
-  },
-  {
-    id: 'media-wishlist-reference',
-    title: 'Wanted chassis reference',
-    uploadedAt: '2026-05-23 08:12',
-    linkageState: 'linked_wishlist',
-    analysisStatus: 'not_analyzed',
-    source: 'Wishlist evidence',
-  },
-]
+type MediaSummary = {
+  total: number
+  unlinked: number
+  linked_inventory: number
+  linked_wishlist: number
+  linked_both: number
+  ready_for_review: number
+}
 
-function linkageLabel(state: MediaAsset['linkageState']) {
+type MediaListResponse = {
+  assets?: MediaAsset[]
+  summary?: MediaSummary
+  filter?: string
+}
+
+type DownloadPreview = {
+  count: number
+  filenames?: string[]
+  allowed: boolean
+}
+
+const EMPTY_SUMMARY: MediaSummary = {
+  total: 0,
+  unlinked: 0,
+  linked_inventory: 0,
+  linked_wishlist: 0,
+  linked_both: 0,
+  ready_for_review: 0,
+}
+
+function linkageLabel(state: MediaAsset['linkage_state']) {
   switch (state) {
     case 'linked_inventory':
       return 'Inventory linked'
     case 'linked_wishlist':
       return 'Wishlist linked'
+    case 'linked_both':
+      return 'Inventory + Wishlist'
     default:
       return 'Unlinked'
   }
 }
 
-function analysisLabel(status: MediaAsset['analysisStatus']) {
+function analysisLabel(status: MediaAsset['analysis_status']) {
   switch (status) {
     case 'ready':
       return 'Analysis ready'
@@ -88,16 +101,92 @@ function analysisLabel(status: MediaAsset['analysisStatus']) {
 
 export function Media() {
   const [filter, setFilter] = useState<'all' | 'unlinked'>('all')
-  const visibleAssets = useMemo(
-    () =>
-      filter === 'unlinked'
-        ? MEDIA_ASSETS.filter((asset) => asset.linkageState === 'unlinked')
-        : MEDIA_ASSETS,
-    [filter]
+  const [assets, setAssets] = useState<MediaAsset[]>([])
+  const [summary, setSummary] = useState<MediaSummary>(EMPTY_SUMMARY)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
+  const [downloadPreview, setDownloadPreview] = useState<DownloadPreview | null>(
+    null
   )
-  const unlinkedCount = MEDIA_ASSETS.filter(
-    (asset) => asset.linkageState === 'unlinked'
-  ).length
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [downloadLoading, setDownloadLoading] = useState(false)
+
+  const loadAssets = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    setDownloadPreview(null)
+    setDownloadError(null)
+    try {
+      const suffix = filter === 'unlinked' ? '?filter=unlinked' : ''
+      const response = await fetch(`/api/media/assets${suffix}`)
+      if (!response.ok) {
+        throw new Error(`media_assets_${response.status}`)
+      }
+      const payload = (await response.json()) as MediaListResponse
+      setAssets(payload.assets ?? [])
+      setSummary(payload.summary ?? EMPTY_SUMMARY)
+      setSelectedAssetIds((current) =>
+        current.filter((id) =>
+          (payload.assets ?? []).some((asset) => asset.id === id)
+        )
+      )
+    } catch (err) {
+      setAssets([])
+      setSummary(EMPTY_SUMMARY)
+      setSelectedAssetIds([])
+      setError(err instanceof Error ? err.message : 'media_assets_failed')
+    } finally {
+      setLoading(false)
+    }
+  }, [filter])
+
+  useEffect(() => {
+    void loadAssets()
+  }, [loadAssets])
+
+  const selectedAssetSet = useMemo(
+    () => new Set(selectedAssetIds),
+    [selectedAssetIds]
+  )
+
+  const toggleAssetSelection = (assetID: string, checked: boolean) => {
+    setDownloadPreview(null)
+    setDownloadError(null)
+    setSelectedAssetIds((current) => {
+      if (checked) {
+        return current.includes(assetID) ? current : [...current, assetID]
+      }
+      return current.filter((id) => id !== assetID)
+    })
+  }
+
+  const previewDownload = async () => {
+    setDownloadLoading(true)
+    setDownloadPreview(null)
+    setDownloadError(null)
+    try {
+      const response = await fetch('/api/media/downloads/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_ids: selectedAssetIds,
+          filter,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(`media_download_preview_${response.status}`)
+      }
+      const payload = (await response.json()) as DownloadPreview
+      setDownloadPreview(payload)
+    } catch (err) {
+      setDownloadError(
+        err instanceof Error ? err.message : 'media_download_preview_failed'
+      )
+    } finally {
+      setDownloadLoading(false)
+    }
+  }
 
   return (
     <>
@@ -141,11 +230,12 @@ export function Media() {
             </Button>
             <Button
               variant='outline'
-              disabled
+              disabled={selectedAssetIds.length === 0 || downloadLoading}
               data-testid='media-download-selected-action'
+              onClick={() => void previewDownload()}
             >
               <Download />
-              Download selected
+              {downloadLoading ? 'Previewing...' : 'Download selected'}
             </Button>
           </div>
         </div>
@@ -156,7 +246,7 @@ export function Media() {
               <CardTitle className='text-sm font-medium'>Assets</CardTitle>
             </CardHeader>
             <CardContent className='text-2xl font-bold'>
-              {MEDIA_ASSETS.length}
+              {loading ? '--' : summary.total}
             </CardContent>
           </Card>
           <Card>
@@ -164,7 +254,7 @@ export function Media() {
               <CardTitle className='text-sm font-medium'>Unlinked</CardTitle>
             </CardHeader>
             <CardContent className='text-2xl font-bold'>
-              {unlinkedCount}
+              {loading ? '--' : summary.unlinked}
             </CardContent>
           </Card>
           <Card>
@@ -174,10 +264,7 @@ export function Media() {
               </CardTitle>
             </CardHeader>
             <CardContent className='text-2xl font-bold'>
-              {
-                MEDIA_ASSETS.filter((asset) => asset.analysisStatus === 'ready')
-                  .length
-              }
+              {loading ? '--' : summary.ready_for_review}
             </CardContent>
           </Card>
         </div>
@@ -198,41 +285,110 @@ export function Media() {
           </TabsList>
         </Tabs>
 
-        {visibleAssets.length === 0 ? (
+        {error ? (
+          <Card data-testid='media-error-state'>
+            <CardHeader>
+              <CardTitle>Media assets are unavailable</CardTitle>
+              <CardDescription>{error}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant='outline'
+                data-testid='media-retry-action'
+                onClick={() => void loadAssets()}
+              >
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {downloadPreview ? (
+          <Card data-testid='media-download-preview'>
+            <CardHeader>
+              <CardTitle>Download preview</CardTitle>
+              <CardDescription>
+                {downloadPreview.count} file
+                {downloadPreview.count === 1 ? '' : 's'} ready with
+                human-readable filenames.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='text-sm text-muted-foreground'>
+              {(downloadPreview.filenames ?? []).join(', ')}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {downloadError ? (
+          <Card data-testid='media-download-error'>
+            <CardHeader>
+              <CardTitle>Download preview failed</CardTitle>
+              <CardDescription>{downloadError}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
+
+        {loading ? (
+          <Card data-testid='media-loading-state'>
+            <CardHeader>
+              <CardTitle>Loading media assets...</CardTitle>
+              <CardDescription>
+                Retrieving profile-scoped media evidence from Cabinet.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : !error && assets.length === 0 ? (
           <Card data-testid='media-empty-state'>
             <CardHeader>
               <CardTitle>No media assets in this view</CardTitle>
               <CardDescription>
-                Change filters or upload evidence when the media ingestion API
-                slice is available.
+                Change filters or upload evidence when new media is available.
               </CardDescription>
             </CardHeader>
           </Card>
-        ) : (
+        ) : !error ? (
           <div
             className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'
             data-testid='media-card-grid'
           >
-            {visibleAssets.map((asset) => (
+            {assets.map((asset) => (
               <Card key={asset.id} data-testid={`media-card-${asset.id}`}>
                 <CardHeader className='space-y-3'>
-                  <div className='flex aspect-video items-center justify-center rounded-md border bg-muted'>
-                    <FileImage className='h-10 w-10 text-muted-foreground' />
+                  <div className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'>
+                    {asset.thumbnail_url ? (
+                      <img
+                        src={asset.thumbnail_url}
+                        alt=''
+                        className='h-full w-full object-cover'
+                      />
+                    ) : (
+                      <FileImage className='h-10 w-10 text-muted-foreground' />
+                    )}
                   </div>
                   <div className='space-y-2'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Badge
-                        variant={
-                          asset.linkageState === 'unlinked'
-                            ? 'default'
-                            : 'secondary'
+                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <Badge
+                          variant={
+                            asset.linkage_state === 'unlinked'
+                              ? 'default'
+                              : 'secondary'
+                          }
+                        >
+                          {linkageLabel(asset.linkage_state)}
+                        </Badge>
+                        <Badge variant='outline'>
+                          {analysisLabel(asset.analysis_status)}
+                        </Badge>
+                      </div>
+                      <Checkbox
+                        aria-label={`Select ${asset.title}`}
+                        checked={selectedAssetSet.has(asset.id)}
+                        data-testid={`media-select-${asset.id}`}
+                        onCheckedChange={(checked) =>
+                          toggleAssetSelection(asset.id, checked === true)
                         }
-                      >
-                        {linkageLabel(asset.linkageState)}
-                      </Badge>
-                      <Badge variant='outline'>
-                        {analysisLabel(asset.analysisStatus)}
-                      </Badge>
+                      />
                     </div>
                     <CardTitle className='text-base'>{asset.title}</CardTitle>
                     <CardDescription>{asset.source}</CardDescription>
@@ -242,11 +398,11 @@ export function Media() {
                   <dl className='grid grid-cols-2 gap-3 text-sm'>
                     <div>
                       <dt className='text-muted-foreground'>Uploaded</dt>
-                      <dd>{asset.uploadedAt}</dd>
+                      <dd>{asset.uploaded_at || 'Unknown'}</dd>
                     </div>
                     <div>
-                      <dt className='text-muted-foreground'>Confidence</dt>
-                      <dd>{asset.confidence ?? 'Pending'}</dd>
+                      <dt className='text-muted-foreground'>Filename</dt>
+                      <dd className='truncate'>{asset.download_filename}</dd>
                     </div>
                   </dl>
                   <div className='grid grid-cols-4 gap-2'>
@@ -263,7 +419,7 @@ export function Media() {
                       size='icon'
                       aria-label={`Analyze ${asset.title}`}
                       data-testid={`media-analyze-${asset.id}`}
-                      disabled={asset.analysisStatus === 'ready'}
+                      disabled={asset.analysis_status === 'ready'}
                     >
                       <WandSparkles />
                     </Button>
@@ -272,7 +428,7 @@ export function Media() {
                       size='icon'
                       aria-label={`Assign ${asset.title}`}
                       data-testid={`media-assign-${asset.id}`}
-                      disabled={asset.linkageState !== 'unlinked'}
+                      disabled={asset.linkage_state !== 'unlinked'}
                     >
                       <Link2 />
                     </Button>
@@ -289,7 +445,7 @@ export function Media() {
               </Card>
             ))}
           </div>
-        )}
+        ) : null}
       </Main>
     </>
   )
