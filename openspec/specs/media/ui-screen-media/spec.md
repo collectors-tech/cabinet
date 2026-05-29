@@ -173,3 +173,21 @@ Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary n
 - **GIVEN** user is signed in on an authenticated Cabinet route
 - **WHEN** user opens the primary Media navigation item
 - **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a card-first media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.
+
+### Requirement UI-SCREEN-MEDIA-007: Media workspace API SHALL expose profile-scoped assets and preview-only assignment/download contracts
+Cabinet SHALL expose a deterministic backend contract for the Media workspace that scopes media assets to the active profile, classifies linkage state, supports the unlinked filter, and previews assignment/download actions without mutating linkage records until confirmed implementation slices exist.
+
+#### Scenario: List profile-scoped Media workspace assets
+- **GIVEN** the active profile has inventory-linked photos and unlinked media evidence
+- **WHEN** UI requests `/api/media/assets`
+- **THEN** runtime MUST return only active-profile assets with stable `linkage_state`, source, upload metadata, thumbnail/download hints, and summary counts for total, unlinked, and linked states.
+
+#### Scenario: Filter unlinked Media workspace assets
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** UI requests `/api/media/assets?filter=unlinked`
+- **THEN** runtime MUST return only unlinked assets while retaining summary counts for the full active-profile scope.
+
+#### Scenario: Preview assignment and download actions
+- **GIVEN** a media asset exists in the active profile
+- **WHEN** UI requests assignment or download preview contracts
+- **THEN** runtime MUST return deterministic projected linkage, confirmation, blocker/audit, and filename details without creating links, duplicating binaries, or streaming files in the preview request.

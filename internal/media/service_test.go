@@ -12,6 +12,106 @@ import (
 	"github.com/collectors-tech/cabinet/internal/db"
 )
 
+func TestListWorkspaceAssetsScopesInventoryAndUnlinkedMediaByProfile(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One'), ('profile-2','Two');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-1','profile-1','AFX','Slot Car','AFX-1','Mustang Front'),
+			('item-2','profile-2','AFX','Slot Car','AFX-2','Other Profile');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Media'), ('thread-2','profile-2','Media');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path) VALUES
+			('attach-1','profile-1','thread-1','loose-reference.jpg','image/jpeg',123,'/tmp/loose-reference.jpg'),
+			('attach-2','profile-2','thread-2','other-profile.jpg','image/jpeg',123,'/tmp/other-profile.jpg');
+	`); err != nil {
+		t.Fatalf("seed workspace data: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	photo, err := svc.Upload(context.Background(), "item-1", "front.jpg", bytes.NewReader(sampleJPEG(t)))
+	if err != nil {
+		t.Fatalf("Upload() profile one photo error = %v", err)
+	}
+	if _, err := svc.Upload(context.Background(), "item-2", "other.jpg", bytes.NewReader(sampleJPEG(t))); err != nil {
+		t.Fatalf("Upload() profile two photo error = %v", err)
+	}
+
+	list, err := svc.ListWorkspaceAssets(context.Background(), "profile-1", "all")
+	if err != nil {
+		t.Fatalf("ListWorkspaceAssets() error = %v", err)
+	}
+	if len(list.Assets) != 2 || list.Summary.Total != 2 || list.Summary.Unlinked != 1 || list.Summary.LinkedInventory != 1 {
+		t.Fatalf("unexpected scoped summary/list: %+v", list)
+	}
+	if !containsAssetState(list.Assets, photo.ID, "linked_inventory") || !containsAssetState(list.Assets, "attach-1", "unlinked") {
+		t.Fatalf("expected profile one inventory and unlinked assets, got %+v", list.Assets)
+	}
+	if containsAssetState(list.Assets, "attach-2", "unlinked") {
+		t.Fatalf("profile two asset leaked into profile one list: %+v", list.Assets)
+	}
+
+	unlinked, err := svc.ListWorkspaceAssets(context.Background(), "profile-1", "unlinked")
+	if err != nil {
+		t.Fatalf("ListWorkspaceAssets(unlinked) error = %v", err)
+	}
+	if len(unlinked.Assets) != 1 || unlinked.Assets[0].ID != "attach-1" || unlinked.Summary.Total != 2 {
+		t.Fatalf("unexpected unlinked filter response: %+v", unlinked)
+	}
+}
+
+func TestPreviewAssignmentAndDownloadKeepMediaWorkspacePreviewOnly(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-1','profile-1','AFX','Slot Car','AFX-1','Mustang Front');
+		INSERT INTO wishlist_entries (id, profile_id, item_id) VALUES ('wish-1','profile-1','item-1');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Media');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path) VALUES
+			('attach-1','profile-1','thread-1','loose-reference.jpg','image/jpeg',123,'/tmp/loose-reference.jpg');
+	`); err != nil {
+		t.Fatalf("seed preview data: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	preview, err := svc.PreviewAssignment(context.Background(), "profile-1", "attach-1", "wishlist", "wish-1")
+	if err != nil {
+		t.Fatalf("PreviewAssignment() error = %v", err)
+	}
+	if preview.Allowed || !preview.RequiresConfirmation || preview.CurrentLinkageState != "unlinked" || preview.ProjectedLinkageState != "linked_wishlist" {
+		t.Fatalf("assignment preview should be blocked preview-only with projected wishlist linkage, got %+v", preview)
+	}
+	if preview.BlockedReason == "" || preview.AuditSummary == "" {
+		t.Fatalf("assignment preview must explain blocker and audit summary, got %+v", preview)
+	}
+
+	download, err := svc.PreviewDownload(context.Background(), "profile-1", []string{"attach-1"}, "all")
+	if err != nil {
+		t.Fatalf("PreviewDownload() error = %v", err)
+	}
+	if !download.Allowed || download.Count != 1 || download.AssetIDs[0] != "attach-1" || download.Filenames[0] != "loose-reference-jpg-attach-1.jpg" {
+		t.Fatalf("unexpected download preview: %+v", download)
+	}
+}
+
 func TestUploadSetPrimaryDeleteAndRebuild(t *testing.T) {
 	t.Parallel()
 
@@ -135,4 +235,13 @@ func sampleJPEG(t *testing.T) []byte {
 		t.Fatalf("encode sample jpeg: %v", err)
 	}
 	return b.Bytes()
+}
+
+func containsAssetState(assets []WorkspaceAsset, id, state string) bool {
+	for _, asset := range assets {
+		if asset.ID == id && asset.LinkageState == state {
+			return true
+		}
+	}
+	return false
 }
