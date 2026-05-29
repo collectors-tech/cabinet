@@ -119,7 +119,8 @@ func TestProviderProductURLIngestReturnsDuplicateCandidates(t *testing.T) {
 			"slug":"bonza-mug-white",
 			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
 			"prices":{"currency_code":"AUD","price":"995"},
-			"is_in_stock":true
+			"is_in_stock":true,
+			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
 		}]`))
 	}))
 	defer bonza.Close()
@@ -205,7 +206,8 @@ func TestProviderProductURLIngestSolvesBonzaSucuriChallenge(t *testing.T) {
 			"slug":"bonza-mug-white",
 			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
 			"prices":{"currency_code":"AUD","price":"995"},
-			"is_in_stock":true
+			"is_in_stock":true,
+			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
 		}]`))
 	}))
 	defer bonza.Close()
@@ -259,7 +261,8 @@ func TestProviderProductURLIngestSolvesChainedBonzaSucuriChallenges(t *testing.T
 			"slug":"bonza-mug-white",
 			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
 			"prices":{"currency_code":"AUD","price":"995"},
-			"is_in_stock":true
+			"is_in_stock":true,
+			"attributes":[{"name":"Brand","terms":[{"name":"AFX","slug":"afx"}]}]
 		}]`))
 	}))
 	defer bonza.Close()
@@ -283,6 +286,9 @@ func TestProviderProductURLIngestSolvesChainedBonzaSucuriChallenges(t *testing.T
 	}
 	if !strings.Contains(ingest.Body.String(), `"provider_product_id":"19603"`) {
 		t.Fatalf("expected Bonza product payload after chained challenge retries, got %s", ingest.Body.String())
+	}
+	if !strings.Contains(ingest.Body.String(), `"Brand":"AFX"`) {
+		t.Fatalf("expected object-shaped Bonza attribute terms to normalize, got %s", ingest.Body.String())
 	}
 }
 

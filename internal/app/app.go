@@ -7996,13 +7996,47 @@ type bonzaProductName struct {
 }
 
 type bonzaProductAttribute struct {
-	Name    string   `json:"name"`
-	Terms   []string `json:"terms"`
-	Options []string `json:"options"`
+	Name    string                      `json:"name"`
+	Terms   bonzaProductAttributeValues `json:"terms"`
+	Options bonzaProductAttributeValues `json:"options"`
 }
 
 type bonzaProductImage struct {
 	Src string `json:"src"`
+}
+
+type bonzaProductAttributeValues []string
+
+func (values *bonzaProductAttributeValues) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*values = nil
+		return nil
+	}
+	var stringsOnly []string
+	if err := json.Unmarshal(data, &stringsOnly); err == nil {
+		*values = compactBonzaAttributeValues(stringsOnly)
+		return nil
+	}
+	var namedValues []bonzaProductName
+	if err := json.Unmarshal(data, &namedValues); err != nil {
+		return err
+	}
+	out := make([]string, 0, len(namedValues))
+	for _, value := range namedValues {
+		out = append(out, value.Name)
+	}
+	*values = compactBonzaAttributeValues(out)
+	return nil
+}
+
+func compactBonzaAttributeValues(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, value := range in {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 type providerProductURLRoute struct {
