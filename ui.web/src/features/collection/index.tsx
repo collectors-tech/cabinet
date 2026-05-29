@@ -197,6 +197,37 @@ type PasteCreateHistoryEntry = {
   value: string
 }
 
+type ProviderProductURLDuplicate = {
+  item_id: string
+  title: string
+  source_urls: string[]
+  reasons: string[]
+}
+
+type ProviderProductURLDraft = {
+  provider_product_id?: string
+  title?: string
+  source_url?: string
+  description?: string
+  price?: number
+  currency?: string
+  stock_state?: string
+  stock_count?: number
+  categories?: string[]
+  attributes?: Record<string, string>
+  image_urls?: string[]
+  evidence?: Record<string, unknown>
+}
+
+type ProviderProductURLIngestResponse = {
+  error?: string
+  provider?: string
+  family?: string
+  draft?: ProviderProductURLDraft
+  evidence?: Record<string, unknown>
+  duplicates?: ProviderProductURLDuplicate[]
+}
+
 type FolderNode = {
   id: string
   name: string
@@ -1049,6 +1080,98 @@ function buildPasteCreateDescription(
     sections.push(`Creation history:\n${formatPasteCreateHistory(entries)}`)
   }
   return sections.join('\n\n')
+}
+
+function formatProviderProductEvidence(
+  payload: ProviderProductURLIngestResponse,
+  source: string
+) {
+  const draft = payload.draft ?? {}
+  const evidence = payload.evidence ?? draft.evidence ?? {}
+  const lines = [
+    `Provider: ${payload.provider ?? String(evidence.provider ?? 'unknown')}`,
+    `Family: ${payload.family ?? String(evidence.family ?? 'unknown')}`,
+    `Provider product ID: ${draft.provider_product_id ?? String(evidence.provider_product_id ?? '')}`,
+    `Extraction: ${String(evidence.extraction_method ?? 'provider_ingest')}`,
+    `Original URL: ${String(evidence.original_url ?? source)}`,
+    `Normalized URL: ${draft.source_url ?? String(evidence.normalized_url ?? source)}`,
+    `Observed at: ${String(evidence.observed_at ?? '')}`,
+    `Source summary: ${String(evidence.source_summary ?? '')}`,
+  ].filter((line) => !line.endsWith(': '))
+  return lines.join('\n')
+}
+
+function buildProviderProductDescription(
+  source: string,
+  payload: ProviderProductURLIngestResponse
+) {
+  const draft = payload.draft ?? {}
+  const sections = [
+    buildPasteCreateDescription(
+      [{ kind: 'url', value: source }],
+      draft.source_url ?? source
+    ),
+  ]
+  if (draft.description) {
+    sections.push(draft.description)
+  }
+  const facts = [
+    draft.price && draft.currency
+      ? `Price: ${draft.currency} ${draft.price.toFixed(2)}`
+      : '',
+    draft.stock_state
+      ? `Stock: ${draft.stock_state}${typeof draft.stock_count === 'number' ? ` (${draft.stock_count})` : ''}`
+      : '',
+    draft.image_urls?.length
+      ? `Image URLs:\n${draft.image_urls.join('\n')}`
+      : '',
+  ].filter(Boolean)
+  if (facts.length > 0) {
+    sections.push(facts.join('\n'))
+  }
+  return sections.filter(Boolean).join('\n\n')
+}
+
+function providerProductDraftToInventoryDraft(
+  source: string,
+  payload: ProviderProductURLIngestResponse
+): InventoryItemDraft {
+  const draft = payload.draft ?? {}
+  const brand = draft.attributes?.Brand ?? draft.attributes?.brand ?? 'Unknown'
+  const category = (draft.categories ?? []).filter(Boolean).join(', ')
+  return {
+    part_number: draft.provider_product_id
+      ? `BONZA-${draft.provider_product_id}`
+      : buildDraftItemPartNumber(),
+    title: draft.title ?? buildQuickCreateDraft(source).title,
+    brand,
+    category: category || 'General',
+    item_type: inferItemTypeFromCategory(category || 'General'),
+    packaging_grade_type: '',
+    description: buildProviderProductDescription(source, payload),
+    notes: formatProviderProductEvidence(payload, source),
+    tags: ['provider-ingest', payload.provider ?? 'bonzaslotcars']
+      .filter(Boolean)
+      .join(', '),
+    source_urls: [draft.source_url ?? source, source]
+      .filter(
+        (value, index, values) => value && values.indexOf(value) === index
+      )
+      .join('\n'),
+  }
+}
+
+function providerProductIngestMessage(error?: string) {
+  switch (error) {
+    case 'supported_provider_unsupported_page':
+      return 'This provider is supported, but the pasted page is not a product page. The pasted URL is still available for manual item creation.'
+    case 'unsupported_provider_url':
+      return 'This URL is not supported for provider ingest yet. The pasted URL is still available for manual item creation.'
+    case 'failed_to_ingest_bonza_product_url':
+      return 'Bonza product data could not be loaded right now. The pasted URL is still available for manual item creation.'
+    default:
+      return 'Provider ingest could not process this URL. The pasted URL is still available for manual item creation.'
+  }
 }
 
 function buildQuickCreateDraft(value: string): InventoryItemDraft {
@@ -2041,6 +2164,9 @@ export function Collection({
   const [pasteCreateHistory, setPasteCreateHistory] = useState<
     PasteCreateHistoryEntry[]
   >([])
+  const [pasteCreateDuplicates, setPasteCreateDuplicates] = useState<
+    ProviderProductURLDuplicate[]
+  >([])
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   )
@@ -2119,6 +2245,7 @@ export function Collection({
       setPasteCreateError(null)
       setPasteCreateSuccess(null)
       setPasteCreateHistory([])
+      setPasteCreateDuplicates([])
       selectInventoryItem(null)
       setItemEditorOpen(true)
     },
@@ -4478,7 +4605,7 @@ export function Collection({
   }, [lastLookupBarcode])
 
   const processPasteCreateInput = useCallback(
-    (rawValue?: string, historyOverride?: PasteCreateHistoryEntry[]) => {
+    async (rawValue?: string, historyOverride?: PasteCreateHistoryEntry[]) => {
       const source = (rawValue ?? pasteCreateInput).trim()
       if (source === '') {
         setPasteCreateError('Paste a URL or text before processing an item.')
@@ -4489,6 +4616,7 @@ export function Collection({
       setPasteCreateBusy(true)
       setPasteCreateError(null)
       setPasteCreateSuccess(null)
+      setPasteCreateDuplicates([])
       try {
         const baseHistory = historyOverride ?? pasteCreateHistory
         const nextEntry: PasteCreateHistoryEntry =
@@ -4498,7 +4626,32 @@ export function Collection({
         const nextHistory = [...baseHistory, nextEntry]
         const sourceURL =
           nextHistory.find((entry) => entry.kind === 'url')?.value ?? undefined
-        const generatedDraft = buildQuickCreateDraft(source)
+        let generatedDraft = buildQuickCreateDraft(source)
+        let successMessage = 'Paste processed into the item draft.'
+
+        if (nextEntry.kind === 'url') {
+          const response = await fetch('/api/providers/product-url/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: source }),
+          })
+          const payload = (await response
+            .json()
+            .catch(() => ({}))) as ProviderProductURLIngestResponse
+          if (response.ok && !payload.error && payload.draft) {
+            generatedDraft = providerProductDraftToInventoryDraft(
+              source,
+              payload
+            )
+            setPasteCreateDuplicates(payload.duplicates ?? [])
+            successMessage =
+              (payload.duplicates?.length ?? 0) > 0
+                ? 'Provider data loaded. Review duplicate matches before creating another item.'
+                : 'Provider data loaded into the item draft.'
+          } else {
+            setPasteCreateError(providerProductIngestMessage(payload.error))
+          }
+        }
 
         setItemDraft((current) => {
           const shouldHydrateIdentity = nextEntry.kind !== 'prompt'
@@ -4517,15 +4670,24 @@ export function Collection({
             packaging_grade_type: shouldHydrateIdentity
               ? generatedDraft.packaging_grade_type
               : current.packaging_grade_type,
-            description: buildPasteCreateDescription(nextHistory, sourceURL),
-            notes: current.notes,
+            description: shouldHydrateIdentity
+              ? generatedDraft.description
+              : buildPasteCreateDescription(nextHistory, sourceURL),
+            notes: shouldHydrateIdentity ? generatedDraft.notes : current.notes,
             tags: shouldHydrateIdentity ? generatedDraft.tags : current.tags,
-            source_urls: sourceURL ?? current.source_urls,
+            source_urls: shouldHydrateIdentity
+              ? generatedDraft.source_urls
+              : (sourceURL ?? current.source_urls),
           }
         })
         setPasteCreateHistory(nextHistory)
-        setPasteCreateSuccess('Paste processed into the item draft.')
+        setPasteCreateSuccess(successMessage)
         return true
+      } catch {
+        setPasteCreateError(
+          'Provider ingest failed. The pasted value is still available for manual item creation.'
+        )
+        return false
       } finally {
         setPasteCreateBusy(false)
       }
@@ -4547,7 +4709,7 @@ export function Collection({
       const text = await navigator.clipboard.readText()
       setPasteCreateInput(text)
       if (text.trim() !== '') {
-        processPasteCreateInput(text, [])
+        await processPasteCreateInput(text, [])
       }
     } catch {
       setPasteCreateSuccess(
@@ -5374,6 +5536,7 @@ export function Collection({
                         setPasteCreateError(null)
                         setPasteCreateSuccess(null)
                         setPasteCreateHistory([])
+                        setPasteCreateDuplicates([])
                       }
                     }}
                   >
@@ -5430,6 +5593,7 @@ export function Collection({
                                   setPasteCreateInput(event.target.value)
                                   setPasteCreateError(null)
                                   setPasteCreateSuccess(null)
+                                  setPasteCreateDuplicates([])
                                 }}
                               />
                               <Button
@@ -5439,7 +5603,7 @@ export function Collection({
                                 aria-label='Process pasted URL or text'
                                 title='Process pasted URL or text'
                                 disabled={pasteCreateBusy}
-                                onClick={() => processPasteCreateInput()}
+                                onClick={() => void processPasteCreateInput()}
                               >
                                 <CircleArrowUp
                                   className='size-5'
@@ -5464,6 +5628,73 @@ export function Collection({
                               >
                                 {pasteCreateSuccess}
                               </p>
+                            ) : null}
+                            {pasteCreateDuplicates.length > 0 ? (
+                              <div
+                                className='space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100'
+                                data-testid='inventory-create-duplicate-warning'
+                              >
+                                <p className='font-medium'>
+                                  Possible duplicate item
+                                </p>
+                                {pasteCreateDuplicates.map((duplicate) => (
+                                  <div
+                                    key={duplicate.item_id}
+                                    className='flex flex-wrap items-center justify-between gap-2'
+                                    data-testid='inventory-create-duplicate-candidate'
+                                  >
+                                    <span>
+                                      {duplicate.title || duplicate.item_id} (
+                                      {duplicate.reasons.join(', ')})
+                                    </span>
+                                    <Button
+                                      type='button'
+                                      size='sm'
+                                      variant='outline'
+                                      data-testid='inventory-create-open-duplicate'
+                                      onClick={() => {
+                                        const existing =
+                                          inventoryItems.find(
+                                            (item) =>
+                                              item.id === duplicate.item_id
+                                          ) ?? null
+                                        if (existing) {
+                                          openInventoryItemEditor(
+                                            existing,
+                                            'dialog'
+                                          )
+                                        } else {
+                                          selectInventoryItem({
+                                            id: duplicate.item_id,
+                                            part_number: duplicate.item_id,
+                                            title:
+                                              duplicate.title ||
+                                              duplicate.item_id,
+                                            status: 'active',
+                                            condition: '',
+                                            category: '',
+                                            item_type: '',
+                                            packaging_grade_type: '',
+                                            brand: '',
+                                            priority: '',
+                                            description: '',
+                                            notes: '',
+                                            tags: [],
+                                            source_urls:
+                                              duplicate.source_urls ?? [],
+                                          })
+                                        }
+                                      }}
+                                    >
+                                      Open existing
+                                    </Button>
+                                  </div>
+                                ))}
+                                <p className='text-xs'>
+                                  Creating another item from this source still
+                                  requires pressing Save.
+                                </p>
+                              </div>
                             ) : null}
                             {pasteCreateHistory.length > 0 ? (
                               <div

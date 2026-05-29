@@ -3,8 +3,8 @@
 - [x] 1.1 Add API test for pasted Bonza product URL detection and provider/family routing.
 - [x] 1.2 Add API test with mocked Bonza Store API response proving product draft normalization for `bonza-mug-white`.
 - [x] 1.3 Add API test for duplicate detection by provider product id and normalized source URL.
-- [ ] 1.4 Add Cypress test for Inventory paste action processing a Bonza URL and prefilling the create-item modal.
-- [ ] 1.5 Add Cypress test for unsupported pasted URL feedback preserving user input.
+- [x] 1.4 Add Cypress test for Inventory paste action processing a Bonza URL and prefilling the create-item modal.
+- [x] 1.5 Add Cypress test for unsupported pasted URL feedback preserving user input.
 
 ## 2. Backend Provider Routing
 
@@ -23,16 +23,16 @@
 
 ## 4. Inventory Create Flow
 
-- [ ] 4.1 Wire Inventory create paste process to call provider URL ingestion for URLs.
-- [ ] 4.2 Prefill create-item modal fields from normalized Bonza item draft while preserving confirm-before-create behavior.
-- [ ] 4.3 Stage provider image URLs as item evidence/media candidates without silently downloading unless create is confirmed.
-- [ ] 4.4 Persist source URL and provider evidence when user confirms item creation.
-- [ ] 4.5 Show duplicate warning with open-existing action and explicit continue option. Backend duplicate candidates are now returned for UI consumption.
+- [x] 4.1 Wire Inventory create paste process to call provider URL ingestion for URLs.
+- [x] 4.2 Prefill create-item modal fields from normalized Bonza item draft while preserving confirm-before-create behavior.
+- [x] 4.3 Stage provider image URLs as item evidence/media candidates without silently downloading unless create is confirmed.
+- [x] 4.4 Persist source URL and provider evidence when user confirms item creation.
+- [x] 4.5 Show duplicate warning with open-existing action and explicit continue option. Backend duplicate candidates are now returned for UI consumption.
 
 ## 5. Verification and Delivery
 
-- [ ] 5.1 Run OpenSpec validation for `ingest-bonza-product-urls`.
-- [ ] 5.2 Run targeted Go/API tests for provider routing and Bonza ingestion.
-- [ ] 5.3 Run targeted Cypress Inventory paste ingestion tests.
+- [x] 5.1 Run OpenSpec validation for `ingest-bonza-product-urls`.
+- [x] 5.2 Run targeted Go/API tests for provider routing and Bonza ingestion.
+- [x] 5.3 Run targeted Cypress Inventory paste ingestion tests.
 - [ ] 5.4 Live/manual verify the example Bonza URL against demo after rebuild.
 - [ ] 5.5 Commit with `#811`, push, PR to `develop`, merge after validation, close issue, delete branch, and restart demo.
