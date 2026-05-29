@@ -82,6 +82,11 @@ type AssignmentPreview struct {
 	AuditSummary          string `json:"audit_summary"`
 }
 
+type AssignmentResult struct {
+	AssignmentPreview
+	Applied bool `json:"applied"`
+}
+
 type DownloadPreview struct {
 	AssetIDs  []string `json:"asset_ids"`
 	Count     int      `json:"count"`
@@ -178,6 +183,11 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		return WorkspaceList{}, fmt.Errorf("filter must be all or unlinked")
 	}
 
+	links, err := s.loadWorkspaceLinks(ctx, profileID)
+	if err != nil {
+		return WorkspaceList{}, err
+	}
+
 	assets := make([]WorkspaceAsset, 0)
 	photoRows, err := s.db.QueryContext(ctx, `
 		SELECT ip.id, ip.filename, ip.created_at, ip.original_path, ci.id, ci.part_number, ci.title
@@ -199,15 +209,18 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		if displayTitle == "" {
 			displayTitle = strings.TrimSpace(filename)
 		}
+		link := links[assetID]
+		linkageState := linkageStateForAsset(true, link)
 		assets = append(assets, WorkspaceAsset{
 			ID:               assetID,
 			Title:            displayTitle,
 			Filename:         filename,
 			UploadedAt:       createdAt,
-			LinkageState:     "linked_inventory",
+			LinkageState:     linkageState,
 			AnalysisStatus:   "not_analyzed",
 			Source:           "Inventory photo",
 			ItemID:           itemID,
+			WishlistID:       link.WishlistID,
 			ThumbnailURL:     "/api/items/" + itemID + "/photos/" + assetID + "/file?variant=thumbnail",
 			DownloadFilename: friendlyMediaFilename(partNumber, displayTitle, filename, assetID),
 			StoredPath:       originalPath,
@@ -234,14 +247,17 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 			attachmentRows.Close()
 			return WorkspaceList{}, fmt.Errorf("scan unlinked media asset: %w", err)
 		}
+		link := links[assetID]
 		assets = append(assets, WorkspaceAsset{
 			ID:               assetID,
 			Title:            strings.TrimSpace(filename),
 			Filename:         filename,
 			UploadedAt:       createdAt,
-			LinkageState:     "unlinked",
+			LinkageState:     linkageStateForAsset(false, link),
 			AnalysisStatus:   "pending",
 			Source:           "Chat attachment",
+			ItemID:           link.ItemID,
+			WishlistID:       link.WishlistID,
 			DownloadFilename: friendlyMediaFilename("", filename, filename, assetID),
 			StoredPath:       storedPath,
 		})
@@ -302,10 +318,37 @@ func (s *Service) PreviewAssignment(ctx context.Context, profileID, assetID, tar
 		CurrentLinkageState:   asset.LinkageState,
 		ProjectedLinkageState: projected,
 		RequiresConfirmation:  true,
-		Allowed:               false,
-		BlockedReason:         "assignment mutation is not implemented in this preview-only contract",
-		AuditSummary:          "Would preserve media asset " + assetID + " provenance while linking to " + targetType + " target " + targetID + ".",
+		Allowed:               true,
+		AuditSummary:          "Will preserve media asset " + assetID + " provenance while linking to " + targetType + " target " + targetID + ".",
 	}, nil
+}
+
+func (s *Service) ApplyAssignment(ctx context.Context, profileID, assetID, targetType, targetID string) (AssignmentResult, error) {
+	preview, err := s.PreviewAssignment(ctx, profileID, assetID, targetType, targetID)
+	if err != nil {
+		return AssignmentResult{}, err
+	}
+	assetType, err := s.assetType(ctx, strings.TrimSpace(profileID), strings.TrimSpace(assetID))
+	if err != nil {
+		return AssignmentResult{}, err
+	}
+	linkID := uuid.NewString()
+	auditSummary := "Preserved media asset " + preview.AssetID + " provenance while linking to " + preview.TargetType + " target " + preview.TargetID + "."
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO media_asset_links(id, profile_id, asset_id, asset_type, target_type, target_id, source, audit_summary)
+		VALUES (?, ?, ?, ?, ?, ?, 'media.workspace', ?)
+		ON CONFLICT(profile_id, asset_id, target_type, target_id) DO UPDATE SET
+			source = excluded.source,
+			audit_summary = excluded.audit_summary,
+			updated_at = CURRENT_TIMESTAMP
+	`, linkID, strings.TrimSpace(profileID), preview.AssetID, assetType, preview.TargetType, preview.TargetID, auditSummary)
+	if err != nil {
+		return AssignmentResult{}, fmt.Errorf("apply media assignment: %w", err)
+	}
+	preview.CurrentLinkageState = preview.ProjectedLinkageState
+	preview.BlockedReason = ""
+	preview.AuditSummary = auditSummary
+	return AssignmentResult{AssignmentPreview: preview, Applied: true}, nil
 }
 
 func (s *Service) PreviewDownload(ctx context.Context, profileID string, assetIDs []string, filter string) (DownloadPreview, error) {
@@ -423,6 +466,74 @@ func (s *Service) assertTargetExists(ctx context.Context, profileID, targetType,
 		return fmt.Errorf("assignment target not found")
 	}
 	return nil
+}
+
+type workspaceLinkState struct {
+	ItemID     string
+	WishlistID string
+}
+
+func (s *Service) loadWorkspaceLinks(ctx context.Context, profileID string) (map[string]workspaceLinkState, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT asset_id, target_type, target_id
+		FROM media_asset_links
+		WHERE profile_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("list media asset links: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]workspaceLinkState{}
+	for rows.Next() {
+		var assetID, targetType, targetID string
+		if err := rows.Scan(&assetID, &targetType, &targetID); err != nil {
+			return nil, fmt.Errorf("scan media asset link: %w", err)
+		}
+		state := out[assetID]
+		switch targetType {
+		case "inventory":
+			if state.ItemID == "" {
+				state.ItemID = targetID
+			}
+		case "wishlist":
+			if state.WishlistID == "" {
+				state.WishlistID = targetID
+			}
+		}
+		out[assetID] = state
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate media asset links: %w", err)
+	}
+	return out, nil
+}
+
+func (s *Service) assetType(ctx context.Context, profileID, assetID string) (string, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM item_photos ip
+		INNER JOIN canonical_items ci ON ci.id = ip.item_id
+		WHERE ip.id = ? AND ci.profile_id = ?
+	`, assetID, profileID).Scan(&count); err != nil {
+		return "", fmt.Errorf("check item photo asset: %w", err)
+	}
+	if count > 0 {
+		return "item_photo", nil
+	}
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1)
+		FROM chat_attachments
+		WHERE id = ? AND profile_id = ?
+	`, assetID, profileID).Scan(&count); err != nil {
+		return "", fmt.Errorf("check chat attachment asset: %w", err)
+	}
+	if count > 0 {
+		return "chat_attachment", nil
+	}
+	return "", fmt.Errorf("media asset not found")
 }
 
 func (s *Service) resolveMediaDirForItem(ctx context.Context, itemID string) (string, error) {
@@ -866,6 +977,21 @@ func projectedLinkageState(current, targetType string) string {
 		return "linked_wishlist"
 	default:
 		return current
+	}
+}
+
+func linkageStateForAsset(hasInventoryLink bool, link workspaceLinkState) string {
+	inventoryLinked := hasInventoryLink || strings.TrimSpace(link.ItemID) != ""
+	wishlistLinked := strings.TrimSpace(link.WishlistID) != ""
+	switch {
+	case inventoryLinked && wishlistLinked:
+		return "linked_both"
+	case inventoryLinked:
+		return "linked_inventory"
+	case wishlistLinked:
+		return "linked_wishlist"
+	default:
+		return "unlinked"
 	}
 }
 

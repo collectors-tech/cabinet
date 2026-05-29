@@ -459,6 +459,21 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);`,
+		`CREATE TABLE IF NOT EXISTS media_asset_links (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			asset_id TEXT NOT NULL,
+			asset_type TEXT NOT NULL,
+			target_type TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT 'media.workspace',
+			audit_summary TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(profile_id, asset_id, target_type, target_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_media_asset_links_profile_asset ON media_asset_links(profile_id, asset_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_media_asset_links_profile_target ON media_asset_links(profile_id, target_type, target_id);`,
 		`CREATE TABLE IF NOT EXISTS chat_inbox_items (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,

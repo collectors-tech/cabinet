@@ -5151,6 +5151,33 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(preview)
 	})
+	mux.HandleFunc("/api/media/assignments", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			AssetID    string `json:"asset_id"`
+			TargetType string `json:"target_type"`
+			TargetID   string `json:"target_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_assignment"}`, http.StatusBadRequest)
+			return
+		}
+		result, err := mediaService.ApplyAssignment(r.Context(), active.ID, req.AssetID, req.TargetType, req.TargetID)
+		if err != nil {
+			http.Error(w, `{"error":"media_assignment_unavailable"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	})
 	mux.HandleFunc("/api/media/downloads/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

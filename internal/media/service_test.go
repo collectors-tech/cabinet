@@ -71,7 +71,7 @@ func TestListWorkspaceAssetsScopesInventoryAndUnlinkedMediaByProfile(t *testing.
 	}
 }
 
-func TestPreviewAssignmentAndDownloadKeepMediaWorkspacePreviewOnly(t *testing.T) {
+func TestPreviewAssignmentAndDownloadExposeConfirmableMediaWorkspaceActions(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -99,11 +99,11 @@ func TestPreviewAssignmentAndDownloadKeepMediaWorkspacePreviewOnly(t *testing.T)
 	if err != nil {
 		t.Fatalf("PreviewAssignment() error = %v", err)
 	}
-	if preview.Allowed || !preview.RequiresConfirmation || preview.CurrentLinkageState != "unlinked" || preview.ProjectedLinkageState != "linked_wishlist" {
-		t.Fatalf("assignment preview should be blocked preview-only with projected wishlist linkage, got %+v", preview)
+	if !preview.Allowed || !preview.RequiresConfirmation || preview.CurrentLinkageState != "unlinked" || preview.ProjectedLinkageState != "linked_wishlist" {
+		t.Fatalf("assignment preview should allow confirmed wishlist linkage, got %+v", preview)
 	}
-	if preview.BlockedReason == "" || preview.AuditSummary == "" {
-		t.Fatalf("assignment preview must explain blocker and audit summary, got %+v", preview)
+	if preview.BlockedReason != "" || preview.AuditSummary == "" {
+		t.Fatalf("assignment preview must explain audit summary without blocker, got %+v", preview)
 	}
 
 	download, err := svc.PreviewDownload(context.Background(), "profile-1", []string{"attach-1"}, "all")
@@ -112,6 +112,70 @@ func TestPreviewAssignmentAndDownloadKeepMediaWorkspacePreviewOnly(t *testing.T)
 	}
 	if !download.Allowed || download.Count != 1 || download.AssetIDs[0] != "attach-1" || download.Filenames[0] != "loose-reference-jpg-attach-1.jpg" {
 		t.Fatalf("unexpected download preview: %+v", download)
+	}
+}
+
+func TestApplyAssignmentPersistsMediaLinksWithoutDuplicatingAssets(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	dbPath := filepath.Join(base, "cabinet.db")
+	conn, err := db.OpenAndMigrate(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`
+		INSERT INTO profiles (id, name) VALUES ('profile-1','One'), ('profile-2','Two');
+		INSERT INTO canonical_items (id, profile_id, brand, category, part_number, title) VALUES
+			('item-1','profile-1','AFX','Slot Car','AFX-1','Mustang Front'),
+			('item-2','profile-2','AFX','Slot Car','AFX-2','Other Profile');
+		INSERT INTO wishlist_entries (id, profile_id, item_id) VALUES ('wish-1','profile-1','item-1'), ('wish-2','profile-2','item-2');
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('thread-1','profile-1','Media'), ('thread-2','profile-2','Media');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path) VALUES
+			('attach-1','profile-1','thread-1','loose-reference.jpg','image/jpeg',123,'/tmp/loose-reference.jpg'),
+			('attach-2','profile-2','thread-2','other-profile.jpg','image/jpeg',123,'/tmp/other-profile.jpg');
+	`); err != nil {
+		t.Fatalf("seed assignment data: %v", err)
+	}
+
+	svc := NewService(conn, filepath.Join(base, "media"))
+	result, err := svc.ApplyAssignment(context.Background(), "profile-1", "attach-1", "wishlist", "wish-1")
+	if err != nil {
+		t.Fatalf("ApplyAssignment() error = %v", err)
+	}
+	if !result.Applied || !result.Allowed || result.CurrentLinkageState != "linked_wishlist" || result.ProjectedLinkageState != "linked_wishlist" {
+		t.Fatalf("unexpected assignment result: %+v", result)
+	}
+
+	list, err := svc.ListWorkspaceAssets(context.Background(), "profile-1", "all")
+	if err != nil {
+		t.Fatalf("ListWorkspaceAssets() after assignment error = %v", err)
+	}
+	if !containsAssetTarget(list.Assets, "attach-1", "linked_wishlist", "", "wish-1") {
+		t.Fatalf("expected assigned attachment to show wishlist linkage, got %+v", list.Assets)
+	}
+	if list.Summary.Unlinked != 0 || list.Summary.LinkedWishlist != 1 {
+		t.Fatalf("expected assignment to update summary counts, got %+v", list.Summary)
+	}
+
+	var linkCount, attachmentCount int
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM media_asset_links WHERE profile_id = 'profile-1' AND asset_id = 'attach-1' AND target_type = 'wishlist' AND target_id = 'wish-1'`).Scan(&linkCount); err != nil {
+		t.Fatalf("count media links: %v", err)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM chat_attachments WHERE id = 'attach-1'`).Scan(&attachmentCount); err != nil {
+		t.Fatalf("count chat attachments: %v", err)
+	}
+	if linkCount != 1 || attachmentCount != 1 {
+		t.Fatalf("expected one link and original attachment preserved, links=%d attachments=%d", linkCount, attachmentCount)
+	}
+
+	if _, err := svc.ApplyAssignment(context.Background(), "profile-1", "attach-2", "wishlist", "wish-1"); err == nil {
+		t.Fatal("ApplyAssignment() should reject another profile's asset")
+	}
+	if _, err := svc.ApplyAssignment(context.Background(), "profile-1", "attach-1", "wishlist", "wish-2"); err == nil {
+		t.Fatal("ApplyAssignment() should reject another profile's target")
 	}
 }
 
@@ -355,6 +419,15 @@ func sampleJPEG(t *testing.T) []byte {
 func containsAssetState(assets []WorkspaceAsset, id, state string) bool {
 	for _, asset := range assets {
 		if asset.ID == id && asset.LinkageState == state {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAssetTarget(assets []WorkspaceAsset, id, state, itemID, wishlistID string) bool {
+	for _, asset := range assets {
+		if asset.ID == id && asset.LinkageState == state && asset.ItemID == itemID && asset.WishlistID == wishlistID {
 			return true
 		}
 	}
