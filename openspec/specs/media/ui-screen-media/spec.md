@@ -165,3 +165,11 @@ Cabinet SHALL support high-speed intake on mobile via batch picker and capture-n
 - **GIVEN** user completes a mobile camera capture
 - **WHEN** user chooses `capture next`
 - **THEN** flow MUST return to camera without leaving context and append each accepted photo to same upload queue
+
+### Requirement UI-SCREEN-MEDIA-006: Media workspace shell SHALL be discoverable from authenticated navigation
+Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary navigation with a page title, card-first asset grid, unlinked filter, operational metadata, and visible action controls before backend ingestion and assignment slices are complete.
+
+#### Scenario: Open Media workspace shell from navigation
+- **GIVEN** user is signed in on an authenticated Cabinet route
+- **WHEN** user opens the primary Media navigation item
+- **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a card-first media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.

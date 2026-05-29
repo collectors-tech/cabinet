@@ -9,6 +9,7 @@ import {
   PlugZap,
   HelpCircle,
   Inbox,
+  Images,
   Bell,
   Palette,
   Settings,
@@ -59,6 +60,12 @@ export const sidebarData: SidebarData = {
           testIdKey: 'inventory',
           url: '/inventory',
           icon: ListChecks,
+        },
+        {
+          title: 'Media',
+          testIdKey: 'media',
+          url: '/media',
+          icon: Images,
         },
         {
           title: 'Collections',
