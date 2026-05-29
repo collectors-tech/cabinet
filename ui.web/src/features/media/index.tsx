@@ -18,6 +18,22 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -66,6 +82,19 @@ type DownloadPreview = {
   allowed: boolean
 }
 
+type AssignmentPreview = {
+  asset_id: string
+  target_type: 'inventory' | 'wishlist'
+  target_id: string
+  current_linkage_state: MediaAsset['linkage_state']
+  projected_linkage_state: MediaAsset['linkage_state']
+  allowed: boolean
+  requires_confirmation: boolean
+  blocked_reason?: string
+  audit_summary?: string
+  applied?: boolean
+}
+
 const EMPTY_SUMMARY: MediaSummary = {
   total: 0,
   unlinked: 0,
@@ -111,6 +140,18 @@ export function Media() {
   )
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [downloadLoading, setDownloadLoading] = useState(false)
+  const [assignmentAsset, setAssignmentAsset] = useState<MediaAsset | null>(
+    null
+  )
+  const [assignmentTargetType, setAssignmentTargetType] = useState<
+    'inventory' | 'wishlist'
+  >('wishlist')
+  const [assignmentTargetID, setAssignmentTargetID] = useState('')
+  const [assignmentPreview, setAssignmentPreview] =
+    useState<AssignmentPreview | null>(null)
+  const [assignmentError, setAssignmentError] = useState<string | null>(null)
+  const [assignmentLoading, setAssignmentLoading] = useState(false)
+  const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(null)
 
   const loadAssets = useCallback(async () => {
     setLoading(true)
@@ -185,6 +226,86 @@ export function Media() {
       )
     } finally {
       setDownloadLoading(false)
+    }
+  }
+
+  const resetAssignment = () => {
+    setAssignmentAsset(null)
+    setAssignmentTargetType('wishlist')
+    setAssignmentTargetID('')
+    setAssignmentPreview(null)
+    setAssignmentError(null)
+    setAssignmentLoading(false)
+  }
+
+  const openAssignment = (asset: MediaAsset) => {
+    setAssignmentAsset(asset)
+    setAssignmentTargetType('wishlist')
+    setAssignmentTargetID(asset.wishlist_id ?? asset.item_id ?? '')
+    setAssignmentPreview(null)
+    setAssignmentError(null)
+    setAssignmentSuccess(null)
+  }
+
+  const previewAssignment = async () => {
+    if (!assignmentAsset) return
+    setAssignmentLoading(true)
+    setAssignmentPreview(null)
+    setAssignmentError(null)
+    try {
+      const response = await fetch('/api/media/assignments/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_id: assignmentAsset.id,
+          target_type: assignmentTargetType,
+          target_id: assignmentTargetID.trim(),
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(`media_assignment_preview_${response.status}`)
+      }
+      const payload = (await response.json()) as AssignmentPreview
+      setAssignmentPreview(payload)
+    } catch (err) {
+      setAssignmentError(
+        err instanceof Error ? err.message : 'media_assignment_preview_failed'
+      )
+    } finally {
+      setAssignmentLoading(false)
+    }
+  }
+
+  const confirmAssignment = async () => {
+    if (!assignmentAsset || !assignmentPreview?.allowed) return
+    setAssignmentLoading(true)
+    setAssignmentError(null)
+    try {
+      const response = await fetch('/api/media/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_id: assignmentAsset.id,
+          target_type: assignmentPreview.target_type,
+          target_id: assignmentPreview.target_id,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(`media_assignment_${response.status}`)
+      }
+      const payload = (await response.json()) as AssignmentPreview
+      setAssignmentSuccess(
+        payload.audit_summary ??
+          `Assigned ${assignmentAsset.title} to ${payload.target_type} target ${payload.target_id}.`
+      )
+      resetAssignment()
+      await loadAssets()
+    } catch (err) {
+      setAssignmentError(
+        err instanceof Error ? err.message : 'media_assignment_failed'
+      )
+    } finally {
+      setAssignmentLoading(false)
     }
   }
 
@@ -328,6 +449,15 @@ export function Media() {
           </Card>
         ) : null}
 
+        {assignmentSuccess ? (
+          <Card data-testid='media-assignment-success'>
+            <CardHeader>
+              <CardTitle>Assignment saved</CardTitle>
+              <CardDescription>{assignmentSuccess}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
+
         {loading ? (
           <Card data-testid='media-loading-state'>
             <CardHeader>
@@ -429,6 +559,7 @@ export function Media() {
                       aria-label={`Assign ${asset.title}`}
                       data-testid={`media-assign-${asset.id}`}
                       disabled={asset.linkage_state !== 'unlinked'}
+                      onClick={() => openAssignment(asset)}
                     >
                       <Link2 />
                     </Button>
@@ -446,6 +577,113 @@ export function Media() {
             ))}
           </div>
         ) : null}
+
+        <Dialog
+          open={assignmentAsset !== null}
+          onOpenChange={(open) => {
+            if (!open) resetAssignment()
+          }}
+        >
+          <DialogContent data-testid='media-assignment-dialog'>
+            <DialogHeader>
+              <DialogTitle>Assign media</DialogTitle>
+            </DialogHeader>
+            <div className='space-y-4'>
+              <div className='text-sm text-muted-foreground'>
+                {assignmentAsset?.title}
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='media-assignment-target-type'>
+                  Target type
+                </Label>
+                <Select
+                  value={assignmentTargetType}
+                  onValueChange={(value) => {
+                    setAssignmentTargetType(
+                      value === 'inventory' ? 'inventory' : 'wishlist'
+                    )
+                    setAssignmentPreview(null)
+                    setAssignmentError(null)
+                  }}
+                >
+                  <SelectTrigger
+                    id='media-assignment-target-type'
+                    data-testid='media-assignment-target-type'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='wishlist'>Wishlist</SelectItem>
+                    <SelectItem value='inventory'>Inventory</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='media-assignment-target-id'>Target ID</Label>
+                <Input
+                  id='media-assignment-target-id'
+                  value={assignmentTargetID}
+                  data-testid='media-assignment-target-id'
+                  onChange={(event) => {
+                    setAssignmentTargetID(event.target.value)
+                    setAssignmentPreview(null)
+                    setAssignmentError(null)
+                  }}
+                />
+              </div>
+              {assignmentPreview ? (
+                <div
+                  className='rounded-md border p-3 text-sm'
+                  data-testid='media-assignment-preview'
+                >
+                  <div>
+                    {linkageLabel(assignmentPreview.current_linkage_state)} to{' '}
+                    {linkageLabel(assignmentPreview.projected_linkage_state)}
+                  </div>
+                  <div className='mt-1 text-muted-foreground'>
+                    {assignmentPreview.audit_summary}
+                  </div>
+                </div>
+              ) : null}
+              {assignmentError ? (
+                <div
+                  className='rounded-md border border-destructive/40 p-3 text-sm text-destructive'
+                  data-testid='media-assignment-error'
+                >
+                  {assignmentError}
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                variant='outline'
+                onClick={() => resetAssignment()}
+                disabled={assignmentLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant='outline'
+                onClick={() => void previewAssignment()}
+                disabled={assignmentLoading || assignmentTargetID.trim() === ''}
+                data-testid='media-assignment-preview-action'
+              >
+                {assignmentLoading ? 'Working...' : 'Preview'}
+              </Button>
+              <Button
+                onClick={() => void confirmAssignment()}
+                disabled={
+                  assignmentLoading ||
+                  !assignmentPreview?.allowed ||
+                  assignmentPreview.requires_confirmation !== true
+                }
+                data-testid='media-assignment-confirm-action'
+              >
+                Confirm assignment
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

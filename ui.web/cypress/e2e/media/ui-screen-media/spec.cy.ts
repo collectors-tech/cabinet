@@ -165,6 +165,104 @@ describe('ui-screen-media', () => {
       .and('contain', 'slot-car-front-media-sl.jpg')
   })
 
+  it('UI-SCREEN-MEDIA-011 confirms assignment and refreshes API-backed linkage state', () => {
+    let assigned = false
+
+    cy.intercept('GET', '/api/media/assets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: assigned
+          ? {
+              ...mediaResponse,
+              summary: {
+                ...mediaResponse.summary,
+                unlinked: 0,
+                linked_wishlist: 2,
+              },
+              assets: mediaResponse.assets.map((asset) =>
+                asset.id === 'media-slot-car-front'
+                  ? {
+                      ...asset,
+                      linkage_state: 'linked_wishlist',
+                      wishlist_id: 'wish-slot-car',
+                    }
+                  : asset
+              ),
+            }
+          : mediaResponse,
+      })
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/media/assignments/preview', (req) => {
+      expect(req.body).to.deep.equal({
+        asset_id: 'media-slot-car-front',
+        target_type: 'wishlist',
+        target_id: 'wish-slot-car',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          asset_id: 'media-slot-car-front',
+          target_type: 'wishlist',
+          target_id: 'wish-slot-car',
+          current_linkage_state: 'unlinked',
+          projected_linkage_state: 'linked_wishlist',
+          allowed: true,
+          requires_confirmation: true,
+          audit_summary:
+            'Preserved media asset media-slot-car-front provenance while linking to wishlist target wish-slot-car.',
+        },
+      })
+    }).as('assignmentPreview')
+    cy.intercept('POST', '/api/media/assignments', (req) => {
+      expect(req.body).to.deep.equal({
+        asset_id: 'media-slot-car-front',
+        target_type: 'wishlist',
+        target_id: 'wish-slot-car',
+      })
+      assigned = true
+      req.reply({
+        statusCode: 200,
+        body: {
+          asset_id: 'media-slot-car-front',
+          target_type: 'wishlist',
+          target_id: 'wish-slot-car',
+          current_linkage_state: 'linked_wishlist',
+          projected_linkage_state: 'linked_wishlist',
+          allowed: true,
+          requires_confirmation: true,
+          applied: true,
+          audit_summary:
+            'Preserved media asset media-slot-car-front provenance while linking to wishlist target wish-slot-car.',
+        },
+      })
+    }).as('assignmentApply')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-assign-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-assignment-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-assignment-target-id"]').type('wish-slot-car')
+    cy.get('[data-testid="media-assignment-preview-action"]').click()
+    cy.wait('@assignmentPreview')
+    cy.get('[data-testid="media-assignment-preview"]')
+      .should('contain', 'Unlinked to Wishlist linked')
+      .and('contain', 'Preserved media asset media-slot-car-front provenance')
+    cy.get('[data-testid="media-assignment-confirm-action"]').click()
+    cy.wait('@assignmentApply')
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-assignment-success"]')
+      .should('be.visible')
+      .and('contain', 'Preserved media asset media-slot-car-front provenance')
+    cy.get('[data-testid="media-card-media-slot-car-front"]')
+      .should('contain', 'Wishlist linked')
+      .and('not.contain', 'Unlinked')
+    cy.get('[data-testid="media-assign-media-slot-car-front"]').should(
+      'be.disabled'
+    )
+  })
+
   it('UI-SCREEN-MEDIA-008 shows API empty, error, and retry states', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 500,
