@@ -201,3 +201,11 @@ Cabinet SHALL let reviewers request non-mutating match suggestions for a single 
 - **GIVEN** the reviewer has opened a forwarder package detail panel and selected a suggestion confidence filter
 - **WHEN** the reviewer requests matches for that package
 - **THEN** Cabinet MUST request `/api/forwarding/package-match-suggestions` with both `package_id` and the selected `confidence_label`, update the visible suggestion summary and result text from the scoped response, and avoid creating or modifying package reconciliation links until the reviewer explicitly confirms a link.
+
+### Requirement INTEGRATION-055: Forwarder package match suggestions SHALL combine package scoping with confidence filtering
+Cabinet SHALL let API clients request non-mutating match suggestions for one forwarder package and one confidence label in the same request so UI review actions and integrations receive backend-scoped regression-proof results.
+
+#### Scenario: Request scoped high-confidence package suggestions
+- **GIVEN** Cabinet has multiple unlinked forwarder packages with purchase-arrival match suggestions across confidence labels
+- **WHEN** a client requests `/api/forwarding/package-match-suggestions` with both `package_id` and `confidence_label=high`
+- **THEN** Cabinet MUST return only high-confidence suggestions for that package, set `confidence_filter` to `high`, derive summary counts from the scoped filtered result set, set `scoped_packages` to `1`, and avoid creating or modifying package reconciliation links.
