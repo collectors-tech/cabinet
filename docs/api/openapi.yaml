@@ -1492,6 +1492,11 @@ paths:
         - in: query
           name: package_id
           schema: { type: string }
+        - in: query
+          name: confidence_label
+          schema:
+            type: string
+            enum: [high, medium, low]
       responses:
         "200":
           description: Ordered confidence-scored match suggestions
@@ -1506,6 +1511,9 @@ paths:
                   mutable:
                     type: boolean
                     enum: [false]
+                  confidence_filter:
+                    type: string
+                    enum: ["", high, medium, low]
                   suggestions:
                     type: array
                     items:
@@ -1514,6 +1522,10 @@ paths:
                     type: object
                     properties:
                       count: { type: integer }
+                      high_confidence: { type: integer }
+                      medium_confidence: { type: integer }
+                      low_confidence: { type: integer }
+                      scoped_packages: { type: integer }
         "400":
           $ref: "#/components/responses/Error"
         "405":

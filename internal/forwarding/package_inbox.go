@@ -148,6 +148,19 @@ type PackageMatchSuggestionSummary struct {
 	ScopedPackages   int `json:"scoped_packages"`
 }
 
+func NormalizePackageMatchConfidenceFilter(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "", nil
+	}
+	switch value {
+	case "high", "medium", "low":
+		return value, nil
+	default:
+		return "", fmt.Errorf("confidence_label must be high, medium, or low")
+	}
+}
+
 type PackageCSVRowError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`
@@ -769,6 +782,20 @@ func SummarizePackageMatchSuggestions(packageID string, suggestions []PackageMat
 		}
 	}
 	return summary
+}
+
+func FilterPackageMatchSuggestionsByConfidence(suggestions []PackageMatchSuggestion, confidenceLabel string) []PackageMatchSuggestion {
+	confidenceLabel = strings.ToLower(strings.TrimSpace(confidenceLabel))
+	if confidenceLabel == "" {
+		return suggestions
+	}
+	filtered := make([]PackageMatchSuggestion, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		if suggestion.ConfidenceLabel == confidenceLabel {
+			filtered = append(filtered, suggestion)
+		}
+	}
+	return filtered
 }
 
 func (s *Service) requirePackageProfile(ctx context.Context, profileID, packageID string) error {

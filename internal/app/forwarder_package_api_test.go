@@ -224,16 +224,28 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if createPackage.Code != http.StatusOK {
 		t.Fatalf("create package status=%d body=%s", createPackage.Code, createPackage.Body.String())
 	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-medium-item', ?, 'AFX', 'Slot', 'AFX-902', 'Medium match item')`, profileID); err != nil {
+		t.Fatalf("seed medium item: %v", err)
+	}
+	createMediumLifecycle := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-medium-item","state":"purchase","source":"ebay","external_ref":"ORDER-902","quantity":1,"amount":20,"currency":"aud","notes":"tracking TRACK-902 package PKG-902"}`), map[string]string{"Content-Type": "application/json"})
+	if createMediumLifecycle.Code != http.StatusCreated {
+		t.Fatalf("create medium lifecycle status=%d body=%s", createMediumLifecycle.Code, createMediumLifecycle.Body.String())
+	}
+	createMediumPackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"email","external_package_id":"PKG-902","status":"received","tracking_number":"TRACK-902","sender":"unrelated sender","raw_payload":{"title":"unrelated text","quantity":7}}`), map[string]string{"Content-Type": "application/json"})
+	if createMediumPackage.Code != http.StatusOK {
+		t.Fatalf("create medium package status=%d body=%s", createMediumPackage.Code, createMediumPackage.Body.String())
+	}
 
 	resp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions", nil, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("suggestions status=%d body=%s", resp.Code, resp.Body.String())
 	}
 	var payload struct {
-		Mode        string           `json:"mode"`
-		Mutable     bool             `json:"mutable"`
-		Suggestions []map[string]any `json:"suggestions"`
-		Summary     map[string]int   `json:"summary"`
+		Mode             string           `json:"mode"`
+		Mutable          bool             `json:"mutable"`
+		ConfidenceFilter string           `json:"confidence_filter"`
+		Suggestions      []map[string]any `json:"suggestions"`
+		Summary          map[string]int   `json:"summary"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode suggestions payload: %v", err)
@@ -241,10 +253,10 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if payload.Mode != "forwarder_package_match_suggestions" || payload.Mutable {
 		t.Fatalf("expected non-mutating suggestions mode, got %+v", payload)
 	}
-	if payload.Summary["count"] != 1 || len(payload.Suggestions) != 1 {
-		t.Fatalf("expected one suggestion, got %+v", payload)
+	if payload.Summary["count"] != 3 || len(payload.Suggestions) != 3 {
+		t.Fatalf("expected three suggestions, got %+v", payload)
 	}
-	if payload.Summary["high_confidence"] != 1 || payload.Summary["medium_confidence"] != 0 || payload.Summary["low_confidence"] != 0 {
+	if payload.Summary["high_confidence"] != 1 || payload.Summary["medium_confidence"] != 1 || payload.Summary["low_confidence"] != 1 {
 		t.Fatalf("expected confidence-bucketed suggestion summary, got %+v", payload.Summary)
 	}
 	if payload.Summary["scoped_packages"] != 0 {
@@ -273,6 +285,28 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	}
 	if _, ok := firstSignal["weight"]; ok {
 		t.Fatalf("suggestion signal API must not expose stale weight field, got %+v", firstSignal)
+	}
+	filteredResp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?confidence_label=medium", nil, nil)
+	if filteredResp.Code != http.StatusOK {
+		t.Fatalf("filtered suggestions status=%d body=%s", filteredResp.Code, filteredResp.Body.String())
+	}
+	var filteredPayload struct {
+		ConfidenceFilter string           `json:"confidence_filter"`
+		Suggestions      []map[string]any `json:"suggestions"`
+		Summary          map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(filteredResp.Body).Decode(&filteredPayload); err != nil {
+		t.Fatalf("decode filtered suggestions payload: %v", err)
+	}
+	if filteredPayload.ConfidenceFilter != "medium" || len(filteredPayload.Suggestions) != 1 || filteredPayload.Summary["medium_confidence"] != 1 || filteredPayload.Summary["high_confidence"] != 0 {
+		t.Fatalf("expected medium-only filtered suggestions with filtered summary, got %+v", filteredPayload)
+	}
+	if filteredPayload.Suggestions[0]["item_id"] != "fwd-medium-item" || filteredPayload.Suggestions[0]["confidence_label"] != "medium" {
+		t.Fatalf("expected medium confidence item suggestion, got %+v", filteredPayload.Suggestions[0])
+	}
+	invalidFilter := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?confidence_label=certain", nil, nil)
+	if invalidFilter.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid confidence filter to return 400, got %d body=%s", invalidFilter.Code, invalidFilter.Body.String())
 	}
 	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links", nil, nil)
 	if listLinks.Code != http.StatusOK {
