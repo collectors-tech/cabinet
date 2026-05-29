@@ -3833,16 +3833,27 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		packageID := strings.TrimSpace(r.URL.Query().Get("package_id"))
+		confidenceLabel, err := forwarding.NormalizePackageMatchConfidenceFilter(r.URL.Query().Get("confidence_label"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "invalid_confidence_label",
+				"message": err.Error(),
+			})
+			return
+		}
 		suggestions, err := forwarderInbox.SuggestPackageMatches(r.Context(), strings.TrimSpace(active.ID), packageID)
 		if err != nil {
 			http.Error(w, "{\"error\":\"failed_to_suggest_forwarder_package_matches\"}", http.StatusInternalServerError)
 			return
 		}
+		suggestions = forwarding.FilterPackageMatchSuggestionsByConfidence(suggestions, confidenceLabel)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"mode":        "forwarder_package_match_suggestions",
-			"mutable":     false,
-			"suggestions": suggestions,
-			"summary":     forwarding.SummarizePackageMatchSuggestions(packageID, suggestions),
+			"mode":              "forwarder_package_match_suggestions",
+			"mutable":           false,
+			"confidence_filter": confidenceLabel,
+			"suggestions":       suggestions,
+			"summary":           forwarding.SummarizePackageMatchSuggestions(packageID, suggestions),
 		})
 	})
 	mux.HandleFunc("/api/forwarding/packages/import-csv", func(w http.ResponseWriter, r *http.Request) {

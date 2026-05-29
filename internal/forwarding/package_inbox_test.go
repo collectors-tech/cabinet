@@ -523,6 +523,34 @@ func TestForwarderPackageMatchSuggestionSummaryCountsConfidenceBuckets(t *testin
 	}
 }
 
+func TestPackageMatchSuggestionConfidenceFilter(t *testing.T) {
+	t.Parallel()
+
+	suggestions := []PackageMatchSuggestion{
+		{PackageID: "pkg-high", ConfidenceLabel: "high"},
+		{PackageID: "pkg-medium", ConfidenceLabel: "medium"},
+		{PackageID: "pkg-low", ConfidenceLabel: "low"},
+	}
+
+	label, err := NormalizePackageMatchConfidenceFilter(" Medium ")
+	if err != nil {
+		t.Fatalf("NormalizePackageMatchConfidenceFilter() error = %v", err)
+	}
+	filtered := FilterPackageMatchSuggestionsByConfidence(suggestions, label)
+	if len(filtered) != 1 || filtered[0].PackageID != "pkg-medium" {
+		t.Fatalf("expected only medium confidence suggestion, got %+v", filtered)
+	}
+
+	unfiltered := FilterPackageMatchSuggestionsByConfidence(suggestions, "")
+	if len(unfiltered) != len(suggestions) {
+		t.Fatalf("expected empty filter to preserve suggestions, got %+v", unfiltered)
+	}
+
+	if _, err := NormalizePackageMatchConfidenceFilter("certain"); err == nil {
+		t.Fatalf("expected invalid confidence label error")
+	}
+}
+
 func seedForwarderPackageLinkTarget(t *testing.T, conn interface {
 	Exec(string, ...any) (sql.Result, error)
 }, profileID, itemID, lifecycleID, arrivalID string) {

@@ -177,3 +177,11 @@ Cabinet SHALL display the non-mutating match-suggestion summary in the forwarder
 - **GIVEN** the forwarder package inbox has loaded package records and match-suggestion summary metadata
 - **WHEN** the user requests match suggestions from the inbox
 - **THEN** Cabinet MUST show candidate count, scoped package count, high-confidence count, medium-confidence count, and low-confidence count from the API response without mutating package reconciliation links.
+
+### Requirement INTEGRATION-052: Forwarder package match suggestions SHALL support confidence-label filtering
+Cabinet SHALL let API clients request non-mutating package match suggestions filtered to a specific confidence label so review queues can focus on high, medium, or low confidence candidates without client-side re-scoring.
+
+#### Scenario: Filter package match suggestions by confidence label
+- **GIVEN** Cabinet has computed non-mutating package-to-purchase-arrival match suggestions across multiple confidence labels
+- **WHEN** a client requests `/api/forwarding/package-match-suggestions?confidence_label=medium`
+- **THEN** Cabinet MUST return only medium-confidence suggestions, set `confidence_filter` to `medium`, derive summary bucket counts from the filtered result set, reject unknown confidence labels with a validation error, and avoid creating or modifying reconciliation links.
