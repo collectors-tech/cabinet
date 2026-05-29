@@ -970,45 +970,49 @@ describe('purchases/purchase-inbox', () => {
       body: { links: [], events: [], summary: { count: 0, events: 0 } },
     }).as('listForwarderPackageLinks')
 
-    cy.intercept('GET', '/api/forwarding/package-match-suggestions*', {
-      statusCode: 200,
-      body: {
-        mode: 'forwarder_package_match_suggestions',
-        mutable: false,
-        suggestions: [
-          {
-            id: 'suggestion-fwdpkg-001',
-            package_id: 'fwdpkg_suggest_001',
-            item_id: 'item-suggested-001',
-            lifecycle_entry_id: 'life-suggested-001',
-            expected_arrival_id: 'arrival-suggested-001',
-            confidence_score: 94,
-            confidence_label: 'high',
-            signals: [
-              {
-                name: 'tracking',
-                score: 40,
-                evidence: '1ZSUGGEST6001 matched purchase notes',
-              },
-              {
-                name: 'seller',
-                score: 20,
-                evidence: 'slot shop matched package sender',
-              },
-            ],
-            audit_trail: [
-              'suggested_match package=fwdpkg_suggest_001 item=item-suggested-001 confidence=high score=94',
-            ],
+    cy.intercept('GET', '/api/forwarding/package-match-suggestions*', (req) => {
+      expect(req.query).to.include({ confidence_label: 'high' })
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_match_suggestions',
+          mutable: false,
+          confidence_filter: 'high',
+          suggestions: [
+            {
+              id: 'suggestion-fwdpkg-001',
+              package_id: 'fwdpkg_suggest_001',
+              item_id: 'item-suggested-001',
+              lifecycle_entry_id: 'life-suggested-001',
+              expected_arrival_id: 'arrival-suggested-001',
+              confidence_score: 94,
+              confidence_label: 'high',
+              signals: [
+                {
+                  name: 'tracking',
+                  score: 40,
+                  evidence: '1ZSUGGEST6001 matched purchase notes',
+                },
+                {
+                  name: 'seller',
+                  score: 20,
+                  evidence: 'slot shop matched package sender',
+                },
+              ],
+              audit_trail: [
+                'suggested_match package=fwdpkg_suggest_001 item=item-suggested-001 confidence=high score=94',
+              ],
+            },
+          ],
+          summary: {
+            count: 1,
+            scoped_packages: 1,
+            high_confidence: 1,
+            medium_confidence: 0,
+            low_confidence: 0,
           },
-        ],
-        summary: {
-          count: 1,
-          scoped_packages: 1,
-          high_confidence: 1,
-          medium_confidence: 0,
-          low_confidence: 0,
         },
-      },
+      })
     }).as('listForwarderPackageMatchSuggestions')
 
     cy.intercept('POST', '/api/forwarding/package-links', (req) => {
@@ -1043,11 +1047,13 @@ describe('purchases/purchase-inbox', () => {
     })
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-confidence-filter-high"]').click()
     cy.get('[data-testid="forwarder-package-match-suggestions-load"]').click()
     cy.wait('@listForwarderPackageMatchSuggestions')
     cy.get('[data-testid="forwarder-package-suggestion-result"]')
       .should('be.visible')
       .and('contain', 'Found 1 package match suggestion')
+      .and('contain', 'high confidence')
     cy.get('[data-testid="forwarder-package-review-summary"]')
       .should('contain', 'Suggestions')
       .and('contain', '1')
@@ -1058,6 +1064,8 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'High confidence')
       .and('contain', 'Medium confidence')
       .and('contain', 'Low confidence')
+      .and('contain', 'Active filter')
+      .and('contain', 'high')
       .and('contain', '0')
     cy.get('[data-testid="forwarder-package-review-filter-suggested"]').click()
     cy.get('[data-testid="forwarder-package-row"]')
