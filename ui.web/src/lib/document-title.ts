@@ -8,6 +8,7 @@ type TitleRule = {
 const TITLE_RULES: TitleRule[] = [
   { prefix: '/dashboard', title: 'Home' },
   { prefix: '/inventory', title: 'Inventory' },
+  { prefix: '/media', title: 'Media' },
   { prefix: '/collections', title: 'Collections' },
   { prefix: '/wishlist', title: 'Wishlist' },
   { prefix: '/discoveries', title: 'Discoveries' },
@@ -28,8 +29,9 @@ export function getDocumentTitle(pathname: string) {
     return `${PRODUCT_NAME} - Home`
   }
 
-  const matched = TITLE_RULES.find((rule) =>
-    normalized === rule.prefix || normalized.startsWith(`${rule.prefix}/`)
+  const matched = TITLE_RULES.find(
+    (rule) =>
+      normalized === rule.prefix || normalized.startsWith(`${rule.prefix}/`)
   )
 
   if (!matched) {

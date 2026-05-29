@@ -27,6 +27,10 @@
     "title": "Inventory",
     "description": "Browse, organize, and update the items you already own."
   },
+  "media": {
+    "title": "Media",
+    "description": "Review uploaded evidence, linkage state, and assignment readiness."
+  },
   "wishlist": {
     "title": "Wishlist",
     "description": "Track wanted items, target prices, and planning decisions before they become owned inventory."

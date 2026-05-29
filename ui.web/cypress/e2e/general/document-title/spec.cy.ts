@@ -10,6 +10,7 @@ describe('document title', () => {
     const primaryRoutes = [
       { path: '/dashboard/', title: 'Cabinet - Home' },
       { path: '/inventory/', title: 'Cabinet - Inventory' },
+      { path: '/media/', title: 'Cabinet - Media' },
       { path: '/collections/', title: 'Cabinet - Collections' },
       { path: '/wishlist/', title: 'Cabinet - Wishlist' },
       { path: '/integrations/', title: 'Cabinet - Integrations' },
