@@ -9170,34 +9170,9 @@ func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requ
 	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	resp, err := fetchBonzaProductURLProductsResponse(ctx, &requestClient, requestURL)
 	if err != nil {
-		return nil, fmt.Errorf("build bonza product ingest request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
-	resp, err := requestClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request bonza product ingest: %w", err)
-	}
-	challengeBody, readChallenge := readBonzaSucuriChallenge(resp)
-	if readChallenge {
-		cookie, cookieErr := bonzaSucuriChallengeCookie(challengeBody)
-		if cookieErr == nil && cookie != "" {
-			req, err = http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-			if err != nil {
-				return nil, fmt.Errorf("build bonza product ingest retry request: %w", err)
-			}
-			req.Header.Set("Accept", "application/json")
-			req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
-			req.Header.Set("Cookie", cookie)
-			resp, err = requestClient.Do(req)
-			if err != nil {
-				return nil, fmt.Errorf("retry bonza product ingest after challenge: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("solve bonza product ingest challenge: %w", cookieErr)
-		}
+		return nil, err
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		resp.Body.Close()
@@ -9210,6 +9185,66 @@ func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requ
 		return nil, fmt.Errorf("decode bonza product ingest response: %w", decodeErr)
 	}
 	return products, nil
+}
+
+func fetchBonzaProductURLProductsResponse(ctx context.Context, client *http.Client, requestURL string) (*http.Response, error) {
+	const maxChallengeRetries = 5
+	cookies := map[string]string{}
+	var lastChallengeErr error
+
+	for attempt := 0; attempt <= maxChallengeRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("build bonza product ingest request: %w", err)
+		}
+		applyBonzaProductURLRequestHeaders(req, cookies)
+		resp, err := client.Do(req)
+		if err != nil {
+			if attempt == 0 {
+				return nil, fmt.Errorf("request bonza product ingest: %w", err)
+			}
+			return nil, fmt.Errorf("retry bonza product ingest after challenge: %w", err)
+		}
+		challengeBody, readChallenge := readBonzaSucuriChallenge(resp)
+		if !readChallenge {
+			return resp, nil
+		}
+		cookie, cookieErr := bonzaSucuriChallengeCookie(challengeBody)
+		if cookieErr != nil || cookie == "" {
+			if cookieErr == nil {
+				cookieErr = fmt.Errorf("empty challenge cookie")
+			}
+			return nil, fmt.Errorf("solve bonza product ingest challenge: %w", cookieErr)
+		}
+		name, value, ok := strings.Cut(cookie, "=")
+		if !ok || strings.TrimSpace(name) == "" || strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("solve bonza product ingest challenge: invalid cookie")
+		}
+		cookies[strings.TrimSpace(name)] = strings.TrimSpace(value)
+		lastChallengeErr = fmt.Errorf("bonza product ingest challenge did not clear after %d attempt(s)", attempt+1)
+	}
+	return nil, lastChallengeErr
+}
+
+func applyBonzaProductURLRequestHeaders(req *http.Request, cookies map[string]string) {
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-AU,en;q=0.9")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 Cabinet/1.0")
+	if req.URL != nil {
+		req.Header.Set("Referer", strings.TrimRight(req.URL.Scheme+"://"+req.URL.Host, "/")+"/")
+	}
+	if len(cookies) > 0 {
+		names := make([]string, 0, len(cookies))
+		for name := range cookies {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, name := range names {
+			parts = append(parts, name+"="+cookies[name])
+		}
+		req.Header.Set("Cookie", strings.Join(parts, "; "))
+	}
 }
 
 func readBonzaSucuriChallenge(resp *http.Response) (string, bool) {
