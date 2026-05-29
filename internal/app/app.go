@@ -9149,23 +9149,9 @@ func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL str
 		strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		url.QueryEscape(search),
 	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	products, err := fetchBonzaProductURLProducts(ctx, client, requestURL)
 	if err != nil {
-		return providerProductDraft{}, fmt.Errorf("build bonza product ingest request: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return providerProductDraft{}, fmt.Errorf("request bonza product ingest: %w", err)
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		resp.Body.Close()
-		return providerProductDraft{}, fmt.Errorf("bonza product ingest returned status %d", resp.StatusCode)
-	}
-	var products []bonzaProductResponse
-	decodeErr := json.NewDecoder(resp.Body).Decode(&products)
-	resp.Body.Close()
-	if decodeErr != nil {
-		return providerProductDraft{}, fmt.Errorf("decode bonza product ingest response: %w", decodeErr)
+		return providerProductDraft{}, err
 	}
 	for _, product := range products {
 		if !bonzaProductMatchesRoute(product, route) {
@@ -9174,6 +9160,128 @@ func ingestBonzaProductURL(ctx context.Context, client *http.Client, baseURL str
 		return bonzaProductDraft(product, route), nil
 	}
 	return providerProductDraft{}, fmt.Errorf("bonza product %q not found", route.Slug)
+}
+
+func fetchBonzaProductURLProducts(ctx context.Context, client *http.Client, requestURL string) ([]bonzaProductResponse, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	requestClient := *client
+	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build bonza product ingest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
+	resp, err := requestClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request bonza product ingest: %w", err)
+	}
+	challengeBody, readChallenge := readBonzaSucuriChallenge(resp)
+	if readChallenge {
+		cookie, cookieErr := bonzaSucuriChallengeCookie(challengeBody)
+		if cookieErr == nil && cookie != "" {
+			req, err = http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+			if err != nil {
+				return nil, fmt.Errorf("build bonza product ingest retry request: %w", err)
+			}
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("User-Agent", "Cabinet/1.0 (+https://collectors.tech)")
+			req.Header.Set("Cookie", cookie)
+			resp, err = requestClient.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("retry bonza product ingest after challenge: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("solve bonza product ingest challenge: %w", cookieErr)
+		}
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bonza product ingest returned status %d", resp.StatusCode)
+	}
+	var products []bonzaProductResponse
+	decodeErr := json.NewDecoder(resp.Body).Decode(&products)
+	resp.Body.Close()
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode bonza product ingest response: %w", decodeErr)
+	}
+	return products, nil
+}
+
+func readBonzaSucuriChallenge(resp *http.Response) (string, bool) {
+	if resp == nil || resp.Body == nil || resp.StatusCode < http.StatusMultipleChoices || resp.StatusCode >= http.StatusBadRequest {
+		return "", false
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", false
+	}
+	content := string(body)
+	return content, strings.Contains(content, "sucuri_cloudproxy_js") && strings.Contains(content, "S='")
+}
+
+func bonzaSucuriChallengeCookie(body string) (string, error) {
+	scriptMatch := regexp.MustCompile(`S='([^']+)'`).FindStringSubmatch(body)
+	if len(scriptMatch) != 2 {
+		return "", fmt.Errorf("missing challenge script")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(scriptMatch[1])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge script: %w", err)
+	}
+	challenge := string(decoded)
+	assignment := regexp.MustCompile(`^([A-Za-z])=(.+?);document\.cookie=(.+)$`).FindStringSubmatch(challenge)
+	if len(assignment) != 4 {
+		return "", fmt.Errorf("unsupported challenge assignment")
+	}
+	value, err := evalSucuriConcatExpression(assignment[2])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge value: %w", err)
+	}
+	cookiePattern := regexp.MustCompile(`\+\s*["']=["']\s*\+\s*` + regexp.QuoteMeta(assignment[1]) + `\s*\+`)
+	cookieParts := cookiePattern.Split(assignment[3], 2)
+	if len(cookieParts) != 2 {
+		return "", fmt.Errorf("unsupported challenge cookie expression")
+	}
+	name, err := evalSucuriConcatExpression(cookieParts[0])
+	if err != nil {
+		return "", fmt.Errorf("decode challenge cookie name: %w", err)
+	}
+	if name == "" || value == "" {
+		return "", fmt.Errorf("empty challenge cookie")
+	}
+	return name + "=" + value, nil
+}
+
+func evalSucuriConcatExpression(expr string) (string, error) {
+	parts := strings.Split(expr, "+")
+	var out strings.Builder
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		if len(trimmed) >= 2 && ((trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'') || (trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"')) {
+			out.WriteString(trimmed[1 : len(trimmed)-1])
+			continue
+		}
+		match := regexp.MustCompile(`^String\.fromCharCode\((\d+)\)$`).FindStringSubmatch(trimmed)
+		if len(match) == 2 {
+			codepoint, err := strconv.Atoi(match[1])
+			if err != nil {
+				return "", err
+			}
+			out.WriteRune(rune(codepoint))
+			continue
+		}
+		return "", fmt.Errorf("unsupported concat token %q", trimmed)
+	}
+	return out.String(), nil
 }
 
 func bonzaProductMatchesRoute(product bonzaProductResponse, route providerProductURLRoute) bool {

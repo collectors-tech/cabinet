@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -171,6 +172,60 @@ func TestProviderProductURLIngestReturnsDuplicateCandidates(t *testing.T) {
 	}
 	if !containsString(duplicate.Reasons, "source_url") || !containsString(duplicate.Reasons, "provider_product_id") {
 		t.Fatalf("expected source URL and provider product id reasons, got %+v", duplicate.Reasons)
+	}
+}
+
+func TestProviderProductURLIngestSolvesBonzaSucuriChallenge(t *testing.T) {
+	t.Parallel()
+
+	const challengeCookie = "sucuri_cloudproxy_uuid_d7cbc918a=6b8cc2469d5d14ef58e8d55a94069178"
+	challengeScript := `r=String.fromCharCode(54)+'b'+"8"+"c"+String.fromCharCode(99)+"2"+"4"+"6"+"9"+"d"+"5"+"d"+"1"+"4"+"e"+"f"+"5"+"8"+"e"+"8"+"d"+"5"+"5"+"a"+"9"+"4"+"0"+"6"+"9"+"1"+"7"+"8"+'';document.cookie='s'+'u'+'c'+'u'+'r'+'i'+'_'+'c'+'l'+'o'+'u'+'d'+'p'+'r'+'o'+'x'+'y'+'_'+'u'+'u'+'i'+'d'+'_'+'d'+'7'+'c'+'b'+'c'+'9'+'1'+'8'+'a'+"=" + r + ';path=/;max-age=86400'; location.reload();`
+	challengeBody := "Javascript is required.<script>S='" + base64.StdEncoding.EncodeToString([]byte(challengeScript)) + "';sucuri_cloudproxy_js='';</script>"
+	cookie, err := bonzaSucuriChallengeCookie(challengeBody)
+	if err != nil {
+		t.Fatalf("challenge cookie failed: %v", err)
+	}
+	if cookie != challengeCookie {
+		t.Fatalf("challenge cookie=%q want %q", cookie, challengeCookie)
+	}
+	requests := 0
+	var cookies []string
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		cookies = append(cookies, r.Header.Get("Cookie"))
+		if r.Header.Get("Cookie") != challengeCookie {
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			_, _ = w.Write([]byte(challengeBody))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id":19603,
+			"name":"BONZA MUG WHITE",
+			"slug":"bonza-mug-white",
+			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
+			"prices":{"currency_code":"AUD","price":"995"},
+			"is_in_stock":true
+		}]`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusOK {
+		t.Fatalf("ingest status=%d requests=%d cookies=%q body=%s", ingest.Code, requests, cookies, ingest.Body.String())
+	}
+	if requests != 2 {
+		t.Fatalf("expected challenge request plus cookie retry, got %d requests", requests)
+	}
+	if !strings.Contains(ingest.Body.String(), `"provider_product_id":"19603"`) {
+		t.Fatalf("expected Bonza product payload after challenge retry, got %s", ingest.Body.String())
 	}
 }
 
