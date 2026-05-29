@@ -229,6 +229,63 @@ func TestProviderProductURLIngestSolvesBonzaSucuriChallenge(t *testing.T) {
 	}
 }
 
+func TestProviderProductURLIngestSolvesChainedBonzaSucuriChallenges(t *testing.T) {
+	t.Parallel()
+
+	firstCookie := "sucuri_cloudproxy_uuid_first=first-cookie-value"
+	secondCookie := "sucuri_cloudproxy_uuid_second=second-cookie-value"
+	firstChallenge := bonzaSucuriChallengeBody(t, "sucuri_cloudproxy_uuid_first", "first-cookie-value")
+	secondChallenge := bonzaSucuriChallengeBody(t, "sucuri_cloudproxy_uuid_second", "second-cookie-value")
+	requests := 0
+	var cookies []string
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		cookie := r.Header.Get("Cookie")
+		cookies = append(cookies, cookie)
+		switch {
+		case !strings.Contains(cookie, firstCookie):
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			_, _ = w.Write([]byte(firstChallenge))
+			return
+		case !strings.Contains(cookie, secondCookie):
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			_, _ = w.Write([]byte(secondChallenge))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id":19603,
+			"name":"BONZA MUG WHITE",
+			"slug":"bonza-mug-white",
+			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
+			"prices":{"currency_code":"AUD","price":"995"},
+			"is_in_stock":true
+		}]`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusOK {
+		t.Fatalf("ingest status=%d requests=%d cookies=%q body=%s", ingest.Code, requests, cookies, ingest.Body.String())
+	}
+	if requests != 3 {
+		t.Fatalf("expected first challenge, second challenge, and cookie retry, got %d requests", requests)
+	}
+	if !strings.Contains(cookies[2], firstCookie) || !strings.Contains(cookies[2], secondCookie) {
+		t.Fatalf("expected final retry to send both challenge cookies, got %q", cookies)
+	}
+	if !strings.Contains(ingest.Body.String(), `"provider_product_id":"19603"`) {
+		t.Fatalf("expected Bonza product payload after chained challenge retries, got %s", ingest.Body.String())
+	}
+}
+
 func TestProviderProductURLIngestRejectsKnownProviderNonProductURL(t *testing.T) {
 	t.Parallel()
 
@@ -261,6 +318,23 @@ func newBonzaIngestTestApp(t *testing.T) (*App, string) {
 		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
 	}
 	return a, profile.ID
+}
+
+func bonzaSucuriChallengeBody(t *testing.T, cookieName, cookieValue string) string {
+	t.Helper()
+
+	nameExpr := sucuriConcatExpression(cookieName)
+	valueExpr := sucuriConcatExpression(cookieValue)
+	challengeScript := "r=" + valueExpr + ";document.cookie=" + nameExpr + "+\"=\"+r+';path=/;max-age=86400'; location.reload();"
+	return "Javascript is required.<script>S='" + base64.StdEncoding.EncodeToString([]byte(challengeScript)) + "';sucuri_cloudproxy_js='';</script>"
+}
+
+func sucuriConcatExpression(value string) string {
+	parts := make([]string, 0, len(value))
+	for _, char := range value {
+		parts = append(parts, fmt.Sprintf("%q", string(char)))
+	}
+	return strings.Join(parts, "+")
 }
 
 func containsString(values []string, expected string) bool {
