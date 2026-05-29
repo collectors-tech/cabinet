@@ -187,6 +187,7 @@ type ForwarderPackageMatchSuggestion = {
 }
 
 type ForwarderPackageMatchSuggestionResponse = {
+  confidence_filter?: string
   suggestions?: ForwarderPackageMatchSuggestion[]
   summary?: {
     count?: number
@@ -206,6 +207,12 @@ type ForwarderPackageReviewFilter =
   | 'linked'
   | 'unlinked'
   | 'suggested'
+
+type ForwarderPackageSuggestionConfidenceFilter =
+  | 'all'
+  | 'high'
+  | 'medium'
+  | 'low'
 
 const sampleCards: PurchaseCard[] = [
   {
@@ -318,6 +325,12 @@ export function Purchases() {
   >(null)
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
+  const [
+    packageSuggestionConfidenceFilter,
+    setPackageSuggestionConfidenceFilter,
+  ] = useState<ForwarderPackageSuggestionConfidenceFilter>('all')
+  const [packageSuggestionActiveFilter, setPackageSuggestionActiveFilter] =
+    useState<string | null>(null)
   const [packageReviewFilter, setPackageReviewFilter] =
     useState<ForwarderPackageReviewFilter>('all')
   const [selectedPackageID, setSelectedPackageID] = useState<string | null>(
@@ -488,6 +501,9 @@ export function Purchases() {
       if (packageForm.profile_id.trim()) {
         params.set('profile_id', packageForm.profile_id.trim())
       }
+      if (packageSuggestionConfidenceFilter !== 'all') {
+        params.set('confidence_label', packageSuggestionConfidenceFilter)
+      }
       const response = await fetch(
         '/api/forwarding/package-match-suggestions?' + params.toString()
       )
@@ -507,13 +523,21 @@ export function Purchases() {
       }, {})
       setPackageSuggestions(grouped)
       setPackageSuggestionSummary(payload.summary ?? null)
+      setPackageSuggestionActiveFilter(payload.confidence_filter ?? null)
       const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
       setPackageSuggestionResult(
-        'Found ' + count + ' package match suggestion' + (count === 1 ? '' : 's')
+        'Found ' +
+          count +
+          ' package match suggestion' +
+          (count === 1 ? '' : 's') +
+          (payload.confidence_filter
+            ? ' for ' + payload.confidence_filter + ' confidence'
+            : '')
       )
     } catch (err) {
       setPackageSuggestions({})
       setPackageSuggestionSummary(null)
+      setPackageSuggestionActiveFilter(null)
       setPackageError(
         err instanceof Error
           ? err.message
@@ -522,7 +546,7 @@ export function Purchases() {
     } finally {
       setPackagesLoading(false)
     }
-  }, [packageForm.profile_id])
+  }, [packageForm.profile_id, packageSuggestionConfidenceFilter])
 
   const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
     setPackageForm((current) => ({ ...current, [field]: value }))
@@ -1090,6 +1114,42 @@ export function Purchases() {
             </Button>
           </div>
 
+          <div
+            className='flex flex-wrap items-center gap-2'
+            data-testid='forwarder-package-confidence-filter'
+          >
+            <span className='text-sm text-muted-foreground'>
+              Suggestion confidence
+            </span>
+            {(
+              [
+                ['all', 'All'],
+                ['high', 'High'],
+                ['medium', 'Medium'],
+                ['low', 'Low'],
+              ] satisfies Array<
+                [ForwarderPackageSuggestionConfidenceFilter, string]
+              >
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type='button'
+                variant={
+                  packageSuggestionConfidenceFilter === value
+                    ? 'default'
+                    : 'outline'
+                }
+                size='sm'
+                data-testid={
+                  'forwarder-package-confidence-filter-' + value
+                }
+                onClick={() => setPackageSuggestionConfidenceFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+
           <dl
             className='grid gap-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-5'
             data-testid='forwarder-package-review-summary'
@@ -1159,6 +1219,12 @@ export function Purchases() {
                 <dt className='text-muted-foreground'>Low confidence</dt>
                 <dd className='text-lg font-semibold'>
                   {packageSuggestionSummary.low_confidence ?? 0}
+                </dd>
+              </div>
+              <div className='sm:col-span-5'>
+                <dt className='text-muted-foreground'>Active filter</dt>
+                <dd className='text-lg font-semibold'>
+                  {packageSuggestionActiveFilter ?? 'all'}
                 </dd>
               </div>
             </dl>

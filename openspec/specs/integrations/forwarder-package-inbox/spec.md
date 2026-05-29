@@ -185,3 +185,11 @@ Cabinet SHALL let API clients request non-mutating package match suggestions fil
 - **GIVEN** Cabinet has computed non-mutating package-to-purchase-arrival match suggestions across multiple confidence labels
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions?confidence_label=medium`
 - **THEN** Cabinet MUST return only medium-confidence suggestions, set `confidence_filter` to `medium`, derive summary bucket counts from the filtered result set, reject unknown confidence labels with a validation error, and avoid creating or modifying reconciliation links.
+
+### Requirement INTEGRATION-053: Forwarder package inbox UI SHALL filter match suggestions by confidence
+Cabinet SHALL let reviewers choose all, high, medium, or low confidence before loading non-mutating forwarder package match suggestions, send the selected confidence label to the suggestions API, and show the active filter with summary counts derived from the returned filtered result set.
+
+#### Scenario: Review high-confidence package match suggestions
+- **GIVEN** the reviewer is in the forwarder package inbox and wants to focus reconciliation review
+- **WHEN** the reviewer selects the high-confidence suggestion filter and requests matches
+- **THEN** Cabinet MUST request `/api/forwarding/package-match-suggestions?confidence_label=high`, render only returned high-confidence suggestions, display the active filter and summary counts, and avoid creating or modifying package reconciliation links until the reviewer explicitly confirms a link.
