@@ -66,7 +66,11 @@ func TestProviderProductURLIngestRoutesBonzaProductURL(t *testing.T) {
 			Attributes        map[string]string `json:"attributes"`
 			ImageURLs         []string          `json:"image_urls"`
 		} `json:"draft"`
-		Evidence map[string]any `json:"evidence"`
+		Evidence   map[string]any `json:"evidence"`
+		Duplicates []struct {
+			ItemID  string   `json:"item_id"`
+			Reasons []string `json:"reasons"`
+		} `json:"duplicates"`
 	}
 	if err := json.NewDecoder(ingest.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode ingest payload: %v", err)
@@ -97,6 +101,76 @@ func TestProviderProductURLIngestRoutesBonzaProductURL(t *testing.T) {
 	}
 	if payload.Evidence["provider"] != "bonzaslotcars" || payload.Evidence["family"] != "woocommerce" || payload.Evidence["extraction_method"] != "store_api" {
 		t.Fatalf("unexpected evidence: %+v", payload.Evidence)
+	}
+	if len(payload.Duplicates) != 0 {
+		t.Fatalf("expected no duplicate candidates, got %+v", payload.Duplicates)
+	}
+}
+
+func TestProviderProductURLIngestReturnsDuplicateCandidates(t *testing.T) {
+	t.Parallel()
+
+	bonza := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id":19603,
+			"name":"BONZA MUG WHITE",
+			"slug":"bonza-mug-white",
+			"permalink":"https://bonzaslotcars.com.au/product/bonza-mug-white/",
+			"prices":{"currency_code":"AUD","price":"995"},
+			"is_in_stock":true
+		}]`))
+	}))
+	defer bonza.Close()
+
+	a, profileID := newBonzaIngestTestApp(t)
+	settingsBody := fmt.Sprintf(`{"settings":{"integration.bonzaslotcars.base_url":"%s"}}`, bonza.URL)
+	saveSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profileID+"/settings", strings.NewReader(settingsBody), map[string]string{"Content-Type": "application/json"})
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+	createExisting := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{
+		"part_number":"BONZA-19603",
+		"title":"Existing Bonza Mug",
+		"brand":"AFX",
+		"category":"MERCHANDISE",
+		"notes":"provider_product_id=19603",
+		"source_urls":["https://bonzaslotcars.com.au/product/bonza-mug-white/"]
+	}`), map[string]string{"Content-Type": "application/json"})
+	if createExisting.Code != http.StatusCreated {
+		t.Fatalf("create existing status=%d body=%s", createExisting.Code, createExisting.Body.String())
+	}
+	var existing struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createExisting.Body).Decode(&existing); err != nil {
+		t.Fatalf("decode existing item: %v", err)
+	}
+
+	ingest := doRequest(t, a, http.MethodPost, "/api/providers/product-url/ingest", strings.NewReader(`{"url":"https://bonzaslotcars.com.au/product/bonza-mug-white/"}`), map[string]string{"Content-Type": "application/json"})
+	if ingest.Code != http.StatusOK {
+		t.Fatalf("ingest status=%d body=%s", ingest.Code, ingest.Body.String())
+	}
+	var payload struct {
+		Duplicates []struct {
+			ItemID     string   `json:"item_id"`
+			Title      string   `json:"title"`
+			SourceURLs []string `json:"source_urls"`
+			Reasons    []string `json:"reasons"`
+		} `json:"duplicates"`
+	}
+	if err := json.NewDecoder(ingest.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode ingest payload: %v", err)
+	}
+	if len(payload.Duplicates) != 1 {
+		t.Fatalf("expected one duplicate candidate, got %+v", payload.Duplicates)
+	}
+	duplicate := payload.Duplicates[0]
+	if duplicate.ItemID != existing.ID || duplicate.Title != "Existing Bonza Mug" {
+		t.Fatalf("unexpected duplicate identity: %+v", duplicate)
+	}
+	if !containsString(duplicate.Reasons, "source_url") || !containsString(duplicate.Reasons, "provider_product_id") {
+		t.Fatalf("expected source URL and provider product id reasons, got %+v", duplicate.Reasons)
 	}
 }
 
@@ -132,4 +206,13 @@ func newBonzaIngestTestApp(t *testing.T) (*App, string) {
 		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
 	}
 	return a, profile.ID
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }

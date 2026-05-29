@@ -2724,13 +2724,20 @@ func New(cfg config.Config) (*App, error) {
 			})
 			return
 		}
+		existingItems, err := collectionRepo.ListItemsByProfile(r.Context(), strings.TrimSpace(active.ID))
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_check_provider_product_duplicates"}`, http.StatusInternalServerError)
+			return
+		}
+		duplicates := providerProductDuplicateCandidates(existingItems, route, draft)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"mode":     "provider_product_url_ingest",
-			"provider": route.Provider,
-			"family":   route.Family,
-			"route":    route,
-			"draft":    draft,
-			"evidence": draft.Evidence,
+			"mode":       "provider_product_url_ingest",
+			"provider":   route.Provider,
+			"family":     route.Family,
+			"route":      route,
+			"draft":      draft,
+			"evidence":   draft.Evidence,
+			"duplicates": duplicates,
 		})
 	})
 	mux.HandleFunc("/api/providers/frontline/discovery", func(w http.ResponseWriter, r *http.Request) {
@@ -9235,6 +9242,44 @@ func bonzaProductDraft(product bonzaProductResponse, route providerProductURLRou
 			"source_summary":      "WooCommerce Store API product detail",
 		},
 	}
+}
+
+type providerProductDuplicateCandidate struct {
+	ItemID     string   `json:"item_id"`
+	Title      string   `json:"title"`
+	SourceURLs []string `json:"source_urls"`
+	Reasons    []string `json:"reasons"`
+}
+
+func providerProductDuplicateCandidates(items []collection.Item, route providerProductURLRoute, draft providerProductDraft) []providerProductDuplicateCandidate {
+	normalizedSource := strings.TrimRight(strings.ToLower(strings.TrimSpace(firstNonEmptyString(draft.SourceURL, route.NormalizedURL))), "/")
+	providerProductID := strings.TrimSpace(draft.ProviderProductID)
+	out := make([]providerProductDuplicateCandidate, 0)
+	for _, item := range items {
+		reasons := make([]string, 0, 2)
+		for _, sourceURL := range item.SourceURLs {
+			if normalizedSource != "" && strings.TrimRight(strings.ToLower(strings.TrimSpace(sourceURL)), "/") == normalizedSource {
+				reasons = append(reasons, "source_url")
+				break
+			}
+		}
+		if providerProductID != "" && strings.Contains(strings.ToLower(item.Notes), strings.ToLower("provider_product_id="+providerProductID)) {
+			reasons = append(reasons, "provider_product_id")
+		}
+		if len(reasons) == 0 {
+			continue
+		}
+		out = append(out, providerProductDuplicateCandidate{
+			ItemID:     item.ID,
+			Title:      item.Title,
+			SourceURLs: item.SourceURLs,
+			Reasons:    reasons,
+		})
+	}
+	if out == nil {
+		return []providerProductDuplicateCandidate{}
+	}
+	return out
 }
 
 func parseWooCommerceMinorUnitPrice(raw string) float64 {
