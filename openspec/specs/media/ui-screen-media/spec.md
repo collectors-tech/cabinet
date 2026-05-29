@@ -191,3 +191,21 @@ Cabinet SHALL expose a deterministic backend contract for the Media workspace th
 - **GIVEN** a media asset exists in the active profile
 - **WHEN** UI requests assignment or download preview contracts
 - **THEN** runtime MUST return deterministic projected linkage, confirmation, blocker/audit, and filename details without creating links, duplicating binaries, or streaming files in the preview request.
+
+### Requirement UI-SCREEN-MEDIA-008: Media workspace UI SHALL render API-backed asset states and download previews
+Cabinet SHALL wire the authenticated Media workspace to the profile-scoped media API instead of static UI fixtures.
+
+#### Scenario: Render API-backed media list
+- **GIVEN** the active profile has linked and unlinked media assets
+- **WHEN** the user opens `/media`
+- **THEN** the UI MUST request `/api/media/assets`, render returned asset cards, summary counts, linkage badges, filenames, thumbnails where available, and keep the unlinked tab backed by `/api/media/assets?filter=unlinked`.
+
+#### Scenario: Handle empty and unavailable media API states
+- **GIVEN** the media API returns no assets or a recoverable error
+- **WHEN** the user opens or retries the Media workspace
+- **THEN** the UI MUST show deterministic empty, error, and retry states without falling back to stale fixture cards.
+
+#### Scenario: Preview selected downloads from the UI
+- **GIVEN** one or more media cards are selected
+- **WHEN** the user previews selected downloads
+- **THEN** the UI MUST call `/api/media/downloads/preview` with the selected asset IDs and current filter, then display returned human-readable filenames without streaming files or mutating media state.
