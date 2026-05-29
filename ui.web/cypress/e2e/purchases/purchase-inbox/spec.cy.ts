@@ -970,8 +970,12 @@ describe('purchases/purchase-inbox', () => {
       body: { links: [], events: [], summary: { count: 0, events: 0 } },
     }).as('listForwarderPackageLinks')
 
+    let scopedSuggestionRequestSeen = false
     cy.intercept('GET', '/api/forwarding/package-match-suggestions*', (req) => {
       expect(req.query).to.include({ confidence_label: 'high' })
+      if (req.query.package_id === 'fwdpkg_suggest_001') {
+        scopedSuggestionRequestSeen = true
+      }
       req.reply({
         statusCode: 200,
         body: {
@@ -1077,6 +1081,17 @@ describe('purchases/purchase-inbox', () => {
     )
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
     cy.wait('@listForwarderPackageLinks')
+    cy.get(
+      '[data-testid="forwarder-package-match-suggestions-load-scoped"]'
+    ).click()
+    cy.wait('@listForwarderPackageMatchSuggestions')
+    cy.then(() => {
+      expect(scopedSuggestionRequestSeen).to.equal(true)
+    })
+    cy.get('[data-testid="forwarder-package-suggestion-result"]')
+      .should('contain', 'Found 1 package match suggestion')
+      .and('contain', 'for package fwdpkg_suggest_001')
+      .and('contain', 'high confidence')
     cy.get('[data-testid="forwarder-package-match-suggestions"]')
       .should('be.visible')
       .and('contain', 'high match to item item-suggested-001')

@@ -193,3 +193,11 @@ Cabinet SHALL let reviewers choose all, high, medium, or low confidence before l
 - **GIVEN** the reviewer is in the forwarder package inbox and wants to focus reconciliation review
 - **WHEN** the reviewer selects the high-confidence suggestion filter and requests matches
 - **THEN** Cabinet MUST request `/api/forwarding/package-match-suggestions?confidence_label=high`, render only returned high-confidence suggestions, display the active filter and summary counts, and avoid creating or modifying package reconciliation links until the reviewer explicitly confirms a link.
+
+### Requirement INTEGRATION-054: Forwarder package inbox UI SHALL scope match suggestions to an opened package
+Cabinet SHALL let reviewers request non-mutating match suggestions for a single opened forwarder package while preserving the selected confidence filter and returned summary evidence.
+
+#### Scenario: Review scoped package match suggestions
+- **GIVEN** the reviewer has opened a forwarder package detail panel and selected a suggestion confidence filter
+- **WHEN** the reviewer requests matches for that package
+- **THEN** Cabinet MUST request `/api/forwarding/package-match-suggestions` with both `package_id` and the selected `confidence_label`, update the visible suggestion summary and result text from the scoped response, and avoid creating or modifying package reconciliation links until the reviewer explicitly confirms a link.

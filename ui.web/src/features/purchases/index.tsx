@@ -491,7 +491,7 @@ export function Purchases() {
     }
   }, [])
 
-  const loadPackageSuggestions = useCallback(async () => {
+  const loadPackageSuggestions = useCallback(async (packageID?: string) => {
     setPackagesLoading(true)
     setPackageError(null)
     setPackageSuggestionResult(null)
@@ -503,6 +503,9 @@ export function Purchases() {
       }
       if (packageSuggestionConfidenceFilter !== 'all') {
         params.set('confidence_label', packageSuggestionConfidenceFilter)
+      }
+      if (packageID?.trim()) {
+        params.set('package_id', packageID.trim())
       }
       const response = await fetch(
         '/api/forwarding/package-match-suggestions?' + params.toString()
@@ -530,6 +533,7 @@ export function Purchases() {
           count +
           ' package match suggestion' +
           (count === 1 ? '' : 's') +
+          (packageID ? ' for package ' + packageID : '') +
           (payload.confidence_filter
             ? ' for ' + payload.confidence_filter + ' confidence'
             : '')
@@ -1773,6 +1777,25 @@ export function Purchases() {
                                 Match this package to the reviewed inventory
                                 item and expected arrival target.
                               </p>
+                            </div>
+                            <div className='flex flex-wrap justify-end gap-2'>
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                data-testid='forwarder-package-match-suggestions-load-scoped'
+                                onClick={() =>
+                                  void loadPackageSuggestions(pkg.id)
+                                }
+                                disabled={packagesLoading}
+                              >
+                                {packagesLoading ? (
+                                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                ) : (
+                                  <ShieldCheck className='mr-2 h-4 w-4' />
+                                )}
+                                Find matches for this package
+                              </Button>
                             </div>
                             {links.length > 0 ? (
                               <div
