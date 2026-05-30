@@ -217,3 +217,11 @@ Cabinet SHALL keep the OpenAPI contract for `/api/forwarding/package-match-sugge
 - **GIVEN** Cabinet exposes non-mutating package match suggestions with package scoping and confidence filtering
 - **WHEN** a client or developer reviews `docs/api/openapi.yaml`
 - **THEN** the OpenAPI specification MUST document the `package_id` query parameter, the `confidence_label` query parameter with `high`, `medium`, and `low` values, the `confidence_filter`, `suggestions`, and `summary` response fields, the `count`, `high_confidence`, `medium_confidence`, `low_confidence`, and `scoped_packages` summary counts, and the suggestion confidence, explanation, scored signal, and audit trail evidence schema.
+
+### Requirement INTEGRATION-057: Forwarder package link OpenAPI SHALL document decision and audit contracts
+Cabinet SHALL keep the OpenAPI contract for `/api/forwarding/package-links` aligned with the implemented reconciliation decision API so integrations can discover package-scoped active-link listing, audit-event listing, confirm/override requests, unlink requests, summary counts, active-link evidence, and durable decision-event evidence from the published API specification.
+
+#### Scenario: Review documented package-link decision API controls
+- **GIVEN** Cabinet exposes package reconciliation link listing, confirm/override mutation, unlink mutation, and durable decision audit events
+- **WHEN** a client or developer reviews `docs/api/openapi.yaml`
+- **THEN** the OpenAPI specification MUST document the `package_id` query parameter, active `links`, decision `events`, `summary.count`, `summary.events`, `ForwarderPackageLinkRequest`, `ForwarderPackageUnlinkRequest`, `ForwarderPackageLink`, and `ForwarderPackageLinkEvent` schemas, including decision, override, target, previous-target, notes, timestamp, and audit-trail evidence fields.

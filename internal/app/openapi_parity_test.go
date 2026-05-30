@@ -181,6 +181,105 @@ func TestOpenAPIDocumentsForwarderMatchSuggestionQueryContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsForwarderPackageLinkDecisionContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/forwarding/package-links")
+	if !ok {
+		t.Fatalf("openapi missing /api/forwarding/package-links path in %s", specPath)
+	}
+
+	for _, token := range []string{
+		"operationId: listForwarderPackageLinks",
+		"name: package_id",
+		"links:",
+		"events:",
+		"summary:",
+		"count: { type: integer }",
+		"events: { type: integer }",
+		"$ref: \"#/components/schemas/ForwarderPackageLink\"",
+		"$ref: \"#/components/schemas/ForwarderPackageLinkEvent\"",
+		"operationId: linkForwarderPackage",
+		"$ref: \"#/components/schemas/ForwarderPackageLinkRequest\"",
+		"operationId: unlinkForwarderPackage",
+		"$ref: \"#/components/schemas/ForwarderPackageUnlinkRequest\"",
+		"enum: [forwarder_package_reconciliation_unlink]",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi %s section missing %q:\n%s", "/api/forwarding/package-links", token, section)
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "ForwarderPackageLinkRequest")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageLinkRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"package_id: { type: string }",
+		"item_id: { type: string }",
+		"lifecycle_entry_id: { type: string }",
+		"expected_arrival_id: { type: string }",
+		"enum: [confirmed, override]",
+		"override: { type: boolean }",
+		"audit_trail:",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi ForwarderPackageLinkRequest schema missing %q:\n%s", token, requestSchema)
+		}
+	}
+
+	unlinkSchema, ok := openAPIComponentSection(raw, "ForwarderPackageUnlinkRequest")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageUnlinkRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"package_id: { type: string }",
+		"source: { type: string }",
+		"notes: { type: string }",
+		"actor: { type: string }",
+		"audit_trail:",
+	} {
+		if !strings.Contains(unlinkSchema, token) {
+			t.Fatalf("openapi ForwarderPackageUnlinkRequest schema missing %q:\n%s", token, unlinkSchema)
+		}
+	}
+
+	linkSchema, ok := openAPIComponentSection(raw, "ForwarderPackageLink")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageLink schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"package_id: { type: string }",
+		"item_id: { type: string }",
+		"expected_arrival_id: { type: string }",
+		"decision: { type: string }",
+		"audit_trail:",
+		"updated_at: { type: string }",
+	} {
+		if !strings.Contains(linkSchema, token) {
+			t.Fatalf("openapi ForwarderPackageLink schema missing %q:\n%s", token, linkSchema)
+		}
+	}
+
+	eventSchema, ok := openAPIComponentSection(raw, "ForwarderPackageLinkEvent")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageLinkEvent schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"action:",
+		"enum: [confirmed, override, unlinked]",
+		"previous_item_id: { type: string }",
+		"previous_expected_arrival_id: { type: string }",
+		"audit_trail:",
+		"created_at: { type: string }",
+	} {
+		if !strings.Contains(eventSchema, token) {
+			t.Fatalf("openapi ForwarderPackageLinkEvent schema missing %q:\n%s", token, eventSchema)
+		}
+	}
+}
+
 func openAPIPathSection(raw []byte, path string) (string, bool) {
 	return indentedYAMLSection(raw, "  "+path+":", 2)
 }
