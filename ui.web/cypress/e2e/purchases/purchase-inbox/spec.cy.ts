@@ -1125,4 +1125,113 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-link-save"]').click()
     cy.wait('@confirmSuggestedForwarderPackageLink')
   })
+
+  it('INTEGRATION-059 keeps package rows visible across empty and failed suggestion loads', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/forwarding/packages*', {
+      statusCode: 200,
+      body: {
+        packages: [
+          {
+            id: 'fwdpkg_empty_001',
+            profile_id: 'e2e-profile-001',
+            provider: 'stackry',
+            source: 'manual',
+            external_package_id: 'STK-EMPTY-7001',
+            shipment_id: 'SHIP-7001',
+            tracking_number: '1ZEMPTY7001',
+            status: 'received',
+            warehouse_location: 'Locker E-7',
+            weight_grams: 510,
+            provenance_key: 'stackry:manual:STK-EMPTY-7001',
+          },
+        ],
+        summary: { count: 1 },
+      },
+    }).as('listForwarderPackages')
+    cy.intercept('GET', '/api/forwarding/package-links*', {
+      statusCode: 200,
+      body: { links: [], events: [], summary: { count: 0, events: 0 } },
+    }).as('listForwarderPackageLinks')
+
+    let suggestionRequestCount = 0
+    cy.intercept('GET', '/api/forwarding/package-match-suggestions*', (req) => {
+      suggestionRequestCount += 1
+      if (suggestionRequestCount === 1) {
+        req.reply({
+          statusCode: 200,
+          body: {
+            mode: 'forwarder_package_match_suggestions',
+            mutable: false,
+            confidence_filter: 'medium',
+            suggestions: [],
+            summary: {
+              count: 0,
+              scoped_packages: 0,
+              high_confidence: 0,
+              medium_confidence: 0,
+              low_confidence: 0,
+            },
+          },
+        })
+        return
+      }
+      if (suggestionRequestCount === 2) {
+        req.reply({
+          statusCode: 503,
+          body: { error: 'suggestions_unavailable' },
+        })
+        return
+      }
+      req.reply({
+        statusCode: 200,
+        body: {
+          mode: 'forwarder_package_match_suggestions',
+          mutable: false,
+          suggestions: [],
+          summary: { count: 0, scoped_packages: 0 },
+        },
+      })
+    }).as('loadForwarderPackageSuggestions')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="forwarder-package-refresh"]').click()
+    cy.wait('@listForwarderPackages')
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-EMPTY-7001')
+
+    cy.get('[data-testid="forwarder-package-confidence-filter-medium"]').click()
+    cy.get('[data-testid="forwarder-package-match-suggestions-load"]').click()
+    cy.wait('@loadForwarderPackageSuggestions')
+    cy.get('[data-testid="forwarder-package-suggestion-result"]')
+      .should('be.visible')
+      .and('contain', 'No package match suggestions matched the current inbox')
+      .and('contain', 'medium confidence')
+      .and('contain', 'Package rows were left unchanged')
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-EMPTY-7001')
+
+    cy.get('[data-testid="forwarder-package-match-suggestions-load"]').click()
+    cy.wait('@loadForwarderPackageSuggestions')
+    cy.get('[data-testid="forwarder-package-suggestion-error"]')
+      .should('be.visible')
+      .and('contain', 'Match suggestions could not load')
+      .and('contain', 'forwarder_package_match_suggestions_503')
+    cy.get('[data-testid="forwarder-package-row"]')
+      .should('have.length', 1)
+      .and('contain', 'STK-EMPTY-7001')
+
+    cy.get('[data-testid="forwarder-package-suggestion-retry"]').click()
+    cy.wait('@loadForwarderPackageSuggestions')
+    cy.get('[data-testid="forwarder-package-suggestion-error"]').should(
+      'not.exist'
+    )
+  })
 })
