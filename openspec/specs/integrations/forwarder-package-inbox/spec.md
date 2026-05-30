@@ -209,3 +209,11 @@ Cabinet SHALL let API clients request non-mutating match suggestions for one for
 - **GIVEN** Cabinet has multiple unlinked forwarder packages with purchase-arrival match suggestions across confidence labels
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions` with both `package_id` and `confidence_label=high`
 - **THEN** Cabinet MUST return only high-confidence suggestions for that package, set `confidence_filter` to `high`, derive summary counts from the scoped filtered result set, set `scoped_packages` to `1`, and avoid creating or modifying package reconciliation links.
+
+### Requirement INTEGRATION-056: Forwarder package match suggestion OpenAPI SHALL document review controls and evidence
+Cabinet SHALL keep the OpenAPI contract for `/api/forwarding/package-match-suggestions` aligned with the implemented non-mutating review API so integrations can discover package scoping, confidence filtering, summary counts, confidence evidence, scored signals, explanations, and audit trail fields from the published API specification.
+
+#### Scenario: Review documented match suggestion API controls
+- **GIVEN** Cabinet exposes non-mutating package match suggestions with package scoping and confidence filtering
+- **WHEN** a client or developer reviews `docs/api/openapi.yaml`
+- **THEN** the OpenAPI specification MUST document the `package_id` query parameter, the `confidence_label` query parameter with `high`, `medium`, and `low` values, the `confidence_filter`, `suggestions`, and `summary` response fields, the `count`, `high_confidence`, `medium_confidence`, `low_confidence`, and `scoped_packages` summary counts, and the suggestion confidence, explanation, scored signal, and audit trail evidence schema.
