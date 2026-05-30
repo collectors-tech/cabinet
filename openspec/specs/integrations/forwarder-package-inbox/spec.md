@@ -233,3 +233,11 @@ Cabinet SHALL carry the audit-trail evidence from a selected non-mutating match 
 - **GIVEN** the reviewer has loaded package match suggestions and selected one suggested target from the forwarder package detail panel
 - **WHEN** the reviewer confirms the prefilled reconciliation link
 - **THEN** Cabinet MUST submit `/api/forwarding/package-links` with the UI confirmation audit entry plus the selected suggestion's audit-trail entries, while still avoiding any package-link mutation until the explicit confirmation action.
+
+### Requirement INTEGRATION-059: Forwarder package inbox UI SHALL preserve review context when suggestions are empty or unavailable
+Cabinet SHALL keep visible forwarder package rows available when non-mutating match suggestions return no candidates or fail, and it SHALL show explicit empty/error feedback with a retry path so reviewers can continue package review without losing the loaded package context.
+
+#### Scenario: Review suggestion empty and error states without losing package rows
+- **GIVEN** the reviewer has loaded forwarder package rows in the inbox
+- **WHEN** the reviewer requests match suggestions and the API returns zero suggestions, or a later suggestion request fails
+- **THEN** Cabinet MUST leave the loaded package rows visible, show a no-suggestions message for the empty result, show a suggestion-specific retryable error for the failed result, and avoid treating suggestion failure as a package import/list failure.

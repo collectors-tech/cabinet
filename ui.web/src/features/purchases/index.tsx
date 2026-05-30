@@ -321,6 +321,9 @@ export function Purchases() {
   const [packageSuggestions, setPackageSuggestions] = useState<
     Record<string, ForwarderPackageMatchSuggestion[]>
   >({})
+  const [packageSuggestionError, setPackageSuggestionError] = useState<
+    string | null
+  >(null)
   const [packageSuggestionResult, setPackageSuggestionResult] = useState<
     string | null
   >(null)
@@ -495,6 +498,7 @@ export function Purchases() {
   const loadPackageSuggestions = useCallback(async (packageID?: string) => {
     setPackagesLoading(true)
     setPackageError(null)
+    setPackageSuggestionError(null)
     setPackageSuggestionResult(null)
     setPackageSuggestionSummary(null)
     try {
@@ -529,6 +533,17 @@ export function Purchases() {
       setPackageSuggestionSummary(payload.summary ?? null)
       setPackageSuggestionActiveFilter(payload.confidence_filter ?? null)
       const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
+      if (count === 0) {
+        setPackageSuggestionResult(
+          'No package match suggestions matched' +
+            (packageID ? ' package ' + packageID : ' the current inbox') +
+            (payload.confidence_filter
+              ? ' for ' + payload.confidence_filter + ' confidence'
+              : '') +
+            '. Package rows were left unchanged.'
+        )
+        return
+      }
       setPackageSuggestionResult(
         'Found ' +
           count +
@@ -543,7 +558,7 @@ export function Purchases() {
       setPackageSuggestions({})
       setPackageSuggestionSummary(null)
       setPackageSuggestionActiveFilter(null)
-      setPackageError(
+      setPackageSuggestionError(
         err instanceof Error
           ? err.message
           : 'forwarder_package_match_suggestions_failed'
@@ -1482,6 +1497,31 @@ export function Purchases() {
                   data-testid='forwarder-package-suggestion-result'
                 >
                   {packageSuggestionResult}
+                </div>
+              ) : null}
+
+              {packageSuggestionError ? (
+                <div
+                  className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
+                  data-testid='forwarder-package-suggestion-error'
+                >
+                  <p className='font-medium'>
+                    Match suggestions could not load.
+                  </p>
+                  <p className='mt-1 text-muted-foreground'>
+                    {packageSuggestionError}
+                  </p>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    className='mt-3'
+                    data-testid='forwarder-package-suggestion-retry'
+                    onClick={() => void loadPackageSuggestions()}
+                    disabled={packagesLoading}
+                  >
+                    Retry suggestions
+                  </Button>
                 </div>
               ) : null}
 
