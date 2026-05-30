@@ -133,6 +133,84 @@ func TestOpenAPIOperationsDeclareClientErrorResponses(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsForwarderMatchSuggestionQueryContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/forwarding/package-match-suggestions")
+	if !ok {
+		t.Fatalf("openapi missing /api/forwarding/package-match-suggestions path in %s", specPath)
+	}
+
+	requiredTokens := []string{
+		"operationId: listForwarderPackageMatchSuggestions",
+		"name: package_id",
+		"name: confidence_label",
+		"enum: [high, medium, low]",
+		"confidence_filter:",
+		"suggestions:",
+		"summary:",
+		"count: { type: integer }",
+		"high_confidence: { type: integer }",
+		"medium_confidence: { type: integer }",
+		"low_confidence: { type: integer }",
+		"scoped_packages: { type: integer }",
+		"$ref: \"#/components/schemas/ForwarderPackageMatchSuggestion\"",
+	}
+	for _, token := range requiredTokens {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi %s section missing %q:\n%s", "/api/forwarding/package-match-suggestions", token, section)
+		}
+	}
+
+	suggestionSchema, ok := openAPIComponentSection(raw, "ForwarderPackageMatchSuggestion")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageMatchSuggestion schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"package_id: { type: string }",
+		"confidence_score: { type: number }",
+		"confidence_label:",
+		"explanation:",
+		"signals:",
+		"audit_trail:",
+	} {
+		if !strings.Contains(suggestionSchema, token) {
+			t.Fatalf("openapi ForwarderPackageMatchSuggestion schema missing %q:\n%s", token, suggestionSchema)
+		}
+	}
+}
+
+func openAPIPathSection(raw []byte, path string) (string, bool) {
+	return indentedYAMLSection(raw, "  "+path+":", 2)
+}
+
+func openAPIComponentSection(raw []byte, component string) (string, bool) {
+	return indentedYAMLSection(raw, "    "+component+":", 4)
+}
+
+func indentedYAMLSection(raw []byte, marker string, indent int) (string, bool) {
+	lines := regexp.MustCompile(`\r?\n`).Split(string(raw), -1)
+	for idx, line := range lines {
+		if line != marker {
+			continue
+		}
+		end := len(lines)
+		for scan := idx + 1; scan < len(lines); scan++ {
+			next := lines[scan]
+			if next == "" {
+				continue
+			}
+			if len(next)-len(strings.TrimLeft(next, " ")) <= indent {
+				end = scan
+				break
+			}
+		}
+		return strings.Join(lines[idx:end], "\n"), true
+	}
+	return "", false
+}
+
 func readOpenAPISpec(t *testing.T) (string, []byte) {
 	t.Helper()
 
