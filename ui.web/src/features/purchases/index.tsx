@@ -165,6 +165,7 @@ type ForwarderPackageLinkForm = {
   expected_arrival_id: string
   source: string
   notes: string
+  audit_trail?: string[]
 }
 
 type ForwarderPackageMatchSignal = {
@@ -584,6 +585,7 @@ export function Purchases() {
         notes:
           (suggestion.confidence_label ?? 'suggested') +
           ' confidence package match suggestion',
+        audit_trail: suggestion.audit_trail ?? [],
       },
     }))
     setPackageLinkResults((current) => ({
@@ -621,6 +623,14 @@ export function Purchases() {
     setPackageLinkResults((current) => ({ ...current, [pkg.id]: null }))
     const override = decision === 'overridden'
     const source = override ? 'manual_override' : form.source
+    const auditTrail = [
+      decision +
+        ' from purchase inbox UI: ' +
+        form.item_id +
+        ' / ' +
+        form.expected_arrival_id,
+      ...(source === 'suggested_match' ? (form.audit_trail ?? []) : []),
+    ]
     try {
       const response = await fetch('/api/forwarding/package-links', {
         method: 'POST',
@@ -635,13 +645,7 @@ export function Purchases() {
           notes: form.notes,
           override,
           actor: 'reviewer',
-          audit_trail: [
-            decision +
-              ' from purchase inbox UI: ' +
-              form.item_id +
-              ' / ' +
-              form.expected_arrival_id,
-          ],
+          audit_trail: auditTrail,
         }),
       })
       const payload = await response.json().catch(() => null)
