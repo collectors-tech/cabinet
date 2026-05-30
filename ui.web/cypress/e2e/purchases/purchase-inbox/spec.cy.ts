@@ -1030,6 +1030,10 @@ describe('purchases/purchase-inbox', () => {
         override: false,
         actor: 'reviewer',
       })
+      expect(req.body.audit_trail).to.deep.equal([
+        'confirmed from purchase inbox UI: item-suggested-001 / arrival-suggested-001',
+        'suggested_match package=fwdpkg_suggest_001 item=item-suggested-001 confidence=high score=94',
+      ])
       req.reply({
         statusCode: 200,
         body: {

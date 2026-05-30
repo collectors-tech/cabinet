@@ -225,3 +225,11 @@ Cabinet SHALL keep the OpenAPI contract for `/api/forwarding/package-links` alig
 - **GIVEN** Cabinet exposes package reconciliation link listing, confirm/override mutation, unlink mutation, and durable decision audit events
 - **WHEN** a client or developer reviews `docs/api/openapi.yaml`
 - **THEN** the OpenAPI specification MUST document the `package_id` query parameter, active `links`, decision `events`, `summary.count`, `summary.events`, `ForwarderPackageLinkRequest`, `ForwarderPackageUnlinkRequest`, `ForwarderPackageLink`, and `ForwarderPackageLinkEvent` schemas, including decision, override, target, previous-target, notes, timestamp, and audit-trail evidence fields.
+
+### Requirement INTEGRATION-058: Forwarder package inbox UI SHALL preserve selected suggestion audit evidence
+Cabinet SHALL carry the audit-trail evidence from a selected non-mutating match suggestion into the explicit package-link confirmation request so the persisted decision can be traced back to the suggestion that the reviewer accepted.
+
+#### Scenario: Confirm a suggested package match with suggestion provenance
+- **GIVEN** the reviewer has loaded package match suggestions and selected one suggested target from the forwarder package detail panel
+- **WHEN** the reviewer confirms the prefilled reconciliation link
+- **THEN** Cabinet MUST submit `/api/forwarding/package-links` with the UI confirmation audit entry plus the selected suggestion's audit-trail entries, while still avoiding any package-link mutation until the explicit confirmation action.
