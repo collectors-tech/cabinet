@@ -27,6 +27,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **THEN** the contract MUST document the required `query_set_id` request field, `provider="ebay"`, persisted `candidates`, and `run` snapshot response fields.
 - **AND** the contract MUST document provider auth failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, `query_set_id`, and `next_action="review_provider_credentials_and_health"`.
 - **AND** the scanner query-set OpenAPI contract MUST document eBay-scoped saved-search inputs including `provider_scope=["ebay"]`, requested `items_per_page`, scheduling/enabled state, rate limits, and latest-run hydration metadata returned by list reloads.
+- **AND** the scanner candidates and discovery action OpenAPI contracts MUST document eBay saved-search handoff provenance fields, including `source="ebay"`, `query_set_id`, listing URL, `source_provider`, `query_name`, and `provider_scope`.
 
 #### Scenario: Scanner run documents eBay auth error envelope
 - **GIVEN** an active profile runs an eBay-scoped scanner query without a usable bearer token, or with a token rejected by eBay

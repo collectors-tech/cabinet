@@ -563,6 +563,7 @@ paths:
     get:
       tags: [Scanner]
       summary: List scanner candidates for query set
+      description: Lists saved-search candidates for output inspection and handoff, including provider/query provenance used by eBay Market Watch handoff actions.
       parameters:
         - in: query
           name: query_set_id
@@ -790,6 +791,7 @@ paths:
     post:
       tags: [Discovery]
       summary: Apply discovery action
+      description: Applies saved-search output handoff actions for Discoveries, Wishlist, or Inventory while preserving eBay provider/query provenance in the durable discovery action audit.
       requestBody:
         required: true
         content:
@@ -806,6 +808,15 @@ paths:
                 payload:
                   type: object
                   additionalProperties: true
+                  properties:
+                    source: { type: string, enum: [market_watch] }
+                    query_set_id: { type: string }
+                    query_name: { type: string }
+                    source_provider: { type: string, enum: [ebay] }
+                    provider_scope:
+                      type: array
+                      items:
+                        type: string
       responses:
         "200":
           description: Action applied
@@ -3213,7 +3224,7 @@ components:
         first_seen: { type: string }
         last_seen: { type: string }
         status: { type: string }
-        source: { type: string }
+        source: { type: string, description: Source provider id such as ebay. }
     MatchResult:
       type: object
       properties:
