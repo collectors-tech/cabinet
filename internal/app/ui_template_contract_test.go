@@ -618,6 +618,39 @@ func TestIntegrationsValidateHealthReconcilesVisibleStateContract(t *testing.T) 
 	}
 }
 
+func TestIntegrationsEbaySetupStatusPanelContract(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("../../ui.web/src/features/apps/index.tsx")
+	if err != nil {
+		t.Fatalf("read integrations feature: %v", err)
+	}
+	src := string(b)
+	required := []string{
+		"data-testid='ebay-setup-status-panel'",
+		"eBay setup status",
+		"Verify credentials, marketplace, token state, and",
+		"data-testid='ebay-setup-auth-mode'",
+		"Auth mode: {editingProvider.auth_mode}",
+		"data-testid='ebay-setup-marketplace'",
+		"Marketplace / Region: {form.marketplace || 'unset'}",
+		"data-testid='ebay-setup-token-state'",
+		"stored token on file",
+		"new token pending save",
+		"token required",
+		"data-testid='ebay-setup-health-state'",
+		"Validation status:",
+		"data-testid='ebay-setup-next-action'",
+		"Ready for Market Watch runs",
+		"Save credentials, then validate health",
+	}
+	for _, token := range required {
+		if !strings.Contains(src, token) {
+			t.Fatalf("integrations eBay setup status panel contract missing token: %s", token)
+		}
+	}
+}
+
 func TestIntegrationsEbaySellerOperationsPanelContract(t *testing.T) {
 	t.Parallel()
 
