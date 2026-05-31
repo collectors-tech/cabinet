@@ -629,28 +629,33 @@ export function Scanner() {
           .map((value) => value.trim().toLowerCase())
           .filter(Boolean)
       : []
-    const isBonzaOnly =
-      providerScope.length === 1 &&
-      (providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza')
-    if (isBonzaOnly) {
-      const bonzaResponse = await fetch('/api/providers/bonza/run', {
+    const providerRunRoute =
+      providerScope.length === 1
+        ? providerScope[0] === 'ebay'
+          ? { provider: 'ebay', url: '/api/providers/ebay/run' }
+          : providerScope[0] === 'bonzaslotcars' || providerScope[0] === 'bonza'
+            ? { provider: 'bonza', url: '/api/providers/bonza/run' }
+            : null
+        : null
+    if (providerRunRoute) {
+      const providerResponse = await fetch(providerRunRoute.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query_set_id: querySet.id,
         }),
       })
-      if (!bonzaResponse.ok) {
-        const fallbackCode = `bonza_run_failed_${bonzaResponse.status}`
+      if (!providerResponse.ok) {
+        const fallbackCode = `${providerRunRoute.provider}_run_failed_${providerResponse.status}`
         let code = fallbackCode
         try {
-          code = parseErrorCode(await bonzaResponse.json(), fallbackCode)
+          code = parseErrorCode(await providerResponse.json(), fallbackCode)
         } catch {
           code = fallbackCode
         }
         setActionStatus('run_failed')
         setActionFeedback(
-          mapScannerActionError('run', bonzaResponse.status, code)
+          mapScannerActionError('run', providerResponse.status, code)
         )
         setRunMetaByQuerySet((current) => ({
           ...current,
@@ -658,7 +663,7 @@ export function Scanner() {
         }))
         return
       }
-      const payload = (await bonzaResponse.json()) as {
+      const payload = (await providerResponse.json()) as {
         candidates?: Candidate[]
         run_summary?: RunSummary
       }
@@ -672,7 +677,7 @@ export function Scanner() {
           [querySet.id]: payload.run_summary as RunSummary,
         }))
       }
-      setActionStatus(`bonza_run_started_${querySet.id}`)
+      setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)
       setActionFeedback(null)
       setRunMetaByQuerySet((current) => ({
         ...current,

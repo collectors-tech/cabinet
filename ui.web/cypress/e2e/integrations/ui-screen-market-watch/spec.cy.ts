@@ -195,6 +195,65 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-candidates-qs-mw-2"]').should('contain', 'amazon')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-002 runs eBay-only saved searches through the provider route', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay',
+            name: 'eBay Scoped',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/run', {
+      statusCode: 500,
+      body: { error: 'unexpected_generic_scanner_run_for_ebay' },
+    }).as('genericScannerRun')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          candidates: [
+            {
+              id: 'cand-mw-ebay',
+              query_set_id: 'qs-mw-ebay',
+              listing_id: 'ebay-1',
+              title: 'eBay AFX Camaro',
+              source: 'ebay',
+            },
+          ],
+        },
+      })
+    }).as('runEbayQuery')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-ebay"]').click()
+    cy.wait('@runEbayQuery')
+    cy.get('@genericScannerRun.all').should('have.length', 0)
+    cy.get('[data-testid="scanner-action-status"]').should(
+      'contain',
+      'ebay_run_started_qs-mw-ebay'
+    )
+    cy.get('[data-testid="scanner-candidates-qs-mw-ebay"]')
+      .should('contain', 'eBay AFX Camaro')
+      .and('contain', 'ebay')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-003 blocks create when provider scope is empty in multi-provider mode', () => {
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
       'querySets'
@@ -270,7 +329,7 @@ describe('integrations/ui-screen-market-watch', () => {
       statusCode: 200,
       body: { status: 'degraded', message: 'Auth refresh required' },
     }).as('providerHealth')
-    cy.intercept('POST', '/api/scanner/run', {
+    cy.intercept('POST', '/api/providers/ebay/run', {
       statusCode: 500,
       body: { error: 'PROVIDER_AUTH_INVALID' },
     }).as('runFailure')
