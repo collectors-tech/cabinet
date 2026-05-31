@@ -272,6 +272,42 @@ func TestOpenAPIDocumentsEbaySellerOperationsContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayScannerRunAuthErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/scanner/run")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/run path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Runs the saved search and maps eBay provider auth failures to actionable provider error envelopes.",
+		`"401":`,
+		"$ref: \"#/components/schemas/ProviderAuthErrorResponse\"",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/scanner/run section missing %q:\n%s", token, section)
+		}
+	}
+
+	authErrorSchema, ok := openAPIComponentSection(raw, "ProviderAuthErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing ProviderAuthErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error: { type: string, enum: [failed_to_run_scanner] }",
+		"error_code:",
+		"enum: [PROVIDER_AUTH_MISSING, PROVIDER_AUTH_INVALID]",
+		"provider: { type: string, enum: [ebay] }",
+		"query_set_id: { type: string }",
+		"next_action: { type: string, enum: [review_provider_credentials_and_health] }",
+	} {
+		if !strings.Contains(authErrorSchema, token) {
+			t.Fatalf("openapi ProviderAuthErrorResponse schema missing %q:\n%s", token, authErrorSchema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsForwarderPackageLinkDecisionContract(t *testing.T) {
 	t.Parallel()
 

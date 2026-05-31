@@ -20,6 +20,17 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.
 
+#### Scenario: Scanner run documents eBay auth error envelope
+- **GIVEN** an active profile runs an eBay-scoped scanner query without a usable bearer token, or with a token rejected by eBay
+- **WHEN** `POST /api/scanner/run` returns the provider auth failure
+- **THEN** the OpenAPI contract MUST expose a `401` response containing:
+  - `error="failed_to_run_scanner"`
+  - `error_code` of `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`
+  - `provider="ebay"`
+  - `query_set_id`
+  - `next_action="review_provider_credentials_and_health"`
+- **AND** clients MUST be able to route the error to eBay credential setup and provider health review without treating it as a generic scanner failure.
+
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state
 Cabinet SHALL report eBay provider health and recent failure telemetry via provider health endpoints.
 
