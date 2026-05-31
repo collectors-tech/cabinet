@@ -44,6 +44,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/forwarding/package-match-suggestions",
 		"/api/providers/ebay/seller-operations/preview",
 		"/api/providers/ebay/seller-operations/execute",
+		"/api/providers/ebay/run",
 		"/api/chat/threads",
 		"/api/chat/messages",
 		"/api/chat/attachments",
@@ -304,6 +305,61 @@ func TestOpenAPIDocumentsEbayScannerRunAuthErrorEnvelope(t *testing.T) {
 	} {
 		if !strings.Contains(authErrorSchema, token) {
 			t.Fatalf("openapi ProviderAuthErrorResponse schema missing %q:\n%s", token, authErrorSchema)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/providers/ebay/run")
+	if !ok {
+		t.Fatalf("openapi missing /api/providers/ebay/run path in %s", specPath)
+	}
+	for _, token := range []string{
+		"summary: Run eBay saved-search provider",
+		"Runs an eBay-scoped saved search with active-profile credentials, persists normalized candidates, and returns the hydrated run snapshot.",
+		"required: [query_set_id]",
+		"$ref: \"#/components/schemas/EbayProviderRunResponse\"",
+		`"401":`,
+		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/providers/ebay/run section missing %q:\n%s", token, section)
+		}
+	}
+
+	runSchema, ok := openAPIComponentSection(raw, "EbayProviderRunResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [query_set_id, provider, candidates, run]",
+		"query_set_id: { type: string }",
+		"provider: { type: string, enum: [ebay] }",
+		"$ref: \"#/components/schemas/Candidate\"",
+		"saved: { type: integer }",
+		"attempts: { type: integer }",
+	} {
+		if !strings.Contains(runSchema, token) {
+			t.Fatalf("openapi EbayProviderRunResponse schema missing %q:\n%s", token, runSchema)
+		}
+	}
+
+	authErrorSchema, ok := openAPIComponentSection(raw, "EbayProviderRunAuthErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunAuthErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error: { type: string, enum: [failed_to_run_ebay_provider] }",
+		"enum: [PROVIDER_AUTH_MISSING, PROVIDER_AUTH_INVALID]",
+		"provider: { type: string, enum: [ebay] }",
+		"next_action: { type: string, enum: [review_provider_credentials_and_health] }",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(authErrorSchema, token) {
+			t.Fatalf("openapi EbayProviderRunAuthErrorResponse schema missing %q:\n%s", token, authErrorSchema)
 		}
 	}
 }
