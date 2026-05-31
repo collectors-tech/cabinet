@@ -241,3 +241,11 @@ Cabinet SHALL keep visible forwarder package rows available when non-mutating ma
 - **GIVEN** the reviewer has loaded forwarder package rows in the inbox
 - **WHEN** the reviewer requests match suggestions and the API returns zero suggestions, or a later suggestion request fails
 - **THEN** Cabinet MUST leave the loaded package rows visible, show a no-suggestions message for the empty result, show a suggestion-specific retryable error for the failed result, and avoid treating suggestion failure as a package import/list failure.
+
+### Requirement INTEGRATION-060: Forwarder package links SHALL reject cross-profile reconciliation evidence
+Cabinet SHALL scope package reconciliation link mutations to the active profile so a package, item, lifecycle entry, or expected arrival from another profile cannot be linked or create audit events.
+
+#### Scenario: Reject cross-profile package-link targets
+- **GIVEN** Cabinet has an active profile and forwarder package, item, lifecycle, or expected-arrival records from another profile
+- **WHEN** a client submits `/api/forwarding/package-links` with a package or reconciliation target outside the active profile
+- **THEN** Cabinet MUST reject the request with a validation error, avoid creating an active package link, and avoid recording decision audit events for the rejected cross-profile request.

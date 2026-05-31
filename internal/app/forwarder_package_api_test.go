@@ -121,6 +121,70 @@ func TestForwarderPackageLinkAPIReconcilesPackageToPurchaseArrival(t *testing.T)
 	}
 }
 
+func TestForwarderPackageLinkAPIRejectsCrossProfileTargets(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-active-item-1', ?, 'AFX', 'Slot', 'FWD-ACTIVE', 'Active Profile Item')`, profileID); err != nil {
+		t.Fatalf("seed active item: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-other-item-1', 'profile-other', 'AFX', 'Slot', 'FWD-OTHER', 'Other Profile Item')`); err != nil {
+		t.Fatalf("seed other profile item: %v", err)
+	}
+	createActivePackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"manual","external_package_id":"PKG-ACTIVE-PROFILE","status":"received"}`), map[string]string{"Content-Type": "application/json"})
+	if createActivePackage.Code != http.StatusOK {
+		t.Fatalf("create active package status=%d body=%s", createActivePackage.Code, createActivePackage.Body.String())
+	}
+	var activePackage struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createActivePackage.Body).Decode(&activePackage); err != nil {
+		t.Fatalf("decode active package: %v", err)
+	}
+	createOtherPackage := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"profile-other","provider":"stackry","source":"manual","external_package_id":"PKG-OTHER-PROFILE","status":"received"}`), map[string]string{"Content-Type": "application/json"})
+	if createOtherPackage.Code != http.StatusOK {
+		t.Fatalf("create other package status=%d body=%s", createOtherPackage.Code, createOtherPackage.Body.String())
+	}
+	var otherPackage struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createOtherPackage.Body).Decode(&otherPackage); err != nil {
+		t.Fatalf("decode other package: %v", err)
+	}
+
+	crossItemBody := `{"package_id":"` + activePackage.Package.ID + `","item_id":"fwd-other-item-1","expected_arrival_id":"arrival-other","source":"manual-review"}`
+	crossItemResp := doRequest(t, a, http.MethodPost, "/api/forwarding/package-links", strings.NewReader(crossItemBody), map[string]string{"Content-Type": "application/json"})
+	if crossItemResp.Code != http.StatusBadRequest || !strings.Contains(crossItemResp.Body.String(), "item not found for profile") {
+		t.Fatalf("expected cross-profile item rejection, status=%d body=%s", crossItemResp.Code, crossItemResp.Body.String())
+	}
+
+	crossPackageBody := `{"package_id":"` + otherPackage.Package.ID + `","item_id":"fwd-active-item-1","expected_arrival_id":"arrival-active","source":"manual-review"}`
+	crossPackageResp := doRequest(t, a, http.MethodPost, "/api/forwarding/package-links", strings.NewReader(crossPackageBody), map[string]string{"Content-Type": "application/json"})
+	if crossPackageResp.Code != http.StatusBadRequest || !strings.Contains(crossPackageResp.Body.String(), "forwarder package not found for profile") {
+		t.Fatalf("expected cross-profile package rejection, status=%d body=%s", crossPackageResp.Code, crossPackageResp.Body.String())
+	}
+
+	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links", nil, nil)
+	if listLinks.Code != http.StatusOK {
+		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
+	}
+	var listPayload struct {
+		Links   []map[string]any `json:"links"`
+		Events  []map[string]any `json:"events"`
+		Summary map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(listLinks.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode links after rejection: %v", err)
+	}
+	if len(listPayload.Links) != 0 || len(listPayload.Events) != 0 || listPayload.Summary["count"] != 0 || listPayload.Summary["events"] != 0 {
+		t.Fatalf("cross-profile rejections must not create links or audit events, got %+v", listPayload)
+	}
+}
+
 func TestForwarderPackageLinkAPIOverridesAndUnlinksWithEvents(t *testing.T) {
 	t.Parallel()
 
