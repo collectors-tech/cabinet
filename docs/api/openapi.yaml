@@ -1449,9 +1449,11 @@ paths:
       tags: [Forwarding]
       operationId: listForwarderPackageLinks
       summary: List active package reconciliation links and audit events
+      description: Returns only active-profile package reconciliation links and decision audit events; package_id scoping never exposes another profile's links or events.
       parameters:
         - in: query
           name: package_id
+          description: Optional active-profile forwarder package id used to scope returned links and events.
           schema: { type: string }
       responses:
         "200":
@@ -1482,6 +1484,7 @@ paths:
       tags: [Forwarding]
       operationId: linkForwarderPackage
       summary: Confirm or override a package-to-purchase reconciliation link
+      description: Creates or overrides an active-profile reconciliation link only when the package, item, lifecycle entry, and expected arrival all belong to the active profile; cross-profile evidence is rejected without creating links or audit events.
       requestBody:
         required: true
         content:
@@ -1509,9 +1512,11 @@ paths:
       tags: [Forwarding]
       operationId: unlinkForwarderPackage
       summary: Unlink a package from its active purchase reconciliation target
+      description: Records an unlink audit event only for an active-profile package link.
       parameters:
         - in: query
           name: package_id
+          description: Active-profile forwarder package id whose current link should be unlinked.
           schema: { type: string }
       requestBody:
         content:
@@ -1540,12 +1545,15 @@ paths:
       tags: [Forwarding]
       operationId: listForwarderPackageMatchSuggestions
       summary: Suggest non-mutating package-to-purchase-arrival matches
+      description: Returns non-mutating suggestions derived only from active-profile forwarder packages and purchase-arrival evidence; a package_id from another profile returns an empty scoped result with zero summary counts and creates no links or audit events.
       parameters:
         - in: query
           name: package_id
+          description: Optional active-profile forwarder package id used to scope non-mutating suggestions.
           schema: { type: string }
         - in: query
           name: confidence_label
+          description: Optional confidence bucket filter applied after active-profile scoping.
           schema:
             type: string
             enum: [high, medium, low]
@@ -3228,6 +3236,7 @@ components:
         error: { type: string }
     ForwarderPackageLinkRequest:
       type: object
+      description: Active-profile package reconciliation decision request; package and target identifiers outside the active profile are rejected without link or audit-event mutation.
       required: [package_id, item_id]
       properties:
         profile_id:
@@ -3249,6 +3258,7 @@ components:
           items: { type: string }
     ForwarderPackageUnlinkRequest:
       type: object
+      description: Active-profile unlink request; unlink audit events are only created for links visible in the active profile.
       properties:
         profile_id:
           type: string
@@ -3308,6 +3318,7 @@ components:
         evidence: { type: string }
     ForwarderPackageMatchSuggestion:
       type: object
+      description: Non-mutating active-profile package-to-purchase-arrival suggestion with confidence and audit evidence.
       properties:
         package_id: { type: string }
         item_id: { type: string }

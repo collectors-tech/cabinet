@@ -257,3 +257,12 @@ Cabinet SHALL scope non-mutating package match suggestions to the active profile
 - **GIVEN** Cabinet has an active profile plus forwarder package and purchase-arrival evidence for another profile
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions`, including a `package_id` that belongs to another profile
 - **THEN** Cabinet MUST return only active-profile suggestions, return an empty scoped result for the cross-profile package id, derive summary counts from the returned suggestions, and avoid creating package links or decision audit events.
+
+### Requirement INTEGRATION-062: Forwarder package OpenAPI SHALL document active-profile isolation
+Cabinet SHALL keep the published OpenAPI contract aligned with the active-profile isolation behavior for forwarding reconciliation APIs so integration clients can discover which requests are profile-scoped, which cross-profile evidence is rejected, and which suggestion requests return empty non-mutating results.
+
+#### Scenario: Review forwarding active-profile OpenAPI evidence
+- **GIVEN** Cabinet documents `/api/forwarding/package-links` and `/api/forwarding/package-match-suggestions`
+- **WHEN** an integration client reads `docs/api/openapi.yaml`
+- **THEN** the package-link contract MUST state that links, unlink events, and audit events are active-profile scoped and cross-profile link evidence is rejected without mutation.
+- **AND** the match-suggestion contract MUST state that suggestions are derived only from active-profile package and purchase-arrival evidence and cross-profile `package_id` scoping returns an empty non-mutating summary.
