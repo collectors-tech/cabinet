@@ -515,11 +515,16 @@ func TestForwarderPackageMatchSuggestionSummaryCountsConfidenceBuckets(t *testin
 		{PackageID: "pkg-other", ConfidenceLabel: ""},
 	})
 
-	if summary.Count != 4 || summary.ScopedPackages != 1 {
+	if summary.Count != 4 || summary.ScopedPackages != 2 {
 		t.Fatalf("expected scoped four-suggestion summary, got %+v", summary)
 	}
 	if summary.HighConfidence != 1 || summary.MediumConfidence != 1 || summary.LowConfidence != 2 {
 		t.Fatalf("expected confidence bucket counts, got %+v", summary)
+	}
+
+	emptyScoped := SummarizePackageMatchSuggestions("pkg-scoped", nil)
+	if emptyScoped.Count != 0 || emptyScoped.ScopedPackages != 0 {
+		t.Fatalf("expected empty scoped summary to derive zero scoped packages, got %+v", emptyScoped)
 	}
 }
 

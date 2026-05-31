@@ -243,6 +243,14 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if createMediumPackage.Code != http.StatusOK {
 		t.Fatalf("create medium package status=%d body=%s", createMediumPackage.Code, createMediumPackage.Body.String())
 	}
+	var mediumPackagePayload struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(createMediumPackage.Body).Decode(&mediumPackagePayload); err != nil {
+		t.Fatalf("decode medium package payload: %v", err)
+	}
 
 	resp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions", nil, nil)
 	if resp.Code != http.StatusOK {
@@ -267,8 +275,8 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	if payload.Summary["high_confidence"] != 1 || payload.Summary["medium_confidence"] != 1 || payload.Summary["low_confidence"] != 1 {
 		t.Fatalf("expected confidence-bucketed suggestion summary, got %+v", payload.Summary)
 	}
-	if payload.Summary["scoped_packages"] != 0 {
-		t.Fatalf("expected unscoped package suggestion summary, got %+v", payload.Summary)
+	if payload.Summary["scoped_packages"] != 2 {
+		t.Fatalf("expected summary to count packages represented by returned suggestions, got %+v", payload.Summary)
 	}
 	suggestion := payload.Suggestions[0]
 	if suggestion["item_id"] != "fwd-match-item" || suggestion["confidence_label"] != "high" {
@@ -332,6 +340,24 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	}
 	if scopedPayload.Suggestions[0]["package_id"] != packagePayload.Package.ID || scopedPayload.Suggestions[0]["confidence_label"] != "high" {
 		t.Fatalf("expected scoped package high-confidence suggestion, got %+v", scopedPayload.Suggestions[0])
+	}
+	scopedEmptyResp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?package_id="+mediumPackagePayload.Package.ID+"&confidence_label=high", nil, nil)
+	if scopedEmptyResp.Code != http.StatusOK {
+		t.Fatalf("scoped empty suggestions status=%d body=%s", scopedEmptyResp.Code, scopedEmptyResp.Body.String())
+	}
+	var scopedEmptyPayload struct {
+		ConfidenceFilter string           `json:"confidence_filter"`
+		Suggestions      []map[string]any `json:"suggestions"`
+		Summary          map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(scopedEmptyResp.Body).Decode(&scopedEmptyPayload); err != nil {
+		t.Fatalf("decode scoped empty suggestions payload: %v", err)
+	}
+	if scopedEmptyPayload.ConfidenceFilter != "high" || len(scopedEmptyPayload.Suggestions) != 0 {
+		t.Fatalf("expected no high-confidence suggestions for medium package, got %+v", scopedEmptyPayload)
+	}
+	if scopedEmptyPayload.Summary["count"] != 0 || scopedEmptyPayload.Summary["scoped_packages"] != 0 || scopedEmptyPayload.Summary["high_confidence"] != 0 {
+		t.Fatalf("expected empty scoped summary derived from returned suggestions, got %+v", scopedEmptyPayload.Summary)
 	}
 	invalidFilter := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?confidence_label=certain", nil, nil)
 	if invalidFilter.Code != http.StatusBadRequest {

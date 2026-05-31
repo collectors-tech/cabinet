@@ -163,12 +163,12 @@ Cabinet SHALL document the forwarder package import, CSV/email ingestion, reconc
 - **THEN** the specification MUST include /api/forwarding/packages, /api/forwarding/packages/import-csv, /api/forwarding/packages/import-email, /api/forwarding/package-links, and /api/forwarding/package-match-suggestions with the persisted package, link, event, non-mutating suggestion, and row-error schemas used by the tested API responses.
 
 ### Requirement INTEGRATION-050: Forwarder package match suggestions SHALL summarize confidence buckets
-Cabinet SHALL include deterministic review-summary metadata with non-mutating forwarder package match suggestions so reviewers and UI clients can see total candidate count, scoped-package state, and high/medium/low confidence buckets without re-scoring suggestion rows client-side.
+Cabinet SHALL include deterministic review-summary metadata with non-mutating forwarder package match suggestions so reviewers and UI clients can see total candidate count, the unique package count represented by returned suggestions, and high/medium/low confidence buckets without re-scoring suggestion rows client-side.
 
 #### Scenario: Review confidence-bucketed match suggestions
 - **GIVEN** Cabinet has computed zero or more non-mutating package-to-purchase-arrival match suggestions for a profile or a scoped package
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions`
-- **THEN** Cabinet MUST return `summary.count`, `summary.high_confidence`, `summary.medium_confidence`, `summary.low_confidence`, and `summary.scoped_packages` values derived from the returned suggestions while keeping the suggestion request non-mutating.
+- **THEN** Cabinet MUST return `summary.count`, `summary.high_confidence`, `summary.medium_confidence`, `summary.low_confidence`, and `summary.scoped_packages` values derived from the returned suggestions, with `summary.scoped_packages` counting unique package IDs present in those suggestions rather than the request parameters, while keeping the suggestion request non-mutating.
 
 ### Requirement INTEGRATION-051: Forwarder package inbox UI SHALL surface suggestion confidence summary
 Cabinet SHALL display the non-mutating match-suggestion summary in the forwarder package inbox so reviewers can see total candidates, scoped packages, and high/medium/low confidence buckets before drilling into package rows.
@@ -208,7 +208,7 @@ Cabinet SHALL let API clients request non-mutating match suggestions for one for
 #### Scenario: Request scoped high-confidence package suggestions
 - **GIVEN** Cabinet has multiple unlinked forwarder packages with purchase-arrival match suggestions across confidence labels
 - **WHEN** a client requests `/api/forwarding/package-match-suggestions` with both `package_id` and `confidence_label=high`
-- **THEN** Cabinet MUST return only high-confidence suggestions for that package, set `confidence_filter` to `high`, derive summary counts from the scoped filtered result set, set `scoped_packages` to `1`, and avoid creating or modifying package reconciliation links.
+- **THEN** Cabinet MUST return only high-confidence suggestions for that package, set `confidence_filter` to `high`, derive summary counts from the scoped filtered result set, set `scoped_packages` to the number of unique package IDs in that result set (1 when a scoped suggestion is returned and 0 when the scoped filter is empty), and avoid creating or modifying package reconciliation links.
 
 ### Requirement INTEGRATION-056: Forwarder package match suggestion OpenAPI SHALL document review controls and evidence
 Cabinet SHALL keep the OpenAPI contract for `/api/forwarding/package-match-suggestions` aligned with the implemented non-mutating review API so integrations can discover package scoping, confidence filtering, summary counts, confidence evidence, scored signals, explanations, and audit trail fields from the published API specification.

@@ -768,10 +768,11 @@ func SummarizePackageMatchSuggestions(packageID string, suggestions []PackageMat
 	summary := PackageMatchSuggestionSummary{
 		Count: len(suggestions),
 	}
-	if strings.TrimSpace(packageID) != "" {
-		summary.ScopedPackages = 1
-	}
+	scopedPackages := map[string]struct{}{}
 	for _, suggestion := range suggestions {
+		if strings.TrimSpace(suggestion.PackageID) != "" {
+			scopedPackages[suggestion.PackageID] = struct{}{}
+		}
 		switch suggestion.ConfidenceLabel {
 		case "high":
 			summary.HighConfidence++
@@ -781,6 +782,7 @@ func SummarizePackageMatchSuggestions(packageID string, suggestions []PackageMat
 			summary.LowConfidence++
 		}
 	}
+	summary.ScopedPackages = len(scopedPackages)
 	return summary
 }
 
