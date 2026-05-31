@@ -37,6 +37,7 @@ Cabinet SHALL require explicit restore confirmation and SHALL return readable ba
 - **AND** restore SHALL fail without explicit confirmation before replacing the active database
 - **AND** newly created backups SHALL be timestamped ZIP archives containing the active database and app-owned backup metadata
 - **AND** the Settings backup flow SHALL expose the generated ZIP filename and a download action
+- **AND** the Settings backup list SHALL render backup metadata in a sortable table that distinguishes generated ZIP archives from legacy database snapshots
 
 ### Requirement DATA-MANAGEMENT-005: Data export SHALL expose explicit download affordances
 Cabinet SHALL expose profile-scoped JSON snapshot and CSV item exports as user-downloadable actions with deterministic download filenames.

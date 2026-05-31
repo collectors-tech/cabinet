@@ -52,8 +52,20 @@ Storage section MUST avoid hard-fail UX and provide actionable recovery with ret
 - **WHEN** user clicks `Rebuild Thumbnails`
 - **THEN** runtime MUST start thumbnail rebuild workflow and return deterministic completion/error feedback
 
+### Requirement UI-SCREEN-SETTINGS-STORAGE-007: Storage screen SHALL show backups in a sortable inspection table
+Backup archives MUST render as a dense table so users can inspect backup identity, freshness, source type, size, validity, and supported actions before restore.
+
+#### Scenario: Backup table inspection and sorting
+- **GIVEN** backup metadata is available from `/api/backup/list`
+- **WHEN** user opens `/settings/storage`
+- **THEN** the backup area MUST render a table with filename, created timestamp, backup source, archive size, status, and actions columns
+- **AND** generated timestamped ZIP archives MUST be visually distinguished from legacy database snapshots or unsupported artifacts
+- **AND** users MUST be able to sort by filename and created timestamp
+- **AND** long filenames and paths MUST remain readable without overlapping restore or download actions
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-STR-01 | Reindex Search action | `Reindex Search` triggers search reindex workflow with deterministic completion/error feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Reindex Search and reports deterministic completion feedback`, `UI-SCREEN-SETTINGS-STORAGE-006 reports Reindex Search failure without route reload` |
 | UC-SET-STR-02 | Rebuild Thumbnails action | `Rebuild Thumbnails` triggers thumbnail maintenance workflow with deterministic completion/error feedback | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-006 runs Rebuild Thumbnails and reports deterministic feedback`, `UI-SCREEN-SETTINGS-STORAGE-006 reports Rebuild Thumbnails failure without route reload` |
+| UC-SET-STR-03 | Backup table inspection | Backup archives render in a sortable metadata table with supported download/restore actions | `ui.web/cypress/e2e/settings/storage/spec.cy.ts` `UI-SCREEN-SETTINGS-STORAGE-007 creates, lists, and restores backups from Settings Storage` |
