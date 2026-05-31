@@ -42,6 +42,8 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/forwarding/packages/import-email",
 		"/api/forwarding/package-links",
 		"/api/forwarding/package-match-suggestions",
+		"/api/providers/ebay/seller-operations/preview",
+		"/api/providers/ebay/seller-operations/execute",
 		"/api/chat/threads",
 		"/api/chat/messages",
 		"/api/chat/attachments",
@@ -177,6 +179,95 @@ func TestOpenAPIDocumentsForwarderMatchSuggestionQueryContract(t *testing.T) {
 	} {
 		if !strings.Contains(suggestionSchema, token) {
 			t.Fatalf("openapi ForwarderPackageMatchSuggestion schema missing %q:\n%s", token, suggestionSchema)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsEbaySellerOperationsContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	for path, operationID := range map[string]string{
+		"/api/providers/ebay/seller-operations/preview": "previewEbaySellerOperation",
+		"/api/providers/ebay/seller-operations/execute": "executeEbaySellerOperation",
+	} {
+		section, ok := openAPIPathSection(raw, path)
+		if !ok {
+			t.Fatalf("openapi missing %s path in %s", path, specPath)
+		}
+		for _, token := range []string{
+			"operationId: " + operationID,
+			"$ref: \"#/components/schemas/EbaySellerOperationRequest\"",
+		} {
+			if !strings.Contains(section, token) {
+				t.Fatalf("openapi %s section missing %q:\n%s", path, token, section)
+			}
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "EbaySellerOperationRequest")
+	if !ok {
+		t.Fatalf("openapi missing EbaySellerOperationRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"operation:",
+		"enum: [messages, notifications, sold_orders, fulfilment, fulfillment, offers, orders]",
+		"action: { type: string }",
+		"capability:",
+		"enum: [unverified, read_only, confirmed_api]",
+		"reference_id: { type: string }",
+		"confirmed: { type: boolean }",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi EbaySellerOperationRequest schema missing %q:\n%s", token, requestSchema)
+		}
+	}
+
+	previewSchema, ok := openAPIComponentSection(raw, "EbaySellerOperationPreview")
+	if !ok {
+		t.Fatalf("openapi missing EbaySellerOperationPreview schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"read_available: { type: boolean }",
+		"write_available: { type: boolean }",
+		"allowed: { type: boolean }",
+		"remote_write: { type: boolean }",
+		"confirmation_required: { type: boolean }",
+		"blocker: { type: string }",
+	} {
+		if !strings.Contains(previewSchema, token) {
+			t.Fatalf("openapi EbaySellerOperationPreview schema missing %q:\n%s", token, previewSchema)
+		}
+	}
+
+	executionSchema, ok := openAPIComponentSection(raw, "EbaySellerOperationExecution")
+	if !ok {
+		t.Fatalf("openapi missing EbaySellerOperationExecution schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"executed: { type: boolean }",
+		"local_only: { type: boolean }",
+		"result:",
+		"$ref: \"#/components/schemas/EbaySellerOperationReadResult\"",
+	} {
+		if !strings.Contains(executionSchema, token) {
+			t.Fatalf("openapi EbaySellerOperationExecution schema missing %q:\n%s", token, executionSchema)
+		}
+	}
+
+	resultSchema, ok := openAPIComponentSection(raw, "EbaySellerOperationReadResult")
+	if !ok {
+		t.Fatalf("openapi missing EbaySellerOperationReadResult schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"source: { type: string }",
+		"records:",
+		"kind: { type: string }",
+		"status: { type: string }",
+		"summary:",
+	} {
+		if !strings.Contains(resultSchema, token) {
+			t.Fatalf("openapi EbaySellerOperationReadResult schema missing %q:\n%s", token, resultSchema)
 		}
 	}
 }
