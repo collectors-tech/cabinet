@@ -1,4 +1,16 @@
 describe('ui-screen-users', () => {
+  function visibleCellText(raw: string) {
+    const value = raw.trim()
+    const midpoint = value.length / 2
+    if (
+      value.length % 2 === 0 &&
+      value.slice(0, midpoint) === value.slice(midpoint)
+    ) {
+      return value.slice(0, midpoint)
+    }
+    return value
+  }
+
   function signInToUsers() {
     cy.visit('/sign-in?redirect=%2Fusers%2F')
     cy.get('input[name="email"]').clear().type('e2e-users@example.com')
@@ -87,5 +99,42 @@ describe('ui-screen-users', () => {
           cy.contains(confirmUsername).should('not.exist')
         })
     })
+  })
+
+  it('UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row', () => {
+    cy.get('tbody tr').should('have.length.greaterThan', 1)
+
+    cy.get('tbody tr')
+      .eq(0)
+      .find('td')
+      .eq(1)
+      .invoke('text')
+      .then((firstUsernameRaw) => {
+        const firstUsername = visibleCellText(firstUsernameRaw)
+
+        cy.get('tbody tr').eq(0).click()
+        cy.contains('[data-testid="users-row-details-modal"]', firstUsername)
+          .should('be.visible')
+        cy.get('body').type('{esc}')
+      })
+
+    cy.get('tbody tr')
+      .eq(1)
+      .find('td')
+      .eq(1)
+      .invoke('text')
+      .then((secondUsernameRaw) => {
+        const secondUsername = visibleCellText(secondUsernameRaw)
+
+        cy.get('tbody tr').eq(1).dblclick()
+        cy.contains('[role="dialog"]', 'Edit User')
+          .should('be.visible')
+          .within(() => {
+            cy.get('input[placeholder="john_doe"]').should(
+              'have.value',
+              secondUsername
+            )
+          })
+      })
   })
 })
