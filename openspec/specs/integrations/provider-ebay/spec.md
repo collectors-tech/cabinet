@@ -21,6 +21,12 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
 
+#### Scenario: Provider run route is documented for client integrations
+- **GIVEN** an API client uses the provider-specific `POST /api/providers/ebay/run` route for an eBay-scoped saved search
+- **WHEN** the client reads the OpenAPI contract
+- **THEN** the contract MUST document the required `query_set_id` request field, `provider="ebay"`, persisted `candidates`, and `run` snapshot response fields.
+- **AND** the contract MUST document provider auth failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, `query_set_id`, and `next_action="review_provider_credentials_and_health"`.
+
 #### Scenario: Scanner run documents eBay auth error envelope
 - **GIVEN** an active profile runs an eBay-scoped scanner query without a usable bearer token, or with a token rejected by eBay
 - **WHEN** `POST /api/scanner/run` returns the provider auth failure

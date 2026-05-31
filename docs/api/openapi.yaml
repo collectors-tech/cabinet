@@ -580,6 +580,42 @@ paths:
                       $ref: "#/components/schemas/Candidate"
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/ebay/run:
+    post:
+      tags: [Integrations]
+      summary: Run eBay saved-search provider
+      description: Runs an eBay-scoped saved search with active-profile credentials, persists normalized candidates, and returns the hydrated run snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query_set_id]
+              properties:
+                query_set_id:
+                  type: string
+      responses:
+        "200":
+          description: eBay provider run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayProviderRunResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          description: eBay provider credentials are missing, expired, or rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayProviderRunAuthErrorResponse"
+        "403":
+          description: eBay provider credentials are rejected by the upstream API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayProviderRunAuthErrorResponse"
   /api/matching/run:
     post:
       tags: [Matching]
@@ -2989,6 +3025,33 @@ components:
         message: { type: string }
         next_action: { type: string, enum: [review_provider_credentials_and_health] }
         query_set_id: { type: string }
+    EbayProviderRunAuthErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, query_set_id]
+      properties:
+        error: { type: string, enum: [failed_to_run_ebay_provider] }
+        error_code:
+          type: string
+          enum: [PROVIDER_AUTH_MISSING, PROVIDER_AUTH_INVALID]
+        provider: { type: string, enum: [ebay] }
+        message: { type: string }
+        next_action: { type: string, enum: [review_provider_credentials_and_health] }
+        query_set_id: { type: string }
+    EbayProviderRunResponse:
+      type: object
+      required: [query_set_id, provider, candidates, run]
+      properties:
+        query_set_id: { type: string }
+        provider: { type: string, enum: [ebay] }
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+        run:
+          type: object
+          properties:
+            saved: { type: integer }
+            attempts: { type: integer }
     OkResponse:
       type: object
       properties:
