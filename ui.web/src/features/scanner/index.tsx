@@ -135,10 +135,15 @@ type CreateQueryValidation = {
 }
 
 function parseErrorCode(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object' && 'error' in payload) {
-    const value = (payload as { error?: unknown }).error
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim()
+  if (payload && typeof payload === 'object') {
+    const values = payload as {
+      error?: unknown
+      error_code?: unknown
+    }
+    for (const value of [values.error_code, values.error]) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim()
+      }
     }
   }
   return fallback
@@ -172,7 +177,10 @@ function mapScannerActionError(
   if (status === 401 || status === 403) {
     return {
       summary: 'Market Watch action was denied.',
-      actions: ['Sign in again and confirm profile access permissions.'],
+      actions: [
+        'Review provider health and credentials before retrying.',
+        'Sign in again if the provider is ready and the request is still denied.',
+      ],
       diagnosticCode: errorCode,
     }
   }

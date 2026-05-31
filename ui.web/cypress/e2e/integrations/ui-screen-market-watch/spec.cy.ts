@@ -330,8 +330,14 @@ describe('integrations/ui-screen-market-watch', () => {
       body: { status: 'degraded', message: 'Auth refresh required' },
     }).as('providerHealth')
     cy.intercept('POST', '/api/providers/ebay/run', {
-      statusCode: 500,
-      body: { error: 'PROVIDER_AUTH_INVALID' },
+      statusCode: 401,
+      body: {
+        error: 'failed_to_run_scanner',
+        error_code: 'PROVIDER_AUTH_INVALID',
+        provider: 'ebay',
+        query_set_id: 'qs-mw-failure',
+        next_action: 'review_provider_credentials_and_health',
+      },
     }).as('runFailure')
     cy.intercept('POST', '/api/scanner/failures/retry', (req) => {
       expect(req.body.query_set_id).to.equal('qs-mw-failure')
@@ -357,9 +363,10 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-run-qs-mw-failure"]').click()
     cy.wait('@runFailure')
     cy.get('[data-testid="scanner-action-feedback"]')
-      .should('contain', 'Market Watch service is temporarily unavailable.')
-      .and('contain', 'Check diagnostics for provider/runtime health.')
+      .should('contain', 'Market Watch action was denied.')
+      .and('contain', 'Review provider health and credentials before retrying.')
       .and('contain', 'PROVIDER_AUTH_INVALID')
+      .and('not.contain', 'failed_to_run_scanner')
 
     cy.get('[data-testid="scanner-failures"]').within(() => {
       cy.contains('ebay').should('be.visible')
