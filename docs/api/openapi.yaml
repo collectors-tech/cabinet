@@ -525,6 +525,7 @@ paths:
     post:
       tags: [Scanner]
       summary: Run scanner now
+      description: Runs the saved search and maps eBay provider auth failures to actionable provider error envelopes.
       requestBody:
         required: true
         content:
@@ -549,6 +550,12 @@ paths:
                     type: integer
         "400":
           $ref: "#/components/responses/Error"
+        "401":
+          description: eBay provider credentials are missing, expired, or rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAuthErrorResponse"
   /api/scanner/candidates:
     get:
       tags: [Scanner]
@@ -2970,6 +2977,18 @@ components:
       properties:
         error:
           type: string
+    ProviderAuthErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, query_set_id]
+      properties:
+        error: { type: string, enum: [failed_to_run_scanner] }
+        error_code:
+          type: string
+          enum: [PROVIDER_AUTH_MISSING, PROVIDER_AUTH_INVALID]
+        provider: { type: string, enum: [ebay] }
+        message: { type: string }
+        next_action: { type: string, enum: [review_provider_credentials_and_health] }
+        query_set_id: { type: string }
     OkResponse:
       type: object
       properties:
