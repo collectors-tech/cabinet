@@ -26,6 +26,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <Button
             variant='ghost'
             className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
           >
             <DotsHorizontalIcon className='h-4 w-4' />
             <span className='sr-only'>Open menu</span>
@@ -33,7 +35,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-[160px]'>
           <DropdownMenuItem
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation()
               setCurrentRow(row.original)
               setOpen('edit')
             }}
@@ -45,7 +48,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation()
               setCurrentRow(row.original)
               setOpen('delete')
             }}

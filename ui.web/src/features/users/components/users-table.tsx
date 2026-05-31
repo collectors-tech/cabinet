@@ -14,6 +14,13 @@ import {
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -22,17 +29,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumns as columns } from './users-columns'
+import { useUsers } from './users-provider'
 
 type DataTableProps = {
   data: User[]
@@ -47,8 +48,8 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedUserID, setSelectedUserID] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
+  const { open, setOpen, setCurrentRow } = useUsers()
 
   // Local state management for table (uncomment to use local-only state, not synced with URL)
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
@@ -117,10 +118,12 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
   )
 
   const isInteractiveTarget = (target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof Element)) {
       return false
     }
-    return Boolean(target.closest('button, a, input, select, textarea, [role="checkbox"]'))
+    return Boolean(
+      target.closest('button, a, input, select, textarea, [role="checkbox"]')
+    )
   }
 
   const setSelectedContext = (id: string) => {
@@ -155,7 +158,13 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     }
     setSelectedContext(id)
     setDetailsOpen(false)
-    setEditOpen(true)
+    const user = data.find((record) => record.id === id)
+    if (user) {
+      setCurrentRow(user)
+      if (open !== 'edit') {
+        setOpen('edit')
+      }
+    }
   }
 
   return (
@@ -277,26 +286,6 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
               </p>
               <p>
                 <strong>Status:</strong> {selectedUser.status}
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent data-testid='users-row-edit-modal'>
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Opened from row double-click interaction.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser ? (
-            <div className='space-y-1 text-sm'>
-              <p>
-                <strong>Username:</strong> {selectedUser.username}
-              </p>
-              <p>
-                <strong>Role:</strong> {selectedUser.role}
               </p>
             </div>
           ) : null}
