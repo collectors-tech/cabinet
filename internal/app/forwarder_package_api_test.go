@@ -442,6 +442,95 @@ func TestForwarderPackageMatchSuggestionsAPIIsNonMutating(t *testing.T) {
 	}
 }
 
+func TestForwarderPackageMatchSuggestionsAPIIsProfileScoped(t *testing.T) {
+	t.Parallel()
+
+	a, profileID := newCommerceProfileApp(t)
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-scope-active-item', ?, 'AFX', 'Slot', 'AFX-SCOPE', 'Active Profile Scope Item')`, profileID); err != nil {
+		t.Fatalf("seed active item: %v", err)
+	}
+	activeLifecycle := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"fwd-scope-active-item","state":"purchase","source":"ebay","external_ref":"ORDER-SCOPE-ACTIVE","quantity":1,"amount":52,"currency":"aud","notes":"tracking TRACK-SCOPE-ACTIVE package PKG-SCOPE-ACTIVE"}`), map[string]string{"Content-Type": "application/json"})
+	if activeLifecycle.Code != http.StatusCreated {
+		t.Fatalf("create active lifecycle status=%d body=%s", activeLifecycle.Code, activeLifecycle.Body.String())
+	}
+	activePackageResp := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+profileID+`","provider":"stackry","source":"email","external_package_id":"PKG-SCOPE-ACTIVE","status":"received","tracking_number":"TRACK-SCOPE-ACTIVE","sender":"active seller","raw_payload":{"title":"Active Profile Scope Item","quantity":1}}`), map[string]string{"Content-Type": "application/json"})
+	if activePackageResp.Code != http.StatusOK {
+		t.Fatalf("create active package status=%d body=%s", activePackageResp.Code, activePackageResp.Body.String())
+	}
+
+	otherProfileID := "profile-suggestion-other"
+	if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES ('fwd-scope-other-item', ?, 'AFX', 'Slot', 'AFX-SCOPE-OTHER', 'Other Profile Scope Item')`, otherProfileID); err != nil {
+		t.Fatalf("seed other item: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes) VALUES ('scope-other-life', ?, 'fwd-scope-other-item', 'purchase', 'ebay', 'ORDER-SCOPE-OTHER', 1, 52, 'AUD', 'tracking TRACK-SCOPE-OTHER package PKG-SCOPE-OTHER')`, otherProfileID); err != nil {
+		t.Fatalf("seed other lifecycle: %v", err)
+	}
+	if _, err := a.db.Exec(`INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, notes) VALUES ('scope-other-arrival', ?, 'fwd-scope-other-item', 'scope-other-life', 'ebay', 'ORDER-SCOPE-OTHER', 1, 52, 'AUD', 'expected', 'tracking TRACK-SCOPE-OTHER package PKG-SCOPE-OTHER')`, otherProfileID); err != nil {
+		t.Fatalf("seed other arrival: %v", err)
+	}
+	otherPackageResp := doRequest(t, a, http.MethodPost, "/api/forwarding/packages", strings.NewReader(`{"profile_id":"`+otherProfileID+`","provider":"stackry","source":"email","external_package_id":"PKG-SCOPE-OTHER","status":"received","tracking_number":"TRACK-SCOPE-OTHER","sender":"other seller","raw_payload":{"title":"Other Profile Scope Item","quantity":1}}`), map[string]string{"Content-Type": "application/json"})
+	if otherPackageResp.Code != http.StatusOK {
+		t.Fatalf("create other package status=%d body=%s", otherPackageResp.Code, otherPackageResp.Body.String())
+	}
+	var otherPackage struct {
+		Package struct {
+			ID string `json:"id"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(otherPackageResp.Body).Decode(&otherPackage); err != nil {
+		t.Fatalf("decode other package: %v", err)
+	}
+
+	allResp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions", nil, nil)
+	if allResp.Code != http.StatusOK {
+		t.Fatalf("suggestions status=%d body=%s", allResp.Code, allResp.Body.String())
+	}
+	var allPayload struct {
+		Suggestions []map[string]any `json:"suggestions"`
+		Summary     map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(allResp.Body).Decode(&allPayload); err != nil {
+		t.Fatalf("decode all suggestions: %v", err)
+	}
+	if allPayload.Summary["count"] != 1 || len(allPayload.Suggestions) != 1 {
+		t.Fatalf("expected one active-profile suggestion, got %+v", allPayload)
+	}
+	if allPayload.Suggestions[0]["item_id"] != "fwd-scope-active-item" {
+		t.Fatalf("suggestions leaked or missed profile scope, got %+v", allPayload.Suggestions)
+	}
+
+	crossScopedResp := doRequest(t, a, http.MethodGet, "/api/forwarding/package-match-suggestions?package_id="+otherPackage.Package.ID, nil, nil)
+	if crossScopedResp.Code != http.StatusOK {
+		t.Fatalf("cross-profile scoped suggestions status=%d body=%s", crossScopedResp.Code, crossScopedResp.Body.String())
+	}
+	var crossScopedPayload struct {
+		Suggestions []map[string]any `json:"suggestions"`
+		Summary     map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(crossScopedResp.Body).Decode(&crossScopedPayload); err != nil {
+		t.Fatalf("decode cross-profile scoped suggestions: %v", err)
+	}
+	if len(crossScopedPayload.Suggestions) != 0 || crossScopedPayload.Summary["count"] != 0 || crossScopedPayload.Summary["scoped_packages"] != 0 {
+		t.Fatalf("cross-profile package_id must not leak suggestions, got %+v", crossScopedPayload)
+	}
+
+	listLinks := doRequest(t, a, http.MethodGet, "/api/forwarding/package-links", nil, nil)
+	if listLinks.Code != http.StatusOK {
+		t.Fatalf("list links status=%d body=%s", listLinks.Code, listLinks.Body.String())
+	}
+	var linksPayload struct {
+		Links   []map[string]any `json:"links"`
+		Events  []map[string]any `json:"events"`
+		Summary map[string]int   `json:"summary"`
+	}
+	if err := json.NewDecoder(listLinks.Body).Decode(&linksPayload); err != nil {
+		t.Fatalf("decode links after suggestions: %v", err)
+	}
+	if len(linksPayload.Links) != 0 || len(linksPayload.Events) != 0 || linksPayload.Summary["count"] != 0 || linksPayload.Summary["events"] != 0 {
+		t.Fatalf("profile-scoped suggestions must not create links or events, got %+v", linksPayload)
+	}
+}
+
 func TestForwarderPackageCSVImportAPIUpsertsValidRowsAndReportsRowErrors(t *testing.T) {
 	t.Parallel()
 
