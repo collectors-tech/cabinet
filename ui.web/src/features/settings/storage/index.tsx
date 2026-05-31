@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, Download } from 'lucide-react'
@@ -35,6 +35,9 @@ type BackupListResponse = {
   backups?: BackupInfo[]
 }
 
+type BackupSortKey = 'created_at' | 'file_name'
+type BackupSortDirection = 'asc' | 'desc'
+
 const LAST_KNOWN_STORAGE_KEY = 'cabinet.settings.storage.lastKnown'
 
 export function SettingsStorage() {
@@ -53,6 +56,9 @@ export function SettingsStorage() {
   const [backupPending, setBackupPending] = useState(false)
   const [restorePending, setRestorePending] = useState(false)
   const [backupError, setBackupError] = useState<string | null>(null)
+  const [backupSortKey, setBackupSortKey] = useState<BackupSortKey>('created_at')
+  const [backupSortDirection, setBackupSortDirection] =
+    useState<BackupSortDirection>('desc')
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [selectedBackupPath, setSelectedBackupPath] = useState<string | null>(null)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
@@ -275,6 +281,39 @@ export function SettingsStorage() {
     }
   }, [loadBackups, loadStorage, selectedBackupPath])
 
+  const sortedBackupList = useMemo(() => {
+    return [...backupList].sort((left, right) => {
+      const direction = backupSortDirection === 'asc' ? 1 : -1
+      if (backupSortKey === 'created_at') {
+        const leftTime = Date.parse(left.created_at ?? '')
+        const rightTime = Date.parse(right.created_at ?? '')
+        const leftValue = Number.isFinite(leftTime) ? leftTime : 0
+        const rightValue = Number.isFinite(rightTime) ? rightTime : 0
+        if (leftValue !== rightValue) {
+          return (leftValue - rightValue) * direction
+        }
+      }
+      return backupDisplayName(left)
+        .localeCompare(backupDisplayName(right), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }) * direction
+    })
+  }, [backupList, backupSortDirection, backupSortKey])
+
+  const toggleBackupSort = useCallback((key: BackupSortKey) => {
+    setBackupSortKey((currentKey) => {
+      if (currentKey === key) {
+        setBackupSortDirection((currentDirection) =>
+          currentDirection === 'asc' ? 'desc' : 'asc'
+        )
+        return currentKey
+      }
+      setBackupSortDirection(key === 'created_at' ? 'desc' : 'asc')
+      return key
+    })
+  }, [])
+
   const actionsDisabled =
     loading ||
     Boolean(error) ||
@@ -467,52 +506,102 @@ export function SettingsStorage() {
               </p>
             ) : null}
             {!backupsLoading && backupList.length > 0 ? (
-              <div className='space-y-2'>
-                {backupList.map((backup) => (
-                  <div
-                    key={backup.path}
-                    className='flex items-center justify-between gap-3 rounded-md border p-2'
-                    data-testid='settings-storage-backup-row'
-                  >
-                    <div className='min-w-0 text-sm text-muted-foreground'>
-                      <p className='truncate font-medium text-foreground'>
-                        {backup.file_name || backup.path}
-                      </p>
-                      <p className='truncate text-xs'>
-                        {backup.path}
-                      </p>
-                      <p className='text-xs'>
-                        {formatBackupSize(backup.size_bytes)} · {formatBackupFormat(backup.archive_format)} · {backup.created_at || 'created time unavailable'}
-                      </p>
-                    </div>
-                    <div className='flex shrink-0 flex-wrap justify-end gap-2'>
-                      {backup.download_url ? (
-                        <Button asChild variant='outline' size='sm'>
-                          <a
-                            data-testid='settings-storage-backup-download'
-                            href={backup.download_url}
-                            download={backup.file_name || undefined}
-                          >
-                            <Download className='mr-2 h-4 w-4' />
-                            Download
-                          </a>
-                        </Button>
-                      ) : null}
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        data-testid='settings-storage-backup-restore'
-                        disabled={actionsDisabled}
-                        onClick={() => {
-                          setSelectedBackupPath(backup.path ?? null)
-                          setRestoreConfirmOpen(true)
-                        }}
+              <div className='overflow-x-auto rounded-md border'>
+                <table
+                  className='w-full min-w-[760px] table-fixed text-left text-sm'
+                  data-testid='settings-storage-backup-table'
+                >
+                  <thead className='bg-muted/40 text-xs uppercase text-muted-foreground'>
+                    <tr>
+                      <th className='w-[28%] px-3 py-2 font-medium'>
+                        <button
+                          type='button'
+                          className='font-medium text-foreground hover:underline'
+                          data-testid='settings-storage-backup-sort-file'
+                          onClick={() => {
+                            toggleBackupSort('file_name')
+                          }}
+                        >
+                          Filename {backupSortKey === 'file_name' ? sortIndicator(backupSortDirection) : ''}
+                        </button>
+                      </th>
+                      <th className='w-[18%] px-3 py-2 font-medium'>
+                        <button
+                          type='button'
+                          className='font-medium text-foreground hover:underline'
+                          data-testid='settings-storage-backup-sort-created'
+                          onClick={() => {
+                            toggleBackupSort('created_at')
+                          }}
+                        >
+                          Created {backupSortKey === 'created_at' ? sortIndicator(backupSortDirection) : ''}
+                        </button>
+                      </th>
+                      <th className='w-[17%] px-3 py-2 font-medium'>Backup source</th>
+                      <th className='w-[12%] px-3 py-2 font-medium'>Archive size</th>
+                      <th className='w-[12%] px-3 py-2 font-medium'>Status</th>
+                      <th className='w-[13%] px-3 py-2 text-right font-medium'>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedBackupList.map((backup) => (
+                      <tr
+                        key={backup.path}
+                        className='border-t align-top'
+                        data-testid='settings-storage-backup-row'
                       >
-                        Restore
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                        <td className='px-3 py-2'>
+                          <p className='break-all font-medium text-foreground'>
+                            {backupDisplayName(backup)}
+                          </p>
+                          <p className='mt-1 break-all text-xs text-muted-foreground'>
+                            {backup.path}
+                          </p>
+                        </td>
+                        <td className='px-3 py-2 text-muted-foreground'>
+                          {formatBackupTimestamp(backup.created_at)}
+                        </td>
+                        <td className='px-3 py-2 text-muted-foreground'>
+                          {backupSourceLabel(backup)}
+                        </td>
+                        <td className='px-3 py-2 text-muted-foreground'>
+                          {formatBackupSize(backup.size_bytes)}
+                        </td>
+                        <td className='px-3 py-2 text-muted-foreground'>
+                          {formatBackupStatus(backup)}
+                        </td>
+                        <td className='px-3 py-2'>
+                          <div className='flex flex-wrap justify-end gap-2'>
+                            {backup.download_url ? (
+                              <Button asChild variant='outline' size='sm'>
+                                <a
+                                  data-testid='settings-storage-backup-download'
+                                  href={backup.download_url}
+                                  download={backup.file_name || undefined}
+                                >
+                                  <Download className='mr-2 h-4 w-4' />
+                                  Download
+                                </a>
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              data-testid='settings-storage-backup-restore'
+                              disabled={actionsDisabled}
+                              onClick={() => {
+                                setSelectedBackupPath(backup.path ?? null)
+                                setRestoreConfirmOpen(true)
+                              }}
+                            >
+                              Restore
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : null}
           </div>
@@ -584,4 +673,43 @@ function formatBackupFormat(format?: string) {
     return 'legacy DB snapshot'
   }
   return 'archive format unavailable'
+}
+
+function backupDisplayName(backup: BackupInfo) {
+  return backup.file_name?.trim() || backup.path?.trim() || 'backup artifact'
+}
+
+function formatBackupTimestamp(timestamp?: string) {
+  const parsed = Date.parse(timestamp ?? '')
+  if (!Number.isFinite(parsed)) {
+    return 'created time unavailable'
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(parsed))
+}
+
+function backupSourceLabel(backup: BackupInfo) {
+  const name = backupDisplayName(backup).toLowerCase()
+  const format = backup.archive_format?.trim().toLowerCase()
+  if (format === 'zip' || name.startsWith('cabinet-backup-')) {
+    return 'Generated ZIP archive'
+  }
+  if (format === 'db' || name.endsWith('.db')) {
+    return 'Legacy database snapshot'
+  }
+  return formatBackupFormat(backup.archive_format)
+}
+
+function formatBackupStatus(backup: BackupInfo) {
+  const integrity = backup.integrity_check?.trim()
+  if (integrity) {
+    return integrity.toLowerCase() === 'ok' ? 'Valid' : integrity
+  }
+  return 'Validity unknown'
+}
+
+function sortIndicator(direction: BackupSortDirection) {
+  return direction === 'asc' ? '↑' : '↓'
 }
