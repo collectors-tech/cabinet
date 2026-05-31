@@ -371,6 +371,56 @@ func TestOpenAPIDocumentsForwarderPackageLinkDecisionContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsForwarderActiveProfileIsolation(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+
+	linkSection, ok := openAPIPathSection(raw, "/api/forwarding/package-links")
+	if !ok {
+		t.Fatalf("openapi missing /api/forwarding/package-links path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Returns only active-profile package reconciliation links",
+		"cross-profile evidence is rejected without creating links or audit events",
+		"Active-profile forwarder package id whose current link should be unlinked",
+	} {
+		if !strings.Contains(linkSection, token) {
+			t.Fatalf("openapi /api/forwarding/package-links section missing active-profile token %q:\n%s", token, linkSection)
+		}
+	}
+
+	suggestionSection, ok := openAPIPathSection(raw, "/api/forwarding/package-match-suggestions")
+	if !ok {
+		t.Fatalf("openapi missing /api/forwarding/package-match-suggestions path in %s", specPath)
+	}
+	for _, token := range []string{
+		"derived only from active-profile forwarder packages and purchase-arrival evidence",
+		"package_id from another profile returns an empty scoped result with zero summary counts",
+		"Optional confidence bucket filter applied after active-profile scoping",
+	} {
+		if !strings.Contains(suggestionSection, token) {
+			t.Fatalf("openapi /api/forwarding/package-match-suggestions section missing active-profile token %q:\n%s", token, suggestionSection)
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "ForwarderPackageLinkRequest")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageLinkRequest schema in %s", specPath)
+	}
+	if !strings.Contains(requestSchema, "outside the active profile are rejected without link or audit-event mutation") {
+		t.Fatalf("openapi ForwarderPackageLinkRequest schema missing active-profile rejection description:\n%s", requestSchema)
+	}
+
+	suggestionSchema, ok := openAPIComponentSection(raw, "ForwarderPackageMatchSuggestion")
+	if !ok {
+		t.Fatalf("openapi missing ForwarderPackageMatchSuggestion schema in %s", specPath)
+	}
+	if !strings.Contains(suggestionSchema, "Non-mutating active-profile package-to-purchase-arrival suggestion") {
+		t.Fatalf("openapi ForwarderPackageMatchSuggestion schema missing active-profile suggestion description:\n%s", suggestionSchema)
+	}
+}
+
 func openAPIPathSection(raw []byte, path string) (string, bool) {
 	return indentedYAMLSection(raw, "  "+path+":", 2)
 }
