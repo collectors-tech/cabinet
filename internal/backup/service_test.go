@@ -1,9 +1,11 @@
 package backup
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +34,14 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	if backupRun.Path == "" || backupRun.FileName == "" || backupRun.SizeBytes == 0 || backupRun.IntegrityCheck != "ok" {
 		t.Fatalf("expected backup run metadata, got %+v", backupRun)
 	}
+	if !strings.HasPrefix(backupRun.FileName, "cabinet-backup-") || !strings.HasSuffix(backupRun.FileName, ".zip") {
+		t.Fatalf("expected timestamped zip filename, got %q", backupRun.FileName)
+	}
+	if backupRun.ArchiveFormat != "zip" || backupRun.DownloadURL == "" {
+		t.Fatalf("expected zip archive metadata, got %+v", backupRun)
+	}
+	assertBackupArchiveContains(t, backupRun.Path, "manifest.json")
+	assertBackupArchiveContains(t, backupRun.Path, "database/cabinet.db")
 	list, err := svc.ListBackups()
 	if err != nil {
 		t.Fatalf("ListBackups error: %v", err)
@@ -41,6 +51,9 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	}
 	if list[0].Path == "" || list[0].FileName == "" || list[0].SizeBytes == 0 {
 		t.Fatalf("expected backup list metadata, got %+v", list[0])
+	}
+	if list[0].ArchiveFormat != "zip" || list[0].DownloadURL == "" {
+		t.Fatalf("expected zip list metadata, got %+v", list[0])
 	}
 
 	conn2, _ := sql.Open("sqlite", "file:"+dbPath)
@@ -65,6 +78,21 @@ func TestCreateAndRestoreBackup(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expected 1 row after restore, got %d", count)
 	}
+}
+
+func assertBackupArchiveContains(t *testing.T, path, name string) {
+	t.Helper()
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatalf("open backup zip: %v", err)
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if f.Name == name {
+			return
+		}
+	}
+	t.Fatalf("backup zip missing %s", name)
 }
 
 func TestStartDoesNotPanic(t *testing.T) {

@@ -28,13 +28,15 @@ Cabinet SHALL require import apply flows to return readable created, merged, ski
 - **AND** the failed count SHALL be zero only when all requested item actions were committed successfully
 
 ### Requirement DATA-MANAGEMENT-004: Backup and restore SHALL report verifiable outcomes and require restore confirmation
-Cabinet SHALL require explicit restore confirmation and SHALL return readable backup, list, and restore metadata including selected path, file name, size, timestamp, and integrity-check outcome.
+Cabinet SHALL require explicit restore confirmation and SHALL return readable backup, list, and restore metadata including selected path, file name, size, timestamp, archive format, download URL, and integrity-check outcome.
 
 #### Scenario: Backup run and restore
 - **GIVEN** a user creates or selects a database backup
 - **WHEN** Cabinet runs backup, lists backups, or restores a confirmed backup
 - **THEN** responses SHALL include user-verifiable backup or restore metadata
 - **AND** restore SHALL fail without explicit confirmation before replacing the active database
+- **AND** newly created backups SHALL be timestamped ZIP archives containing the active database and app-owned backup metadata
+- **AND** the Settings backup flow SHALL expose the generated ZIP filename and a download action
 
 ### Requirement DATA-MANAGEMENT-005: Data export SHALL expose explicit download affordances
 Cabinet SHALL expose profile-scoped JSON snapshot and CSV item exports as user-downloadable actions with deterministic download filenames.

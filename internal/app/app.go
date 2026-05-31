@@ -5369,6 +5369,26 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"backups": backups})
 	})
+	mux.HandleFunc("/api/backup/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		backupPath, err := backupSvc.ResolveBackupPath(r.URL.Query().Get("file_name"))
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"backup_not_found"}`, http.StatusNotFound)
+			return
+		}
+		if strings.EqualFold(filepath.Ext(backupPath), ".zip") {
+			w.Header().Set("Content-Type", "application/zip")
+		} else {
+			w.Header().Set("Content-Type", "application/octet-stream")
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(backupPath)+`"`)
+		http.ServeFile(w, r, backupPath)
+	})
 	mux.HandleFunc("/api/backup/restore", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

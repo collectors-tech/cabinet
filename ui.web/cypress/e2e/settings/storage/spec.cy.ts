@@ -80,7 +80,7 @@ describe('settings/storage', () => {
       'be.visible'
     )
 
-    cy.contains('button', 'Retry').click()
+    cy.get('[data-testid="settings-storage-retry"]').click()
     cy.wait('@storageInfo')
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
     cy.contains('Storage information is unavailable right now.').should(
@@ -211,6 +211,8 @@ describe('settings/storage', () => {
         file_name: 'cabinet-2026-04-21-120000.db',
         size_bytes: 2048,
         created_at: '2026-04-21T12:00:00Z',
+        archive_format: 'db',
+        download_url: '/api/backup/download?file_name=cabinet-2026-04-21-120000.db',
         integrity_check: 'ok',
       },
     ]
@@ -234,10 +236,12 @@ describe('settings/storage', () => {
     }).as('backupList')
     cy.intercept('POST', '/api/backup/run', (req) => {
       backups.unshift({
-        path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
-        file_name: 'cabinet-2026-04-21-130000.db',
+        path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
+        file_name: 'cabinet-backup-2026-04-21-130000.zip',
         size_bytes: 4096,
         created_at: '2026-04-21T13:00:00Z',
+        archive_format: 'zip',
+        download_url: '/api/backup/download?file_name=cabinet-backup-2026-04-21-130000.zip',
         integrity_check: 'ok',
       })
       req.reply({
@@ -247,14 +251,14 @@ describe('settings/storage', () => {
     }).as('backupRun')
     cy.intercept('POST', '/api/backup/restore', (req) => {
       expect(req.body).to.deep.equal({
-        backup_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+        backup_path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
         confirm_restore: true,
       })
       req.reply({
         statusCode: 200,
         body: {
           restore: {
-            restored_path: 'C:/cabinet/backups/cabinet-2026-04-21-130000.db',
+            restored_path: 'C:/cabinet/backups/cabinet-backup-2026-04-21-130000.zip',
             restored_at: '2026-04-21T13:05:00Z',
             integrity_check: 'ok',
           },
@@ -271,15 +275,17 @@ describe('settings/storage', () => {
     cy.get('[data-testid="settings-storage-backup-run"]').click()
     cy.wait('@backupRun')
     cy.wait('@backupList')
-    cy.get('[data-testid="settings-storage-action-status"]').should(
-      'contain',
-      'Backup created successfully.'
-    )
     cy.get('[data-testid="settings-storage-backup-row"]').should('have.length', 2)
     cy.get('[data-testid="settings-storage-backup-row"]').first().should(
       'contain',
-      'cabinet-2026-04-21-130000.db'
+      'cabinet-backup-2026-04-21-130000.zip'
     )
+    cy.get('[data-testid="settings-storage-backup-row"]')
+      .first()
+      .should('contain', 'ZIP archive')
+      .find('[data-testid="settings-storage-backup-download"]')
+      .should('have.attr', 'href', '/api/backup/download?file_name=cabinet-backup-2026-04-21-130000.zip')
+      .and('have.attr', 'download', 'cabinet-backup-2026-04-21-130000.zip')
 
     cy.get('[data-testid="settings-storage-backup-row"]')
       .first()
@@ -315,6 +321,8 @@ describe('settings/storage', () => {
             file_name: 'cabinet-2026-04-21-090000.db',
             size_bytes: 1024,
             created_at: '2026-04-21T09:00:00Z',
+            archive_format: 'db',
+            download_url: '/api/backup/download?file_name=cabinet-2026-04-21-090000.db',
             integrity_check: 'ok',
           },
         ],

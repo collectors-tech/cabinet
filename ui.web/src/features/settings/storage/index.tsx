@@ -26,6 +26,8 @@ type BackupInfo = {
   file_name?: string
   size_bytes?: number
   created_at?: string
+  archive_format?: string
+  download_url?: string
   integrity_check?: string
 }
 
@@ -228,7 +230,8 @@ export function SettingsStorage() {
       const payload = (await response.json()) as { backup?: BackupInfo }
       const fileName = payload.backup?.file_name?.trim() || 'backup snapshot'
       const integrityCheck = payload.backup?.integrity_check?.trim() || 'unknown'
-      setActionStatus(`Backup created successfully: ${fileName}. Integrity check: ${integrityCheck}.`)
+      const archiveFormat = payload.backup?.archive_format?.trim().toUpperCase() || 'archive'
+      setActionStatus(`Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`)
       await loadBackups()
     } catch {
       setActionTone('destructive')
@@ -298,6 +301,7 @@ export function SettingsStorage() {
                 variant='outline'
                 size='sm'
                 className='mt-3'
+                data-testid='settings-storage-retry'
                 onClick={() => {
                   void loadStorage()
                 }}
@@ -478,21 +482,35 @@ export function SettingsStorage() {
                         {backup.path}
                       </p>
                       <p className='text-xs'>
-                        {formatBackupSize(backup.size_bytes)} · {backup.created_at || 'created time unavailable'}
+                        {formatBackupSize(backup.size_bytes)} · {formatBackupFormat(backup.archive_format)} · {backup.created_at || 'created time unavailable'}
                       </p>
                     </div>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      data-testid='settings-storage-backup-restore'
-                      disabled={actionsDisabled}
-                      onClick={() => {
-                        setSelectedBackupPath(backup.path ?? null)
-                        setRestoreConfirmOpen(true)
-                      }}
-                    >
-                      Restore
-                    </Button>
+                    <div className='flex shrink-0 flex-wrap justify-end gap-2'>
+                      {backup.download_url ? (
+                        <Button asChild variant='outline' size='sm'>
+                          <a
+                            data-testid='settings-storage-backup-download'
+                            href={backup.download_url}
+                            download={backup.file_name || undefined}
+                          >
+                            <Download className='mr-2 h-4 w-4' />
+                            Download
+                          </a>
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        data-testid='settings-storage-backup-restore'
+                        disabled={actionsDisabled}
+                        onClick={() => {
+                          setSelectedBackupPath(backup.path ?? null)
+                          setRestoreConfirmOpen(true)
+                        }}
+                      >
+                        Restore
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -555,4 +573,15 @@ function formatBackupSize(sizeBytes?: number) {
     return `${(sizeBytes / 1024).toFixed(1)} KB`
   }
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatBackupFormat(format?: string) {
+  const normalized = format?.trim().toLowerCase()
+  if (normalized === 'zip') {
+    return 'ZIP archive'
+  }
+  if (normalized === 'db') {
+    return 'legacy DB snapshot'
+  }
+  return 'archive format unavailable'
 }

@@ -26,6 +26,8 @@ func TestBackupRunAndRestoreEndpoints(t *testing.T) {
 			FileName       string `json:"file_name"`
 			SizeBytes      int64  `json:"size_bytes"`
 			CreatedAt      string `json:"created_at"`
+			ArchiveFormat  string `json:"archive_format"`
+			DownloadURL    string `json:"download_url"`
 			IntegrityCheck string `json:"integrity_check"`
 		} `json:"backup"`
 	}
@@ -34,6 +36,20 @@ func TestBackupRunAndRestoreEndpoints(t *testing.T) {
 	}
 	if strings.TrimSpace(runPayload.Backup.Path) == "" || runPayload.Backup.FileName == "" || runPayload.Backup.SizeBytes == 0 || runPayload.Backup.IntegrityCheck != "ok" {
 		t.Fatalf("expected backup metadata in response, got %+v", runPayload.Backup)
+	}
+	if !strings.HasPrefix(runPayload.Backup.FileName, "cabinet-backup-") || !strings.HasSuffix(runPayload.Backup.FileName, ".zip") || runPayload.Backup.ArchiveFormat != "zip" || runPayload.Backup.DownloadURL == "" {
+		t.Fatalf("expected timestamped zip backup metadata, got %+v", runPayload.Backup)
+	}
+
+	downloadResp := doRequest(t, a, http.MethodGet, "/api/backup/download?file_name="+runPayload.Backup.FileName, nil, nil)
+	if downloadResp.Code != http.StatusOK {
+		t.Fatalf("backup download status = %d body=%s", downloadResp.Code, downloadResp.Body.String())
+	}
+	if ct := downloadResp.Header().Get("Content-Type"); !strings.Contains(ct, "application/zip") {
+		t.Fatalf("expected zip content type, got %q", ct)
+	}
+	if cd := downloadResp.Header().Get("Content-Disposition"); !strings.Contains(cd, runPayload.Backup.FileName) {
+		t.Fatalf("expected attachment filename in content disposition, got %q", cd)
 	}
 
 	listResp := doRequest(t, a, http.MethodGet, "/api/backup/list", nil, nil)
