@@ -1,10 +1,24 @@
 describe("inventory-management", () => {
   function signIn() {
+    cy.viewport(1280, 900);
     cy.e2eReset();
+    cy.clearLocalStorage("cabinet.viewMode.inventory");
     cy.e2eSetSetupState("present");
     cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
       cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
     });
+  }
+
+  function setInventoryItemCategory(category: string) {
+    cy.get('[data-testid="inventory-item-category-trigger"]').click();
+    cy.get(`[data-testid="inventory-item-category-option-${category}"]`).click();
+    cy.get('[data-testid="inventory-item-category"]').should("have.value", category);
+  }
+
+  function scrollInventoryTable(position: "left" | "right") {
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).scrollTo(position);
   }
 
   it("renders inventory workspace, supports view toggle and filtering, and avoids 500", () => {
@@ -46,17 +60,17 @@ describe("inventory-management", () => {
       .click()
       .should("have.attr", "aria-pressed", "true");
     cy.get("table").should("be.visible");
-    cy.contains("th", "Part #").should("be.visible");
-    cy.contains("th", "Title").should("be.visible");
-    cy.contains("th", "Condition").should("be.visible");
-    cy.contains("th", "Category").should("be.visible");
+    cy.contains("th", "Part #").should("exist");
+    cy.contains("th", "Title").should("exist");
+    cy.contains("th", "Condition").should("exist");
+    cy.contains("th", "Category").should("exist");
     cy.contains("th", "Task").should("not.exist");
     cy.contains("th", "Priority").should("not.exist");
     cy.contains("PN-001").should("be.visible");
-    cy.contains("todo").should("be.visible");
-    cy.contains("feature").should("be.visible");
+    cy.contains("todo").should("exist");
+    cy.contains("feature").should("exist");
 
-    cy.get('input[placeholder="Filter by title or part number..."]').type(
+    cy.get('input[placeholder^="Filter by title"]').type(
       "no-matching-task-xyz"
     );
     cy.contains("No results.").should("be.visible");
@@ -172,7 +186,7 @@ describe("inventory-management", () => {
           .should("be.visible")
           .then(($summary) => {
             const summaryTop = $summary[0].getBoundingClientRect().top;
-            cy.get('input[placeholder="Filter by title or part number..."]')
+            cy.get('input[placeholder^="Filter by title"]')
               .should("be.visible")
               .then(($input) => {
                 const inputTop = $input[0].getBoundingClientRect().top;
@@ -482,7 +496,7 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-item-part-number"]').clear().type("PN-CREATE-1");
     cy.get('[data-testid="inventory-item-title"]').clear().type("Created Inventory Item");
     cy.get('[data-testid="inventory-item-brand"]').clear().type("Tyco");
-    cy.get('[data-testid="inventory-item-category"]').clear().type("Cars");
+    setInventoryItemCategory("Cars");
     cy.get('[data-testid="inventory-item-description"]').clear().type("Freshly saved item");
     cy.get('[data-testid="inventory-item-save"]').click();
 
@@ -491,8 +505,10 @@ describe("inventory-management", () => {
     cy.wait("@createdItemPhotos");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    scrollInventoryTable("left");
     cy.contains("Created Inventory Item").should("be.visible");
 
+    scrollInventoryTable("right");
     cy.get(
       '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
     ).click();
@@ -510,6 +526,7 @@ describe("inventory-management", () => {
     cy.get('[data-testid="inventory-photos-dialog-close"]').click();
     cy.get('[data-testid="inventory-photos-dialog"]').should("not.exist");
 
+    scrollInventoryTable("right");
     cy.get('[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"]').click();
     cy.contains('[role="menuitem"]', "Edit").click();
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("be.visible");
@@ -520,8 +537,10 @@ describe("inventory-management", () => {
     cy.wait("@updateItem");
     cy.wait("@itemsList");
     cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    scrollInventoryTable("left");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+    scrollInventoryTable("right");
     cy.get(
       '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'
     ).click();
@@ -600,7 +619,7 @@ describe("inventory-management", () => {
     cy.get('button[aria-label="Switch to rows view"]')
       .click({ force: true })
       .should("have.attr", "aria-pressed", "true");
-    cy.get('input[placeholder="Filter by title or part number..."]').type("Road");
+    cy.get('input[placeholder^="Filter by title"]').type("Road");
 
     cy.contains("th", "Title").find("button").click();
     cy.contains('[role="menuitem"]', "Desc").click();
@@ -635,7 +654,7 @@ describe("inventory-management", () => {
     });
 
     cy.contains("button", "Rows").should("have.attr", "aria-pressed", "true");
-    cy.get('input[placeholder="Filter by title or part number..."]').should(
+    cy.get('input[placeholder^="Filter by title"]').should(
       "have.value",
       "Road"
     );
@@ -700,6 +719,7 @@ describe("inventory-management", () => {
     cy.contains('[role="option"]', "Trading Card").click();
     cy.contains("Trading Card Item").should("be.visible");
     cy.contains("Slot Car Item").should("not.exist");
+    cy.get("body").type("{esc}");
     cy.contains("button", "Reset").click();
 
     cy.get('[data-testid="inventory-new-action"]').click();
@@ -714,6 +734,82 @@ describe("inventory-management", () => {
       .find("option")
       .should("contain", "Played (PL)")
       .and("not.contain", "10+ - New, in packaging");
+  });
+
+  it("UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable", () => {
+    cy.viewport(1280, 900);
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-dense-1",
+            part_number: "PN-DENSE-0000000001",
+            title: "Dense Inventory Item With A Representative Long Display Title",
+            status: "10+ - New, in packaging",
+            category: "Slot Cars, Limited Edition",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Factory sealed long card",
+          },
+          {
+            id: "item-dense-2",
+            part_number: "PN-DENSE-0000000002",
+            title: "Second Dense Inventory Item",
+            status: "8 - Like new",
+            category: "Trading Cards",
+            item_type: "Trading Cards",
+            packaging_grade_type: "Sleeved and boxed",
+          },
+        ],
+      },
+    }).as("itemsDenseRows");
+
+    signIn();
+    cy.wait("@itemsDenseRows");
+
+    cy.get('button[aria-label="Switch to rows view"]')
+      .click({ force: true })
+      .should("have.attr", "aria-pressed", "true");
+
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).then(($surface) => {
+      expect($surface[0].scrollWidth).to.be.greaterThan(
+        $surface[0].clientWidth
+      );
+    });
+
+    cy.contains("th", "Part #").should("be.visible");
+    cy.contains("th", "Title").should("be.visible");
+    cy.contains("th", "Condition").should("exist");
+
+    cy.get(
+      '[data-testid="inventory-table-surface"] [data-slot="table-container"]'
+    ).scrollTo("right");
+    cy.contains("th", "Packaging").should("be.visible");
+    cy.contains("th", "Category").should("be.visible");
+    cy.get(
+      '[data-testid="inventory-item-row-item-dense-1"] [data-testid="inventory-row-packaging-grade"]'
+    )
+      .should("be.visible")
+      .and("have.attr", "title", "Factory sealed long card");
+    cy.get(
+      '[data-testid="inventory-item-row-item-dense-1"] [data-testid="inventory-row-photos-action"]'
+    ).should("be.visible");
+
+    cy.contains("th", "Item type").then(($itemType) => {
+      cy.contains("th", "Packaging").then(($packaging) => {
+        cy.contains("th", "Category").then(($category) => {
+          const itemTypeRight = $itemType[0].getBoundingClientRect().right;
+          const packagingLeft = $packaging[0].getBoundingClientRect().left;
+          const packagingRight = $packaging[0].getBoundingClientRect().right;
+          const categoryLeft = $category[0].getBoundingClientRect().left;
+
+          expect(itemTypeRight).to.be.at.most(packagingLeft);
+          expect(packagingRight).to.be.at.most(categoryLeft);
+        });
+      });
+    });
   });
 
 });

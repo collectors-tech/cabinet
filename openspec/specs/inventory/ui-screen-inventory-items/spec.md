@@ -91,6 +91,16 @@ Inventory rows view MUST render Cabinet inventory item semantics instead of gene
 - **AND** the standalone `Summary Strip` card MUST NOT render
 - **AND** the Collection Browser header MUST render a one-line summary with `Folders`, `Items`, `Active Brand`, and `Active Category` directly above the filter bar
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-012: Inventory rows SHALL keep dense item columns readable
+Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type, Packaging, Category, and action columns at normal desktop review widths by allocating stable column widths and using horizontal scrolling when the full dense table exceeds the available viewport.
+
+#### Scenario: Dense inventory columns remain readable
+- **GIVEN** `/api/items` returns representative inventory records with long part numbers, titles, conditions, item types, packaging grades, and categories
+- **WHEN** user opens `/inventory` in rows view at a normal desktop review width
+- **THEN** right-side inventory headers and row values SHALL NOT overlap
+- **AND** action controls SHALL remain reachable without covering data columns
+- **AND** the table MAY expose horizontal scrolling instead of compressing columns into unreadable text
+
 ## Acceptance Criteria
 - UC IDs cover browse, edit, selection, and state transitions.
 - E2E mapping includes non-500 regression behavior.
@@ -115,3 +125,4 @@ Inventory rows view MUST render Cabinet inventory item semantics instead of gene
 | UC-INV-07 | Click Add Folder | Folder creation workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-folder-opens-create-flow` |
 | UC-INV-08 | Toggle Rows/Cards view | View mode changes deterministically | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-view-mode-toggle` |
 | UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-browser-controls-available` |
+| UC-INV-10 | Review dense inventory rows at desktop width | Right-side columns remain readable and actions are reachable via table scroll | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable` |
