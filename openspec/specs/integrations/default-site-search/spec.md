@@ -26,6 +26,7 @@ Cabinet MUST support provider-scoped saved searches for Bonza/Amazon/eBay with p
 - **WHEN** user creates, edits, and deletes a saved search with provider scope and keyword filters
 - **THEN** runtime MUST persist updated saved search payload via scanner query-set APIs
 - **AND** UI MUST reflect deterministic state transitions for create/edit/delete outcomes
+- **AND** OpenAPI MUST document query-set create/update/list fields for `provider_scope`, `items_per_page`, `schedule_cron`, `enabled`, `rate_limit_rps`, and latest-run hydration metadata.
 
 ### Requirement DEFAULT-SITE-SEARCH-005: Saved searches MUST support run-now and scheduled refresh execution
 Cabinet MUST execute saved searches immediately and through scheduled refresh flow with deterministic summaries.
@@ -44,6 +45,7 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **AND** eBay saved-search runs MUST expose the same provider-specific persistence contract as the Amazon route, including persisted `source="ebay"` candidates and latest-run snapshot hydration from query-set reloads
 - **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
 - **AND** Market Watch MUST refresh its saved-query snapshots after scheduled refresh and render a latest-run history summary from durable query-set metadata
+- **AND** OpenAPI MUST document the latest-run query-set list metadata fields that clients use to hydrate Market Watch after eBay provider runs and scheduled refreshes.
 
 ### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries, Wishlist, and Inventory handoff
 Cabinet MUST provide workflow handoff from saved-search output into Discoveries, Wishlist, and Inventory actions.

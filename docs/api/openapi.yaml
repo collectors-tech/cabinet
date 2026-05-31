@@ -450,6 +450,7 @@ paths:
     get:
       tags: [Scanner]
       summary: List scanner query sets
+      description: Lists active-profile query sets including provider scope, schedule controls, rate-limit settings, and hydrated latest-run metadata used by Market Watch.
       responses:
         "200":
           description: Query set list
@@ -467,6 +468,7 @@ paths:
     post:
       tags: [Scanner]
       summary: Create scanner query set
+      description: Creates a provider-scoped saved search. eBay Market Watch query sets use `provider_scope=["ebay"]` with optional pagination, schedule, and rate-limit controls.
       requestBody:
         required: true
         content:
@@ -486,6 +488,7 @@ paths:
     put:
       tags: [Scanner]
       summary: Update scanner query set
+      description: Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set.
       parameters:
         - in: path
           name: querySetID
@@ -3165,6 +3168,15 @@ components:
         exclusions:
           type: array
           items: { type: string }
+        provider_scope:
+          type: array
+          description: Provider ids to run for this saved search. eBay-only Market Watch query sets use `ebay`.
+          items:
+            type: string
+            enum: [ebay, amazon, bonzaslotcars, frontlinehobbies, hobbytechtoys, mrtoys.com.au]
+        items_per_page:
+          type: integer
+          description: Requested page size for provider-backed runs; runtime applies provider-safe caps in run summaries.
         max_price: { type: number }
         region: { type: string }
         condition: { type: string }
@@ -3180,6 +3192,12 @@ components:
             id: { type: string }
             created_at: { type: string }
             updated_at: { type: string }
+            last_run_status:
+              type: string
+              enum: [never, succeeded, failed]
+            last_run_at: { type: string }
+            last_run_message: { type: string }
+            last_candidate_count: { type: integer }
     Candidate:
       type: object
       properties:

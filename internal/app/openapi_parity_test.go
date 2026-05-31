@@ -364,6 +364,69 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayQuerySetContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	listSection, ok := openAPIPathSection(raw, "/api/scanner/query-sets")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/query-sets path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Lists active-profile query sets including provider scope, schedule controls, rate-limit settings, and hydrated latest-run metadata used by Market Watch.",
+		"Creates a provider-scoped saved search. eBay Market Watch query sets use `provider_scope=[\"ebay\"]` with optional pagination, schedule, and rate-limit controls.",
+		"$ref: \"#/components/schemas/ScannerQuerySetInput\"",
+		"$ref: \"#/components/schemas/ScannerQuerySet\"",
+	} {
+		if !strings.Contains(listSection, token) {
+			t.Fatalf("openapi /api/scanner/query-sets section missing %q:\n%s", token, listSection)
+		}
+	}
+
+	updateSection, ok := openAPIPathSection(raw, "/api/scanner/query-sets/{querySetID}")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/query-sets/{querySetID} path in %s", specPath)
+	}
+	if !strings.Contains(updateSection, "Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set.") {
+		t.Fatalf("openapi /api/scanner/query-sets/{querySetID} section missing update description:\n%s", updateSection)
+	}
+
+	inputSchema, ok := openAPIComponentSection(raw, "ScannerQuerySetInput")
+	if !ok {
+		t.Fatalf("openapi missing ScannerQuerySetInput schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"provider_scope:",
+		"Provider ids to run for this saved search. eBay-only Market Watch query sets use `ebay`.",
+		"enum: [ebay, amazon, bonzaslotcars, frontlinehobbies, hobbytechtoys, mrtoys.com.au]",
+		"items_per_page:",
+		"Requested page size for provider-backed runs; runtime applies provider-safe caps in run summaries.",
+		"schedule_cron: { type: string }",
+		"enabled: { type: boolean }",
+		"rate_limit_rps: { type: integer }",
+	} {
+		if !strings.Contains(inputSchema, token) {
+			t.Fatalf("openapi ScannerQuerySetInput schema missing %q:\n%s", token, inputSchema)
+		}
+	}
+
+	querySetSchema, ok := openAPIComponentSection(raw, "ScannerQuerySet")
+	if !ok {
+		t.Fatalf("openapi missing ScannerQuerySet schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"last_run_status:",
+		"enum: [never, succeeded, failed]",
+		"last_run_at: { type: string }",
+		"last_run_message: { type: string }",
+		"last_candidate_count: { type: integer }",
+	} {
+		if !strings.Contains(querySetSchema, token) {
+			t.Fatalf("openapi ScannerQuerySet schema missing %q:\n%s", token, querySetSchema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsForwarderPackageLinkDecisionContract(t *testing.T) {
 	t.Parallel()
 
