@@ -2227,6 +2227,51 @@ export function Apps({
                     </div>
                   ) : null}
                   {editingProvider.provider_id === 'ebay' ? (
+                    <section
+                      className='rounded-md border p-3 text-xs'
+                      data-testid='ebay-setup-status-panel'
+                    >
+                      <div className='flex flex-wrap items-start justify-between gap-3'>
+                        <div>
+                          <p className='font-medium'>eBay setup status</p>
+                          <p className='text-muted-foreground'>
+                            Verify credentials, marketplace, token state, and
+                            provider health before running eBay query sets.
+                          </p>
+                        </div>
+                        <span
+                          className='rounded bg-muted px-2 py-1 text-muted-foreground'
+                          data-testid='ebay-setup-next-action'
+                        >
+                          {editingProvider.health?.status === 'ok' &&
+                          editingProvider.has_token
+                            ? 'Ready for Market Watch runs'
+                            : 'Save credentials, then validate health'}
+                        </span>
+                      </div>
+                      <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                        <p data-testid='ebay-setup-auth-mode'>
+                          Auth mode: {editingProvider.auth_mode}
+                        </p>
+                        <p data-testid='ebay-setup-marketplace'>
+                          Marketplace / Region: {form.marketplace || 'unset'}
+                        </p>
+                        <p data-testid='ebay-setup-token-state'>
+                          Token state:{' '}
+                          {editingProvider.has_token && !replaceToken
+                            ? 'stored token on file'
+                            : form.token.trim()
+                              ? 'new token pending save'
+                              : 'token required'}
+                        </p>
+                        <p data-testid='ebay-setup-health-state'>
+                          Validation status:{' '}
+                          {editingProvider.health?.status ?? 'unknown'}
+                        </p>
+                      </div>
+                    </section>
+                  ) : null}
+                  {editingProvider.provider_id === 'ebay' ? (
                     <div className='space-y-3'>
                       <section
                         className='rounded-md border p-3'

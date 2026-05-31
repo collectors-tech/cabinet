@@ -31,6 +31,12 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - `next_action="review_provider_credentials_and_health"`
 - **AND** clients MUST be able to route the error to eBay credential setup and provider health review without treating it as a generic scanner failure.
 
+#### Scenario: Setup UI exposes credential and marketplace readiness
+- **GIVEN** the eBay integration dialog is opened for the active profile
+- **WHEN** Cabinet renders the setup surface
+- **THEN** the UI MUST display auth mode, marketplace/region, token state, validation/health status, and a next action tied to saving credentials and validating health.
+- **AND** a ready eBay setup MUST direct the operator to run eBay query sets from Market Watch rather than implying that the setup dialog itself executes saved searches.
+
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state
 Cabinet SHALL report eBay provider health and recent failure telemetry via provider health endpoints.
 
