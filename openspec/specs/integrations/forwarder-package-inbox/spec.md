@@ -249,3 +249,11 @@ Cabinet SHALL scope package reconciliation link mutations to the active profile 
 - **GIVEN** Cabinet has an active profile and forwarder package, item, lifecycle, or expected-arrival records from another profile
 - **WHEN** a client submits `/api/forwarding/package-links` with a package or reconciliation target outside the active profile
 - **THEN** Cabinet MUST reject the request with a validation error, avoid creating an active package link, and avoid recording decision audit events for the rejected cross-profile request.
+
+### Requirement INTEGRATION-061: Forwarder package match suggestions SHALL isolate active-profile evidence
+Cabinet SHALL scope non-mutating package match suggestions to the active profile so packages, inventory items, lifecycle entries, and expected arrivals from other profiles are never returned as review candidates.
+
+#### Scenario: Reject cross-profile package match suggestion evidence
+- **GIVEN** Cabinet has an active profile plus forwarder package and purchase-arrival evidence for another profile
+- **WHEN** a client requests `/api/forwarding/package-match-suggestions`, including a `package_id` that belongs to another profile
+- **THEN** Cabinet MUST return only active-profile suggestions, return an empty scoped result for the cross-profile package id, derive summary counts from the returned suggestions, and avoid creating package links or decision audit events.
