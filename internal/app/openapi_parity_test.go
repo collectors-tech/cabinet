@@ -427,6 +427,57 @@ func TestOpenAPIDocumentsEbayQuerySetContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	candidatesSection, ok := openAPIPathSection(raw, "/api/scanner/candidates")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/candidates path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Lists saved-search candidates for output inspection and handoff, including provider/query provenance used by eBay Market Watch handoff actions.",
+		"name: query_set_id",
+		"$ref: \"#/components/schemas/Candidate\"",
+	} {
+		if !strings.Contains(candidatesSection, token) {
+			t.Fatalf("openapi /api/scanner/candidates section missing %q:\n%s", token, candidatesSection)
+		}
+	}
+
+	actionSection, ok := openAPIPathSection(raw, "/api/discovery/action")
+	if !ok {
+		t.Fatalf("openapi missing /api/discovery/action path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Applies saved-search output handoff actions for Discoveries, Wishlist, or Inventory while preserving eBay provider/query provenance in the durable discovery action audit.",
+		"enum: [ignore, add_to_wishlist, track_price, create_item]",
+		"source: { type: string, enum: [market_watch] }",
+		"source_provider: { type: string, enum: [ebay] }",
+		"provider_scope:",
+	} {
+		if !strings.Contains(actionSection, token) {
+			t.Fatalf("openapi /api/discovery/action section missing %q:\n%s", token, actionSection)
+		}
+	}
+
+	candidateSchema, ok := openAPIComponentSection(raw, "Candidate")
+	if !ok {
+		t.Fatalf("openapi missing Candidate schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"query_set_id: { type: string }",
+		"listing_id: { type: string }",
+		"url: { type: string }",
+		"seller: { type: string }",
+		"source: { type: string, description: Source provider id such as ebay. }",
+	} {
+		if !strings.Contains(candidateSchema, token) {
+			t.Fatalf("openapi Candidate schema missing %q:\n%s", token, candidateSchema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsForwarderPackageLinkDecisionContract(t *testing.T) {
 	t.Parallel()
 

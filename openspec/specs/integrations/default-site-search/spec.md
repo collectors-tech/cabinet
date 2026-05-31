@@ -59,3 +59,4 @@ Cabinet MUST provide workflow handoff from saved-search output into Discoveries,
 - **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope in both the Wishlist note and durable discovery action audit payload
 - **AND** Inventory handoff MUST create a Cabinet inventory item from the candidate and preserve source provider, query-set id, query name, provider scope, and listing URL on the created item
 - **AND** a subsequent Wishlist route reload MUST render the handed-off item and preserved saved-search provenance from durable Wishlist/API state
+- **AND** OpenAPI MUST document saved-search candidate output plus discovery action handoff payload fields needed to preserve provider/query provenance for Discoveries, Wishlist, and Inventory handoffs.
