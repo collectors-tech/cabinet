@@ -205,11 +205,18 @@ func TestApplySavedSearchActionsRetainAuditProvenance(t *testing.T) {
 		t.Fatalf("expected track action side effect, got %d", trackedCount)
 	}
 	var createdCount int
-	if err := conn.QueryRow(`SELECT COUNT(*) FROM canonical_items WHERE part_number = 'CREATE-901' AND title = 'AFX Create Candidate'`).Scan(&createdCount); err != nil {
+	var createdNotes, createdSourceURLs string
+	if err := conn.QueryRow(`SELECT COUNT(*), COALESCE(MAX(notes), ''), COALESCE(MAX(source_urls_json), '') FROM canonical_items WHERE part_number = 'CREATE-901' AND title = 'AFX Create Candidate'`).Scan(&createdCount, &createdNotes, &createdSourceURLs); err != nil {
 		t.Fatalf("load created item count: %v", err)
 	}
 	if createdCount != 1 {
 		t.Fatalf("expected create item side effect, got %d", createdCount)
+	}
+	if !strings.Contains(createdNotes, `"source_provider":"ebay"`) || !strings.Contains(createdNotes, `"query_set_id":"q1"`) || !strings.Contains(createdNotes, `"query_name":"AFX saved search"`) {
+		t.Fatalf("expected created inventory item notes to preserve saved-search provenance, got %q", createdNotes)
+	}
+	if !strings.Contains(createdSourceURLs, "https://example.test/listing") {
+		t.Fatalf("expected created inventory item source URL to preserve listing URL, got %q", createdSourceURLs)
 	}
 
 	rows, err := conn.Query(`SELECT action_type, payload_json FROM discovery_actions WHERE candidate_id IN ('c-ignore', 'c-track', 'c-create')`)

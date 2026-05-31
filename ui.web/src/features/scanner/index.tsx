@@ -591,6 +591,34 @@ export function Scanner() {
     setHandoffStatus('wishlist_handoff_ok')
   }
 
+  const handoffFirstCandidateToInventory = async (querySetID: string) => {
+    const candidates = candidatesByQuerySet[querySetID] ?? []
+    const firstCandidate = candidates.find(
+      (candidate) => (candidate.id ?? '').trim() !== ''
+    )
+    if (!firstCandidate || !firstCandidate.id) {
+      setHandoffStatus('inventory_handoff_no_candidate')
+      return
+    }
+    const response = await fetch('/api/discovery/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: firstCandidate.id,
+        type: 'create_item',
+        payload: {
+          source: 'market_watch',
+          query_set_id: querySetID,
+        },
+      }),
+    })
+    if (!response.ok) {
+      setHandoffStatus(`inventory_handoff_failed_${response.status}`)
+      return
+    }
+    setHandoffStatus('inventory_handoff_ok')
+  }
+
   const runNow = async (querySet: QuerySet) => {
     setRunMetaByQuerySet((current) => ({
       ...current,
@@ -1830,6 +1858,17 @@ export function Scanner() {
                 }
               >
                 Add First Result to Wishlist
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                data-testid={`scanner-handoff-inventory-${selectedOutputQuerySetID}`}
+                onClick={() =>
+                  void handoffFirstCandidateToInventory(selectedOutputQuerySetID)
+                }
+              >
+                Add First Result to Inventory
               </Button>
               <Button
                 type='button'

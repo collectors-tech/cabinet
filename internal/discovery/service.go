@@ -174,20 +174,24 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 			`, itemID, profileID, profileID)
 		}
 	case ActionCreateItem:
-		var title, partNumber string
+		var title, partNumber, profileID, listingURL, seller, stockSignal, sourceProvider, querySetID, queryName, providerScopeJSON string
+		var observedPrice float64
 		if err := s.db.QueryRowContext(ctx, `
-			SELECT c.title, m.extracted_part_number
+			SELECT c.title, m.extracted_part_number, c.profile_id, c.url, c.seller, c.stock_state, c.price, c.source, c.query_set_id, COALESCE(q.name, ''), COALESCE(q.provider_scope_json, '[]')
 			FROM scanner_candidates c
 			JOIN scanner_matches m ON m.candidate_id = c.id
+			LEFT JOIN scanner_query_sets q ON q.id = c.query_set_id
 			WHERE c.id = ?
-		`, a.CandidateID).Scan(&title, &partNumber); err == nil {
+		`, a.CandidateID).Scan(&title, &partNumber, &profileID, &listingURL, &seller, &stockSignal, &observedPrice, &sourceProvider, &querySetID, &queryName, &providerScopeJSON); err == nil {
 			if strings.TrimSpace(partNumber) == "" {
 				partNumber = "AUTO-" + strings.ToUpper(uuid.NewString()[:8])
 			}
+			metadata := buildDiscoveryMetadataNote(listingURL, seller, stockSignal, observedPrice, sourceProvider, querySetID, queryName, decodeStringArray(providerScopeJSON))
+			sourceURLs, _ := json.Marshal([]string{strings.TrimSpace(listingURL)})
 			_, _ = s.db.ExecContext(ctx, `
-				INSERT INTO canonical_items(id, brand, category, part_number, title)
-				VALUES (?, ?, ?, ?, ?)
-			`, uuid.NewString(), "Unknown", "Unknown", partNumber, title)
+				INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title, status, notes, source_urls_json, created_by, updated_by)
+				VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 'discovery.service', 'discovery.service')
+			`, uuid.NewString(), strings.TrimSpace(profileID), "Unknown", "Unknown", partNumber, title, metadata, string(sourceURLs))
 		}
 	}
 	return nil

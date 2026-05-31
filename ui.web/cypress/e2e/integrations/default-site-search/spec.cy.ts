@@ -152,9 +152,10 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="market-watch-query-table"]').should('contain', 'Candidates: 1')
   })
 
-  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows', () => {
+  it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries wishlist and inventory flows', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []
+    let discoveryActionTypes: string[] = []
 
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
@@ -198,35 +199,38 @@ describe('integrations/default-site-search', () => {
     }).as('discoveriesHandoff')
     cy.intercept('POST', '/api/discovery/action', (req) => {
       expect(req.body.candidate_id).to.equal('cand-dss-3')
-      expect(req.body.type).to.equal('add_to_wishlist')
+      discoveryActionTypes.push(req.body.type)
+      expect(['add_to_wishlist', 'create_item']).to.include(req.body.type)
       expect(req.body.payload).to.deep.equal({
         source: 'market_watch',
         query_set_id: 'qs-dss-3',
       })
-      wishlistEntries = [
-        {
-          id: 'wish-dss-3',
-          item_id: 'item-dss-3',
-          priority: 'medium',
-          target_price: 0,
-          notes:
-            'source_provider=ebay; query_set_id=qs-dss-3; query_name=eBay Handoff; provider_scope=ebay',
-          created_at: '2026-05-27T10:44:00Z',
-          updated_at: '2026-05-27T10:44:00Z',
-        },
-      ]
-      wishlistItems = [
-        {
-          id: 'item-dss-3',
-          title: 'eBay Handoff Car',
-          part_number: 'ebay-1',
-          status: 'wishlist',
-          category: 'Slot Cars',
-          priority: 'medium',
-        },
-      ]
+      if (req.body.type === 'add_to_wishlist') {
+        wishlistEntries = [
+          {
+            id: 'wish-dss-3',
+            item_id: 'item-dss-3',
+            priority: 'medium',
+            target_price: 0,
+            notes:
+              'source_provider=ebay; query_set_id=qs-dss-3; query_name=eBay Handoff; provider_scope=ebay',
+            created_at: '2026-05-27T10:44:00Z',
+            updated_at: '2026-05-27T10:44:00Z',
+          },
+        ]
+        wishlistItems = [
+          {
+            id: 'item-dss-3',
+            title: 'eBay Handoff Car',
+            part_number: 'ebay-1',
+            status: 'wishlist',
+            category: 'Slot Cars',
+            priority: 'medium',
+          },
+        ]
+      }
       req.reply({ statusCode: 200, body: { ok: true } })
-    }).as('wishlistHandoff')
+    }).as('savedSearchAction')
     cy.intercept('GET', '/api/wishlist', (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistEntries } })
     }).as('wishlistEntries')
@@ -264,8 +268,16 @@ describe('integrations/default-site-search', () => {
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
     cy.get('[data-testid="market-watch-open-output-qs-dss-3"]').click()
     cy.get('[data-testid="scanner-handoff-wishlist-qs-dss-3"]').click()
-    cy.wait('@wishlistHandoff')
+    cy.wait('@savedSearchAction')
     cy.get('[data-testid="scanner-handoff-status"]').should('contain', 'wishlist_handoff_ok')
+
+    cy.get('[data-testid="scanner-handoff-inventory-qs-dss-3"]').click()
+    cy.wait('@savedSearchAction')
+    cy.wrap(discoveryActionTypes).should('deep.equal', [
+      'add_to_wishlist',
+      'create_item',
+    ])
+    cy.get('[data-testid="scanner-handoff-status"]').should('contain', 'inventory_handoff_ok')
 
     cy.visit('/wishlist/')
     cy.wait(['@wishlistEntries', '@wishlistItems'])
