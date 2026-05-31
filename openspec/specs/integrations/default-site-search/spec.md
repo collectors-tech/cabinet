@@ -45,14 +45,15 @@ Cabinet MUST execute saved searches immediately and through scheduled refresh fl
 - **AND** scheduled refresh MUST persist latest run status, run timestamp, and candidate count so a later query-set list reload can hydrate Market Watch without transient in-memory state
 - **AND** Market Watch MUST refresh its saved-query snapshots after scheduled refresh and render a latest-run history summary from durable query-set metadata
 
-### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries and Wishlist handoff
-Cabinet MUST provide workflow handoff from saved-search output into Discoveries and Wishlist actions.
+### Requirement DEFAULT-SITE-SEARCH-006: Saved-search output MUST support Discoveries, Wishlist, and Inventory handoff
+Cabinet MUST provide workflow handoff from saved-search output into Discoveries, Wishlist, and Inventory actions.
 
 #### Scenario: Handoff from output detail
 - **GIVEN** saved-search output detail is open with candidate results
-- **WHEN** user triggers Discoveries handoff or Wishlist handoff action
+- **WHEN** user triggers Discoveries handoff, Wishlist handoff, or Inventory handoff action
 - **THEN** runtime MUST call discovery/wishlist APIs with deterministic payload contract
 - **AND** UI MUST surface action feedback indicating handoff result
 - **AND** Discoveries actions for ignore, track, create-owned-item, and Wishlist handoff MUST preserve decision payload plus source provider, query-set id, query name, and saved provider scope in the durable discovery action audit record
 - **AND** Wishlist handoff metadata MUST preserve the source provider, query-set id, query name, and saved provider scope in both the Wishlist note and durable discovery action audit payload
+- **AND** Inventory handoff MUST create a Cabinet inventory item from the candidate and preserve source provider, query-set id, query name, provider scope, and listing URL on the created item
 - **AND** a subsequent Wishlist route reload MUST render the handed-off item and preserved saved-search provenance from durable Wishlist/API state
