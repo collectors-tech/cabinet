@@ -660,6 +660,58 @@ paths:
                     type: object
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/ebay/seller-operations/preview:
+    post:
+      tags: [Integrations]
+      summary: Preview an eBay seller operation without executing remote writes
+      operationId: previewEbaySellerOperation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EbaySellerOperationRequest"
+      responses:
+        "200":
+          description: Seller operation preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string }
+                  mode: { type: string }
+                  preview:
+                    $ref: "#/components/schemas/EbaySellerOperationPreview"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/ebay/seller-operations/execute:
+    post:
+      tags: [Integrations]
+      summary: Execute a safe local seller operation or report a remote-write blocker
+      operationId: executeEbaySellerOperation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EbaySellerOperationRequest"
+      responses:
+        "200":
+          description: Seller operation execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string }
+                  mode: { type: string }
+                  execution:
+                    $ref: "#/components/schemas/EbaySellerOperationExecution"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/discovery/not-in-collection:
     get:
       tags: [Discovery]
@@ -3275,6 +3327,68 @@ components:
         audit_trail:
           type: array
           items: { type: string }
+    EbaySellerOperationRequest:
+      type: object
+      required: [operation, action]
+      properties:
+        operation:
+          type: string
+          enum: [messages, notifications, sold_orders, fulfilment, fulfillment, offers, orders]
+        action: { type: string }
+        capability:
+          type: string
+          enum: [unverified, read_only, confirmed_api]
+        reference_id: { type: string }
+        confirmed: { type: boolean }
+    EbaySellerOperationPreview:
+      type: object
+      properties:
+        operation: { type: string }
+        action: { type: string }
+        capability: { type: string }
+        reference_id: { type: string }
+        read_available: { type: boolean }
+        write_available: { type: boolean }
+        allowed: { type: boolean }
+        remote_write: { type: boolean }
+        confirmation_required: { type: boolean }
+        blocker: { type: string }
+    EbaySellerOperationExecution:
+      type: object
+      properties:
+        operation: { type: string }
+        action: { type: string }
+        capability: { type: string }
+        reference_id: { type: string }
+        read_available: { type: boolean }
+        write_available: { type: boolean }
+        allowed: { type: boolean }
+        remote_write: { type: boolean }
+        confirmation_required: { type: boolean }
+        executed: { type: boolean }
+        local_only: { type: boolean }
+        status: { type: string }
+        blocker: { type: string }
+        result:
+          $ref: "#/components/schemas/EbaySellerOperationReadResult"
+    EbaySellerOperationReadResult:
+      type: object
+      properties:
+        operation: { type: string }
+        source: { type: string }
+        records:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string }
+              status: { type: string }
+              title: { type: string }
+        summary:
+          type: object
+          additionalProperties:
+            type: integer
     LogEntry:
       type: object
       properties:

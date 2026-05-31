@@ -127,6 +127,12 @@ Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment,
 - **AND** confirmed remote-write seller operations MUST remain blocked with an adapter-not-configured blocker until a real eBay write adapter is wired.
 - **AND** the integration UI MUST display the execute status separately from preview status so local sync completion is not confused with an external eBay write.
 
+#### Scenario: Seller operation OpenAPI contract documents safety states
+- **GIVEN** Cabinet exposes seller operation preview and execute APIs for messages, notifications, sold orders, fulfilment, and offers
+- **WHEN** integrations inspect `docs/api/openapi.yaml`
+- **THEN** the specification MUST document `/api/providers/ebay/seller-operations/preview` and `/api/providers/ebay/seller-operations/execute`.
+- **AND** the documented request and response schemas MUST include operation, action, capability, confirmation, allowed, local-only, remote-write, blocker, and read-result fields so clients can preserve the same safety boundaries as the implemented API.
+
 ### Requirement INTEGRATION-028: eBay seller listing lifecycle commands MUST be safety gated
 Cabinet SHALL model eBay seller listing draft, publish, revise, end, and relist commands separately so local draft creation is not confused with external marketplace writes.
 
