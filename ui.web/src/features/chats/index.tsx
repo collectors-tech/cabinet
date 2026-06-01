@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessagesSquare, Send } from 'lucide-react'
+import {
+  MessageCircle,
+  MessagesSquare,
+  Plus,
+  Search as SearchIcon,
+  Send,
+} from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -79,10 +85,15 @@ function prettyRole(role: ChatMessage['role']) {
   return 'You'
 }
 
+function threadInitial(title: string) {
+  return title.trim().charAt(0).toUpperCase() || 'C'
+}
+
 export function Chats() {
   const [activeProfileId, setActiveProfileId] = useState('')
   const [threads, setThreads] = useState<ChatThread[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState('')
+  const [threadSearch, setThreadSearch] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [threadTitle, setThreadTitle] = useState('')
   const [draft, setDraft] = useState('')
@@ -108,6 +119,13 @@ export function Chats() {
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
     [selectedThreadId, threads]
   )
+  const filteredThreads = useMemo(() => {
+    const query = threadSearch.trim().toLowerCase()
+    if (!query) {
+      return threads
+    }
+    return threads.filter((thread) => thread.title.toLowerCase().includes(query))
+  }, [threadSearch, threads])
 
   const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
 

@@ -29,3 +29,14 @@ Cabinet MUST define the distinct responsibilities of shell Assistant workspace a
 - **THEN** Assistant MUST be documented as the AI helper workspace
 - **AND** `/chats` MUST be documented as the intentional conversation/thread workspace
 - **AND** overlap, if any, MUST be explicitly justified by product behavior
+
+### Requirement CHATS-WORKSPACE-004: `/chats` SHALL preserve the original/example two-pane conversation layout
+Chats workspace MUST render as a dark, sparse two-pane conversation surface with a compact conversation rail on the left and the active or empty conversation workspace on the right.
+
+#### Scenario: Render original/example chats layout parity
+- **GIVEN** user opens `/chats`
+- **WHEN** no conversation is selected
+- **THEN** the left rail MUST include a search input before the conversation list
+- **AND** conversation rows MUST preserve compact avatar, participant/title, and message preview structure
+- **AND** the right workspace MUST show a centered empty-state composition with icon, title, helper text, and primary action affordance
+- **AND** the rail and workspace MUST remain separate, readable, and unclipped at normal desktop widths
