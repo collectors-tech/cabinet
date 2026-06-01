@@ -184,3 +184,16 @@ E2E-only reset hooks MUST clear supported runtime data without failing solely be
 - **WHEN** `/api/test/reset` or the reset hook clears E2E state
 - **THEN** reset MUST skip the absent table and continue clearing present reset tables
 - **AND** reset MUST still fail on real delete/query errors for tables that exist
+
+### Requirement RUNTIME-CORE-018: Cypress runner SHALL prepare dependencies and persist execution logs
+Cabinet Cypress execution scripts MUST perform required local preparation before invoking Cypress and MUST persist progress/output logs for traceability.
+
+#### Scenario: Cypress execution from clean or temporary worktree
+- **GIVEN** a Cabinet worktree has the Cypress spec and runtime config but does not have prepared `ui.web/node_modules`
+- **WHEN** the Cypress runner starts
+- **THEN** it MUST prepare UI dependencies by reusing a configured/local Cabinet `node_modules` install when available or by running deterministic install from the UI lockfile
+- **AND** it MUST build static UI assets and the project-local `bin/cabinet(.exe)` runtime before starting the validation server unless an explicit build skip is requested
+- **AND** it MUST recycle an existing listener on the target base URL by default so validation runs against the current worktree, unless explicit server reuse is requested
+- **AND** it MUST log each preparation, runtime, and Cypress execution step to a timestamped run log
+- **AND** it MUST write a machine-readable run summary containing the spec, browser, base URL, runtime path, exit code, and ordered step list
+- **AND** it MUST retain existing runtime health, E2E hook, stale-port recycling, and project-local runtime path protections

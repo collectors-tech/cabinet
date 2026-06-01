@@ -3,17 +3,44 @@ param(
   [string]$Browser = "electron",
   [switch]$Headed,
   [switch]$NoServer,
+  [switch]$ReuseServer,
   [switch]$RequireE2EHooks,
   [string]$RuntimeExecutablePath = "",
   [switch]$AllowTempRuntimePath,
+  [switch]$SkipDependencyPrep,
+  [switch]$SkipRuntimeBuild,
   [string]$BaseUrl = "http://127.0.0.1:17880",
-  [int]$StartupTimeoutSec = 45
+  [int]$StartupTimeoutSec = 45,
+  [string]$LogDir = ".work-agent\logs\cypress",
+  [string]$LogName = ""
 )
 
 $ErrorActionPreference = "Stop"
+$script:CypressStepEvents = @()
 
 function Write-Step([string]$msg) {
-  Write-Host "[cypress.ps1] $msg"
+  $timestamp = (Get-Date).ToString("o")
+  $script:CypressStepEvents += [pscustomobject]@{
+    timestamp = $timestamp
+    message = $msg
+  }
+  Write-Host "[$timestamp] [cypress.ps1] $msg"
+}
+
+function ConvertTo-SafeLogSegment([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    return "run"
+  }
+
+  $safe = $value -replace '[^A-Za-z0-9._-]+', '-'
+  $safe = $safe.Trim('-')
+  if ([string]::IsNullOrWhiteSpace($safe)) {
+    return "run"
+  }
+  if ($safe.Length -gt 80) {
+    return $safe.Substring(0, 80)
+  }
+  return $safe
 }
 
 function Test-Health([string]$url) {
@@ -74,6 +101,156 @@ function Test-IsEphemeralRuntimePath([string]$path) {
   return $false
 }
 
+function Test-CypressDependencyReady([string]$uiRoot) {
+  $nodeModules = Join-Path $uiRoot "node_modules"
+  if (-not (Test-Path $nodeModules)) {
+    return $false
+  }
+
+  $cypressPackage = Join-Path $nodeModules "cypress\package.json"
+  $cypressCmd = Join-Path $nodeModules ".bin\cypress.cmd"
+  $cypressBin = Join-Path $nodeModules ".bin\cypress"
+  return (Test-Path $cypressPackage) -and ((Test-Path $cypressCmd) -or (Test-Path $cypressBin))
+}
+
+function Get-ReusableNodeModulesPath([string]$repoRoot, [string]$uiRoot) {
+  $candidates = @()
+
+  if (-not [string]::IsNullOrWhiteSpace($env:CABINET_UI_NODE_MODULES_PATH)) {
+    $candidates += $env:CABINET_UI_NODE_MODULES_PATH
+  }
+
+  $repoParent = Split-Path -Parent $repoRoot
+  if ($repoParent) {
+    $candidates += (Join-Path $repoParent "cabinet\ui.web\node_modules")
+
+    $repoGrandParent = Split-Path -Parent $repoParent
+    if ($repoGrandParent) {
+      $candidates += (Join-Path $repoGrandParent "cabinet\ui.web\node_modules")
+    }
+  }
+
+  $currentNodeModules = Join-Path $uiRoot "node_modules"
+  foreach ($candidate in $candidates) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+      continue
+    }
+    if ($candidate -eq $currentNodeModules) {
+      continue
+    }
+    if (Test-CypressDependencyReady (Split-Path -Parent $candidate)) {
+      return (Resolve-Path $candidate).Path
+    }
+  }
+
+  return ""
+}
+
+function Invoke-NpmCi([string]$uiRoot) {
+  $lockPath = Join-Path $uiRoot "package-lock.json"
+  if (-not (Test-Path $lockPath)) {
+    throw "Cannot install UI dependencies: missing $lockPath"
+  }
+
+  Write-Step "Installing UI dependencies with npm ci."
+  Push-Location $uiRoot
+  try {
+    & npm ci
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm ci failed with exit code $LASTEXITCODE."
+    }
+  }
+  finally {
+    Pop-Location
+  }
+}
+
+function Ensure-UiDependencies([string]$repoRoot, [string]$uiRoot) {
+  if (Test-CypressDependencyReady $uiRoot) {
+    Write-Step "UI dependencies already prepared."
+    return
+  }
+
+  $nodeModules = Join-Path $uiRoot "node_modules"
+  if (Test-Path $nodeModules) {
+    Write-Step "UI node_modules exists but Cypress is not ready; reinstalling dependencies."
+    Remove-Item -LiteralPath $nodeModules -Recurse -Force
+    Invoke-NpmCi $uiRoot
+  }
+  else {
+    $reusableNodeModules = Get-ReusableNodeModulesPath $repoRoot $uiRoot
+    if (-not [string]::IsNullOrWhiteSpace($reusableNodeModules)) {
+      Write-Step "Linking UI dependencies from $reusableNodeModules"
+      New-Item -ItemType Junction -Path $nodeModules -Target $reusableNodeModules | Out-Null
+    }
+    else {
+      Invoke-NpmCi $uiRoot
+    }
+  }
+
+  if (-not (Test-CypressDependencyReady $uiRoot)) {
+    throw "UI dependency prep completed, but Cypress is still not ready under $nodeModules."
+  }
+}
+
+function Ensure-RuntimeExecutable([string]$repoRoot, [string]$runtimeExecutablePath, [bool]$skipRuntimeBuild) {
+  if ($skipRuntimeBuild -and (Test-Path $runtimeExecutablePath)) {
+    Write-Step "Runtime build skipped; using existing $runtimeExecutablePath"
+    return (Resolve-Path $runtimeExecutablePath).Path
+  }
+
+  Write-Step "Building static UI and project-local runtime executable at $runtimeExecutablePath"
+  Push-Location $repoRoot
+  try {
+    & (Join-Path $repoRoot "scripts\build-cabinet.ps1") | ForEach-Object {
+      Write-Host $_
+    }
+    if ($LASTEXITCODE -ne 0) {
+      throw "build-cabinet.ps1 failed with exit code $LASTEXITCODE."
+    }
+  }
+  finally {
+    Pop-Location
+  }
+
+  if (-not (Test-Path $runtimeExecutablePath)) {
+    throw "Runtime build completed without producing $runtimeExecutablePath"
+  }
+  return (Resolve-Path $runtimeExecutablePath).Path
+}
+
+function Write-RunSummary(
+  [string]$summaryPath,
+  [int]$exitCode,
+  [string]$errorMessage,
+  [string]$repoRoot,
+  [string]$uiRoot,
+  [string]$specPath,
+  [string]$browser,
+  [string]$baseUrl,
+  [string]$runtimeExecutablePath,
+  [string]$logPath,
+  [bool]$startedServer
+) {
+  $summary = [ordered]@{
+    timestamp = (Get-Date).ToString("o")
+    exit_code = $exitCode
+    error = $errorMessage
+    repo_root = $repoRoot
+    ui_root = $uiRoot
+    spec = $specPath
+    browser = $browser
+    base_url = $baseUrl
+    runtime_executable_path = $runtimeExecutablePath
+    started_server = $startedServer
+    log_path = $logPath
+    steps = $script:CypressStepEvents
+  }
+
+  $summaryJson = $summary | ConvertTo-Json -Depth 6
+  Set-Content -LiteralPath $summaryPath -Value $summaryJson -Encoding UTF8
+}
+
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uiRoot = Join-Path $repoRoot "ui.web"
 $defaultRuntimeExecutable = Join-Path $repoRoot "bin/cabinet.exe"
@@ -84,12 +261,41 @@ $runtimePort = $baseUri.Port
 $e2eDataDir = Join-Path $repoRoot ".tmp\cypress-runtime-$runtimePort"
 $e2eProfile = "e2e-cypress-$runtimePort"
 $e2eInstanceName = "cypress-$runtimePort"
+$resolvedLogDir = if ([System.IO.Path]::IsPathRooted($LogDir)) { $LogDir } else { Join-Path $repoRoot $LogDir }
+$runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$logSegment = if ([string]::IsNullOrWhiteSpace($LogName)) {
+  ConvertTo-SafeLogSegment ([System.IO.Path]::GetFileNameWithoutExtension($Spec))
+} else {
+  ConvertTo-SafeLogSegment $LogName
+}
+$logPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.log"
+$summaryPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.summary.json"
+$transcriptStarted = $false
+
+New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
+try {
+  Start-Transcript -Path $logPath -Force | Out-Null
+  $transcriptStarted = $true
+}
+catch {
+  Write-Step "Unable to start transcript log at ${logPath}: $($_.Exception.Message)"
+}
+Write-Step "Run log: $logPath"
+Write-Step "Run summary: $summaryPath"
+
+if (-not (Test-Path $configPath)) {
+  throw "Missing Cypress config: $configPath"
+}
+if (-not (Test-Path $specPath)) {
+  throw "Missing Cypress spec: $specPath"
+}
+if (-not $SkipDependencyPrep) {
+  Ensure-UiDependencies $repoRoot $uiRoot
+}
 
 $resolvedRuntimeExecutablePath = ""
 if ([string]::IsNullOrWhiteSpace($RuntimeExecutablePath)) {
-  if (Test-Path $defaultRuntimeExecutable) {
-    $resolvedRuntimeExecutablePath = (Resolve-Path $defaultRuntimeExecutable).Path
-  }
+  $resolvedRuntimeExecutablePath = Ensure-RuntimeExecutable $repoRoot $defaultRuntimeExecutable $SkipRuntimeBuild
 } else {
   $candidate = $RuntimeExecutablePath
   if (-not [System.IO.Path]::IsPathRooted($candidate)) {
@@ -105,22 +311,25 @@ if ((Test-IsEphemeralRuntimePath $resolvedRuntimeExecutablePath) -and -not $Allo
   throw "ephemeral temp/template runtime path was rejected: $resolvedRuntimeExecutablePath. Pass -AllowTempRuntimePath to override explicitly."
 }
 
-if (-not (Test-Path $configPath)) {
-  throw "Missing Cypress config: $configPath"
-}
-if (-not (Test-Path $specPath)) {
-  throw "Missing Cypress spec: $specPath"
-}
-
 $serverProc = $null
 $startedServer = $false
 $exitCode = 1
+$runError = $null
 
 try {
   if (-not $NoServer) {
     $alreadyRunning = Test-Health $BaseUrl
-    $canReuse = $alreadyRunning
-    if ($alreadyRunning -and $RequireE2EHooks) {
+    $canReuse = $alreadyRunning -and $ReuseServer
+    if ($alreadyRunning -and -not $ReuseServer) {
+      Write-Step "Existing server found at $BaseUrl; recycling to ensure current worktree runtime and UI."
+      Stop-PortListener $BaseUrl
+      Start-Sleep -Seconds 1
+      $alreadyRunning = Test-Health $BaseUrl
+      if ($alreadyRunning) {
+        Write-Step "Existing server still responds after recycle attempt; continuing with startup and health validation."
+      }
+    }
+    elseif ($alreadyRunning -and $RequireE2EHooks) {
       $canReuse = Test-E2EHooks $BaseUrl
       if (-not $canReuse) {
         Write-Step "Existing server lacks E2E hooks; recycling runtime with CABINET_E2E_MODE=1."
@@ -179,6 +388,7 @@ try {
     "cypress", "run",
     "--browser", $Browser,
     "--config-file", $configPath,
+    "--config", "baseUrl=$BaseUrl",
     "--spec", $specPath
   )
   if ($Headed) {
@@ -195,6 +405,7 @@ try {
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     & npx @args
     $exitCode = $LASTEXITCODE
+    Write-Step "Cypress exited with code $exitCode."
   }
   finally {
     if ($hadElectronRunAsNode) {
@@ -205,11 +416,37 @@ try {
     Pop-Location
   }
 }
+catch {
+  $runError = $_
+  $exitCode = 1
+  Write-Step "Run failed: $($_.Exception.Message)"
+}
 finally {
   if ($startedServer -and $serverProc) {
     Write-Step "Stopping server process $($serverProc.Id)"
     Stop-Process -Id $serverProc.Id -Force -ErrorAction SilentlyContinue
   }
+  $errorMessage = if ($runError) { $runError.Exception.Message } else { "" }
+  Write-RunSummary `
+    -summaryPath $summaryPath `
+    -exitCode $exitCode `
+    -errorMessage $errorMessage `
+    -repoRoot $repoRoot `
+    -uiRoot $uiRoot `
+    -specPath $specPath `
+    -browser $Browser `
+    -baseUrl $BaseUrl `
+    -runtimeExecutablePath $resolvedRuntimeExecutablePath `
+    -logPath $logPath `
+    -startedServer $startedServer
+  Write-Step "Run summary written: $summaryPath"
+  if ($transcriptStarted) {
+    Stop-Transcript | Out-Null
+  }
 }
 
+if ($runError) {
+  Write-Error -Message $runError.Exception.Message
+  exit 1
+}
 exit $exitCode
