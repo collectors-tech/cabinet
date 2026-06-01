@@ -1121,8 +1121,7 @@ export function TasksTable({
         >
           <Table
             className={cn(
-              'min-w-[42rem]',
-              isInventoryRoute ? 'table-fixed' : '',
+              isInventoryRoute ? 'min-w-[88rem] table-fixed' : 'min-w-[42rem]',
               routePath === '/_authenticated/wishlist/' ? 'min-w-[56rem]' : ''
             )}
           >

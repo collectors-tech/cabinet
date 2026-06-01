@@ -733,7 +733,7 @@ export function getTasksColumns({
             ),
             meta: isInventoryRoute
               ? {
-                  className: 'w-[14rem] max-w-[14rem]',
+                  className: 'w-[12rem] max-w-[12rem]',
                   tdClassName: 'max-w-0',
                 }
               : undefined,
@@ -758,7 +758,7 @@ export function getTasksColumns({
       meta: {
         className: isWishlistRoute
           ? 'ps-1 min-w-[12rem]'
-          : 'ps-1 max-w-0 w-2/3',
+          : 'ps-1 w-[28rem] max-w-[28rem]',
         tdClassName: 'ps-4',
       },
       cell: ({ row }) => {
@@ -773,7 +773,7 @@ export function getTasksColumns({
               ) : null}
               <div className='flex min-w-0 space-x-2'>
                 <span
-                  className='block min-w-0 max-w-full truncate font-medium'
+                  className='block max-w-full min-w-0 truncate font-medium'
                   title={String(row.getValue('title'))}
                 >
                   {row.getValue('title')}
@@ -810,7 +810,12 @@ export function getTasksColumns({
                 title={isInventoryRoute ? 'Condition' : 'Status'}
               />
             ),
-            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            meta: isInventoryRoute
+              ? {
+                  className: 'w-[13rem] max-w-[13rem] ps-1',
+                  tdClassName: 'ps-4',
+                }
+              : { className: 'ps-1', tdClassName: 'ps-4' },
             cell: ({ row }) => {
               if (isInventoryRoute) {
                 return (
@@ -1000,7 +1005,10 @@ export function getTasksColumns({
             header: ({ column }) => (
               <DataTableColumnHeader column={column} title='Item type' />
             ),
-            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            meta: {
+              className: 'w-[10rem] max-w-[10rem] ps-1',
+              tdClassName: 'ps-4',
+            },
             cell: ({ row }) => (
               <span
                 className='block max-w-full truncate'
@@ -1019,7 +1027,10 @@ export function getTasksColumns({
             header: ({ column }) => (
               <DataTableColumnHeader column={column} title='Packaging' />
             ),
-            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            meta: {
+              className: 'w-[10rem] max-w-[10rem] ps-1',
+              tdClassName: 'ps-4',
+            },
             cell: ({ row }) => (
               <span
                 className='block max-w-full truncate'
@@ -1043,7 +1054,12 @@ export function getTasksColumns({
           title={isInventoryRoute ? 'Category' : 'Priority'}
         />
       ),
-      meta: { className: 'ps-1', tdClassName: 'ps-3' },
+      meta: isInventoryRoute
+        ? {
+            className: 'w-[10rem] max-w-[10rem] ps-1',
+            tdClassName: 'ps-3',
+          }
+        : { className: 'ps-1', tdClassName: 'ps-3' },
       cell: ({ row }) => {
         if (isInventoryRoute) {
           return (
@@ -1093,7 +1109,7 @@ export function getTasksColumns({
     {
       id: 'actions',
       meta: {
-        className: isInventoryRoute ? 'w-40' : undefined,
+        className: isInventoryRoute ? 'w-44' : undefined,
         tdClassName: isInventoryRoute ? 'max-w-none' : undefined,
       },
       cell: ({ row }) => (
