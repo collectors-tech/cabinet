@@ -183,7 +183,9 @@ export function Chats() {
     if (!query) {
       return threads
     }
-    return threads.filter((thread) => thread.title.toLowerCase().includes(query))
+    return threads.filter((thread) =>
+      thread.title.toLowerCase().includes(query)
+    )
   }, [threadSearch, threads])
 
   const threadCreationDisabled = loading || Boolean(error) || !activeProfileId
@@ -299,7 +301,9 @@ export function Chats() {
     setApplyResult(null)
     setApplyNotice('')
     setConfirmApplyOpen(false)
-    const storedPreview = readStoredActionPreview(selectedActionPreviewStorageKey)
+    const storedPreview = readStoredActionPreview(
+      selectedActionPreviewStorageKey
+    )
     if (
       storedPreview?.profile_id === activeProfileId &&
       storedPreview.thread_id === selectedThreadId &&
@@ -628,8 +632,24 @@ export function Chats() {
           </div>
         ) : null}
 
-        <section className='grid h-full min-h-[520px] gap-4 lg:grid-cols-[320px_1fr]'>
-          <div className='rounded-md border p-3'>
+        <section
+          className='grid h-full min-h-[520px] overflow-hidden rounded-md border bg-background lg:grid-cols-[320px_1fr]'
+          data-testid='chat-layout'
+        >
+          <aside
+            className='flex min-h-0 flex-col border-b bg-muted/20 p-3 lg:border-e lg:border-b-0'
+            data-testid='chat-conversation-rail'
+          >
+            <div className='relative mb-3'>
+              <SearchIcon className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+              <Input
+                data-testid='chat-conversation-search'
+                placeholder='Search messages'
+                value={threadSearch}
+                onChange={(event) => setThreadSearch(event.target.value)}
+                className='ps-9'
+              />
+            </div>
             <div className='mb-3 flex gap-2'>
               <Input
                 data-testid='chat-new-thread-input'
@@ -643,22 +663,23 @@ export function Chats() {
                 onClick={() => void createThread()}
                 disabled={threadCreationDisabled || !threadTitle.trim()}
               >
+                <Plus className='mr-1 h-4 w-4' />
                 Create
               </Button>
             </div>
-            <ScrollArea className='h-[420px]'>
+            <ScrollArea className='min-h-0 flex-1'>
               <div data-testid='chat-thread-list' className='space-y-1'>
                 {threads.length === 0 && !loading ? (
                   <p className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'>
                     No chat threads yet.
                   </p>
                 ) : null}
-                {threads.map((thread) => (
+                {filteredThreads.map((thread) => (
                   <button
                     key={thread.id}
                     type='button'
                     data-testid='chat-thread-item'
-                    className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
+                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm ${
                       selectedThreadId === thread.id
                         ? 'border-primary bg-primary/5'
                         : 'hover:bg-muted/40'
@@ -668,241 +689,302 @@ export function Chats() {
                       void loadMessages(activeProfileId, thread.id)
                     }}
                   >
-                    {thread.title}
+                    <span
+                      className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary'
+                      data-testid='chat-thread-avatar'
+                    >
+                      {threadInitial(thread.title)}
+                    </span>
+                    <span className='min-w-0 flex-1'>
+                      <span className='block truncate font-medium'>
+                        {thread.title}
+                      </span>
+                      <span
+                        className='block truncate text-xs text-muted-foreground'
+                        data-testid='chat-thread-preview'
+                      >
+                        No messages yet
+                      </span>
+                    </span>
                   </button>
                 ))}
               </div>
             </ScrollArea>
-          </div>
+          </aside>
 
-          <div className='rounded-md border p-3'>
-            <div className='mb-3'>
-              <h2 className='font-semibold' data-testid='chat-thread-title'>
-                {selectedThread?.title ?? 'Select or create a thread'}
-              </h2>
-            </div>
-            <ScrollArea className='h-[380px] rounded-md border p-3'>
-              <div data-testid='chat-message-list' className='space-y-3'>
-                {messagesLoading ? (
-                  <p className='text-sm text-muted-foreground'>
-                    Loading messages...
-                  </p>
-                ) : null}
-                {!messagesLoading && selectedThread && messages.length === 0 ? (
-                  <p className='text-sm text-muted-foreground'>
-                    No messages in this thread yet.
-                  </p>
-                ) : null}
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className='rounded-md border p-2 text-sm'
-                  >
-                    <p className='font-medium'>{prettyRole(message.role)}</p>
-                    <p>{message.content}</p>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-            {sendError ? (
-              <p
-                className='mt-2 text-sm text-destructive'
-                data-testid='chat-send-error'
-              >
-                {sendError}
-              </p>
-            ) : null}
-            <div className='mt-3 flex gap-2'>
-              <Input
-                data-testid='chat-compose-input'
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder='Type your message...'
-                disabled={!selectedThreadId}
-              />
-              <Button
-                data-testid='chat-send-button'
-                onClick={() => void sendMessage()}
-                disabled={!selectedThreadId || !draft.trim()}
-              >
-                <Send className='mr-1 h-4 w-4' />
-                Send
-              </Button>
-            </div>
-
-            <div className='mt-4 space-y-3 rounded-md border p-3'>
-              <p className='text-sm font-medium'>Attachments</p>
-              <div className='flex items-center gap-2'>
-                <Input
-                  type='file'
-                  data-testid='chat-attachment-input'
-                  disabled={!selectedThreadId}
-                  onChange={(event) =>
-                    setPendingAttachment(event.target.files?.[0] ?? null)
-                  }
-                />
-                <Button
-                  type='button'
-                  data-testid='chat-upload-attachment-button'
-                  disabled={!selectedThreadId || !pendingAttachment}
-                  onClick={() => void uploadAttachment()}
-                >
-                  Upload
-                </Button>
-              </div>
+          <div className='flex min-h-0 flex-col p-3'>
+            {!selectedThread ? (
               <div
-                data-testid='chat-attachment-list'
-                className='space-y-1 text-sm'
+                className='flex min-h-[420px] flex-1 items-center justify-center'
+                data-testid='chat-empty-workspace-state'
               >
-                {attachments.length === 0 ? (
-                  <p className='text-muted-foreground'>
-                    No attachments uploaded.
+                <div className='mx-auto max-w-sm text-center'>
+                  <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border bg-muted/40'>
+                    <MessageCircle className='h-6 w-6 text-muted-foreground' />
+                  </div>
+                  <h2 className='text-lg font-semibold'>
+                    Select a conversation
+                  </h2>
+                  <p className='mt-2 text-sm text-muted-foreground'>
+                    Choose an existing thread or create a new one to continue a
+                    durable Cabinet conversation.
                   </p>
-                ) : (
-                  attachments.map((attachment) => (
-                    <p key={attachment.id}>{attachment.filename}</p>
-                  ))
-                )}
+                  <Button
+                    type='button'
+                    className='mt-4'
+                    data-testid='chat-empty-workspace-action'
+                    onClick={() =>
+                      document
+                        .querySelector<HTMLInputElement>(
+                          '[data-testid="chat-new-thread-input"]'
+                        )
+                        ?.focus()
+                    }
+                  >
+                    Start a conversation
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className='mb-3'>
+                  <h2 className='font-semibold' data-testid='chat-thread-title'>
+                    {selectedThread.title}
+                  </h2>
+                </div>
+                <ScrollArea className='h-[380px] rounded-md border p-3'>
+                  <div data-testid='chat-message-list' className='space-y-3'>
+                    {messagesLoading ? (
+                      <p className='text-sm text-muted-foreground'>
+                        Loading messages...
+                      </p>
+                    ) : null}
+                    {!messagesLoading &&
+                    selectedThread &&
+                    messages.length === 0 ? (
+                      <p className='text-sm text-muted-foreground'>
+                        No messages in this thread yet.
+                      </p>
+                    ) : null}
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className='rounded-md border p-2 text-sm'
+                      >
+                        <p className='font-medium'>
+                          {prettyRole(message.role)}
+                        </p>
+                        <p>{message.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+                {sendError ? (
+                  <p
+                    className='mt-2 text-sm text-destructive'
+                    data-testid='chat-send-error'
+                  >
+                    {sendError}
+                  </p>
+                ) : null}
+                <div className='mt-3 flex gap-2'>
+                  <Input
+                    data-testid='chat-compose-input'
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder='Type your message...'
+                    disabled={!selectedThreadId}
+                  />
+                  <Button
+                    data-testid='chat-send-button'
+                    onClick={() => void sendMessage()}
+                    disabled={!selectedThreadId || !draft.trim()}
+                  >
+                    <Send className='mr-1 h-4 w-4' />
+                    Send
+                  </Button>
+                </div>
 
-            <div className='mt-4 space-y-3 rounded-md border p-3'>
-              <div className='flex flex-wrap items-start justify-between gap-2'>
-                <p className='text-sm font-medium'>Action Preview</p>
-                <p
-                  className='rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground'
-                  data-testid='chat-assistant-defaults'
-                >
-                  Assistant default: {assistantDefaults.provider} /{' '}
-                  {assistantDefaults.model}
-                </p>
-              </div>
-              <label className='grid gap-1 text-sm'>
-                <span>Action Mode</span>
-                <select
-                  data-testid='chat-preview-action-mode'
-                  className='h-9 rounded-md border bg-background px-3'
-                  value={actionMode}
-                  onChange={(event) =>
-                    setActionMode(
-                      event.target.value as
-                        | 'create_inventory_item'
-                        | 'create_wishlist_entry'
-                        | 'update_inventory_item'
-                        | 'assign_collection_item'
-                    )
-                  }
-                  disabled={!selectedThreadId}
-                >
-                  <option value='create_inventory_item'>
-                    create_inventory_item
-                  </option>
-                  <option value='create_wishlist_entry'>
-                    create_wishlist_entry
-                  </option>
-                  <option value='update_inventory_item'>
-                    update_inventory_item
-                  </option>
-                  <option value='assign_collection_item'>
-                    assign_collection_item
-                  </option>
-                </select>
-              </label>
-              {actionMode === 'update_inventory_item' ||
-              actionMode === 'assign_collection_item' ? (
-                <Input
-                  data-testid='chat-preview-target-item-id'
-                  value={actionTargetItemID}
-                  onChange={(event) =>
-                    setActionTargetItemID(event.target.value)
-                  }
-                  placeholder='Existing item ID'
-                  disabled={!selectedThreadId}
-                />
-              ) : null}
-              {actionMode === 'assign_collection_item' ? (
-                <Input
-                  data-testid='chat-preview-collection-name'
-                  value={actionCollectionName}
-                  onChange={(event) =>
-                    setActionCollectionName(event.target.value)
-                  }
-                  placeholder='Collection name'
-                  disabled={!selectedThreadId}
-                />
-              ) : null}
-              <div className='grid gap-2 sm:grid-cols-2'>
-                <Input
-                  data-testid='chat-preview-part-number'
-                  value={actionPartNumber}
-                  onChange={(event) => setActionPartNumber(event.target.value)}
-                  placeholder='Part number'
-                  disabled={!selectedThreadId}
-                />
-                <Input
-                  data-testid='chat-preview-title'
-                  value={actionTitle}
-                  onChange={(event) => setActionTitle(event.target.value)}
-                  placeholder='Item title'
-                  disabled={!selectedThreadId}
-                />
-              </div>
-              <div className='flex flex-wrap gap-2'>
-                <Button
-                  type='button'
-                  data-testid='chat-preview-action-button'
-                  onClick={() => void previewCreateItemAction()}
-                  disabled={previewDisabled}
-                >
-                  Preview Action
-                </Button>
-                <Button
-                  type='button'
-                  variant='outline'
-                  data-testid='chat-apply-action-button'
-                  onClick={() => setConfirmApplyOpen(true)}
-                  disabled={
-                    !selectedThreadId ||
-                    !actionPreview?.id ||
-                    actionPreviewStatusLabel !== 'pending'
-                  }
-                >
-                  Apply Action
-                </Button>
-              </div>
-              {actionPreview ? (
-                <p
-                  data-testid='chat-action-preview'
-                  className='text-sm text-muted-foreground'
-                >
-                  Preview {actionPreview.id}: {actionPreview.action} (
-                  {actionPreviewStatusLabel}) via{' '}
-                  {String(
-                    actionPreview.payload?.assistant_provider ?? 'openai'
-                  )}{' '}
-                  /{' '}
-                  {String(
-                    actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
-                  )}
-                  {actionPreviewTargetSummary
-                    ? ` - ${actionPreviewTargetSummary}`
-                    : ''}
-                </p>
-              ) : null}
-              {applyResult ? (
-                <p data-testid='chat-action-apply-result' className='text-sm'>
-                  {applyResultSummary}
-                </p>
-              ) : null}
-              {applyNotice ? (
-                <p
-                  data-testid='chat-action-apply-notice'
-                  className='text-sm text-muted-foreground'
-                >
-                  {applyNotice}
-                </p>
-              ) : null}
-            </div>
+                <div className='mt-4 space-y-3 rounded-md border p-3'>
+                  <p className='text-sm font-medium'>Attachments</p>
+                  <div className='flex items-center gap-2'>
+                    <Input
+                      type='file'
+                      data-testid='chat-attachment-input'
+                      disabled={!selectedThreadId}
+                      onChange={(event) =>
+                        setPendingAttachment(event.target.files?.[0] ?? null)
+                      }
+                    />
+                    <Button
+                      type='button'
+                      data-testid='chat-upload-attachment-button'
+                      disabled={!selectedThreadId || !pendingAttachment}
+                      onClick={() => void uploadAttachment()}
+                    >
+                      Upload
+                    </Button>
+                  </div>
+                  <div
+                    data-testid='chat-attachment-list'
+                    className='space-y-1 text-sm'
+                  >
+                    {attachments.length === 0 ? (
+                      <p className='text-muted-foreground'>
+                        No attachments uploaded.
+                      </p>
+                    ) : (
+                      attachments.map((attachment) => (
+                        <p key={attachment.id}>{attachment.filename}</p>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className='mt-4 space-y-3 rounded-md border p-3'>
+                  <div className='flex flex-wrap items-start justify-between gap-2'>
+                    <p className='text-sm font-medium'>Action Preview</p>
+                    <p
+                      className='rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground'
+                      data-testid='chat-assistant-defaults'
+                    >
+                      Assistant default: {assistantDefaults.provider} /{' '}
+                      {assistantDefaults.model}
+                    </p>
+                  </div>
+                  <label className='grid gap-1 text-sm'>
+                    <span>Action Mode</span>
+                    <select
+                      data-testid='chat-preview-action-mode'
+                      className='h-9 rounded-md border bg-background px-3'
+                      value={actionMode}
+                      onChange={(event) =>
+                        setActionMode(
+                          event.target.value as
+                            | 'create_inventory_item'
+                            | 'create_wishlist_entry'
+                            | 'update_inventory_item'
+                            | 'assign_collection_item'
+                        )
+                      }
+                      disabled={!selectedThreadId}
+                    >
+                      <option value='create_inventory_item'>
+                        create_inventory_item
+                      </option>
+                      <option value='create_wishlist_entry'>
+                        create_wishlist_entry
+                      </option>
+                      <option value='update_inventory_item'>
+                        update_inventory_item
+                      </option>
+                      <option value='assign_collection_item'>
+                        assign_collection_item
+                      </option>
+                    </select>
+                  </label>
+                  {actionMode === 'update_inventory_item' ||
+                  actionMode === 'assign_collection_item' ? (
+                    <Input
+                      data-testid='chat-preview-target-item-id'
+                      value={actionTargetItemID}
+                      onChange={(event) =>
+                        setActionTargetItemID(event.target.value)
+                      }
+                      placeholder='Existing item ID'
+                      disabled={!selectedThreadId}
+                    />
+                  ) : null}
+                  {actionMode === 'assign_collection_item' ? (
+                    <Input
+                      data-testid='chat-preview-collection-name'
+                      value={actionCollectionName}
+                      onChange={(event) =>
+                        setActionCollectionName(event.target.value)
+                      }
+                      placeholder='Collection name'
+                      disabled={!selectedThreadId}
+                    />
+                  ) : null}
+                  <div className='grid gap-2 sm:grid-cols-2'>
+                    <Input
+                      data-testid='chat-preview-part-number'
+                      value={actionPartNumber}
+                      onChange={(event) =>
+                        setActionPartNumber(event.target.value)
+                      }
+                      placeholder='Part number'
+                      disabled={!selectedThreadId}
+                    />
+                    <Input
+                      data-testid='chat-preview-title'
+                      value={actionTitle}
+                      onChange={(event) => setActionTitle(event.target.value)}
+                      placeholder='Item title'
+                      disabled={!selectedThreadId}
+                    />
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      type='button'
+                      data-testid='chat-preview-action-button'
+                      onClick={() => void previewCreateItemAction()}
+                      disabled={previewDisabled}
+                    >
+                      Preview Action
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      data-testid='chat-apply-action-button'
+                      onClick={() => setConfirmApplyOpen(true)}
+                      disabled={
+                        !selectedThreadId ||
+                        !actionPreview?.id ||
+                        actionPreviewStatusLabel !== 'pending'
+                      }
+                    >
+                      Apply Action
+                    </Button>
+                  </div>
+                  {actionPreview ? (
+                    <p
+                      data-testid='chat-action-preview'
+                      className='text-sm text-muted-foreground'
+                    >
+                      Preview {actionPreview.id}: {actionPreview.action} (
+                      {actionPreviewStatusLabel}) via{' '}
+                      {String(
+                        actionPreview.payload?.assistant_provider ?? 'openai'
+                      )}{' '}
+                      /{' '}
+                      {String(
+                        actionPreview.payload?.assistant_model ?? 'gpt-4o-mini'
+                      )}
+                      {actionPreviewTargetSummary
+                        ? ` - ${actionPreviewTargetSummary}`
+                        : ''}
+                    </p>
+                  ) : null}
+                  {applyResult ? (
+                    <p
+                      data-testid='chat-action-apply-result'
+                      className='text-sm'
+                    >
+                      {applyResultSummary}
+                    </p>
+                  ) : null}
+                  {applyNotice ? (
+                    <p
+                      data-testid='chat-action-apply-notice'
+                      className='text-sm text-muted-foreground'
+                    >
+                      {applyNotice}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
         </section>
       </Main>
