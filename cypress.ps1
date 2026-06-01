@@ -63,6 +63,31 @@ function Test-E2EHooks([string]$url) {
   }
 }
 
+function Test-AppEndpoint([string]$url, [string]$path) {
+  try {
+    $res = Invoke-WebRequest -Uri "$url$path" -UseBasicParsing -TimeoutSec 5
+    return $res.StatusCode -ge 200 -and $res.StatusCode -lt 300
+  }
+  catch {
+    return $false
+  }
+}
+
+function Assert-AppPreflight([string]$url) {
+  $checks = @(
+    @{ Name = "healthz"; Path = "/healthz" },
+    @{ Name = "runtime API"; Path = "/api/runtime" },
+    @{ Name = "sign-in route"; Path = "/sign-in" }
+  )
+
+  foreach ($check in $checks) {
+    if (-not (Test-AppEndpoint $url $check.Path)) {
+      throw "Server preflight failed: $($check.Name) did not return 2xx at $url$($check.Path)."
+    }
+    Write-Step "Server preflight passed: $($check.Name) at $($check.Path)."
+  }
+}
+
 function Stop-PortListener([string]$url) {
   $uri = [Uri]$url
   $port = $uri.Port
@@ -338,6 +363,7 @@ try {
     }
     if ($canReuse) {
       Write-Step "Reusing existing server at $BaseUrl"
+      Assert-AppPreflight $BaseUrl
     }
     else {
       Write-Step "Starting Cabinet server..."
@@ -380,6 +406,7 @@ try {
         throw "Server is healthy but E2E hooks are unavailable at $BaseUrl/api/test/reset."
       }
       Write-Step "Server is healthy."
+      Assert-AppPreflight $BaseUrl
     }
   }
 
