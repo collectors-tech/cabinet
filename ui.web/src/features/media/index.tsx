@@ -135,9 +135,8 @@ export function Media() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
-  const [downloadPreview, setDownloadPreview] = useState<DownloadPreview | null>(
-    null
-  )
+  const [downloadPreview, setDownloadPreview] =
+    useState<DownloadPreview | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [downloadLoading, setDownloadLoading] = useState(false)
   const [assignmentAsset, setAssignmentAsset] = useState<MediaAsset | null>(
@@ -151,7 +150,9 @@ export function Media() {
     useState<AssignmentPreview | null>(null)
   const [assignmentError, setAssignmentError] = useState<string | null>(null)
   const [assignmentLoading, setAssignmentLoading] = useState(false)
-  const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(null)
+  const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(
+    null
+  )
 
   const loadAssets = useCallback(async () => {
     setLoading(true)
@@ -478,12 +479,16 @@ export function Media() {
           </Card>
         ) : !error ? (
           <div
-            className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'
+            className='grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
             data-testid='media-card-grid'
           >
             {assets.map((asset) => (
-              <Card key={asset.id} data-testid={`media-card-${asset.id}`}>
-                <CardHeader className='space-y-3'>
+              <Card
+                key={asset.id}
+                className='overflow-hidden'
+                data-testid={`media-card-${asset.id}`}
+              >
+                <CardHeader className='space-y-2 p-2.5'>
                   <div className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'>
                     {asset.thumbnail_url ? (
                       <img
@@ -492,13 +497,14 @@ export function Media() {
                         className='h-full w-full object-cover'
                       />
                     ) : (
-                      <FileImage className='h-10 w-10 text-muted-foreground' />
+                      <FileImage className='h-7 w-7 text-muted-foreground' />
                     )}
                   </div>
-                  <div className='space-y-2'>
-                    <div className='flex flex-wrap items-center justify-between gap-2'>
-                      <div className='flex flex-wrap items-center gap-2'>
+                  <div className='space-y-1.5'>
+                    <div className='flex items-start justify-between gap-2'>
+                      <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
                         <Badge
+                          className='max-w-full truncate text-[11px]'
                           variant={
                             asset.linkage_state === 'unlinked'
                               ? 'default'
@@ -507,7 +513,10 @@ export function Media() {
                         >
                           {linkageLabel(asset.linkage_state)}
                         </Badge>
-                        <Badge variant='outline'>
+                        <Badge
+                          className='max-w-full truncate text-[11px]'
+                          variant='outline'
+                        >
                           {analysisLabel(asset.analysis_status)}
                         </Badge>
                       </div>
@@ -520,25 +529,32 @@ export function Media() {
                         }
                       />
                     </div>
-                    <CardTitle className='text-base'>{asset.title}</CardTitle>
-                    <CardDescription>{asset.source}</CardDescription>
+                    <CardTitle className='line-clamp-2 text-sm leading-snug'>
+                      {asset.title}
+                    </CardTitle>
+                    <CardDescription className='truncate text-xs'>
+                      {asset.source}
+                    </CardDescription>
                   </div>
                 </CardHeader>
-                <CardContent className='space-y-4'>
-                  <dl className='grid grid-cols-2 gap-3 text-sm'>
-                    <div>
+                <CardContent className='space-y-2.5 p-2.5 pt-0'>
+                  <dl className='grid grid-cols-2 gap-2 text-[11px]'>
+                    <div className='min-w-0'>
                       <dt className='text-muted-foreground'>Uploaded</dt>
-                      <dd>{asset.uploaded_at || 'Unknown'}</dd>
+                      <dd className='truncate'>
+                        {asset.uploaded_at || 'Unknown'}
+                      </dd>
                     </div>
-                    <div>
+                    <div className='min-w-0'>
                       <dt className='text-muted-foreground'>Filename</dt>
                       <dd className='truncate'>{asset.download_filename}</dd>
                     </div>
                   </dl>
-                  <div className='grid grid-cols-4 gap-2'>
+                  <div className='grid grid-cols-4 gap-1'>
                     <Button
                       variant='outline'
                       size='icon'
+                      className='h-7 w-7'
                       aria-label={`Open ${asset.title}`}
                       data-testid={`media-open-${asset.id}`}
                     >
@@ -547,6 +563,7 @@ export function Media() {
                     <Button
                       variant='outline'
                       size='icon'
+                      className='h-7 w-7'
                       aria-label={`Analyze ${asset.title}`}
                       data-testid={`media-analyze-${asset.id}`}
                       disabled={asset.analysis_status === 'ready'}
@@ -556,6 +573,7 @@ export function Media() {
                     <Button
                       variant='outline'
                       size='icon'
+                      className='h-7 w-7'
                       aria-label={`Assign ${asset.title}`}
                       data-testid={`media-assign-${asset.id}`}
                       disabled={asset.linkage_state !== 'unlinked'}
@@ -566,6 +584,7 @@ export function Media() {
                     <Button
                       variant='outline'
                       size='icon'
+                      className='h-7 w-7'
                       aria-label={`Archive ${asset.title}`}
                       data-testid={`media-archive-${asset.id}`}
                     >

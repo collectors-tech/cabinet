@@ -165,6 +165,60 @@ describe('ui-screen-media', () => {
       .and('contain', 'slot-car-front-media-sl.jpg')
   })
 
+  it('UI-SCREEN-MEDIA-012 keeps Media cards compact and responsive', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+
+    cy.viewport(1280, 900)
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-card-grid"]').should('be.visible')
+    cy.get('[data-testid="media-card-media-slot-car-front"]').then(($card) => {
+      const rect = $card[0].getBoundingClientRect()
+      expect(rect.width).to.be.lessThan(240)
+      expect(rect.height).to.be.lessThan(400)
+    })
+    cy.get('[data-testid="media-card-media-slot-car-front"]')
+      .should('contain', 'AFX Mustang front view')
+      .and('contain', 'slot-car-front-media-sl.jpg')
+    cy.get('[data-testid="media-open-media-slot-car-front"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="media-analyze-media-slot-car-front"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="media-assign-media-slot-car-front"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="media-archive-media-slot-car-front"]').should(
+      'be.visible'
+    )
+
+    cy.viewport(390, 844)
+    cy.reload()
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-card-grid"]').then(($grid) => {
+      const rect = $grid[0].getBoundingClientRect()
+      expect(rect.left).to.be.at.least(0)
+      expect(rect.right).to.be.at.most(390)
+    })
+    cy.get('[data-testid="media-card-media-slot-car-front"]').then(($card) => {
+      const rect = $card[0].getBoundingClientRect()
+      expect(rect.width).to.be.greaterThan(300)
+      expect(rect.right).to.be.at.most(390)
+    })
+    cy.get('[data-testid="media-card-media-slot-car-front"]')
+      .should('contain', 'AFX Mustang front view')
+      .and('contain', 'slot-car-front-media-sl.jpg')
+    cy.get('[data-testid="media-archive-media-slot-car-front"]').should(
+      'be.visible'
+    )
+  })
+
   it('UI-SCREEN-MEDIA-011 confirms assignment and refreshes API-backed linkage state', () => {
     let assigned = false
 
