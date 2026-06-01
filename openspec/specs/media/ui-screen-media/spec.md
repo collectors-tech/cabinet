@@ -243,3 +243,16 @@ Cabinet SHALL route Media workspace assignment actions through a preview-first c
 - **GIVEN** the assignment target is invalid or the assignment endpoint rejects the request
 - **WHEN** the user previews or confirms assignment
 - **THEN** the UI MUST show a deterministic error state and MUST NOT update card linkage state until the refreshed API state confirms the assignment.
+
+### Requirement UI-SCREEN-MEDIA-012: Media cards SHALL use compact responsive density
+Cabinet SHALL render Media workspace asset cards in a compact grid that substantially reduces the desktop card footprint while preserving readable metadata, visible thumbnails, usable quick actions, and responsive mobile behavior.
+
+#### Scenario: Render compact desktop Media cards
+- **GIVEN** the Media workspace has multiple returned assets
+- **WHEN** the user opens `/media` on the primary desktop review viewport
+- **THEN** the card grid MUST render compact cards at approximately one third of the previous visual footprint, keep thumbnails and metadata readable, and keep open/analyze/assign/archive controls usable without clipping.
+
+#### Scenario: Preserve responsive Media card behavior
+- **GIVEN** the Media workspace has multiple returned assets
+- **WHEN** the user opens `/media` at tablet or mobile widths
+- **THEN** the card grid MUST reflow without horizontal overflow, overlapping content, or clipped metadata/action controls.
