@@ -2,6 +2,8 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -217,6 +219,78 @@ func TestApiContractSmokeScriptDiagnosesHealthzFailure(t *testing.T) {
 	}
 	if !strings.Contains(healthzCheck.Error, "503") {
 		t.Fatalf("healthz failure was not diagnostic: %q", healthzCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesDeadRuntime(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve dead runtime port: %v", err)
+	}
+	deadBaseURL := fmt.Sprintf("http://%s", listener.Addr().String())
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release dead runtime port: %v", err)
+	}
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-dead-runtime"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", deadBaseURL, "-LogRoot", logRoot, "-RunId", runID, "-TimeoutSec", "1")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed against dead runtime\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read dead runtime summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode dead runtime summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 4 {
+		t.Fatalf("unexpected dead runtime summary: %+v", summary)
+	}
+
+	var healthzCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "healthz" {
+			healthzCheck = check
+			break
+		}
+	}
+	if healthzCheck.Name == "" {
+		t.Fatalf("summary did not include healthz check: %+v", summary.Checks)
+	}
+	if healthzCheck.Passed || healthzCheck.Status != 0 {
+		t.Fatalf("healthz check did not record dead runtime failure: %+v", healthzCheck)
+	}
+	lowerError := strings.ToLower(healthzCheck.Error)
+	if !strings.Contains(lowerError, "connection") && !strings.Contains(lowerError, "refused") && !strings.Contains(lowerError, "timeout") {
+		t.Fatalf("dead runtime failure was not diagnostic: %q", healthzCheck.Error)
 	}
 }
 
