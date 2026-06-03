@@ -56,15 +56,20 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	}
 
 	var summary struct {
-		ExitCode    int `json:"exit_code"`
-		CheckCount  int `json:"check_count"`
-		FailedCount int `json:"failed_count"`
+		ExitCode     int    `json:"exit_code"`
+		CheckCount   int    `json:"check_count"`
+		FailedCount  int    `json:"failed_count"`
+		SourceCommit string `json:"source_commit"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
 		t.Fatalf("decode summary: %v\n%s", err, string(raw))
 	}
 	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	expectedCommit := currentGitCommit(t, repoRoot)
+	if summary.SourceCommit != expectedCommit {
+		t.Fatalf("summary source_commit = %q, want %q", summary.SourceCommit, expectedCommit)
 	}
 }
 
@@ -737,4 +742,14 @@ func currentFileDir(t *testing.T) string {
 		t.Fatal("runtime.Caller failed")
 	}
 	return filepath.Dir(filename)
+}
+
+func currentGitCommit(t *testing.T, repoRoot string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD failed: %v", err)
+	}
+	return strings.TrimSpace(string(output))
 }

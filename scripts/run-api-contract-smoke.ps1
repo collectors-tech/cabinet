@@ -93,11 +93,24 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
   }
 }
 
+function Get-SourceCommit([string]$repoRoot) {
+  try {
+    $commit = (& git -C $repoRoot rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+      return [string]$commit
+    }
+  }
+  catch {
+  }
+  return ""
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
 $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($LogRoot)) { $LogRoot } else { Join-Path $repoRoot $LogRoot }
 $runLogDir = Join-Path $resolvedLogRoot $runStamp
 $summaryPath = Join-Path $runLogDir "api-contract-smoke.summary.json"
+$sourceCommit = Get-SourceCommit $repoRoot
 
 New-Item -ItemType Directory -Force -Path $runLogDir | Out-Null
 
@@ -161,6 +174,7 @@ $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
   exit_code = $exitCode
   base_url = $BaseUrl
+  source_commit = $sourceCommit
   check_count = $results.Count
   failed_count = $failed.Count
   require_e2e_hooks = $RequireE2EHooks.IsPresent
