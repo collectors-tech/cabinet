@@ -139,6 +139,87 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptDiagnosesHealthzFailure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			http.Error(w, "stale runtime", http.StatusServiceUnavailable)
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"mode":"test","version":"mock"}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-healthz-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read healthz failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode healthz failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected healthz failure summary: %+v", summary)
+	}
+
+	var healthzCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "healthz" {
+			healthzCheck = check
+			break
+		}
+	}
+	if healthzCheck.Name == "" {
+		t.Fatalf("summary did not include healthz check: %+v", summary.Checks)
+	}
+	if healthzCheck.Passed || healthzCheck.Status != http.StatusServiceUnavailable {
+		t.Fatalf("healthz check did not record stale runtime status: %+v", healthzCheck)
+	}
+	if !strings.Contains(healthzCheck.Error, "503") {
+		t.Fatalf("healthz failure was not diagnostic: %q", healthzCheck.Error)
+	}
+}
+
 func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
