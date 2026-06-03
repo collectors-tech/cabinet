@@ -103,13 +103,16 @@ function Get-SourceCommit([string]$repoRoot) {
 }
 
 function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDir, [bool]$requireE2EHooks) {
+  $runId = "cypress-preflight-$runStamp"
+  $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($logDir)) { $logDir } else { Join-Path $repoRoot $logDir }
+  $summaryPath = Join-Path (Join-Path $resolvedLogRoot $runId) "api-contract-smoke.summary.json"
   $args = @(
     "-NoLogo",
     "-NoProfile",
     "-File", (Join-Path $repoRoot "scripts\run-api-contract-smoke.ps1"),
     "-BaseUrl", $url,
     "-LogRoot", $logDir,
-    "-RunId", "cypress-preflight-$runStamp"
+    "-RunId", $runId
   )
   if ($requireE2EHooks) {
     $args += "-RequireE2EHooks"
@@ -122,6 +125,8 @@ function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDi
   if ($LASTEXITCODE -ne 0) {
     throw "API contract smoke preflight failed with exit code $LASTEXITCODE."
   }
+  Write-Step "API contract smoke summary: $summaryPath"
+  return $summaryPath
 }
 
 function Stop-PortListener([string]$url) {
@@ -296,6 +301,7 @@ function Write-RunSummary(
   [string]$runtimeExecutablePath,
   [string]$sourceCommit,
   [string]$logPath,
+  [string]$apiContractSmokeSummaryPath,
   [bool]$startedServer
 ) {
   $summary = [ordered]@{
@@ -315,6 +321,7 @@ function Write-RunSummary(
     source_commit = $sourceCommit
     started_server = $startedServer
     log_path = $logPath
+    api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
     steps = $script:CypressStepEvents
   }
 
@@ -386,6 +393,7 @@ if ((Test-IsEphemeralRuntimePath $resolvedRuntimeExecutablePath) -and -not $Allo
 
 $serverProc = $null
 $startedServer = $false
+$apiContractSmokeSummaryPath = ""
 $exitCode = 1
 $runError = $null
 
@@ -459,7 +467,7 @@ try {
   }
 
   if ($ApiContractSmoke) {
-    Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent
+    $apiContractSmokeSummaryPath = Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent
   }
 
   Write-Step "Running Cypress spec: $specPath"
@@ -522,6 +530,7 @@ finally {
     -runtimeExecutablePath $resolvedRuntimeExecutablePath `
     -sourceCommit $sourceCommit `
     -logPath $logPath `
+    -apiContractSmokeSummaryPath $apiContractSmokeSummaryPath `
     -startedServer $startedServer
   Write-Step "Run summary written: $summaryPath"
   if ($transcriptStarted) {
