@@ -121,6 +121,7 @@ $checks = @(
     Method = "GET"
     Path = "/api/openapi.yaml"
     Status = 200
+    ContentType = "yaml"
     Contains = "openapi:"
   },
   @{

@@ -302,6 +302,88 @@ func TestApiContractSmokeScriptDiagnosesSignInContentMismatch(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptDiagnosesOpenAPIContentTypeMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"mode":"test","version":"mock"}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-openapi-content-type-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read OpenAPI content-type failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode OpenAPI content-type failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected OpenAPI content-type failure summary: %+v", summary)
+	}
+
+	var openAPICheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "OpenAPI YAML" {
+			openAPICheck = check
+			break
+		}
+	}
+	if openAPICheck.Name == "" {
+		t.Fatalf("summary did not include OpenAPI YAML check: %+v", summary.Checks)
+	}
+	if openAPICheck.Passed || openAPICheck.Status != http.StatusOK {
+		t.Fatalf("OpenAPI check did not record content-type mismatch: %+v", openAPICheck)
+	}
+	if !strings.Contains(openAPICheck.Error, "content type") {
+		t.Fatalf("OpenAPI content-type failure was not diagnostic: %q", openAPICheck.Error)
+	}
+}
+
 func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
