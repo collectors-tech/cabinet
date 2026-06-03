@@ -547,6 +547,93 @@ func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptDiagnosesMissingE2EHooksWhenRequired(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"mode":"test","version":"mock"}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-missing-e2e-hooks"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID, "-RequireE2EHooks")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed without E2E hooks\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read missing E2E hooks summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode        int  `json:"exit_code"`
+		CheckCount      int  `json:"check_count"`
+		FailedCount     int  `json:"failed_count"`
+		RequireE2EHooks bool `json:"require_e2e_hooks"`
+		Checks          []struct {
+			Name   string `json:"name"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode missing E2E hooks summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 5 || summary.FailedCount != 1 || !summary.RequireE2EHooks {
+		t.Fatalf("unexpected missing E2E hooks summary: %+v", summary)
+	}
+
+	var resetHookCheck struct {
+		Name   string `json:"name"`
+		Method string `json:"method"`
+		Path   string `json:"path"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "E2E reset hook" {
+			resetHookCheck = check
+			break
+		}
+	}
+	if resetHookCheck.Name == "" {
+		t.Fatalf("summary did not include E2E reset hook check: %+v", summary.Checks)
+	}
+	if resetHookCheck.Passed || resetHookCheck.Method != http.MethodPost || resetHookCheck.Path != "/api/test/reset" || resetHookCheck.Status != http.StatusNotFound {
+		t.Fatalf("reset hook check did not record missing hook failure: %+v", resetHookCheck)
+	}
+	if !strings.Contains(resetHookCheck.Error, "404") {
+		t.Fatalf("missing E2E hook failure was not diagnostic: %q", resetHookCheck.Error)
+	}
+}
+
 func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
 	repoRoot := filepath.Dir(currentFileDir(t))
 	cypressPath := filepath.Join(repoRoot, "cypress.ps1")
