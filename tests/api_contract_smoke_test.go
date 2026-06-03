@@ -60,12 +60,28 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 		CheckCount   int    `json:"check_count"`
 		FailedCount  int    `json:"failed_count"`
 		SourceCommit string `json:"source_commit"`
+		ElapsedMS    *int   `json:"elapsed_ms"`
+		Checks       []struct {
+			Name       string `json:"name"`
+			DurationMS *int   `json:"duration_ms"`
+		} `json:"checks"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
 		t.Fatalf("decode summary: %v\n%s", err, string(raw))
 	}
 	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.ElapsedMS == nil || *summary.ElapsedMS < 0 {
+		t.Fatalf("summary did not include elapsed_ms timing: %+v", summary)
+	}
+	if len(summary.Checks) != summary.CheckCount {
+		t.Fatalf("summary checks length = %d, want %d", len(summary.Checks), summary.CheckCount)
+	}
+	for _, check := range summary.Checks {
+		if check.DurationMS == nil || *check.DurationMS < 0 {
+			t.Fatalf("check %q did not include duration_ms timing: %+v", check.Name, check)
+		}
 	}
 	expectedCommit := currentGitCommit(t, repoRoot)
 	if summary.SourceCommit != expectedCommit {

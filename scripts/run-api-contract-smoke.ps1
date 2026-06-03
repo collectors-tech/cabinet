@@ -28,6 +28,7 @@ function Join-UrlPath([string]$baseUrl, [string]$path) {
 }
 
 function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeoutSec) {
+  $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
   $method = if ($check.ContainsKey("Method")) { $check.Method } else { "GET" }
   $uri = Join-UrlPath $baseUrl $check.Path
   $result = [ordered]@{
@@ -38,6 +39,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     expected_status = $check.Status
     status = 0
     passed = $false
+    duration_ms = 0
     error = ""
   }
 
@@ -48,6 +50,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     $result.status = [int]$response.StatusCode
     if ([int]$response.StatusCode -ne [int]$check.Status) {
       $result.error = "expected status $($check.Status), got $($response.StatusCode)"
+      $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
       return [pscustomobject]$result
     }
 
@@ -55,6 +58,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
       $actualContentType = [string]$response.Headers["Content-Type"]
       if (-not $actualContentType.ToLowerInvariant().Contains($check.ContentType.ToLowerInvariant())) {
         $result.error = "expected content type containing $($check.ContentType), got $actualContentType"
+        $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
         return [pscustomobject]$result
       }
     }
@@ -66,6 +70,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     }
     if ($check.ContainsKey("Contains") -and -not $text.Contains($check.Contains)) {
       $result.error = "response body did not contain required marker $($check.Contains)"
+      $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
       return [pscustomobject]$result
     }
 
@@ -75,11 +80,13 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
       }
       catch {
         $result.error = "response body was not valid JSON: $($_.Exception.Message)"
+        $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
         return [pscustomobject]$result
       }
     }
 
     $result.passed = $true
+    $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
     return [pscustomobject]$result
   }
   catch {
@@ -89,6 +96,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     }
     $result.status = $statusCode
     $result.error = $_.Exception.Message
+    $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
     return [pscustomobject]$result
   }
 }
@@ -106,6 +114,7 @@ function Get-SourceCommit([string]$repoRoot) {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$runStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
 $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($LogRoot)) { $LogRoot } else { Join-Path $repoRoot $LogRoot }
 $runLogDir = Join-Path $resolvedLogRoot $runStamp
@@ -175,6 +184,7 @@ $summary = [ordered]@{
   exit_code = $exitCode
   base_url = $BaseUrl
   source_commit = $sourceCommit
+  elapsed_ms = [int]$runStopwatch.ElapsedMilliseconds
   check_count = $results.Count
   failed_count = $failed.Count
   require_e2e_hooks = $RequireE2EHooks.IsPresent
