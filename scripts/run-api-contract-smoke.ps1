@@ -127,6 +127,21 @@ function Get-SourceCommit([string]$repoRoot) {
   return ""
 }
 
+function Get-BaseUrlMetadata([string]$baseUrl) {
+  $metadata = [ordered]@{
+    host = ""
+    port = 0
+  }
+  try {
+    $uri = [System.Uri]$baseUrl
+    $metadata.host = $uri.Host
+    $metadata.port = $uri.Port
+  }
+  catch {
+  }
+  return $metadata
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
@@ -134,6 +149,7 @@ $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($LogRoot)) { $LogRoot } el
 $runLogDir = Join-Path $resolvedLogRoot $runStamp
 $summaryPath = Join-Path $runLogDir "api-contract-smoke.summary.json"
 $sourceCommit = Get-SourceCommit $repoRoot
+$baseUrlMetadata = Get-BaseUrlMetadata $BaseUrl
 
 New-Item -ItemType Directory -Force -Path $runLogDir | Out-Null
 
@@ -199,6 +215,8 @@ $summary = [ordered]@{
   exit_code = $exitCode
   run_id = $runStamp
   base_url = $BaseUrl
+  base_url_host = $baseUrlMetadata.host
+  base_url_port = $baseUrlMetadata.port
   source_commit = $sourceCommit
   timeout_sec = $TimeoutSec
   elapsed_ms = [int]$runStopwatch.ElapsedMilliseconds

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +59,8 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	var summary struct {
 		ExitCode     int    `json:"exit_code"`
 		RunID        string `json:"run_id"`
+		BaseURLHost  string `json:"base_url_host"`
+		BaseURLPort  int    `json:"base_url_port"`
 		CheckCount   int    `json:"check_count"`
 		FailedCount  int    `json:"failed_count"`
 		SourceCommit string `json:"source_commit"`
@@ -78,6 +81,13 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	}
 	if summary.RunID != runID || summary.TimeoutSec != 5 || summary.SummaryPath != summaryPath {
 		t.Fatalf("summary metadata was not traceable: %+v", summary)
+	}
+	mockRuntimeURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	if summary.BaseURLHost != mockRuntimeURL.Hostname() || fmt.Sprint(summary.BaseURLPort) != mockRuntimeURL.Port() {
+		t.Fatalf("summary base URL metadata = %s:%d, want %s:%s", summary.BaseURLHost, summary.BaseURLPort, mockRuntimeURL.Hostname(), mockRuntimeURL.Port())
 	}
 	if summary.ElapsedMS == nil || *summary.ElapsedMS < 0 {
 		t.Fatalf("summary did not include elapsed_ms timing: %+v", summary)
