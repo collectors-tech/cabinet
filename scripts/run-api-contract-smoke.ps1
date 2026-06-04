@@ -238,7 +238,9 @@ $failedChecks = @($failed | ForEach-Object {
     name = $_.name
     method = $_.method
     path = $_.path
+    expected_status = $_.expected_status
     status = $_.status
+    duration_ms = $_.duration_ms
     error = $_.error
   }
 })

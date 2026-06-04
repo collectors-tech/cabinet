@@ -171,11 +171,13 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 		CheckCount   int    `json:"check_count"`
 		FailedCount  int    `json:"failed_count"`
 		FailedChecks []struct {
-			Name   string `json:"name"`
-			Method string `json:"method"`
-			Path   string `json:"path"`
-			Status int    `json:"status"`
-			Error  string `json:"error"`
+			Name           string `json:"name"`
+			Method         string `json:"method"`
+			Path           string `json:"path"`
+			ExpectedStatus int    `json:"expected_status"`
+			Status         int    `json:"status"`
+			DurationMS     *int   `json:"duration_ms"`
+			Error          string `json:"error"`
 		} `json:"failed_checks"`
 		Checks []struct {
 			Name   string `json:"name"`
@@ -196,8 +198,11 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 		t.Fatalf("failure summary did not include compact failed_checks triage: %+v", summary.FailedChecks)
 	}
 	failedCheck := summary.FailedChecks[0]
-	if failedCheck.Name != "runtime API" || failedCheck.Method != http.MethodGet || failedCheck.Path != "/api/runtime" || failedCheck.Status != http.StatusOK {
+	if failedCheck.Name != "runtime API" || failedCheck.Method != http.MethodGet || failedCheck.Path != "/api/runtime" || failedCheck.ExpectedStatus != http.StatusOK || failedCheck.Status != http.StatusOK {
 		t.Fatalf("failed_checks entry did not identify runtime API failure: %+v", failedCheck)
+	}
+	if failedCheck.DurationMS == nil || *failedCheck.DurationMS < 0 {
+		t.Fatalf("failed_checks entry did not include compact timing evidence: %+v", failedCheck)
 	}
 	if !strings.Contains(failedCheck.Error, "not valid JSON") {
 		t.Fatalf("failed_checks error was not diagnostic: %q", failedCheck.Error)
