@@ -27,7 +27,7 @@ function Join-UrlPath([string]$baseUrl, [string]$path) {
   return $baseUrl.TrimEnd("/") + "/" + $path.TrimStart("/")
 }
 
-function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeoutSec) {
+function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeoutSec, $baseUrlMetadata) {
   $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
   $method = if ($check.ContainsKey("Method")) { $check.Method } else { "GET" }
   $uri = Join-UrlPath $baseUrl $check.Path
@@ -99,6 +99,16 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
       $result.json_fields = $jsonFields
     }
 
+    if ($check.ContainsKey("RuntimePortMustMatchBaseUrl") -and $check.RuntimePortMustMatchBaseUrl) {
+      $runtimePort = [int]$jsonPayload.runtime_port
+      $baseUrlPort = [int]$baseUrlMetadata.port
+      if ($baseUrlPort -gt 0 -and $runtimePort -ne $baseUrlPort) {
+        $result.error = "runtime_port $runtimePort did not match BaseUrl port $baseUrlPort"
+        $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
+        return [pscustomobject]$result
+      }
+    }
+
     $result.passed = $true
     $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
     return [pscustomobject]$result
@@ -168,6 +178,7 @@ $checks = @(
     ContentType = "json"
     Json = $true
     JsonFields = @("app_version", "runtime_host", "runtime_port")
+    RuntimePortMustMatchBaseUrl = $true
   },
   @{
     Name = "OpenAPI YAML"
@@ -202,7 +213,7 @@ Write-Host "[api-contract-smoke] Summary: $summaryPath"
 
 $results = @()
 foreach ($check in $checks) {
-  $result = Invoke-ApiSmokeCheck $BaseUrl $check $TimeoutSec
+  $result = Invoke-ApiSmokeCheck $BaseUrl $check $TimeoutSec $baseUrlMetadata
   $results += $result
   $state = if ($result.passed) { "pass" } else { "fail" }
   Write-Host "[api-contract-smoke] $state $($result.method) $($result.path) status=$($result.status)"

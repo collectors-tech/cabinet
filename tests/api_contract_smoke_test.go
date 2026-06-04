@@ -20,14 +20,15 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -106,7 +107,7 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 			t.Fatalf("check %q did not include duration_ms timing: %+v", check.Name, check)
 		}
 		if check.Name == "runtime API" {
-			if check.JsonFields["app_version"] != "test" || check.JsonFields["runtime_host"] != "127.0.0.1" || fmt.Sprint(check.JsonFields["runtime_port"]) != "17880" {
+			if check.JsonFields["app_version"] != "test" || check.JsonFields["runtime_host"] != mockRuntimeURL.Hostname() || fmt.Sprint(check.JsonFields["runtime_port"]) != mockRuntimeURL.Port() {
 				t.Fatalf("runtime API check did not record runtime metadata fields: %+v", check.JsonFields)
 			}
 		}
@@ -122,7 +123,8 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
@@ -212,7 +214,8 @@ func TestApiContractSmokeScriptDiagnosesRuntimeMetadataMismatch(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
@@ -289,18 +292,106 @@ func TestApiContractSmokeScriptDiagnosesRuntimeMetadataMismatch(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptDiagnosesRuntimePortMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":1}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-runtime-port-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed with mismatched runtime port\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read runtime port failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode runtime port failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected runtime port failure summary: %+v", summary)
+	}
+
+	var runtimeCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "runtime API" {
+			runtimeCheck = check
+			break
+		}
+	}
+	if runtimeCheck.Name == "" {
+		t.Fatalf("summary did not include runtime API check: %+v", summary.Checks)
+	}
+	if runtimeCheck.Passed || runtimeCheck.Status != http.StatusOK {
+		t.Fatalf("runtime API check did not record port mismatch: %+v", runtimeCheck)
+	}
+	mockRuntimeURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	if !strings.Contains(runtimeCheck.Error, "runtime_port 1") || !strings.Contains(runtimeCheck.Error, mockRuntimeURL.Port()) {
+		t.Fatalf("runtime port mismatch failure was not diagnostic: %q", runtimeCheck.Error)
+	}
+}
+
 func TestApiContractSmokeScriptDiagnosesHealthzFailure(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			http.Error(w, "stale runtime", http.StatusServiceUnavailable)
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -447,14 +538,15 @@ func TestApiContractSmokeScriptDiagnosesSignInContentMismatch(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -529,14 +621,15 @@ func TestApiContractSmokeScriptDiagnosesOpenAPIContentTypeMismatch(t *testing.T)
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -611,14 +704,15 @@ func TestApiContractSmokeScriptDiagnosesOpenAPIBodyMismatch(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("info:\n  title: Wrong Runtime\n"))
@@ -693,14 +787,15 @@ func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -774,14 +869,15 @@ func TestApiContractSmokeScriptDiagnosesMissingE2EHooksWhenRequired(t *testing.T
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/healthz":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		case "/api/runtime":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":17880}`))
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
 		case "/api/openapi.yaml":
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
@@ -885,6 +981,15 @@ func currentFileDir(t *testing.T) string {
 		t.Fatal("runtime.Caller failed")
 	}
 	return filepath.Dir(filename)
+}
+
+func mockRuntimeMetadataJSON(t *testing.T, baseURL string) []byte {
+	t.Helper()
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	return []byte(fmt.Sprintf(`{"app_version":"test","runtime_host":%q,"runtime_port":%s}`, parsed.Hostname(), parsed.Port()))
 }
 
 func currentGitCommit(t *testing.T, repoRoot string) string {
