@@ -59,6 +59,7 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 
 	var summary struct {
 		ExitCode     int    `json:"exit_code"`
+		Status       string `json:"status"`
 		RunID        string `json:"run_id"`
 		BaseURLHost  string `json:"base_url_host"`
 		BaseURLPort  int    `json:"base_url_port"`
@@ -82,6 +83,9 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	}
 	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.Status != "passed" {
+		t.Fatalf("summary status = %q, want passed", summary.Status)
 	}
 	if len(summary.FailedChecks) != 0 {
 		t.Fatalf("passing summary unexpectedly listed failed checks: %+v", summary.FailedChecks)
@@ -161,9 +165,10 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 	}
 
 	var summary struct {
-		ExitCode     int `json:"exit_code"`
-		CheckCount   int `json:"check_count"`
-		FailedCount  int `json:"failed_count"`
+		ExitCode     int    `json:"exit_code"`
+		Status       string `json:"status"`
+		CheckCount   int    `json:"check_count"`
+		FailedCount  int    `json:"failed_count"`
 		FailedChecks []struct {
 			Name   string `json:"name"`
 			Method string `json:"method"`
@@ -182,6 +187,9 @@ func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
 	}
 	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
 		t.Fatalf("unexpected failure summary: %+v", summary)
+	}
+	if summary.Status != "failed" {
+		t.Fatalf("failure summary status = %q, want failed", summary.Status)
 	}
 	if len(summary.FailedChecks) != 1 {
 		t.Fatalf("failure summary did not include compact failed_checks triage: %+v", summary.FailedChecks)

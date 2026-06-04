@@ -241,9 +241,11 @@ $failedChecks = @($failed | ForEach-Object {
   }
 })
 $exitCode = if ($failed.Count -gt 0) { 1 } else { 0 }
+$status = if ($exitCode -eq 0) { "passed" } else { "failed" }
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
   exit_code = $exitCode
+  status = $status
   run_id = $runStamp
   base_url = $BaseUrl
   base_url_host = $baseUrlMetadata.host
