@@ -182,13 +182,16 @@ $exitCode = if ($failed.Count -gt 0) { 1 } else { 0 }
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
   exit_code = $exitCode
+  run_id = $runStamp
   base_url = $BaseUrl
   source_commit = $sourceCommit
+  timeout_sec = $TimeoutSec
   elapsed_ms = [int]$runStopwatch.ElapsedMilliseconds
   check_count = $results.Count
   failed_count = $failed.Count
   require_e2e_hooks = $RequireE2EHooks.IsPresent
   log_dir = $runLogDir
+  summary_path = $summaryPath
   checks = $results
 }
 $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $summaryPath -Encoding UTF8

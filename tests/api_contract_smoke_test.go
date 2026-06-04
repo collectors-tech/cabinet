@@ -57,10 +57,13 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 
 	var summary struct {
 		ExitCode     int    `json:"exit_code"`
+		RunID        string `json:"run_id"`
 		CheckCount   int    `json:"check_count"`
 		FailedCount  int    `json:"failed_count"`
 		SourceCommit string `json:"source_commit"`
+		TimeoutSec   int    `json:"timeout_sec"`
 		ElapsedMS    *int   `json:"elapsed_ms"`
+		SummaryPath  string `json:"summary_path"`
 		Checks       []struct {
 			Name       string `json:"name"`
 			DurationMS *int   `json:"duration_ms"`
@@ -71,6 +74,9 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	}
 	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.RunID != runID || summary.TimeoutSec != 5 || summary.SummaryPath != summaryPath {
+		t.Fatalf("summary metadata was not traceable: %+v", summary)
 	}
 	if summary.ElapsedMS == nil || *summary.ElapsedMS < 0 {
 		t.Fatalf("summary did not include elapsed_ms timing: %+v", summary)
