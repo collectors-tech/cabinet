@@ -87,13 +87,16 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     }
 
     if ($check.ContainsKey("JsonFields")) {
+      $jsonFields = [ordered]@{}
       foreach ($field in $check.JsonFields) {
         if (-not $jsonPayload -or -not ($jsonPayload.PSObject.Properties.Name -contains $field)) {
           $result.error = "response JSON did not contain required field $field"
           $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
           return [pscustomobject]$result
         }
+        $jsonFields[$field] = $jsonPayload.$field
       }
+      $result.json_fields = $jsonFields
     }
 
     $result.passed = $true

@@ -65,8 +65,9 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 		ElapsedMS    *int   `json:"elapsed_ms"`
 		SummaryPath  string `json:"summary_path"`
 		Checks       []struct {
-			Name       string `json:"name"`
-			DurationMS *int   `json:"duration_ms"`
+			Name       string         `json:"name"`
+			DurationMS *int           `json:"duration_ms"`
+			JsonFields map[string]any `json:"json_fields"`
 		} `json:"checks"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
@@ -87,6 +88,11 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	for _, check := range summary.Checks {
 		if check.DurationMS == nil || *check.DurationMS < 0 {
 			t.Fatalf("check %q did not include duration_ms timing: %+v", check.Name, check)
+		}
+		if check.Name == "runtime API" {
+			if check.JsonFields["app_version"] != "test" || check.JsonFields["runtime_host"] != "127.0.0.1" || fmt.Sprint(check.JsonFields["runtime_port"]) != "17880" {
+				t.Fatalf("runtime API check did not record runtime metadata fields: %+v", check.JsonFields)
+			}
 		}
 	}
 	expectedCommit := currentGitCommit(t, repoRoot)
