@@ -18,6 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:CypressStepEvents = @()
+$script:LastApiContractSmokeSummaryPath = ""
 
 function Write-Step([string]$msg) {
   $timestamp = (Get-Date).ToString("o")
@@ -106,6 +107,7 @@ function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDi
   $runId = "cypress-preflight-$runStamp"
   $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($logDir)) { $logDir } else { Join-Path $repoRoot $logDir }
   $summaryPath = Join-Path (Join-Path $resolvedLogRoot $runId) "api-contract-smoke.summary.json"
+  $script:LastApiContractSmokeSummaryPath = $summaryPath
   $args = @(
     "-NoLogo",
     "-NoProfile",
@@ -506,6 +508,9 @@ try {
 catch {
   $runError = $_
   $exitCode = 1
+  if ([string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath)) {
+    $apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath
+  }
   Write-Step "Run failed: $($_.Exception.Message)"
 }
 finally {

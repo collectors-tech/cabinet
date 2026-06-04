@@ -1065,7 +1065,9 @@ func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
 		"scripts\\run-api-contract-smoke.ps1",
 		"Running API contract smoke preflight.",
 		"API contract smoke summary:",
+		"$script:LastApiContractSmokeSummaryPath = $summaryPath",
 		"api_contract_smoke_summary_path",
+		"$apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath",
 		"API contract smoke preflight failed",
 	} {
 		if !strings.Contains(content, snippet) {
