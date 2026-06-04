@@ -209,6 +209,15 @@ foreach ($check in $checks) {
 }
 
 $failed = @($results | Where-Object { -not $_.passed })
+$failedChecks = @($failed | ForEach-Object {
+  [ordered]@{
+    name = $_.name
+    method = $_.method
+    path = $_.path
+    status = $_.status
+    error = $_.error
+  }
+})
 $exitCode = if ($failed.Count -gt 0) { 1 } else { 0 }
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
@@ -222,6 +231,7 @@ $summary = [ordered]@{
   elapsed_ms = [int]$runStopwatch.ElapsedMilliseconds
   check_count = $results.Count
   failed_count = $failed.Count
+  failed_checks = $failedChecks
   require_e2e_hooks = $RequireE2EHooks.IsPresent
   log_dir = $runLogDir
   summary_path = $summaryPath
