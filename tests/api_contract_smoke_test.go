@@ -58,14 +58,15 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	}
 
 	var summary struct {
-		ExitCode     int    `json:"exit_code"`
-		Status       string `json:"status"`
-		RunID        string `json:"run_id"`
-		BaseURLHost  string `json:"base_url_host"`
-		BaseURLPort  int    `json:"base_url_port"`
-		CheckCount   int    `json:"check_count"`
-		FailedCount  int    `json:"failed_count"`
-		FailedChecks []struct {
+		ExitCode      int    `json:"exit_code"`
+		Status        string `json:"status"`
+		RunID         string `json:"run_id"`
+		BaseURLScheme string `json:"base_url_scheme"`
+		BaseURLHost   string `json:"base_url_host"`
+		BaseURLPort   int    `json:"base_url_port"`
+		CheckCount    int    `json:"check_count"`
+		FailedCount   int    `json:"failed_count"`
+		FailedChecks  []struct {
 			Name string `json:"name"`
 		} `json:"failed_checks"`
 		SourceCommit string `json:"source_commit"`
@@ -97,8 +98,8 @@ func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse mock runtime URL: %v", err)
 	}
-	if summary.BaseURLHost != mockRuntimeURL.Hostname() || fmt.Sprint(summary.BaseURLPort) != mockRuntimeURL.Port() {
-		t.Fatalf("summary base URL metadata = %s:%d, want %s:%s", summary.BaseURLHost, summary.BaseURLPort, mockRuntimeURL.Hostname(), mockRuntimeURL.Port())
+	if summary.BaseURLScheme != mockRuntimeURL.Scheme || summary.BaseURLHost != mockRuntimeURL.Hostname() || fmt.Sprint(summary.BaseURLPort) != mockRuntimeURL.Port() {
+		t.Fatalf("summary base URL metadata = %s://%s:%d, want %s://%s:%s", summary.BaseURLScheme, summary.BaseURLHost, summary.BaseURLPort, mockRuntimeURL.Scheme, mockRuntimeURL.Hostname(), mockRuntimeURL.Port())
 	}
 	if summary.ElapsedMS == nil || *summary.ElapsedMS < 0 {
 		t.Fatalf("summary did not include elapsed_ms timing: %+v", summary)

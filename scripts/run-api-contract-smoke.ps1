@@ -149,11 +149,13 @@ function Get-SourceCommit([string]$repoRoot) {
 
 function Get-BaseUrlMetadata([string]$baseUrl) {
   $metadata = [ordered]@{
+    scheme = ""
     host = ""
     port = 0
   }
   try {
     $uri = [System.Uri]$baseUrl
+    $metadata.scheme = $uri.Scheme
     $metadata.host = $uri.Host
     $metadata.port = $uri.Port
   }
@@ -248,6 +250,7 @@ $summary = [ordered]@{
   status = $status
   run_id = $runStamp
   base_url = $BaseUrl
+  base_url_scheme = $baseUrlMetadata.scheme
   base_url_host = $baseUrlMetadata.host
   base_url_port = $baseUrlMetadata.port
   source_commit = $sourceCommit
