@@ -74,14 +74,25 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
       return [pscustomobject]$result
     }
 
+    $jsonPayload = $null
     if ($check.ContainsKey("Json") -and $check.Json) {
       try {
-        $null = $text | ConvertFrom-Json
+        $jsonPayload = $text | ConvertFrom-Json
       }
       catch {
         $result.error = "response body was not valid JSON: $($_.Exception.Message)"
         $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
         return [pscustomobject]$result
+      }
+    }
+
+    if ($check.ContainsKey("JsonFields")) {
+      foreach ($field in $check.JsonFields) {
+        if (-not $jsonPayload -or -not ($jsonPayload.PSObject.Properties.Name -contains $field)) {
+          $result.error = "response JSON did not contain required field $field"
+          $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
+          return [pscustomobject]$result
+        }
       }
     }
 
@@ -137,6 +148,7 @@ $checks = @(
     Status = 200
     ContentType = "json"
     Json = $true
+    JsonFields = @("app_version", "runtime_host", "runtime_port")
   },
   @{
     Name = "OpenAPI YAML"
