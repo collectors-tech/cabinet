@@ -99,6 +99,16 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
       $result.json_fields = $jsonFields
     }
 
+    if ($check.ContainsKey("RuntimeHostMustMatchBaseUrl") -and $check.RuntimeHostMustMatchBaseUrl) {
+      $runtimeHost = [string]$jsonPayload.runtime_host
+      $baseUrlHost = [string]$baseUrlMetadata.host
+      if (-not [string]::IsNullOrWhiteSpace($baseUrlHost) -and $runtimeHost -ne $baseUrlHost) {
+        $result.error = "runtime_host $runtimeHost did not match BaseUrl host $baseUrlHost"
+        $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
+        return [pscustomobject]$result
+      }
+    }
+
     if ($check.ContainsKey("RuntimePortMustMatchBaseUrl") -and $check.RuntimePortMustMatchBaseUrl) {
       $runtimePort = [int]$jsonPayload.runtime_port
       $baseUrlPort = [int]$baseUrlMetadata.port
@@ -178,6 +188,7 @@ $checks = @(
     ContentType = "json"
     Json = $true
     JsonFields = @("app_version", "runtime_host", "runtime_port")
+    RuntimeHostMustMatchBaseUrl = $true
     RuntimePortMustMatchBaseUrl = $true
   },
   @{
