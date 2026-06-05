@@ -1072,6 +1072,7 @@ func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
 		"API contract smoke summary:",
 		"$script:LastApiContractSmokeSummaryPath = $summaryPath",
 		"api_contract_smoke_summary_path",
+		"api_contract_smoke_check_count",
 		"$apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath",
 		"API contract smoke preflight failed",
 	} {
@@ -1133,6 +1134,7 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 		Error                       string `json:"error"`
 		ApiContractSmokeSummaryPath string `json:"api_contract_smoke_summary_path"`
 		ApiContractSmokeStatus      string `json:"api_contract_smoke_status"`
+		ApiContractSmokeCheckCount  *int   `json:"api_contract_smoke_check_count"`
 		ApiContractSmokeFailedCount *int   `json:"api_contract_smoke_failed_count"`
 	}
 	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
@@ -1150,6 +1152,9 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	if cypressSummary.ApiContractSmokeStatus != "failed" || cypressSummary.ApiContractSmokeFailedCount == nil || *cypressSummary.ApiContractSmokeFailedCount == 0 {
 		t.Fatalf("Cypress summary did not include compact API smoke failure metadata: %+v", cypressSummary)
 	}
+	if cypressSummary.ApiContractSmokeCheckCount == nil || *cypressSummary.ApiContractSmokeCheckCount == 0 {
+		t.Fatalf("Cypress summary did not include API smoke check count metadata: %+v", cypressSummary)
+	}
 	if _, err := os.Stat(cypressSummary.ApiContractSmokeSummaryPath); err != nil {
 		t.Fatalf("API smoke summary path from Cypress summary was not readable: %v", err)
 	}
@@ -1161,6 +1166,7 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	var apiSummary struct {
 		ExitCode    int    `json:"exit_code"`
 		Status      string `json:"status"`
+		CheckCount  int    `json:"check_count"`
 		FailedCount int    `json:"failed_count"`
 	}
 	if err := json.Unmarshal(apiRaw, &apiSummary); err != nil {
@@ -1168,6 +1174,9 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	}
 	if apiSummary.ExitCode != 1 || apiSummary.Status != "failed" || apiSummary.FailedCount == 0 {
 		t.Fatalf("API smoke summary did not record preflight failure: %+v", apiSummary)
+	}
+	if *cypressSummary.ApiContractSmokeCheckCount != apiSummary.CheckCount {
+		t.Fatalf("Cypress summary API smoke check count = %d, want nested summary count %d", *cypressSummary.ApiContractSmokeCheckCount, apiSummary.CheckCount)
 	}
 }
 

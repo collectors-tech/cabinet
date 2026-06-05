@@ -307,12 +307,16 @@ function Write-RunSummary(
   [bool]$startedServer
 ) {
   $apiContractSmokeStatus = ""
+  $apiContractSmokeCheckCount = $null
   $apiContractSmokeFailedCount = $null
   if (-not [string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath) -and (Test-Path $apiContractSmokeSummaryPath)) {
     try {
       $apiContractSmokeSummary = Get-Content -Raw -LiteralPath $apiContractSmokeSummaryPath | ConvertFrom-Json
       if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "status") {
         $apiContractSmokeStatus = [string]$apiContractSmokeSummary.status
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "check_count") {
+        $apiContractSmokeCheckCount = [int]$apiContractSmokeSummary.check_count
       }
       if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "failed_count") {
         $apiContractSmokeFailedCount = [int]$apiContractSmokeSummary.failed_count
@@ -342,6 +346,7 @@ function Write-RunSummary(
     log_path = $logPath
     api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
     api_contract_smoke_status = $apiContractSmokeStatus
+    api_contract_smoke_check_count = $apiContractSmokeCheckCount
     api_contract_smoke_failed_count = $apiContractSmokeFailedCount
     steps = $script:CypressStepEvents
   }
