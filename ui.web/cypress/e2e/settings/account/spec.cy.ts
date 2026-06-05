@@ -33,6 +33,23 @@ describe('settings/account', () => {
     cy.contains('Please enter your name.').should('be.visible')
   })
 
+  it('UI-SCREEN-SETTINGS-ACCOUNT-003 preserves account values on save failure', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 500,
+      body: { error: 'failed_to_update_settings' },
+    }).as('accountSaveFailure')
+
+    cy.contains('button', 'Update account').should('not.be.disabled')
+    cy.get('input[name="name"]').clear().type('Settings Failure Name')
+    cy.get('[data-testid="settings-account-language-trigger"]').click()
+    cy.contains('[role="option"]', 'Korean').click()
+    cy.contains('button', 'Update account').click()
+    cy.wait('@accountSaveFailure')
+    cy.contains('profile_settings_save_500').should('be.visible')
+    cy.get('input[name="name"]').should('have.value', 'Settings Failure Name')
+    cy.contains('button[role="combobox"]', 'Korean').should('be.visible')
+  })
+
   it('UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload', () => {
     let settingsAttempt = 0
     cy.intercept('GET', '/api/profiles/*/settings', (req) => {

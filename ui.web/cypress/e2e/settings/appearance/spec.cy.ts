@@ -97,7 +97,27 @@ describe('settings/appearance', () => {
     cy.window().its('localStorage.i18nextLng').should('eq', 'ja')
   })
 
-  it('UI-SCREEN-SETTINGS-APPEARANCE-005 retries appearance settings load failure without route reload', () => {
+  it('UI-SCREEN-SETTINGS-APPEARANCE-006 preserves preference values on save failure', () => {
+    signInToSettings()
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 500,
+      body: { error: 'failed_to_update_settings' },
+    }).as('appearanceSaveFailure')
+
+    cy.contains('button', 'Update preferences').should('not.be.disabled')
+    cy.get('select[name="font"]').select('inter')
+    cy.get('[data-testid="appearance-language-select"]').select('ja')
+    cy.contains('span', 'Light').click()
+    cy.contains('button', 'Update preferences').click()
+
+    cy.wait('@appearanceSaveFailure')
+    cy.contains('profile_settings_save_500').should('be.visible')
+    cy.get('select[name="font"]').should('have.value', 'inter')
+    cy.get('[data-testid="appearance-language-select"]').should('have.value', 'ja')
+    cy.get('html').should('have.class', 'light')
+  })
+
+  it('UI-SCREEN-SETTINGS-APPEARANCE-007 retries appearance settings load failure without route reload', () => {
     signInToSettings()
     let settingsAttempt = 0
     cy.intercept('GET', '/api/profiles/*/settings', (req) => {

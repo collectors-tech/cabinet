@@ -91,7 +91,7 @@ describe('settings/display', () => {
     cy.contains('button', 'Update display').should('not.be.disabled')
   })
 
-  it('UI-SCREEN-SETTINGS-DISPLAY-004 updates display with deterministic success feedback', () => {
+  it('UI-SCREEN-SETTINGS-DISPLAY-005 updates display with deterministic success feedback', () => {
     cy.intercept('PUT', '/api/profiles/*/settings').as('saveDisplay')
 
     cy.contains('button', 'Clear selection').click()
@@ -119,5 +119,35 @@ describe('settings/display', () => {
         )
       })
     })
+  })
+
+  it('UI-SCREEN-SETTINGS-DISPLAY-006 preserves selected items on save failure', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 500,
+      body: { error: 'failed_to_update_settings' },
+    }).as('displaySaveFailure')
+
+    cy.contains('button', 'Clear selection').click()
+    cy.get('[data-testid="settings-display-documents"]').click()
+    cy.get('[data-testid="settings-display-downloads"]').click()
+    cy.contains('button', 'Update display').click()
+
+    cy.wait('@displaySaveFailure')
+    cy.contains('profile_settings_save_500').should('be.visible')
+    cy.get('[data-testid="settings-display-documents"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-display-downloads"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-display-home"]').should(
+      'have.attr',
+      'data-state',
+      'unchecked'
+    )
   })
 })
