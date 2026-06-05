@@ -137,6 +137,9 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     specs = @($laneSpecs[$laneIndex])
   }
 }
+$specCountsByLane = @($lanePlans | ForEach-Object { $_.specs.Count })
+$activeLaneCount = @($specCountsByLane | Where-Object { $_ -gt 0 }).Count
+$emptyLaneCount = $LaneCount - $activeLaneCount
 
 if ($PlanOnly) {
   $summary = [ordered]@{
@@ -150,6 +153,9 @@ if ($PlanOnly) {
     lane_count = $LaneCount
     max_workers = $MaxWorkers
     worker_limit = $workerLimit
+    active_lane_count = $activeLaneCount
+    empty_lane_count = $emptyLaneCount
+    spec_counts_by_lane = $specCountsByLane
     log_dir = $runLogDir
     lanes = $lanePlans
   }
@@ -282,6 +288,8 @@ $cleanLaneResults = @(
   }
 )
 $exitCode = if (($cleanLaneResults | Where-Object { $_.exit_code -ne 0 }).Count -gt 0) { 1 } else { 0 }
+$completedActiveLaneCount = @($cleanLaneResults | Where-Object { $_.results.Count -gt 0 }).Count
+$completedEmptyLaneCount = $LaneCount - $completedActiveLaneCount
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
   exit_code = $exitCode
@@ -293,6 +301,9 @@ $summary = [ordered]@{
   lane_count = $LaneCount
   max_workers = $MaxWorkers
   worker_limit = $workerLimit
+  active_lane_count = $completedActiveLaneCount
+  empty_lane_count = $completedEmptyLaneCount
+  spec_counts_by_lane = $specCountsByLane
   log_dir = $runLogDir
   lanes = $cleanLaneResults
 }
