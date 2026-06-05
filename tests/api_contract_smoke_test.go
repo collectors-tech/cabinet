@@ -1136,6 +1136,7 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 		ApiContractSmokeStatus       string `json:"api_contract_smoke_status"`
 		ApiContractSmokeCheckCount   *int   `json:"api_contract_smoke_check_count"`
 		ApiContractSmokeFailedCount  *int   `json:"api_contract_smoke_failed_count"`
+		ApiContractSmokeElapsedMS    *int   `json:"api_contract_smoke_elapsed_ms"`
 		ApiContractSmokeFailedChecks []struct {
 			Name   string `json:"name"`
 			Method string `json:"method"`
@@ -1161,6 +1162,9 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	if cypressSummary.ApiContractSmokeCheckCount == nil || *cypressSummary.ApiContractSmokeCheckCount == 0 {
 		t.Fatalf("Cypress summary did not include API smoke check count metadata: %+v", cypressSummary)
 	}
+	if cypressSummary.ApiContractSmokeElapsedMS == nil {
+		t.Fatalf("Cypress summary did not include API smoke elapsed timing metadata: %+v", cypressSummary)
+	}
 	if len(cypressSummary.ApiContractSmokeFailedChecks) == 0 {
 		t.Fatalf("Cypress summary did not surface compact API smoke failed checks: %+v", cypressSummary)
 	}
@@ -1181,6 +1185,7 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 		Status      string `json:"status"`
 		CheckCount  int    `json:"check_count"`
 		FailedCount int    `json:"failed_count"`
+		ElapsedMS   int    `json:"elapsed_ms"`
 	}
 	if err := json.Unmarshal(apiRaw, &apiSummary); err != nil {
 		t.Fatalf("decode API smoke summary: %v\n%s", err, string(apiRaw))
@@ -1190,6 +1195,9 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	}
 	if *cypressSummary.ApiContractSmokeCheckCount != apiSummary.CheckCount {
 		t.Fatalf("Cypress summary API smoke check count = %d, want nested summary count %d", *cypressSummary.ApiContractSmokeCheckCount, apiSummary.CheckCount)
+	}
+	if *cypressSummary.ApiContractSmokeElapsedMS != apiSummary.ElapsedMS {
+		t.Fatalf("Cypress summary API smoke elapsed_ms = %d, want nested summary elapsed_ms %d", *cypressSummary.ApiContractSmokeElapsedMS, apiSummary.ElapsedMS)
 	}
 }
 

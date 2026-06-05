@@ -309,6 +309,7 @@ function Write-RunSummary(
   $apiContractSmokeStatus = ""
   $apiContractSmokeCheckCount = $null
   $apiContractSmokeFailedCount = $null
+  $apiContractSmokeElapsedMs = $null
   $apiContractSmokeFailedChecks = @()
   if (-not [string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath) -and (Test-Path $apiContractSmokeSummaryPath)) {
     try {
@@ -321,6 +322,9 @@ function Write-RunSummary(
       }
       if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "failed_count") {
         $apiContractSmokeFailedCount = [int]$apiContractSmokeSummary.failed_count
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "elapsed_ms") {
+        $apiContractSmokeElapsedMs = [int]$apiContractSmokeSummary.elapsed_ms
       }
       if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "failed_checks") {
         $apiContractSmokeFailedChecks = @($apiContractSmokeSummary.failed_checks)
@@ -352,6 +356,7 @@ function Write-RunSummary(
     api_contract_smoke_status = $apiContractSmokeStatus
     api_contract_smoke_check_count = $apiContractSmokeCheckCount
     api_contract_smoke_failed_count = $apiContractSmokeFailedCount
+    api_contract_smoke_elapsed_ms = $apiContractSmokeElapsedMs
     api_contract_smoke_failed_checks = $apiContractSmokeFailedChecks
     steps = $script:CypressStepEvents
   }
