@@ -1081,6 +1081,91 @@ func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
 	}
 }
 
+func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve dead runtime port: %v", err)
+	}
+	deadBaseURL := fmt.Sprintf("http://%s", listener.Addr().String())
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release dead runtime port: %v", err)
+	}
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File", filepath.Join(repoRoot, "cypress.ps1"),
+		"-NoServer",
+		"-SkipDependencyPrep",
+		"-RuntimeExecutablePath", filepath.Join(repoRoot, "cypress.ps1"),
+		"-ApiContractSmoke",
+		"-BaseUrl", deadBaseURL,
+		"-LogDir", logRoot,
+		"-LogName", "api-smoke-failure-artifact",
+	)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("cypress harness unexpectedly passed against dead API smoke runtime\n%s", string(output))
+	}
+
+	cypressSummaries, err := filepath.Glob(filepath.Join(logRoot, "*-api-smoke-failure-artifact.summary.json"))
+	if err != nil {
+		t.Fatalf("glob Cypress summaries: %v", err)
+	}
+	if len(cypressSummaries) != 1 {
+		t.Fatalf("expected one Cypress summary, got %d: %v\n%s", len(cypressSummaries), cypressSummaries, string(output))
+	}
+
+	raw, err := os.ReadFile(cypressSummaries[0])
+	if err != nil {
+		t.Fatalf("read Cypress summary: %v", err)
+	}
+	var cypressSummary struct {
+		ExitCode                    int    `json:"exit_code"`
+		Error                       string `json:"error"`
+		ApiContractSmokeSummaryPath string `json:"api_contract_smoke_summary_path"`
+	}
+	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
+		t.Fatalf("decode Cypress summary: %v\n%s", err, string(raw))
+	}
+	if cypressSummary.ExitCode != 1 {
+		t.Fatalf("Cypress summary exit_code = %d, want 1: %+v", cypressSummary.ExitCode, cypressSummary)
+	}
+	if !strings.Contains(cypressSummary.Error, "API contract smoke preflight failed") {
+		t.Fatalf("Cypress summary error did not identify API smoke failure: %q", cypressSummary.Error)
+	}
+	if cypressSummary.ApiContractSmokeSummaryPath == "" {
+		t.Fatalf("Cypress summary did not preserve API smoke summary path: %+v", cypressSummary)
+	}
+	if _, err := os.Stat(cypressSummary.ApiContractSmokeSummaryPath); err != nil {
+		t.Fatalf("API smoke summary path from Cypress summary was not readable: %v", err)
+	}
+
+	apiRaw, err := os.ReadFile(cypressSummary.ApiContractSmokeSummaryPath)
+	if err != nil {
+		t.Fatalf("read API smoke summary: %v", err)
+	}
+	var apiSummary struct {
+		ExitCode    int    `json:"exit_code"`
+		Status      string `json:"status"`
+		FailedCount int    `json:"failed_count"`
+	}
+	if err := json.Unmarshal(apiRaw, &apiSummary); err != nil {
+		t.Fatalf("decode API smoke summary: %v\n%s", err, string(apiRaw))
+	}
+	if apiSummary.ExitCode != 1 || apiSummary.Status != "failed" || apiSummary.FailedCount == 0 {
+		t.Fatalf("API smoke summary did not record preflight failure: %+v", apiSummary)
+	}
+}
+
 func currentFileDir(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
