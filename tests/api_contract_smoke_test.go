@@ -1130,12 +1130,18 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 		t.Fatalf("read Cypress summary: %v", err)
 	}
 	var cypressSummary struct {
-		ExitCode                    int    `json:"exit_code"`
-		Error                       string `json:"error"`
-		ApiContractSmokeSummaryPath string `json:"api_contract_smoke_summary_path"`
-		ApiContractSmokeStatus      string `json:"api_contract_smoke_status"`
-		ApiContractSmokeCheckCount  *int   `json:"api_contract_smoke_check_count"`
-		ApiContractSmokeFailedCount *int   `json:"api_contract_smoke_failed_count"`
+		ExitCode                     int    `json:"exit_code"`
+		Error                        string `json:"error"`
+		ApiContractSmokeSummaryPath  string `json:"api_contract_smoke_summary_path"`
+		ApiContractSmokeStatus       string `json:"api_contract_smoke_status"`
+		ApiContractSmokeCheckCount   *int   `json:"api_contract_smoke_check_count"`
+		ApiContractSmokeFailedCount  *int   `json:"api_contract_smoke_failed_count"`
+		ApiContractSmokeFailedChecks []struct {
+			Name   string `json:"name"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Error  string `json:"error"`
+		} `json:"api_contract_smoke_failed_checks"`
 	}
 	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
 		t.Fatalf("decode Cypress summary: %v\n%s", err, string(raw))
@@ -1154,6 +1160,13 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	}
 	if cypressSummary.ApiContractSmokeCheckCount == nil || *cypressSummary.ApiContractSmokeCheckCount == 0 {
 		t.Fatalf("Cypress summary did not include API smoke check count metadata: %+v", cypressSummary)
+	}
+	if len(cypressSummary.ApiContractSmokeFailedChecks) == 0 {
+		t.Fatalf("Cypress summary did not surface compact API smoke failed checks: %+v", cypressSummary)
+	}
+	failedCheck := cypressSummary.ApiContractSmokeFailedChecks[0]
+	if failedCheck.Name != "healthz" || failedCheck.Method != http.MethodGet || failedCheck.Path != "/healthz" || failedCheck.Error == "" {
+		t.Fatalf("Cypress summary failed check was not diagnostic: %+v", failedCheck)
 	}
 	if _, err := os.Stat(cypressSummary.ApiContractSmokeSummaryPath); err != nil {
 		t.Fatalf("API smoke summary path from Cypress summary was not readable: %v", err)
