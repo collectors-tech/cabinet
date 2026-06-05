@@ -1132,6 +1132,8 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 		ExitCode                    int    `json:"exit_code"`
 		Error                       string `json:"error"`
 		ApiContractSmokeSummaryPath string `json:"api_contract_smoke_summary_path"`
+		ApiContractSmokeStatus      string `json:"api_contract_smoke_status"`
+		ApiContractSmokeFailedCount *int   `json:"api_contract_smoke_failed_count"`
 	}
 	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
 		t.Fatalf("decode Cypress summary: %v\n%s", err, string(raw))
@@ -1144,6 +1146,9 @@ func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *test
 	}
 	if cypressSummary.ApiContractSmokeSummaryPath == "" {
 		t.Fatalf("Cypress summary did not preserve API smoke summary path: %+v", cypressSummary)
+	}
+	if cypressSummary.ApiContractSmokeStatus != "failed" || cypressSummary.ApiContractSmokeFailedCount == nil || *cypressSummary.ApiContractSmokeFailedCount == 0 {
+		t.Fatalf("Cypress summary did not include compact API smoke failure metadata: %+v", cypressSummary)
 	}
 	if _, err := os.Stat(cypressSummary.ApiContractSmokeSummaryPath); err != nil {
 		t.Fatalf("API smoke summary path from Cypress summary was not readable: %v", err)
