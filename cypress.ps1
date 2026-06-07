@@ -88,6 +88,19 @@ function Assert-AppPreflight([string]$url) {
   }
 }
 
+function Get-SourceCommit([string]$repoRoot) {
+  try {
+    $commit = & git -C $repoRoot rev-parse HEAD
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+      return $commit.Trim()
+    }
+  }
+  catch {
+    return ""
+  }
+  return ""
+}
+
 function Stop-PortListener([string]$url) {
   $uri = [Uri]$url
   $port = $uri.Port
@@ -253,7 +266,12 @@ function Write-RunSummary(
   [string]$specPath,
   [string]$browser,
   [string]$baseUrl,
+  [int]$runtimePort,
+  [string]$runtimeDataDir,
+  [string]$runtimeProfile,
+  [string]$runtimeInstanceName,
   [string]$runtimeExecutablePath,
+  [string]$sourceCommit,
   [string]$logPath,
   [bool]$startedServer
 ) {
@@ -266,7 +284,12 @@ function Write-RunSummary(
     spec = $specPath
     browser = $browser
     base_url = $baseUrl
+    runtime_port = $runtimePort
+    runtime_data_dir = $runtimeDataDir
+    runtime_profile = $runtimeProfile
+    runtime_instance_name = $runtimeInstanceName
     runtime_executable_path = $runtimeExecutablePath
+    source_commit = $sourceCommit
     started_server = $startedServer
     log_path = $logPath
     steps = $script:CypressStepEvents
@@ -286,6 +309,7 @@ $runtimePort = $baseUri.Port
 $e2eDataDir = Join-Path $repoRoot ".tmp\cypress-runtime-$runtimePort"
 $e2eProfile = "e2e-cypress-$runtimePort"
 $e2eInstanceName = "cypress-$runtimePort"
+$sourceCommit = Get-SourceCommit $repoRoot
 $resolvedLogDir = if ([System.IO.Path]::IsPathRooted($LogDir)) { $LogDir } else { Join-Path $repoRoot $LogDir }
 $runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $logSegment = if ([string]::IsNullOrWhiteSpace($LogName)) {
@@ -307,6 +331,7 @@ catch {
 }
 Write-Step "Run log: $logPath"
 Write-Step "Run summary: $summaryPath"
+Write-Step "Lane isolation: port=$runtimePort data_dir=$e2eDataDir profile=$e2eProfile instance=$e2eInstanceName commit=$sourceCommit"
 
 if (-not (Test-Path $configPath)) {
   throw "Missing Cypress config: $configPath"
@@ -463,7 +488,12 @@ finally {
     -specPath $specPath `
     -browser $Browser `
     -baseUrl $BaseUrl `
+    -runtimePort $runtimePort `
+    -runtimeDataDir $e2eDataDir `
+    -runtimeProfile $e2eProfile `
+    -runtimeInstanceName $e2eInstanceName `
     -runtimeExecutablePath $resolvedRuntimeExecutablePath `
+    -sourceCommit $sourceCommit `
     -logPath $logPath `
     -startedServer $startedServer
   Write-Step "Run summary written: $summaryPath"
