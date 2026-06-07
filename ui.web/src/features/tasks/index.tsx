@@ -197,6 +197,20 @@ function normalizeOptionalWholeNumber(raw: string, fallback: number) {
   return parsed
 }
 
+function wishlistPartNumberFallback(title: string) {
+  const slug =
+    title
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 24) || 'ITEM'
+  const suffix =
+    globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase() ??
+    Date.now().toString(36).toUpperCase()
+  return `WISH-${slug}-${suffix}`
+}
+
 function firstImageFileFromDataTransfer(
   dataTransfer: DataTransfer | null
 ): File | null {
@@ -807,11 +821,13 @@ export function Tasks({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               title: draft.title,
-              part_number: draft.partNumber,
+              part_number:
+                draft.partNumber || wishlistPartNumberFallback(draft.title),
               category: draft.category,
               item_type: draft.itemType,
               packaging_grade_type: draft.packagingGradeType,
               condition: draft.condition,
+              status: 'wishlist',
               priority: normalizeWishlistPriority(draft.priority),
             }),
           })

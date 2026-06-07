@@ -149,6 +149,20 @@ Wishlist rows view SHALL render a compact thumbnail before each item title. When
 - **AND** the thumbnail MUST be decorative for assistive technology and MUST NOT duplicate the item title
 - **AND** the dense wishlist table layout MUST keep the title and notes readable on desktop and mobile widths
 
+### Requirement UI-SCREEN-WISHLIST-019: Wishlist create SHALL persist title-only drafts with defaults
+
+Wishlist create SHALL accept a draft with only `Title` populated, create the backing canonical wishlist item with generated part-number metadata and default planning values, then create the wishlist metadata entry without surfacing generic save failure copy.
+
+#### Scenario: Create title-only wishlist entry
+
+- **GIVEN** wishlist route is loaded and the create panel is open
+- **WHEN** user enters only a title and clicks `Save changes`
+- **THEN** Cabinet MUST create a canonical item with status `wishlist`, the submitted title, generated part number metadata, and default priority
+- **AND** Cabinet MUST create the wishlist metadata entry linked to that item
+- **AND** the created title MUST appear in the refreshed wishlist rows/cards
+- **AND** the create panel MUST close after persistence succeeds
+- **AND** the UI MUST NOT show generic `Wishlist save failed` copy for this valid title-only draft
+
 ## Use-Case IDs and E2E Mapping
 
 | UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |
@@ -159,3 +173,4 @@ Wishlist rows view SHALL render a compact thumbnail before each item title. When
 | UC-WSH-04 | Sort wishlist by title           | Title sort control reorders rows deterministically                                                                     | planned: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `wishlist-title-sort`                                                             |
 | UC-WSH-17 | Edit wishlist Cost and Quantity  | Inline numeric fields support keyboard entry plus accessible fixed-width stepper controls with lower-bound constraints | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-017 edits cost and quantity with stable stepper controls` |
 | UC-WSH-18 | Show row thumbnails              | Rows render stable decorative thumbnails with deterministic fallback styling                                            | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails`        |
+| UC-WSH-19 | Create title-only wishlist entry | Title-only drafts persist with generated metadata and no generic failure copy                                           | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-019 creates a title-only wishlist entry`                  |
