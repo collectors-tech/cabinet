@@ -771,6 +771,75 @@ describe("ui-screen-wishlist", () => {
     cy.contains("Import Wishlist Entries").should("be.visible");
   });
 
+  it("UI-SCREEN-WISHLIST-019 creates a title-only wishlist entry", () => {
+    let wishlistEntries: Array<Record<string, unknown>> = [];
+    let wishlistItems: Array<Record<string, unknown>> = [];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("POST", "/api/items", (req) => {
+      expect(req.body.title).to.eq("Title Only Wishlist Save");
+      expect(req.body.status).to.eq("wishlist");
+      expect(req.body.priority).to.eq("medium");
+      expect(req.body.part_number).to.match(/^WISH-TITLE-ONLY-WISHLIST-SAVE-/);
+      wishlistItems = [
+        ...wishlistItems,
+        {
+          id: "item-title-only-1",
+          title: req.body.title,
+          part_number: req.body.part_number,
+          status: "wishlist",
+          category: req.body.category || "General",
+          priority: req.body.priority,
+        },
+      ];
+      req.reply({
+        statusCode: 201,
+        body: wishlistItems[wishlistItems.length - 1],
+      });
+    }).as("createWishlistItem");
+    cy.intercept("POST", "/api/wishlist", (req) => {
+      expect(req.body.item_id).to.eq("item-title-only-1");
+      expect(req.body.priority).to.eq("medium");
+      expect(req.body.target_price).to.eq(0);
+      wishlistEntries = [
+        ...wishlistEntries,
+        {
+          id: "wish-title-only-1",
+          item_id: req.body.item_id,
+          priority: req.body.priority,
+          target_price: req.body.target_price,
+          notes: req.body.notes,
+          quantity: req.body.quantity,
+          needed_quantity: req.body.needed_quantity,
+        },
+      ];
+      req.reply({
+        statusCode: 201,
+        body: wishlistEntries[wishlistEntries.length - 1],
+      });
+    }).as("createWishlistEntry");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+
+    cy.get('[data-testid="wishlist-new-action"]').click();
+    cy.contains("Create Wishlist Entry").should("be.visible");
+    cy.get('input[name="title"]').type("Title Only Wishlist Save");
+    cy.contains("button", "Save changes").click();
+
+    cy.wait("@createWishlistItem");
+    cy.wait("@createWishlistEntry");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.contains("Wishlist save failed").should("not.exist");
+    cy.get('[data-testid="wishlist-create-panel"]').should("not.exist");
+    cy.contains("Title Only Wishlist Save").should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-010 persists wishlist edit and delete actions", () => {
     let wishlistEntries = [
       {
