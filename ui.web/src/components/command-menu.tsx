@@ -7,6 +7,7 @@ import {
   Laptop,
   LoaderCircle,
   Moon,
+  Plus,
   PackageSearch,
   ScanSearch,
   Sun,
@@ -20,6 +21,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
   CommandSeparator,
 } from '@/components/ui/command'
 import { sidebarData } from './layout/data/sidebar-data'
@@ -39,7 +41,9 @@ type BarcodeMatch = {
   barcode: string
 }
 
-function normalizeLocalSearchItem(item: Partial<LocalSearchItem>): LocalSearchItem {
+function normalizeLocalSearchItem(
+  item: Partial<LocalSearchItem>
+): LocalSearchItem {
   return {
     id: item.id?.trim() ?? '',
     part_number: item.part_number?.trim() ?? '',
@@ -207,15 +211,25 @@ export function CommandMenu() {
     })
   }
 
+  const openCreateCollection = () => {
+    if (/^\/collections\/?$/.test(window.location.pathname)) {
+      window.dispatchEvent(new CustomEvent('cabinet:create-collection'))
+      return
+    }
+
+    void navigate({
+      to: '/collections',
+      search: { create: 'collection' } as never,
+    })
+  }
+
   return (
     <CommandDialog modal open={open} onOpenChange={handleOpenChange}>
       <CommandInput
         placeholder='Type a command or search...'
         value={searchValue}
         onValueChange={handleSearchValueChange}
-        onInput={(event) =>
-          handleSearchValueChange(event.currentTarget.value)
-        }
+        onInput={(event) => handleSearchValueChange(event.currentTarget.value)}
       />
       <CommandList>
         <ScrollArea type='hover' className='h-72 pe-1'>
@@ -267,7 +281,10 @@ export function CommandMenu() {
           {barcodeCandidate ? (
             <CommandGroup heading='Barcode lookup'>
               {barcodeState === 'loading' ? (
-                <CommandItem disabled value={`barcode-loading-${trimmedSearch}`}>
+                <CommandItem
+                  disabled
+                  value={`barcode-loading-${trimmedSearch}`}
+                >
                   <LoaderCircle className='animate-spin' />
                   Looking up barcode {trimmedSearch}...
                 </CommandItem>
@@ -325,6 +342,18 @@ export function CommandMenu() {
             </CommandGroup>
           ) : null}
           {trimmedSearch.length >= 2 ? <CommandSeparator /> : null}
+          <CommandGroup heading='Actions'>
+            <CommandItem
+              value='Create collection'
+              data-testid='command-create-collection'
+              onSelect={() => runCommand(openCreateCollection)}
+            >
+              <Plus />
+              <span>Create collection</span>
+              <CommandShortcut>Ctrl+N</CommandShortcut>
+            </CommandItem>
+          </CommandGroup>
+          <CommandSeparator />
           {sidebarData.navGroups.map((group) => (
             <CommandGroup key={group.title} heading={group.title}>
               {group.items.map((navItem, i) => {

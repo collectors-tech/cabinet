@@ -410,6 +410,61 @@ describe('ui-screen-collections', () => {
     )
   })
 
+  it('UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
+      'saveCollectionSettings'
+    )
+
+    cy.get('[data-testid="collections-search-input"]').click().type('{ctrl}n')
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+
+    cy.get('body').click(0, 0).type('{ctrl}n')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-input"]').type('Shortcut Shelf')
+    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Shortcut Shelf')
+      expect(persisted.activeCollection).to.equal('Shortcut Shelf')
+    })
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+    cy.get('[data-testid="collections-row-shortcut-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+
+    cy.contains('button', /search/i).first().click()
+    cy.get('input[placeholder="Type a command or search..."]').type(
+      'Create collection'
+    )
+    cy.get('[data-testid="command-create-collection"]')
+      .should('contain.text', 'Create collection')
+      .and('contain.text', 'Ctrl+N')
+      .click()
+
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/collections\/?$/)
+    cy.location('search').should('not.contain', 'create=collection')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-input"]').type('Command Shelf')
+    cy.get('[data-testid="collections-create-submit"]').click()
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Command Shelf')
+      expect(persisted.activeCollection).to.equal('Command Shelf')
+    })
+    cy.get('[data-testid="collections-row-command-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+  })
+
   it('UI-SCREEN-COLLECTIONS-004 renames a collection from the row workflow and persists after refresh', () => {
     signInToCollections()
 
