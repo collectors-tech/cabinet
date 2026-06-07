@@ -306,6 +306,8 @@ export function Collections() {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [createValue, setCreateValue] = useState('')
+  const [createError, setCreateError] = useState('')
+  const [createSubmitting, setCreateSubmitting] = useState(false)
   const [editValue, setEditValue] = useState('')
   const [inventoryMembers, setInventoryMembers] = useState<CollectionMemberRow[]>(
     []
@@ -505,6 +507,15 @@ export function Collections() {
   const canNavigateNext =
     selectedVisibleIndex >= 0 && selectedVisibleIndex < visibleRows.length - 1
 
+  function setCreateDialogOpen(open: boolean) {
+    setCreateOpen(open)
+    if (!open) {
+      setCreateValue('')
+      setCreateError('')
+      setCreateSubmitting(false)
+    }
+  }
+
   function navigateEditPanel(offset: number) {
     if (selectedVisibleIndex < 0) {
       return
@@ -518,15 +529,24 @@ export function Collections() {
   }
 
   async function handleCreateCollection() {
-    const created = await addCollection(createValue)
-    if (!created) {
-      toast.error('Collection name must be unique and non-empty.')
+    if (createSubmitting) {
       return
     }
-    setSelectedCollectionID(collectionKey(created))
-    setCreateValue('')
-    setCreateOpen(false)
-    toast.success(`${created} created and set as the active collection.`)
+    setCreateSubmitting(true)
+    setCreateError('')
+    try {
+      const created = await addCollection(createValue)
+      if (!created) {
+        setCreateError('Enter a unique collection name.')
+        return
+      }
+      setSelectedCollectionID(collectionKey(created))
+      setCreateValue('')
+      setCreateDialogOpen(false)
+      toast.success(`${created} created and set as the active collection.`)
+    } finally {
+      setCreateSubmitting(false)
+    }
   }
 
   async function handleRenameCollection() {
@@ -582,7 +602,7 @@ export function Collections() {
               size='icon'
               aria-label='New collection'
               title='New collection'
-              onClick={() => setCreateOpen(true)}
+              onClick={() => setCreateDialogOpen(true)}
             >
               <Plus className='h-4 w-4' aria-hidden='true' />
             </Button>
@@ -811,38 +831,65 @@ export function Collections() {
         </div>
       </Main>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent data-testid='collections-create-dialog'>
-          <DialogHeader>
-            <DialogTitle>Create collection</DialogTitle>
-            <DialogDescription>
-              Add a new collection row to the management table.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={createValue}
-            onChange={(event) => setCreateValue(event.target.value)}
-            placeholder='Collection name'
-            data-testid='collections-create-input'
-          />
-          <DialogFooter>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setCreateOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type='button'
-              onClick={() => {
-                void handleCreateCollection()
-              }}
-              data-testid='collections-create-submit'
-            >
-              Save collection
-            </Button>
-          </DialogFooter>
+          <form
+            className='space-y-4'
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleCreateCollection()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Create collection</DialogTitle>
+              <DialogDescription>
+                Add a new collection row to the management table.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='space-y-2'>
+              <Input
+                value={createValue}
+                onChange={(event) => {
+                  setCreateValue(event.target.value)
+                  if (createError) {
+                    setCreateError('')
+                  }
+                }}
+                placeholder='Collection name'
+                aria-invalid={createError ? 'true' : undefined}
+                aria-describedby={
+                  createError ? 'collections-create-error' : undefined
+                }
+                data-testid='collections-create-input'
+              />
+              {createError ? (
+                <p
+                  id='collections-create-error'
+                  className='text-sm text-destructive'
+                  data-testid='collections-create-error'
+                >
+                  {createError}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setCreateDialogOpen(false)}
+                disabled={createSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type='submit'
+                disabled={createSubmitting}
+                data-testid='collections-create-submit'
+              >
+                {createSubmitting ? 'Saving...' : 'Save collection'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
