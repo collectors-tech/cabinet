@@ -96,6 +96,107 @@ describe('ui-screen-integrations', () => {
     cy.get('table').should('be.visible')
   })
 
+  it('UI-SCREEN-INTEGRATIONS-010: applies direct route query state on first render', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+          {
+            provider_id: 'au-webshop-bonzaslotcars-com-au',
+            display_name: 'bonzaslotcars.com.au',
+            base_domain: 'bonzaslotcars.com.au',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Webshop ingestion requires no token.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+          {
+            provider_id: 'au-webshop-hobbyco-com-au',
+            display_name: 'hobbyco.com.au',
+            base_domain: 'hobbyco.com.au',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Webshop ingestion requires no token.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.au-webshop-bonzaslotcars-com-au.enabled': 'true' } },
+    }).as('settings')
+
+    cy.visit(
+      '/sign-in?redirect=%2Fintegrations%2F%3Ffilter%3Dbonza%26type%3Dconnected%26sort%3Ddesc%26view%3Drows'
+    )
+    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/integrations\/?$/
+    )
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.location('search').should('contain', 'filter=bonza')
+    cy.location('search').should('contain', 'type=connected')
+    cy.location('search').should('contain', 'sort=desc')
+    cy.location('search').should('contain', 'view=rows')
+    cy.get('input[placeholder="Filter providers..."]').should('have.value', 'bonza')
+    cy.contains('button', 'Connected').should('be.visible')
+    cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
+    cy.get('table').should('be.visible')
+    cy.contains('td', 'bonzaslotcars.com.au').should('be.visible')
+    cy.contains('td', 'eBay').should('not.exist')
+    cy.contains('td', 'hobbyco.com.au').should('not.exist')
+    cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
+      'not.exist'
+    )
+  })
+
   it('UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
@@ -626,7 +727,7 @@ describe('ui-screen-integrations', () => {
     })
     cy.intercept('GET', '/api/provider/health?provider=ebay', {
       statusCode: 200,
-      delayMs: 250,
+      delay: 1000,
       body: {
         provider: 'ebay',
         status: 'ok',
