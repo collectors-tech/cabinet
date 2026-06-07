@@ -203,11 +203,7 @@ type ForwarderPackageMatchSuggestionSummary = NonNullable<
   ForwarderPackageMatchSuggestionResponse['summary']
 >
 
-type ForwarderPackageReviewFilter =
-  | 'all'
-  | 'linked'
-  | 'unlinked'
-  | 'suggested'
+type ForwarderPackageReviewFilter = 'all' | 'linked' | 'unlinked' | 'suggested'
 
 type ForwarderPackageSuggestionConfidenceFilter =
   | 'all'
@@ -495,78 +491,83 @@ export function Purchases() {
     }
   }, [])
 
-  const loadPackageSuggestions = useCallback(async (packageID?: string) => {
-    setPackagesLoading(true)
-    setPackageError(null)
-    setPackageSuggestionError(null)
-    setPackageSuggestionResult(null)
-    setPackageSuggestionSummary(null)
-    try {
-      const params = new URLSearchParams()
-      if (packageForm.profile_id.trim()) {
-        params.set('profile_id', packageForm.profile_id.trim())
-      }
-      if (packageSuggestionConfidenceFilter !== 'all') {
-        params.set('confidence_label', packageSuggestionConfidenceFilter)
-      }
-      if (packageID?.trim()) {
-        params.set('package_id', packageID.trim())
-      }
-      const response = await fetch(
-        '/api/forwarding/package-match-suggestions?' + params.toString()
-      )
-      if (!response.ok) {
-        throw new Error('forwarder_package_match_suggestions_' + response.status)
-      }
-      const payload =
-        (await response.json()) as ForwarderPackageMatchSuggestionResponse
-      const grouped = (payload.suggestions ?? []).reduce<
-        Record<string, ForwarderPackageMatchSuggestion[]>
-      >((current, suggestion) => {
-        current[suggestion.package_id] = [
-          ...(current[suggestion.package_id] ?? []),
-          suggestion,
-        ]
-        return current
-      }, {})
-      setPackageSuggestions(grouped)
-      setPackageSuggestionSummary(payload.summary ?? null)
-      setPackageSuggestionActiveFilter(payload.confidence_filter ?? null)
-      const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
-      if (count === 0) {
+  const loadPackageSuggestions = useCallback(
+    async (packageID?: string) => {
+      setPackagesLoading(true)
+      setPackageError(null)
+      setPackageSuggestionError(null)
+      setPackageSuggestionResult(null)
+      setPackageSuggestionSummary(null)
+      try {
+        const params = new URLSearchParams()
+        if (packageForm.profile_id.trim()) {
+          params.set('profile_id', packageForm.profile_id.trim())
+        }
+        if (packageSuggestionConfidenceFilter !== 'all') {
+          params.set('confidence_label', packageSuggestionConfidenceFilter)
+        }
+        if (packageID?.trim()) {
+          params.set('package_id', packageID.trim())
+        }
+        const response = await fetch(
+          '/api/forwarding/package-match-suggestions?' + params.toString()
+        )
+        if (!response.ok) {
+          throw new Error(
+            'forwarder_package_match_suggestions_' + response.status
+          )
+        }
+        const payload =
+          (await response.json()) as ForwarderPackageMatchSuggestionResponse
+        const grouped = (payload.suggestions ?? []).reduce<
+          Record<string, ForwarderPackageMatchSuggestion[]>
+        >((current, suggestion) => {
+          current[suggestion.package_id] = [
+            ...(current[suggestion.package_id] ?? []),
+            suggestion,
+          ]
+          return current
+        }, {})
+        setPackageSuggestions(grouped)
+        setPackageSuggestionSummary(payload.summary ?? null)
+        setPackageSuggestionActiveFilter(payload.confidence_filter ?? null)
+        const count = payload.summary?.count ?? payload.suggestions?.length ?? 0
+        if (count === 0) {
+          setPackageSuggestionResult(
+            'No package match suggestions matched' +
+              (packageID ? ' package ' + packageID : ' the current inbox') +
+              (payload.confidence_filter
+                ? ' for ' + payload.confidence_filter + ' confidence'
+                : '') +
+              '. Package rows were left unchanged.'
+          )
+          return
+        }
         setPackageSuggestionResult(
-          'No package match suggestions matched' +
-            (packageID ? ' package ' + packageID : ' the current inbox') +
+          'Found ' +
+            count +
+            ' package match suggestion' +
+            (count === 1 ? '' : 's') +
+            (packageID ? ' for package ' + packageID : '') +
             (payload.confidence_filter
               ? ' for ' + payload.confidence_filter + ' confidence'
-              : '') +
-            '. Package rows were left unchanged.'
+              : '')
         )
-        return
+      } catch (err) {
+        setPackageSuggestions({})
+        setPackageSuggestionSummary(null)
+        setPackageSuggestionActiveFilter(null)
+        setPackageSuggestionError(
+          err instanceof Error
+            ? err.message
+            : 'forwarder_package_match_suggestions_failed'
+        )
+      } finally {
+        setPackagesLoading(false)
       }
-      setPackageSuggestionResult(
-        'Found ' +
-          count +
-          ' package match suggestion' +
-          (count === 1 ? '' : 's') +
-          (packageID ? ' for package ' + packageID : '') +
-          (payload.confidence_filter
-            ? ' for ' + payload.confidence_filter + ' confidence'
-            : '')
-      )
-    } catch (err) {
-      setPackageSuggestions({})
-      setPackageSuggestionSummary(null)
-      setPackageSuggestionActiveFilter(null)
-      setPackageSuggestionError(
-        err instanceof Error
-          ? err.message
-          : 'forwarder_package_match_suggestions_failed'
-      )
-    } finally {
-      setPackagesLoading(false)
-    }
-  }, [packageForm.profile_id, packageSuggestionConfidenceFilter])
+    },
+    [packageForm.profile_id, packageSuggestionConfidenceFilter]
+  )
 
   const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
     setPackageForm((current) => ({ ...current, [field]: value }))
@@ -688,9 +689,7 @@ export function Purchases() {
       setPackageLinkErrors((current) => ({
         ...current,
         [pkg.id]:
-          err instanceof Error
-            ? err.message
-            : 'forwarder_package_link_failed',
+          err instanceof Error ? err.message : 'forwarder_package_link_failed',
       }))
     }
   }
@@ -1102,11 +1101,11 @@ export function Purchases() {
             <div>
               <h2 className='flex items-center gap-2 text-xl font-semibold tracking-tight'>
                 <Truck className='h-5 w-5' />
-                Forwarder Packages
+                Purchase Source Matches
               </h2>
               <p className='text-sm text-muted-foreground'>
-                Import Stackry or freight-forwarder package records before
-                matching them to purchases.
+                Import Stackry or freight-forwarder evidence as source-backed
+                purchase candidates before confirming matches.
               </p>
             </div>
             <Button
@@ -1120,7 +1119,7 @@ export function Purchases() {
               ) : (
                 <RefreshCw className='mr-2 h-4 w-4' />
               )}
-              Refresh packages
+              Refresh source records
             </Button>
             <Button
               variant='secondary'
@@ -1163,9 +1162,7 @@ export function Purchases() {
                     : 'outline'
                 }
                 size='sm'
-                data-testid={
-                  'forwarder-package-confidence-filter-' + value
-                }
+                data-testid={'forwarder-package-confidence-filter-' + value}
                 onClick={() => setPackageSuggestionConfidenceFilter(value)}
               >
                 {label}
@@ -1178,7 +1175,7 @@ export function Purchases() {
             data-testid='forwarder-package-review-summary'
           >
             <div>
-              <dt className='text-muted-foreground'>Packages</dt>
+              <dt className='text-muted-foreground'>Source records</dt>
               <dd className='text-lg font-semibold'>
                 {packageReviewSummary.packageCount}
               </dd>
@@ -1546,9 +1543,12 @@ export function Purchases() {
                   className='rounded-md border border-dashed p-6'
                   data-testid='forwarder-package-empty'
                 >
-                  <p className='font-medium'>No forwarder packages listed.</p>
+                  <p className='font-medium'>
+                    No purchase source records listed.
+                  </p>
                   <p className='mt-1 text-sm text-muted-foreground'>
-                    Import a package or refresh the current profile inbox.
+                    Import forwarder evidence or refresh the current profile
+                    inbox.
                   </p>
                 </div>
               ) : null}
@@ -1559,7 +1559,7 @@ export function Purchases() {
                   data-testid='forwarder-package-filter-empty'
                 >
                   <p className='font-medium'>
-                    No packages match this review state.
+                    No source records match this review state.
                   </p>
                   <p className='mt-1 text-sm text-muted-foreground'>
                     Switch filters or refresh link and suggestion evidence.
@@ -1602,509 +1602,520 @@ export function Purchases() {
                       },
                     ].filter((badge) => badge.visible)
                     return (
-                    <article
-                      key={pkg.id}
-                      className='rounded-md border p-4'
-                      data-testid='forwarder-package-row'
-                    >
-                      <div className='flex flex-wrap items-start justify-between gap-3'>
-                        <div>
-                          <h3 className='font-semibold'>
-                            {pkg.external_package_id}
-                          </h3>
-                          <p className='text-sm text-muted-foreground'>
-                            {pkg.provider} / {pkg.source} ·{' '}
-                            {pkg.tracking_number || 'tracking pending'}
-                          </p>
-                        </div>
-                        <span className='rounded-md border px-2 py-1 text-xs font-medium'>
-                          {labelForStatus(pkg.status)}
-                        </span>
-                      </div>
-                      <div
-                        className='mt-3 flex flex-wrap gap-2 text-xs'
-                        data-testid='forwarder-package-row-evidence'
+                      <article
+                        key={pkg.id}
+                        className='rounded-md border p-4'
+                        data-testid='forwarder-package-row'
                       >
-                        {evidenceBadges.length > 0 ? (
-                          evidenceBadges.map((badge) => (
-                            <span
-                              key={badge.label}
-                              className='rounded-md border bg-muted/30 px-2 py-1 font-medium'
-                            >
-                              {badge.label}
-                            </span>
-                          ))
-                        ) : (
-                          <span className='text-muted-foreground'>
-                            No loaded reconciliation evidence
-                          </span>
-                        )}
-                      </div>
-                      <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-4'>
-                        <div>
-                          <dt className='text-muted-foreground'>Warehouse</dt>
-                          <dd>{pkg.warehouse_location || 'Pending'}</dd>
-                        </div>
-                        <div>
-                          <dt className='text-muted-foreground'>Sender</dt>
-                          <dd>{pkg.sender || 'Pending'}</dd>
-                        </div>
-                        <div>
-                          <dt className='text-muted-foreground'>Weight</dt>
-                          <dd>{pkg.weight_grams ?? 0} g</dd>
-                        </div>
-                        <div>
-                          <dt className='text-muted-foreground'>Provenance</dt>
-                          <dd className='break-all'>{pkg.provenance_key}</dd>
-                        </div>
-                      </dl>
-                      <div className='mt-4 flex justify-end'>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          data-testid='forwarder-package-detail-toggle'
-                          onClick={() => void selectPackage(pkg.id, selected)}
-                        >
-                          {selected ? 'Hide details' : 'View details'}
-                        </Button>
-                      </div>
-                      {selected ? (
-                        <div
-                          className='mt-4 space-y-4 rounded-md border bg-muted/20 p-4'
-                          data-testid='forwarder-package-detail'
-                        >
-                          <dl className='grid gap-3 text-sm md:grid-cols-3'>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Package ID
-                              </dt>
-                              <dd className='break-all'>
-                                {pkg.external_package_id}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Shipment ID
-                              </dt>
-                              <dd className='break-all'>
-                                {packageDetailValue(pkg.shipment_id)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Tracking number
-                              </dt>
-                              <dd className='break-all'>
-                                {packageDetailValue(pkg.tracking_number)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Received
-                              </dt>
-                              <dd>{packageDetailValue(pkg.received_at)}</dd>
-                            </div>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Created
-                              </dt>
-                              <dd>{packageDetailValue(pkg.created_at)}</dd>
-                            </div>
-                            <div>
-                              <dt className='text-muted-foreground'>
-                                Updated
-                              </dt>
-                              <dd>{packageDetailValue(pkg.updated_at)}</dd>
-                            </div>
-                          </dl>
-                          <div className='space-y-2'>
-                            <p className='text-sm font-medium'>
-                              Source provenance
+                        <div className='flex flex-wrap items-start justify-between gap-3'>
+                          <div>
+                            <h3 className='font-semibold'>
+                              {pkg.external_package_id}
+                            </h3>
+                            <p className='text-sm text-muted-foreground'>
+                              {pkg.provider} / {pkg.source} ·{' '}
+                              {pkg.tracking_number || 'tracking pending'}
                             </p>
-                            <pre
-                              className='max-h-48 overflow-auto rounded-md border bg-background p-3 text-xs'
-                              data-testid='forwarder-package-raw-payload'
-                            >
-                              {rawPayload}
-                            </pre>
                           </div>
-                          <div
-                            className='space-y-3 rounded-md border bg-background p-4'
-                            data-testid='forwarder-package-link-panel'
+                          <span className='rounded-md border px-2 py-1 text-xs font-medium'>
+                            {labelForStatus(pkg.status)}
+                          </span>
+                        </div>
+                        <div
+                          className='mt-3 flex flex-wrap gap-2 text-xs'
+                          data-testid='forwarder-package-row-evidence'
+                        >
+                          {evidenceBadges.length > 0 ? (
+                            evidenceBadges.map((badge) => (
+                              <span
+                                key={badge.label}
+                                className='rounded-md border bg-muted/30 px-2 py-1 font-medium'
+                              >
+                                {badge.label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className='text-muted-foreground'>
+                              No loaded reconciliation evidence
+                            </span>
+                          )}
+                        </div>
+                        <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-4'>
+                          <div>
+                            <dt className='text-muted-foreground'>Warehouse</dt>
+                            <dd>{pkg.warehouse_location || 'Pending'}</dd>
+                          </div>
+                          <div>
+                            <dt className='text-muted-foreground'>Sender</dt>
+                            <dd>{pkg.sender || 'Pending'}</dd>
+                          </div>
+                          <div>
+                            <dt className='text-muted-foreground'>Weight</dt>
+                            <dd>{pkg.weight_grams ?? 0} g</dd>
+                          </div>
+                          <div>
+                            <dt className='text-muted-foreground'>
+                              Provenance
+                            </dt>
+                            <dd className='break-all'>{pkg.provenance_key}</dd>
+                          </div>
+                        </dl>
+                        <div className='mt-4 flex justify-end'>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            data-testid='forwarder-package-detail-toggle'
+                            onClick={() => void selectPackage(pkg.id, selected)}
                           >
-                            {suggestions.length > 0 ? (
-                              <div
-                                className='space-y-2 rounded-md border bg-muted/20 p-3 text-sm'
-                                data-testid='forwarder-package-match-suggestions'
-                              >
-                                <p className='font-medium'>
-                                  Suggested package matches
-                                </p>
-                                {suggestions.map((suggestion, index) => (
-                                  <div
-                                    key={suggestion.id ?? index}
-                                    className='rounded-md border bg-background p-3'
-                                    data-testid='forwarder-package-match-suggestion'
-                                  >
-                                    <div className='flex flex-wrap items-start justify-between gap-3'>
-                                      <div>
-                                        <p className='font-medium'>
-                                          {labelForStatus(
-                                            suggestion.confidence_label ??
-                                              'suggested'
-                                          )}{' '}
-                                          match to item {suggestion.item_id}
-                                        </p>
-                                        <p className='text-xs text-muted-foreground'>
-                                          Score{' '}
-                                          {suggestion.confidence_score ?? 0}
-                                          {suggestion.expected_arrival_id
-                                            ? ' · arrival ' +
-                                              suggestion.expected_arrival_id
-                                            : ''}
-                                        </p>
-                                      </div>
-                                      <Button
-                                        type='button'
-                                        size='sm'
-                                        variant='outline'
-                                        data-testid='forwarder-package-match-suggestion-use'
-                                        onClick={() =>
-                                          applyPackageSuggestion(
-                                            pkg.id,
-                                            suggestion
-                                          )
-                                        }
-                                      >
-                                        Use suggestion
-                                      </Button>
-                                    </div>
-                                    {(suggestion.signals ?? []).length > 0 ? (
-                                      <ul
-                                        className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
-                                        data-testid='forwarder-package-match-signals'
-                                      >
-                                        {(suggestion.signals ?? []).map(
-                                          (signal, signalIndex) => (
-                                            <li key={signalIndex}>
-                                              {signal.name ?? 'signal'}:{' '}
-                                              {signal.evidence ?? 'matched'} (
-                                              {signal.score ?? 0})
-                                            </li>
-                                          )
-                                        )}
-                                      </ul>
-                                    ) : null}
-                                    {(suggestion.audit_trail ?? []).length >
-                                    0 ? (
-                                      <ul
-                                        className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
-                                        data-testid='forwarder-package-match-audit-trail'
-                                      >
-                                        {(suggestion.audit_trail ?? []).map(
-                                          (entry, auditIndex) => (
-                                            <li key={auditIndex}>{entry}</li>
-                                          )
-                                        )}
-                                      </ul>
-                                    ) : null}
-                                  </div>
-                                ))}
+                            {selected ? 'Hide details' : 'View details'}
+                          </Button>
+                        </div>
+                        {selected ? (
+                          <div
+                            className='mt-4 space-y-4 rounded-md border bg-muted/20 p-4'
+                            data-testid='forwarder-package-detail'
+                          >
+                            <dl className='grid gap-3 text-sm md:grid-cols-3'>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Package ID
+                                </dt>
+                                <dd className='break-all'>
+                                  {pkg.external_package_id}
+                                </dd>
                               </div>
-                            ) : null}
-                            <div>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Shipment ID
+                                </dt>
+                                <dd className='break-all'>
+                                  {packageDetailValue(pkg.shipment_id)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Tracking number
+                                </dt>
+                                <dd className='break-all'>
+                                  {packageDetailValue(pkg.tracking_number)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Received
+                                </dt>
+                                <dd>{packageDetailValue(pkg.received_at)}</dd>
+                              </div>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Created
+                                </dt>
+                                <dd>{packageDetailValue(pkg.created_at)}</dd>
+                              </div>
+                              <div>
+                                <dt className='text-muted-foreground'>
+                                  Updated
+                                </dt>
+                                <dd>{packageDetailValue(pkg.updated_at)}</dd>
+                              </div>
+                            </dl>
+                            <div className='space-y-2'>
                               <p className='text-sm font-medium'>
-                                Reconciliation link
+                                Source provenance
                               </p>
-                              <p className='text-xs text-muted-foreground'>
-                                Match this package to the reviewed inventory
-                                item and expected arrival target.
-                              </p>
-                            </div>
-                            <div className='flex flex-wrap justify-end gap-2'>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant='outline'
-                                data-testid='forwarder-package-match-suggestions-load-scoped'
-                                onClick={() =>
-                                  void loadPackageSuggestions(pkg.id)
-                                }
-                                disabled={packagesLoading}
+                              <pre
+                                className='max-h-48 overflow-auto rounded-md border bg-background p-3 text-xs'
+                                data-testid='forwarder-package-raw-payload'
                               >
-                                {packagesLoading ? (
-                                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                ) : (
-                                  <ShieldCheck className='mr-2 h-4 w-4' />
-                                )}
-                                Find matches for this package
-                              </Button>
-                            </div>
-                            {links.length > 0 ? (
-                              <div
-                                className='rounded-md border bg-muted/30 p-3 text-sm'
-                                data-testid='forwarder-package-link-state'
-                              >
-                                {links.map((link) => (
-                                  <div key={link.id} className='space-y-1'>
-                                    <p>
-                                      {labelForStatus(
-                                        link.decision || 'confirmed'
-                                      )}{' '}
-                                      to item {link.item_id}
-                                      {link.expected_arrival_id
-                                        ? ' / arrival ' + link.expected_arrival_id
-                                        : ''}
-                                    </p>
-                                    <p className='text-xs text-muted-foreground'>
-                                      Source {link.source}
-                                      {link.notes ? ' · ' + link.notes : ''}
-                                    </p>
-                                    {link.audit_trail &&
-                                    link.audit_trail.length > 0 ? (
-                                      <ul
-                                        className='list-disc space-y-1 ps-5 text-xs text-muted-foreground'
-                                        data-testid='forwarder-package-link-audit-trail'
-                                      >
-                                        {link.audit_trail.map(
-                                          (entry, index) => (
-                                            <li key={index}>{entry}</li>
-                                          )
-                                        )}
-                                      </ul>
-                                    ) : null}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div
-                                className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
-                                data-testid='forwarder-package-link-empty'
-                              >
-                                No reconciliation link recorded for this
-                                package.
-                              </div>
-                            )}
-                            <div className='grid gap-3 md:grid-cols-2'>
-                              <div className='grid gap-1.5'>
-                                <Label htmlFor={'forwarder-link-item-' + pkg.id}>
-                                  Item ID
-                                </Label>
-                                <Input
-                                  id={'forwarder-link-item-' + pkg.id}
-                                  data-testid='forwarder-package-link-item'
-                                  value={linkForm.item_id}
-                                  onChange={(event) =>
-                                    updatePackageLinkForm(
-                                      pkg.id,
-                                      'item_id',
-                                      event.target.value
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className='grid gap-1.5'>
-                                <Label
-                                  htmlFor={'forwarder-link-arrival-' + pkg.id}
-                                >
-                                  Expected arrival ID
-                                </Label>
-                                <Input
-                                  id={'forwarder-link-arrival-' + pkg.id}
-                                  data-testid='forwarder-package-link-arrival'
-                                  value={linkForm.expected_arrival_id}
-                                  onChange={(event) =>
-                                    updatePackageLinkForm(
-                                      pkg.id,
-                                      'expected_arrival_id',
-                                      event.target.value
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className='grid gap-1.5'>
-                                <Label
-                                  htmlFor={'forwarder-link-lifecycle-' + pkg.id}
-                                >
-                                  Lifecycle entry ID
-                                </Label>
-                                <Input
-                                  id={'forwarder-link-lifecycle-' + pkg.id}
-                                  data-testid='forwarder-package-link-lifecycle'
-                                  value={linkForm.lifecycle_entry_id}
-                                  onChange={(event) =>
-                                    updatePackageLinkForm(
-                                      pkg.id,
-                                      'lifecycle_entry_id',
-                                      event.target.value
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className='grid gap-1.5'>
-                                <Label
-                                  htmlFor={'forwarder-link-source-' + pkg.id}
-                                >
-                                  Source
-                                </Label>
-                                <Input
-                                  id={'forwarder-link-source-' + pkg.id}
-                                  data-testid='forwarder-package-link-source'
-                                  value={linkForm.source}
-                                  onChange={(event) =>
-                                    updatePackageLinkForm(
-                                      pkg.id,
-                                      'source',
-                                      event.target.value
-                                    )
-                                  }
-                                />
-                              </div>
-                            </div>
-                            <div className='grid gap-1.5'>
-                              <Label htmlFor={'forwarder-link-notes-' + pkg.id}>
-                                Notes
-                              </Label>
-                              <Textarea
-                                id={'forwarder-link-notes-' + pkg.id}
-                                data-testid='forwarder-package-link-notes'
-                                value={linkForm.notes}
-                                onChange={(event) =>
-                                  updatePackageLinkForm(
-                                    pkg.id,
-                                    'notes',
-                                    event.target.value
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className='flex flex-wrap justify-end gap-2'>
-                              <Button
-                                type='button'
-                                size='sm'
-                                data-testid='forwarder-package-link-save'
-                                onClick={() => void linkPackage(pkg)}
-                              >
-                                Confirm link
-                              </Button>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant='secondary'
-                                data-testid='forwarder-package-link-override'
-                                onClick={() =>
-                                  void linkPackage(pkg, 'overridden')
-                                }
-                              >
-                                Override link
-                              </Button>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant='outline'
-                                data-testid='forwarder-package-link-unlink'
-                                onClick={() => void unlinkPackage(pkg)}
-                                disabled={links.length === 0}
-                              >
-                                Unlink package
-                              </Button>
+                                {rawPayload}
+                              </pre>
                             </div>
                             <div
-                              className='rounded-md border bg-muted/20 p-3 text-sm'
-                              data-testid='forwarder-package-link-events'
+                              className='space-y-3 rounded-md border bg-background p-4'
+                              data-testid='forwarder-package-link-panel'
                             >
-                              <p className='font-medium'>Decision audit</p>
-                              {events.length > 0 ? (
-                                <ul className='mt-2 space-y-2'>
-                                  {events.map((event) => (
-                                    <li key={event.id} className='space-y-1'>
-                                      <p>
-                                        <span className='font-medium'>
-                                          {labelForStatus(event.action)}
-                                        </span>
-                                        {event.item_id
-                                          ? ' item ' + event.item_id
-                                          : ''}
-                                        {event.lifecycle_entry_id
-                                          ? ' / lifecycle ' +
-                                            event.lifecycle_entry_id
-                                          : ''}
-                                        {event.expected_arrival_id
-                                          ? ' / arrival ' +
-                                            event.expected_arrival_id
-                                          : ''}
-                                        {event.previous_item_id ||
-                                        event.previous_lifecycle_entry_id ||
-                                        event.previous_expected_arrival_id ? (
-                                          <span className='text-muted-foreground'>
-                                            {' '}
-                                            (previous
-                                            {event.previous_item_id
-                                              ? ' item ' +
-                                                event.previous_item_id
+                              {suggestions.length > 0 ? (
+                                <div
+                                  className='space-y-2 rounded-md border bg-muted/20 p-3 text-sm'
+                                  data-testid='forwarder-package-match-suggestions'
+                                >
+                                  <p className='font-medium'>
+                                    Suggested purchase matches
+                                  </p>
+                                  {suggestions.map((suggestion, index) => (
+                                    <div
+                                      key={suggestion.id ?? index}
+                                      className='rounded-md border bg-background p-3'
+                                      data-testid='forwarder-package-match-suggestion'
+                                    >
+                                      <div className='flex flex-wrap items-start justify-between gap-3'>
+                                        <div>
+                                          <p className='font-medium'>
+                                            {labelForStatus(
+                                              suggestion.confidence_label ??
+                                                'suggested'
+                                            )}{' '}
+                                            match to item {suggestion.item_id}
+                                          </p>
+                                          <p className='text-xs text-muted-foreground'>
+                                            Score{' '}
+                                            {suggestion.confidence_score ?? 0}
+                                            {suggestion.expected_arrival_id
+                                              ? ' · arrival ' +
+                                                suggestion.expected_arrival_id
                                               : ''}
-                                            {event.previous_lifecycle_entry_id
-                                              ? ' / lifecycle ' +
-                                                event.previous_lifecycle_entry_id
-                                              : ''}
-                                            {event.previous_expected_arrival_id
-                                              ? ' / arrival ' +
-                                                event.previous_expected_arrival_id
-                                              : ''}
+                                          </p>
+                                        </div>
+                                        <Button
+                                          type='button'
+                                          size='sm'
+                                          variant='outline'
+                                          data-testid='forwarder-package-match-suggestion-use'
+                                          onClick={() =>
+                                            applyPackageSuggestion(
+                                              pkg.id,
+                                              suggestion
                                             )
-                                          </span>
-                                        ) : null}
+                                          }
+                                        >
+                                          Use suggestion
+                                        </Button>
+                                      </div>
+                                      {(suggestion.signals ?? []).length > 0 ? (
+                                        <ul
+                                          className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                          data-testid='forwarder-package-match-signals'
+                                        >
+                                          {(suggestion.signals ?? []).map(
+                                            (signal, signalIndex) => (
+                                              <li key={signalIndex}>
+                                                {signal.name ?? 'signal'}:{' '}
+                                                {signal.evidence ?? 'matched'} (
+                                                {signal.score ?? 0})
+                                              </li>
+                                            )
+                                          )}
+                                        </ul>
+                                      ) : null}
+                                      {(suggestion.audit_trail ?? []).length >
+                                      0 ? (
+                                        <ul
+                                          className='mt-2 list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                          data-testid='forwarder-package-match-audit-trail'
+                                        >
+                                          {(suggestion.audit_trail ?? []).map(
+                                            (entry, auditIndex) => (
+                                              <li key={auditIndex}>{entry}</li>
+                                            )
+                                          )}
+                                        </ul>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <div>
+                                <p className='text-sm font-medium'>
+                                  Reconciliation link
+                                </p>
+                                <p className='text-xs text-muted-foreground'>
+                                  Match this source evidence to the reviewed
+                                  inventory item and expected arrival target.
+                                </p>
+                              </div>
+                              <div className='flex flex-wrap justify-end gap-2'>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='forwarder-package-match-suggestions-load-scoped'
+                                  onClick={() =>
+                                    void loadPackageSuggestions(pkg.id)
+                                  }
+                                  disabled={packagesLoading}
+                                >
+                                  {packagesLoading ? (
+                                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                  ) : (
+                                    <ShieldCheck className='mr-2 h-4 w-4' />
+                                  )}
+                                  Find matches for this source record
+                                </Button>
+                              </div>
+                              {links.length > 0 ? (
+                                <div
+                                  className='rounded-md border bg-muted/30 p-3 text-sm'
+                                  data-testid='forwarder-package-link-state'
+                                >
+                                  {links.map((link) => (
+                                    <div key={link.id} className='space-y-1'>
+                                      <p>
+                                        {labelForStatus(
+                                          link.decision || 'confirmed'
+                                        )}{' '}
+                                        to item {link.item_id}
+                                        {link.expected_arrival_id
+                                          ? ' / arrival ' +
+                                            link.expected_arrival_id
+                                          : ''}
                                       </p>
                                       <p className='text-xs text-muted-foreground'>
-                                        via {event.source}
-                                        {event.created_at
-                                          ? ' · ' + event.created_at
-                                          : ''}
-                                        {event.notes ? ' · ' + event.notes : ''}
+                                        Source {link.source}
+                                        {link.notes ? ' · ' + link.notes : ''}
                                       </p>
-                                      {event.audit_trail &&
-                                      event.audit_trail.length > 0 ? (
+                                      {link.audit_trail &&
+                                      link.audit_trail.length > 0 ? (
                                         <ul
                                           className='list-disc space-y-1 ps-5 text-xs text-muted-foreground'
-                                          data-testid='forwarder-package-link-event-audit-trail'
+                                          data-testid='forwarder-package-link-audit-trail'
                                         >
-                                          {event.audit_trail.map(
+                                          {link.audit_trail.map(
                                             (entry, index) => (
                                               <li key={index}>{entry}</li>
                                             )
                                           )}
                                         </ul>
                                       ) : null}
-                                    </li>
+                                    </div>
                                   ))}
-                                </ul>
+                                </div>
                               ) : (
-                                <p className='mt-1 text-muted-foreground'>
-                                  No link decisions recorded yet.
-                                </p>
+                                <div
+                                  className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'
+                                  data-testid='forwarder-package-link-empty'
+                                >
+                                  No reconciliation link recorded for this
+                                  source record.
+                                </div>
                               )}
+                              <div className='grid gap-3 md:grid-cols-2'>
+                                <div className='grid gap-1.5'>
+                                  <Label
+                                    htmlFor={'forwarder-link-item-' + pkg.id}
+                                  >
+                                    Item ID
+                                  </Label>
+                                  <Input
+                                    id={'forwarder-link-item-' + pkg.id}
+                                    data-testid='forwarder-package-link-item'
+                                    value={linkForm.item_id}
+                                    onChange={(event) =>
+                                      updatePackageLinkForm(
+                                        pkg.id,
+                                        'item_id',
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className='grid gap-1.5'>
+                                  <Label
+                                    htmlFor={'forwarder-link-arrival-' + pkg.id}
+                                  >
+                                    Expected arrival ID
+                                  </Label>
+                                  <Input
+                                    id={'forwarder-link-arrival-' + pkg.id}
+                                    data-testid='forwarder-package-link-arrival'
+                                    value={linkForm.expected_arrival_id}
+                                    onChange={(event) =>
+                                      updatePackageLinkForm(
+                                        pkg.id,
+                                        'expected_arrival_id',
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className='grid gap-1.5'>
+                                  <Label
+                                    htmlFor={
+                                      'forwarder-link-lifecycle-' + pkg.id
+                                    }
+                                  >
+                                    Lifecycle entry ID
+                                  </Label>
+                                  <Input
+                                    id={'forwarder-link-lifecycle-' + pkg.id}
+                                    data-testid='forwarder-package-link-lifecycle'
+                                    value={linkForm.lifecycle_entry_id}
+                                    onChange={(event) =>
+                                      updatePackageLinkForm(
+                                        pkg.id,
+                                        'lifecycle_entry_id',
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className='grid gap-1.5'>
+                                  <Label
+                                    htmlFor={'forwarder-link-source-' + pkg.id}
+                                  >
+                                    Source
+                                  </Label>
+                                  <Input
+                                    id={'forwarder-link-source-' + pkg.id}
+                                    data-testid='forwarder-package-link-source'
+                                    value={linkForm.source}
+                                    onChange={(event) =>
+                                      updatePackageLinkForm(
+                                        pkg.id,
+                                        'source',
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                              <div className='grid gap-1.5'>
+                                <Label
+                                  htmlFor={'forwarder-link-notes-' + pkg.id}
+                                >
+                                  Notes
+                                </Label>
+                                <Textarea
+                                  id={'forwarder-link-notes-' + pkg.id}
+                                  data-testid='forwarder-package-link-notes'
+                                  value={linkForm.notes}
+                                  onChange={(event) =>
+                                    updatePackageLinkForm(
+                                      pkg.id,
+                                      'notes',
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className='flex flex-wrap justify-end gap-2'>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  data-testid='forwarder-package-link-save'
+                                  onClick={() => void linkPackage(pkg)}
+                                >
+                                  Confirm link
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='secondary'
+                                  data-testid='forwarder-package-link-override'
+                                  onClick={() =>
+                                    void linkPackage(pkg, 'overridden')
+                                  }
+                                >
+                                  Override link
+                                </Button>
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='outline'
+                                  data-testid='forwarder-package-link-unlink'
+                                  onClick={() => void unlinkPackage(pkg)}
+                                  disabled={links.length === 0}
+                                >
+                                  Unlink package
+                                </Button>
+                              </div>
+                              <div
+                                className='rounded-md border bg-muted/20 p-3 text-sm'
+                                data-testid='forwarder-package-link-events'
+                              >
+                                <p className='font-medium'>Decision audit</p>
+                                {events.length > 0 ? (
+                                  <ul className='mt-2 space-y-2'>
+                                    {events.map((event) => (
+                                      <li key={event.id} className='space-y-1'>
+                                        <p>
+                                          <span className='font-medium'>
+                                            {labelForStatus(event.action)}
+                                          </span>
+                                          {event.item_id
+                                            ? ' item ' + event.item_id
+                                            : ''}
+                                          {event.lifecycle_entry_id
+                                            ? ' / lifecycle ' +
+                                              event.lifecycle_entry_id
+                                            : ''}
+                                          {event.expected_arrival_id
+                                            ? ' / arrival ' +
+                                              event.expected_arrival_id
+                                            : ''}
+                                          {event.previous_item_id ||
+                                          event.previous_lifecycle_entry_id ||
+                                          event.previous_expected_arrival_id ? (
+                                            <span className='text-muted-foreground'>
+                                              {' '}
+                                              (previous
+                                              {event.previous_item_id
+                                                ? ' item ' +
+                                                  event.previous_item_id
+                                                : ''}
+                                              {event.previous_lifecycle_entry_id
+                                                ? ' / lifecycle ' +
+                                                  event.previous_lifecycle_entry_id
+                                                : ''}
+                                              {event.previous_expected_arrival_id
+                                                ? ' / arrival ' +
+                                                  event.previous_expected_arrival_id
+                                                : ''}
+                                              )
+                                            </span>
+                                          ) : null}
+                                        </p>
+                                        <p className='text-xs text-muted-foreground'>
+                                          via {event.source}
+                                          {event.created_at
+                                            ? ' · ' + event.created_at
+                                            : ''}
+                                          {event.notes
+                                            ? ' · ' + event.notes
+                                            : ''}
+                                        </p>
+                                        {event.audit_trail &&
+                                        event.audit_trail.length > 0 ? (
+                                          <ul
+                                            className='list-disc space-y-1 ps-5 text-xs text-muted-foreground'
+                                            data-testid='forwarder-package-link-event-audit-trail'
+                                          >
+                                            {event.audit_trail.map(
+                                              (entry, index) => (
+                                                <li key={index}>{entry}</li>
+                                              )
+                                            )}
+                                          </ul>
+                                        ) : null}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className='mt-1 text-muted-foreground'>
+                                    No link decisions recorded yet.
+                                  </p>
+                                )}
+                              </div>
+                              {packageLinkResults[pkg.id] ? (
+                                <div
+                                  className='rounded-md border bg-muted/30 p-3 text-sm'
+                                  data-testid='forwarder-package-link-result'
+                                >
+                                  {packageLinkResults[pkg.id]}
+                                </div>
+                              ) : null}
+                              {packageLinkErrors[pkg.id] ? (
+                                <div
+                                  className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
+                                  data-testid='forwarder-package-link-error'
+                                >
+                                  {packageLinkErrors[pkg.id]}
+                                </div>
+                              ) : null}
                             </div>
-                            {packageLinkResults[pkg.id] ? (
-                              <div
-                                className='rounded-md border bg-muted/30 p-3 text-sm'
-                                data-testid='forwarder-package-link-result'
-                              >
-                                {packageLinkResults[pkg.id]}
-                              </div>
-                            ) : null}
-                            {packageLinkErrors[pkg.id] ? (
-                              <div
-                                className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'
-                                data-testid='forwarder-package-link-error'
-                              >
-                                {packageLinkErrors[pkg.id]}
-                              </div>
-                            ) : null}
                           </div>
-                        </div>
-                      ) : null}
-                    </article>
+                        ) : null}
+                      </article>
                     )
                   })}
                 </div>

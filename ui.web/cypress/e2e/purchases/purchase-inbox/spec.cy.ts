@@ -195,6 +195,9 @@ describe('purchases/purchase-inbox', () => {
       path: '/inbox',
     })
     cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
+    cy.get('[data-testid="forwarder-package-inbox"]')
+      .should('contain', 'Purchase Source Matches')
+      .and('contain', 'source-backed purchase candidates')
     cy.get('[data-testid="forwarder-package-import"]').click()
     cy.wait('@importForwarderPackage')
       .its('request.body')
@@ -748,7 +751,7 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
     cy.get('[data-testid="forwarder-package-review-summary"]')
-      .should('contain', 'Packages')
+      .should('contain', 'Source records')
       .and('contain', '1')
       .and('contain', 'Linked')
       .and('contain', '0')
@@ -761,7 +764,7 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="forwarder-package-review-filter-linked"]').click()
     cy.get('[data-testid="forwarder-package-filter-empty"]').should(
       'contain',
-      'No packages match this review state'
+      'No source records match this review state'
     )
     cy.get('[data-testid="forwarder-package-review-filter-result"]').should(
       'contain',
@@ -1063,7 +1066,8 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Found 1 package match suggestion')
       .and('contain', 'high confidence')
     cy.get('[data-testid="forwarder-package-review-summary"]')
-      .should('contain', 'Suggestions')
+      .should('contain', 'Source records')
+      .and('contain', 'Suggestions')
       .and('contain', '1')
     cy.get('[data-testid="forwarder-package-suggestion-summary"]')
       .should('contain', 'Candidates')
@@ -1098,6 +1102,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'high confidence')
     cy.get('[data-testid="forwarder-package-match-suggestions"]')
       .should('be.visible')
+      .and('contain', 'Suggested purchase matches')
       .and('contain', 'high match to item item-suggested-001')
       .and('contain', 'Score 94')
       .and('contain', 'arrival arrival-suggested-001')
@@ -1122,6 +1127,11 @@ describe('purchases/purchase-inbox', () => {
       'contain',
       'Prepared suggested match for item item-suggested-001'
     )
+    cy.get('[data-testid="forwarder-package-link-panel"]')
+      .should('contain', 'Match this source evidence')
+      .and('contain', 'Confirm link')
+      .and('contain', 'Override link')
+      .and('contain', 'No reconciliation link recorded for this source record')
     cy.get('[data-testid="forwarder-package-link-save"]').click()
     cy.wait('@confirmSuggestedForwarderPackageLink')
   })
