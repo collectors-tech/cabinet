@@ -47,17 +47,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  DataTableColumnHeader,
+  DataTablePagination,
+  DataTableToolbar,
+} from '@/components/data-table'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import {
-  DataTableColumnHeader,
-  DataTablePagination,
-  DataTableToolbar,
-} from '@/components/data-table'
 import {
   type WorkspaceCollectionItem,
   type WorkspaceCollectionSummary,
@@ -117,6 +117,18 @@ function collectionMemberFromInventoryItem(
     detail,
     collectionName: null,
   }
+}
+
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return Boolean(
+    target.closest(
+      'input, textarea, select, [contenteditable="true"], [role="textbox"]'
+    )
+  )
 }
 
 function buildCollectionColumns({
@@ -309,9 +321,9 @@ export function Collections() {
   const [createError, setCreateError] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
   const [editValue, setEditValue] = useState('')
-  const [inventoryMembers, setInventoryMembers] = useState<CollectionMemberRow[]>(
-    []
-  )
+  const [inventoryMembers, setInventoryMembers] = useState<
+    CollectionMemberRow[]
+  >([])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -332,9 +344,7 @@ export function Collections() {
           .filter((item): item is CollectionMemberRow => item !== null)
         setInventoryMembers(nextMembers)
       } catch (error) {
-        if (!controller.signal.aborted) {
-          console.warn('Failed to load collection inventory members', error)
-        }
+        void error
       }
     }
 
@@ -369,9 +379,8 @@ export function Collections() {
         itemCount:
           summary.name === 'All Items'
             ? memberRows.length
-            : memberRows.filter(
-                (item) => item.collectionName === summary.name
-              ).length,
+            : memberRows.filter((item) => item.collectionName === summary.name)
+                .length,
       })),
     [collectionSummaries, memberRows]
   )
@@ -435,7 +444,6 @@ export function Collections() {
   )
   const memberColumns = useMemo(() => buildCollectionMemberColumns(), [])
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -466,7 +474,6 @@ export function Collections() {
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const membersTable = useReactTable({
     data: selectedCollectionItems,
     columns: memberColumns,
@@ -507,14 +514,64 @@ export function Collections() {
   const canNavigateNext =
     selectedVisibleIndex >= 0 && selectedVisibleIndex < visibleRows.length - 1
 
-  function setCreateDialogOpen(open: boolean) {
+  const setCreateDialogOpen = useCallback((open: boolean) => {
     setCreateOpen(open)
     if (!open) {
       setCreateValue('')
       setCreateError('')
       setCreateSubmitting(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    function handleCommandCreateCollection() {
+      setCreateDialogOpen(true)
+    }
+
+    window.addEventListener(
+      'cabinet:create-collection',
+      handleCommandCreateCollection
+    )
+
+    const searchParams = new URLSearchParams(window.location.search)
+    if (searchParams.get('create') === 'collection') {
+      setCreateDialogOpen(true)
+      searchParams.delete('create')
+      const nextSearch = searchParams.toString()
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`
+      )
+    }
+
+    return () =>
+      window.removeEventListener(
+        'cabinet:create-collection',
+        handleCommandCreateCollection
+      )
+  }, [setCreateDialogOpen])
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (
+        event.key.toLowerCase() !== 'n' ||
+        !event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey ||
+        isEditableShortcutTarget(event.target)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      setCreateDialogOpen(true)
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [setCreateDialogOpen])
 
   function navigateEditPanel(offset: number) {
     if (selectedVisibleIndex < 0) {
@@ -645,7 +702,9 @@ export function Collections() {
                   className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
                   data-testid='collections-management-summary'
                 >
-                  <span>Showing {filteredCount} of {rows.length} collections.</span>
+                  <span>
+                    Showing {filteredCount} of {rows.length} collections.
+                  </span>
                   <span data-testid='collections-active-context'>
                     {selectedCollectionName}
                   </span>
@@ -729,7 +788,10 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
-              <div className='mt-auto' data-testid='collections-table-pagination'>
+              <div
+                className='mt-auto'
+                data-testid='collections-table-pagination'
+              >
                 <DataTablePagination table={table} />
               </div>
             </CardContent>
@@ -823,7 +885,10 @@ export function Collections() {
                   </TableBody>
                 </Table>
               </div>
-              <div className='mt-auto' data-testid='collections-members-table-pagination'>
+              <div
+                className='mt-auto'
+                data-testid='collections-members-table-pagination'
+              >
                 <DataTablePagination table={membersTable} />
               </div>
             </CardContent>

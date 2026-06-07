@@ -117,6 +117,22 @@ The Create collection dialog SHALL treat Enter in its single-line collection nam
 - **AND** deterministic validation feedback MUST be shown without creating a collection
 - **AND** the pending submit state MUST prevent duplicate collection creation while a submit is in progress
 
+### Requirement UI-SCREEN-COLLECTIONS-023: Collections SHALL support fast create shortcuts and command entry
+The Collections screen SHALL expose the Create collection workflow through a page-scoped `Ctrl+N` shortcut and through the global command palette so users can create collection rows without hunting for the header action.
+
+#### Scenario: Ctrl+N opens Create collection
+- **GIVEN** the user is on `/collections`
+- **AND** focus is not inside a text input, textarea, select, contenteditable, or textbox control
+- **WHEN** the user presses `Ctrl+N`
+- **THEN** the Create collection dialog MUST open through the same create path as the primary header action
+- **AND** submitting a valid collection name MUST persist the new collection and active context
+
+#### Scenario: Command palette opens Create collection
+- **GIVEN** the command palette is open
+- **WHEN** the user selects the `Create collection` command entry with the `Ctrl+N` shortcut label
+- **THEN** Cabinet MUST navigate to `/collections` and open the Create collection dialog
+- **AND** submitting a valid collection name MUST persist the new collection and active context
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -140,3 +156,4 @@ The Create collection dialog SHALL treat Enter in its single-line collection nam
 | UC-COL-09 | Route iconography | Tag icon remains visible for collections route | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity` |
 | UC-COL-10 | View row in Inventory | Row View selects collection and navigates to Inventory | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions` |
 | UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
+| UC-COL-23 | Shortcut and command create | `Ctrl+N` and command palette entry open the same create dialog and persisted create flow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry` |
