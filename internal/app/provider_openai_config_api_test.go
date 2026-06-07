@@ -143,6 +143,83 @@ func TestEbayRegistryExposesSellerOperationCapabilityStatuses(t *testing.T) {
 	}
 }
 
+func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"TelegramRegistryProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	telegram := findRegistryProvider(payload.Providers, "telegram")
+	if telegram == nil {
+		t.Fatalf("expected telegram provider in registry payload: %+v", payload.Providers)
+	}
+	if got := fmt.Sprintf("%v", telegram["integration_mode"]); got != "assistant_capture_channel" {
+		t.Fatalf("expected assistant capture channel mode, got %q", got)
+	}
+	if got := fmt.Sprintf("%v", telegram["state"]); got != "needs_config" {
+		t.Fatalf("expected Telegram setup-needed state before sender/chat authorization, got %q", got)
+	}
+	capabilities, ok := telegram["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected capabilities map, got %#v", telegram["capabilities"])
+	}
+	if capabilities["assistant"] != true || capabilities["media_capture"] != true {
+		t.Fatalf("expected Telegram assistant and media capture capabilities, got %+v", capabilities)
+	}
+	authMethods, ok := telegram["auth_methods"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth_methods map, got %#v", telegram["auth_methods"])
+	}
+	senderChat, ok := authMethods["sender_chat"].(map[string]any)
+	if !ok || senderChat["connected"].(bool) {
+		t.Fatalf("expected sender/chat method to start disconnected, got %#v", authMethods["sender_chat"])
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"telegram.catalog_capture.sender_id":"12345","telegram.catalog_capture.chat_id":"-5235769556"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	registry = doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry after settings status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	payload = struct {
+		Providers []map[string]any `json:"providers"`
+	}{}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload after settings: %v", err)
+	}
+	telegram = findRegistryProvider(payload.Providers, "telegram")
+	if got := fmt.Sprintf("%v", telegram["state"]); got != "ready" {
+		t.Fatalf("expected Telegram ready state after sender/chat authorization, got %q", got)
+	}
+	authMethods = telegram["auth_methods"].(map[string]any)
+	senderChat = authMethods["sender_chat"].(map[string]any)
+	if connected, _ := senderChat["connected"].(bool); !connected {
+		t.Fatalf("expected sender/chat method connected after settings, got %+v", senderChat)
+	}
+}
+
 func findRegistryProvider(providers []map[string]any, id string) map[string]any {
 	for _, provider := range providers {
 		if fmt.Sprintf("%v", provider["provider_id"]) == id {

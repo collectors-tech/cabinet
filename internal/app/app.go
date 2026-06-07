@@ -7653,6 +7653,35 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
 		},
 		{
+			"provider_id":         "telegram",
+			"display_name":        "Telegram",
+			"base_domain":         "telegram.org",
+			"api_family":          "messaging_channel",
+			"api_support_profile": "bot_webhook_sender_chat_v1",
+			"active_mode":         map[bool]string{true: "authorized_sender_chat", false: "setup_needed"}[telegramCatalogCaptureConfigured(settings)],
+			"integration_mode":    "assistant_capture_channel",
+			"api_available":       true,
+			"auth_requirement":    "sender_chat_authorization",
+			"auth_mode":           "sender_chat",
+			"auth_methods": map[string]any{
+				"sender_chat": map[string]any{
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[telegramCatalogCaptureConfigured(settings)],
+					"connected":          telegramCatalogCaptureConfigured(settings),
+					"credential_present": telegramCatalogCaptureConfigured(settings),
+					"setup_message":      "Store the Telegram sender id and chat id on the active profile before Cabinet accepts capture messages.",
+				},
+			},
+			"capabilities": map[string]bool{
+				"search":        false,
+				"health":        true,
+				"assistant":     true,
+				"media_capture": true,
+				"text_capture":  true,
+			},
+			"state":              map[bool]string{true: "ready", false: "needs_config"}[telegramCatalogCaptureConfigured(settings)],
+			"setup_instructions": "Configure Telegram sender/chat authorization in Profile settings, then route bot messages through the governed preview-before-apply capture channel.",
+		},
+		{
 			"provider_id":         "ebay",
 			"display_name":        "eBay",
 			"base_domain":         "ebay.com",
@@ -7846,6 +7875,11 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	}
 
 	return base
+}
+
+func telegramCatalogCaptureConfigured(settings map[string]string) bool {
+	return strings.TrimSpace(settings["telegram.catalog_capture.sender_id"]) != "" &&
+		strings.TrimSpace(settings["telegram.catalog_capture.chat_id"]) != ""
 }
 
 func defaultAUWebshopDomains() []string {

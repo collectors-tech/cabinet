@@ -75,6 +75,8 @@ type ProviderRecord = {
     assistant?: boolean
     image_help?: boolean
     content_generation?: boolean
+    media_capture?: boolean
+    text_capture?: boolean
   }
   active_auth_method?: 'api_key' | 'browser_auth' | string
   auth_methods?: {
@@ -84,6 +86,12 @@ type ProviderRecord = {
       credential_present?: boolean
     }
     browser_auth?: {
+      state?: string
+      connected?: boolean
+      credential_present?: boolean
+      setup_message?: string
+    }
+    sender_chat?: {
       state?: string
       connected?: boolean
       credential_present?: boolean
@@ -438,6 +446,9 @@ function isConnected(
       provider.active_auth_method === 'api_key' ||
       provider.active_auth_method === 'browser_auth'
     )
+  }
+  if (provider.auth_methods?.sender_chat?.connected) {
+    return true
   }
   if (provider.auth_mode === 'none') {
     return true
@@ -1144,7 +1155,11 @@ export function Apps({
   }
 
   const disconnectOpenAIApiKey = async () => {
-    if (!activeProfileId || !editingProvider || editingProvider.provider_id !== 'openai') {
+    if (
+      !activeProfileId ||
+      !editingProvider ||
+      editingProvider.provider_id !== 'openai'
+    ) {
       return
     }
     setSaving(true)
@@ -1820,6 +1835,16 @@ export function Apps({
                       Image help
                     </span>
                   ) : null}
+                  {provider.capabilities.media_capture ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Media capture
+                    </span>
+                  ) : null}
+                  {provider.capabilities.text_capture ? (
+                    <span className='rounded bg-muted px-2 py-0.5'>
+                      Text capture
+                    </span>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -1870,6 +1895,52 @@ export function Apps({
                 {editingProvider.setup_instructions ??
                   'Enter provider details, validate health, and save configuration.'}
               </div>
+
+              {editingProvider.provider_id === 'telegram' ? (
+                <section
+                  className='rounded-md border p-3 text-xs'
+                  data-testid='telegram-capture-status-panel'
+                >
+                  <div className='flex flex-wrap items-start justify-between gap-3'>
+                    <div>
+                      <p className='font-medium'>Telegram capture channel</p>
+                      <p className='text-muted-foreground'>
+                        Sender/chat authorization gates assistant capture intake
+                        before preview and confirmation.
+                      </p>
+                    </div>
+                    <span
+                      className='rounded bg-muted px-2 py-1 text-muted-foreground'
+                      data-testid='telegram-capture-next-action'
+                    >
+                      {editingProvider.auth_methods?.sender_chat?.connected
+                        ? 'Profile settings: sender and chat authorized'
+                        : 'Profile settings: sender and chat required'}
+                    </span>
+                  </div>
+                  <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                    <p data-testid='telegram-capture-auth-mode'>
+                      Auth method: sender/chat authorization
+                    </p>
+                    <p data-testid='telegram-capture-sender-chat-state'>
+                      Sender/chat state:{' '}
+                      {editingProvider.auth_methods?.sender_chat?.state ??
+                        (editingProvider.auth_methods?.sender_chat?.connected
+                          ? 'connected'
+                          : 'setup_needed')}
+                    </p>
+                    <p data-testid='telegram-capture-api-family'>
+                      API family:{' '}
+                      {editingProvider.api_family ?? 'messaging_channel'}
+                    </p>
+                    <p data-testid='telegram-capture-support-profile'>
+                      Support profile:{' '}
+                      {editingProvider.api_support_profile ??
+                        'bot_webhook_sender_chat_v1'}
+                    </p>
+                  </div>
+                </section>
+              ) : null}
 
               {editingProvider.provider_id === 'openai' ? (
                 <div className='space-y-4' data-testid='openai-config-dialog'>
@@ -2808,18 +2879,15 @@ export function Apps({
                               <p className='mt-1 text-muted-foreground'>
                                 Direct:{' '}
                                 {formatCents(
-                                  landedCostResult.allocation
-                                    .total_direct_cents
+                                  landedCostResult.allocation.total_direct_cents
                                 )}{' '}
                                 / Shared:{' '}
                                 {formatCents(
-                                  landedCostResult.allocation
-                                    .total_shared_cents
+                                  landedCostResult.allocation.total_shared_cents
                                 )}{' '}
                                 / Landed:{' '}
                                 {formatCents(
-                                  landedCostResult.allocation
-                                    .total_landed_cents
+                                  landedCostResult.allocation.total_landed_cents
                                 )}
                               </p>
                               <div className='mt-3 grid gap-2 sm:grid-cols-2'>
@@ -2835,9 +2903,7 @@ export function Apps({
                                       </p>
                                       <p className='mt-1 text-muted-foreground'>
                                         Allocated:{' '}
-                                        {formatCents(
-                                          item.allocated_cost_cents
-                                        )}{' '}
+                                        {formatCents(item.allocated_cost_cents)}{' '}
                                         / Direct:{' '}
                                         {formatCents(item.direct_cost_cents)}
                                       </p>
@@ -2865,9 +2931,8 @@ export function Apps({
                                   landedCostResult.consolidation.item_ids ?? []
                                 ).join(', ')}
                               </p>
-                              {(
-                                landedCostResult.consolidation.warnings ?? []
-                              ).length > 0 ? (
+                              {(landedCostResult.consolidation.warnings ?? [])
+                                .length > 0 ? (
                                 <p className='mt-1 text-muted-foreground'>
                                   Warnings:{' '}
                                   {landedCostResult.consolidation.warnings?.join(
