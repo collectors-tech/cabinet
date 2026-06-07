@@ -5,6 +5,7 @@ param(
   [switch]$NoServer,
   [switch]$ReuseServer,
   [switch]$RequireE2EHooks,
+  [switch]$ApiContractSmoke,
   [string]$RuntimeExecutablePath = "",
   [switch]$AllowTempRuntimePath,
   [switch]$SkipDependencyPrep,
@@ -99,6 +100,28 @@ function Get-SourceCommit([string]$repoRoot) {
     return ""
   }
   return ""
+}
+
+function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDir, [bool]$requireE2EHooks) {
+  $args = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-File", (Join-Path $repoRoot "scripts\run-api-contract-smoke.ps1"),
+    "-BaseUrl", $url,
+    "-LogRoot", $logDir,
+    "-RunId", "cypress-preflight-$runStamp"
+  )
+  if ($requireE2EHooks) {
+    $args += "-RequireE2EHooks"
+  }
+
+  Write-Step "Running API contract smoke preflight."
+  & pwsh @args | ForEach-Object {
+    Write-Host $_
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "API contract smoke preflight failed with exit code $LASTEXITCODE."
+  }
 }
 
 function Stop-PortListener([string]$url) {
@@ -433,6 +456,10 @@ try {
       Write-Step "Server is healthy."
       Assert-AppPreflight $BaseUrl
     }
+  }
+
+  if ($ApiContractSmoke) {
+    Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent
   }
 
   Write-Step "Running Cypress spec: $specPath"
