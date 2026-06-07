@@ -100,6 +100,23 @@ The Collections management summary SHALL NOT expose a standalone Browse action. 
 - **AND** the Inventory screen MUST show that collection as the active context
 - **AND** existing row edit and delete actions MUST remain available
 
+### Requirement UI-SCREEN-COLLECTIONS-022: Create collection dialog SHALL submit from Enter
+The Create collection dialog SHALL treat Enter in its single-line collection name input as the same create action as the primary save button while preserving the same validation and persistence contract.
+
+#### Scenario: Enter submits a valid collection
+- **GIVEN** the Create collection dialog is open
+- **WHEN** the user types a valid collection name and presses Enter in the name input
+- **THEN** the dialog MUST create the collection through the existing save path
+- **AND** the new collection MUST become the active management context
+- **AND** the saved profile settings MUST persist the collection and active context
+
+#### Scenario: Enter validates an invalid collection name
+- **GIVEN** the Create collection dialog is open
+- **WHEN** the user presses Enter with an empty or duplicate collection name
+- **THEN** the dialog MUST stay open
+- **AND** deterministic validation feedback MUST be shown without creating a collection
+- **AND** the pending submit state MUST prevent duplicate collection creation while a submit is in progress
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -122,3 +139,4 @@ The Collections management summary SHALL NOT expose a standalone Browse action. 
 | UC-COL-08 | Move item | Item leaves source and appears in destination after refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-008 moves an assigned item between collections and persists after refresh` |
 | UC-COL-09 | Route iconography | Tag icon remains visible for collections route | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity` |
 | UC-COL-10 | View row in Inventory | Row View selects collection and navigates to Inventory | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions` |
+| UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
