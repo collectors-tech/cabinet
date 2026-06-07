@@ -250,6 +250,15 @@ Cabinet MUST expose profile-scoped controls for the Telegram sender/chat authori
 - **THEN** Cabinet MUST persist `telegram.catalog_capture.sender_id` and `telegram.catalog_capture.chat_id` through the profile settings API
 - **AND** reloading the profile settings screen MUST show the saved sender/chat authorization values
 
+### Requirement TELEGRAM-CATALOG-CAPTURE-025: Integrations SHALL expose Telegram capture channel setup state
+Cabinet MUST list Telegram in the Integrations registry and UI as an assistant capture channel whose setup state is derived from profile-scoped sender/chat authorization settings.
+
+#### Scenario: Show Telegram channel state in Integrations
+- **GIVEN** the active profile has Telegram catalog capture sender/chat authorization settings
+- **WHEN** the user opens the Integrations page and reviews the Telegram provider
+- **THEN** the provider registry MUST expose Telegram with `assistant_capture_channel` mode, sender/chat auth metadata, and assistant/media/text capture capabilities
+- **AND** the Integrations UI MUST show Telegram as connected, display the messaging API family and capture capabilities, and show sender/chat authorization status in the provider detail panel
+
 ### Requirement TELEGRAM-CATALOG-CAPTURE-017: Lookup-backed Telegram drafts SHALL preserve lookup evidence
 When Telegram catalog intake receives a barcode/product lookup result, Cabinet MUST preserve lookup source evidence with the preview, assistant message context, and Inbox audit trail so reviewers can distinguish resolved lookup-backed drafts from the manual barcode fallback.
 

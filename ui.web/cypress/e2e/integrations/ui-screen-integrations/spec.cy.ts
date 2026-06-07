@@ -197,6 +197,87 @@ describe('ui-screen-integrations', () => {
     )
   })
 
+  it('TELEGRAM-CATALOG-CAPTURE-025: exposes Telegram assistant capture channel status from profile authorization settings', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'telegram',
+            display_name: 'Telegram',
+            base_domain: 'telegram.org',
+            api_family: 'messaging_channel',
+            api_support_profile: 'bot_webhook_sender_chat_v1',
+            active_mode: 'authorized_sender_chat',
+            integration_mode: 'assistant_capture_channel',
+            auth_mode: 'sender_chat',
+            state: 'ready',
+            has_token: false,
+            setup_instructions:
+              'Configure Telegram sender/chat authorization in Profile settings, then route bot messages through the governed preview-before-apply capture channel.',
+            auth_methods: {
+              sender_chat: {
+                state: 'connected',
+                connected: true,
+                credential_present: true,
+                setup_message:
+                  'Store the Telegram sender id and chat id on the active profile before Cabinet accepts capture messages.',
+              },
+            },
+            capabilities: {
+              search: false,
+              stock_observation: false,
+              pricing: false,
+              health: true,
+              assistant: true,
+              media_capture: true,
+              text_capture: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          'telegram.catalog_capture.sender_id': '12345',
+          'telegram.catalog_capture.chat_id': '-5235769556',
+        },
+      },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="provider-card-telegram"]')
+      .should('be.visible')
+      .and('contain', 'Telegram')
+      .and('contain', 'API Family: messaging_channel')
+      .and('contain', 'Assistant')
+      .and('contain', 'Media capture')
+
+    cy.get('[data-testid="provider-open-telegram"]').should('contain', 'Edit')
+
+    cy.get('[data-testid="provider-open-telegram"]').click()
+    cy.contains('Manage provider credentials, validation, and setup controls.').should(
+      'be.visible'
+    )
+    cy.contains('Mode: assistant_capture_channel').should('be.visible')
+    cy.contains('Auth method: sender/chat authorization').should('be.visible')
+    cy.contains('Sender/chat state: connected').should('be.visible')
+    cy.contains('Profile settings: sender and chat authorized').should('be.visible')
+    cy.contains('preview-before-apply capture channel').should('be.visible')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
