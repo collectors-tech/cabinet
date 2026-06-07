@@ -195,6 +195,9 @@ describe('purchases/purchase-inbox', () => {
       path: '/inbox',
     })
     cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
+    cy.get('[data-testid="forwarder-package-inbox"]')
+      .should('contain', 'Purchase Source Matches')
+      .and('contain', 'source-backed purchase candidates')
     cy.get('[data-testid="forwarder-package-import"]').click()
     cy.wait('@importForwarderPackage')
       .its('request.body')

@@ -1102,11 +1102,11 @@ export function Purchases() {
             <div>
               <h2 className='flex items-center gap-2 text-xl font-semibold tracking-tight'>
                 <Truck className='h-5 w-5' />
-                Forwarder Packages
+                Purchase Source Matches
               </h2>
               <p className='text-sm text-muted-foreground'>
-                Import Stackry or freight-forwarder package records before
-                matching them to purchases.
+                Import Stackry or freight-forwarder evidence as source-backed
+                purchase candidates before confirming matches.
               </p>
             </div>
             <Button
@@ -1546,9 +1546,12 @@ export function Purchases() {
                   className='rounded-md border border-dashed p-6'
                   data-testid='forwarder-package-empty'
                 >
-                  <p className='font-medium'>No forwarder packages listed.</p>
+                  <p className='font-medium'>
+                    No purchase source records listed.
+                  </p>
                   <p className='mt-1 text-sm text-muted-foreground'>
-                    Import a package or refresh the current profile inbox.
+                    Import forwarder evidence or refresh the current profile
+                    inbox.
                   </p>
                 </div>
               ) : null}
