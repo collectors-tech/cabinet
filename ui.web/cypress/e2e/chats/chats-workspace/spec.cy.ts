@@ -52,4 +52,33 @@ describe('chats/chats-workspace', () => {
     cy.get('[data-testid="shell-chat-toggle"]').should('be.visible')
     cy.location('pathname').should('match', /^\/chats\/?$/)
   })
+
+  it('CHATS-WORKSPACE-004 renders original two-pane chats layout parity', () => {
+    openChats()
+
+    cy.get('[data-testid="chat-layout"]').should('be.visible')
+    cy.get('[data-testid="chat-conversation-rail"]').should('be.visible')
+    cy.get('[data-testid="chat-conversation-search"]')
+      .should('be.visible')
+      .and('have.attr', 'placeholder', 'Search messages')
+    cy.get('[data-testid="chat-empty-workspace-state"]')
+      .should('be.visible')
+      .and('contain.text', 'Select a conversation')
+      .and('contain.text', 'Choose an existing thread or create a new one to continue a durable Cabinet conversation.')
+    cy.get('[data-testid="chat-empty-workspace-action"]')
+      .should('be.visible')
+      .and('contain.text', 'Start a conversation')
+
+    createThread('E2E Visual Parity Thread')
+
+    cy.contains('[data-testid="chat-thread-item"]', 'E2E Visual Parity Thread')
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="chat-thread-avatar"]').should('be.visible')
+        cy.get('[data-testid="chat-thread-preview"]').should(
+          'contain.text',
+          'No messages yet'
+        )
+      })
+  })
 })
