@@ -371,6 +371,45 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-active-context"]').should('contain.text', 'Collections Alpha')
   })
 
+  it('UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter', () => {
+    signInToCollections()
+    cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
+      'saveCollectionSettings'
+    )
+
+    cy.get('[data-testid="collections-new-action"]').click()
+    cy.get('[data-testid="collections-create-input"]').type('{enter}')
+    cy.get('[data-testid="collections-create-dialog"]').should('be.visible')
+    cy.get('[data-testid="collections-create-error"]')
+      .should('be.visible')
+      .and('contain.text', 'Enter a unique collection name.')
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+
+    cy.get('[data-testid="collections-create-input"]').type(
+      'Keyboard Shelf{enter}'
+    )
+    cy.wait('@saveCollectionSettings').then(({ request }) => {
+      const settings = (request.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(settings[collectionsSettingsKey] ?? '{}') as {
+        collections?: string[]
+        activeCollection?: string
+      }
+      expect(persisted.collections).to.include('Keyboard Shelf')
+      expect(persisted.activeCollection).to.equal('Keyboard Shelf')
+    })
+    cy.contains('Keyboard Shelf created and set as the active collection.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="collections-create-dialog"]').should('not.exist')
+    cy.get('[data-testid="collections-row-keyboard-shelf"]')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Keyboard Shelf'
+    )
+  })
+
   it('UI-SCREEN-COLLECTIONS-004 renames a collection from the row workflow and persists after refresh', () => {
     signInToCollections()
 
