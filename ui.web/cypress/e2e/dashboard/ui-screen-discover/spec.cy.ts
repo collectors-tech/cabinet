@@ -147,4 +147,90 @@ describe('dashboard/ui-screen-discover', () => {
     cy.location('search').should('include', 'from=discoveries')
     cy.location('search').should('include', 'q=afx')
   })
+
+  it('UI-SCREEN-DISCOVER-005 explains candidate inbox purpose', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('discoverListPurpose')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListPurpose')
+
+    cy.get('[data-testid="discover-candidate-inbox-purpose"]')
+      .should('contain', 'Candidate inbox')
+      .and('contain', 'Review found items')
+      .and('contain', 'Wishlist')
+      .and('contain', 'Inventory')
+      .and('contain', 'Purchase')
+      .and('contain', 'ignored or archived')
+
+    cy.get('[data-testid="discover-list"]')
+      .should('contain', 'No pending found-item candidates')
+      .and('contain', 'separate from Inventory, Wishlist, and Market Watch query history')
+  })
+
+  it('UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-005',
+            title: 'Kyosho Mini-Z Candidate',
+            price: 88.5,
+            currency: 'AUD',
+            url: 'https://example.test/mini-z',
+            source_result_url: 'https://provider.test/result/mini-z',
+            source_result_id: 'result-555',
+            provider: 'Hobbytech Toys',
+            source: 'hobbytechtoys',
+            first_seen: '2026-03-01T00:00:00Z',
+            last_seen: '2026-03-08T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 2,
+            triage_status: 'reviewing',
+            confidence: 0.92,
+            seller_label: 'Provider listing',
+          },
+        ],
+      },
+    }).as('discoverListProvenance')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListProvenance')
+
+    cy.get('[data-testid="discover-candidate-row-cand-005"]')
+      .should('contain', 'Kyosho Mini-Z Candidate')
+      .and('contain', 'A$88.50')
+      .and('contain', 'Stock 2')
+
+    cy.get('[data-testid="discover-provenance-cand-005"]')
+      .should('contain', 'Hobbytech Toys')
+      .and('contain', 'result-555')
+      .and('contain', 'First seen Mar 1, 2026; last seen Mar 8, 2026')
+      .and('contain', 'reviewing - Confidence 92%')
+      .and('contain', 'Provider listing')
+
+    cy.get('[data-testid="discover-source-result-cand-005"]')
+      .should('have.attr', 'href', 'https://provider.test/result/mini-z')
+      .and('contain', 'Review source result')
+    cy.get('[data-testid="discover-action-review-source-cand-005"]').should('be.visible')
+    cy.get('[data-testid="discover-action-wishlist-cand-005"]').should(
+      'contain',
+      'Promote to Wishlist'
+    )
+    cy.get('[data-testid="discover-action-create-cand-005"]').should(
+      'contain',
+      'Inventory Handoff'
+    )
+    cy.get('[data-testid="discover-action-track-cand-005"]').should(
+      'contain',
+      'Purchase Follow-up'
+    )
+    cy.get('[data-testid="discover-action-ignore-cand-005"]').should(
+      'contain',
+      'Ignore / Archive'
+    )
+  })
 })
