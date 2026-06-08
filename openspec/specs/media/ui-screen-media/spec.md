@@ -1,14 +1,14 @@
 ﻿## Purpose
-Define Media workspace behavior for uploaded assets, unlinked filtering, and card-first management workflows.
+Define Media workspace behavior for uploaded assets, unlinked filtering, and shared table-first management workflows.
 
 ## Requirements
-### Requirement UI-SCREEN-MEDIA-001: Media workspace SHALL provide card-first default view for uploaded assets
-Cabinet SHALL provide a dedicated media section with cards as default rendering mode.
+### Requirement UI-SCREEN-MEDIA-001: Media workspace SHALL provide table-first default view for uploaded assets
+Cabinet SHALL provide a dedicated media section with Cabinet's shared table surface as default rendering mode.
 
 #### Scenario: Open media workspace default view
 - **GIVEN** user navigates to `/media` media section
 - **WHEN** workspace loads successfully
-- **THEN** UI MUST render media cards by default and SHALL NOT default to row/table mode
+- **THEN** UI MUST render the shared table management surface by default and keep card mode available as a secondary view
 
 ### Requirement UI-SCREEN-MEDIA-002: Media workspace SHALL provide unlinked-assets filter
 Cabinet SHALL support a first-class view/filter for media not linked to inventory or wishlist targets.
@@ -167,12 +167,12 @@ Cabinet SHALL support high-speed intake on mobile via batch picker and capture-n
 - **THEN** flow MUST return to camera without leaving context and append each accepted photo to same upload queue
 
 ### Requirement UI-SCREEN-MEDIA-006: Media workspace shell SHALL be discoverable from authenticated navigation
-Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary navigation with a page title, card-first asset grid, unlinked filter, operational metadata, and visible action controls before backend ingestion and assignment slices are complete.
+Cabinet SHALL expose a dedicated authenticated `/media` workspace from primary navigation with a page title, shared table asset surface, unlinked filter, operational metadata, and visible action controls before backend ingestion and assignment slices are complete.
 
 #### Scenario: Open Media workspace shell from navigation
 - **GIVEN** user is signed in on an authenticated Cabinet route
 - **WHEN** user opens the primary Media navigation item
-- **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a card-first media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.
+- **THEN** Cabinet MUST navigate to `/media`, set document title `Cabinet - Media`, render a shared table media workspace, show all/unlinked filter controls, show deterministic asset metadata, and expose open/analyze/assign/archive plus upload/download controls without mutating media links.
 
 ### Requirement UI-SCREEN-MEDIA-007: Media workspace API SHALL expose profile-scoped assets and preview-only assignment/download contracts
 Cabinet SHALL expose a deterministic backend contract for the Media workspace that scopes media assets to the active profile, classifies linkage state, supports the unlinked filter, and previews assignment/download actions without mutating linkage records until confirmed implementation slices exist.
@@ -258,19 +258,28 @@ Cabinet SHALL render Media workspace asset cards in a compact grid that substant
 - **THEN** the card grid MUST reflow without horizontal overflow, overlapping content, or clipped metadata/action controls.
 
 ### Requirement UI-SCREEN-MEDIA-013: Media workspace SHALL provide persisted Cards and Rows view modes
-Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated Media workspace, default to Cards, preserve the existing card behavior, and persist the selected view mode using Cabinet's view-state convention.
+Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated Media workspace, default to Rows, preserve the existing card behavior as a secondary view, and persist the selected view mode using Cabinet's view-state convention.
 
 #### Scenario: Switch from Cards to Rows view
 - **GIVEN** the Media workspace has returned profile-scoped media assets
 - **WHEN** the user opens `/media`
-- **THEN** the UI MUST default to Cards mode and render the media card grid.
-- **WHEN** the user switches to Rows mode
-- **THEN** the UI MUST render a row/table listing with media title, analysis status, linkage state, upload timestamp, source, filename, selection, and open/analyze/assign/archive actions.
+- **THEN** the UI MUST default to Rows mode and render the media shared table.
+- **WHEN** the user switches to Cards mode
+- **THEN** the UI MUST render the preserved compact card grid.
 
 #### Scenario: Persist Media view mode
 - **GIVEN** the user has selected Cards or Rows mode on `/media`
 - **WHEN** the workspace reloads
 - **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.
+
+### Requirement UI-SCREEN-MEDIA-015: Media workspace table SHALL use Cabinet shared table affordances
+Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, and row actions.
+
+#### Scenario: Manage media from shared table surface
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user opens `/media`
+- **THEN** the primary content MUST render a `data-table-surface` table with thumbnail/title identity, analysis status, linkage state, upload timestamp, source/context, filename, row selection, and open/analyze/assign/archive actions.
+- **AND** the table toolbar MUST provide search/filtering over media identity, status, linkage, source, and filename fields without switching away from the table.
 
 ### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
 Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
