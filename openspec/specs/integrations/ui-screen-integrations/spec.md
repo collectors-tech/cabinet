@@ -18,6 +18,23 @@ Integrations screen SHALL expose integration-type selector (default `All Integra
 - **WHEN** user toggles `Rows` and `Cards`
 - **THEN** provider presentation MUST switch deterministically and preserve active filter context
 
+### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-page table as the primary provider list
+Integrations screen SHALL render the primary provider list as a scan-friendly full-page table with pagination and stable operational columns.
+
+#### Scenario: Default integrations table renders stable scan columns
+- **GIVEN** integrations route is loaded with provider registry data
+- **WHEN** the primary provider list renders
+- **THEN** the default presentation MUST be a table, not cards
+- **AND** the table MUST include stable columns for provider/name, category/type, connection/config status, action availability, health/last-run state, and row actions
+- **AND** row actions MUST keep the provider configuration/details flow reachable
+
+#### Scenario: Integrations table paginates larger provider lists
+- **GIVEN** integrations route has more providers than the table page size
+- **WHEN** user uses pagination controls
+- **THEN** the visible rows MUST advance between pages
+- **AND** pagination status MUST report the visible range and current page
+- **AND** filter/type/sort changes MUST reset pagination to the first matching page
+
 #### Scenario: Filter and sort integrations
 - **GIVEN** integrations route is loaded with provider cards
 - **WHEN** user applies text filter, type filter, and sort order
@@ -149,3 +166,5 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry` |
 | UC-INT-UI-12 | Provider edit fields are labeled | Dialog config fields have visible labels associated by `htmlFor`/`id` | `internal/app/ui_template_contract_test.go` `TestIntegrationsProviderConfigInputsHaveLabels` |
 | UC-INT-UI-13 | Validate provider health | Validation shows progress, reconciles health/last-run/last-checked, and reports resulting status | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state` |
+| UC-INT-UI-14 | Primary integrations table | Default list renders full-page table columns with provider identity, type, connection, actions, health/last-run, and row actions | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to table and supports filter/sort/view using registry data` |
+| UC-INT-UI-15 | Integrations table pagination | Larger provider lists page through stable table rows and reset to page 1 when filters change | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page integrations table` |

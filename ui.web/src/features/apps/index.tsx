@@ -299,6 +299,8 @@ type AppsProps = {
   description?: string
 }
 
+const integrationTablePageSize = 10
+
 const appText = new Map<AppType, string>([
   ['all', 'All Integrations'],
   ['connected', 'Connected'],
@@ -415,6 +417,19 @@ function sellerOperationState(status: SellerOperationStatus) {
   return 'Blocked'
 }
 
+function capabilityLabels(provider: ProviderRecord) {
+  return [
+    provider.capabilities.search ? 'Search' : null,
+    provider.capabilities.stock_observation ? 'Stock' : null,
+    provider.capabilities.pricing ? 'Pricing' : null,
+    provider.capabilities.health ? 'Health' : null,
+    provider.capabilities.assistant ? 'Assistant' : null,
+    provider.capabilities.image_help ? 'Image help' : null,
+    provider.capabilities.media_capture ? 'Media capture' : null,
+    provider.capabilities.text_capture ? 'Text capture' : null,
+  ].filter((label): label is string => Boolean(label))
+}
+
 function providerSettingsKeys(providerID: string) {
   if (providerID === 'ebay') {
     return {
@@ -509,7 +524,8 @@ export function Apps({
   const [sort, setSort] = useState(initSort)
   const [appType, setAppType] = useState(type)
   const [searchTerm, setSearchTerm] = useState(filter)
-  const viewMode: ViewMode = view ?? 'cards'
+  const viewMode: ViewMode = view ?? 'rows'
+  const [tablePage, setTablePage] = useState(1)
   const [activeProfileId, setActiveProfileId] = useState('')
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [providers, setProviders] = useState<ProviderRecord[]>([])
@@ -683,10 +699,29 @@ export function Apps({
     .filter((provider) =>
       provider.display_name.toLowerCase().includes(searchTerm.toLowerCase())
     )
+  const tablePageCount = Math.max(
+    1,
+    Math.ceil(filteredProviders.length / integrationTablePageSize)
+  )
+  const tableStart = (tablePage - 1) * integrationTablePageSize
+  const paginatedProviders = filteredProviders.slice(
+    tableStart,
+    tableStart + integrationTablePageSize
+  )
+  const tableRangeStart = filteredProviders.length ? tableStart + 1 : 0
+  const tableRangeEnd = Math.min(
+    filteredProviders.length,
+    tableStart + paginatedProviders.length
+  )
+
+  useEffect(() => {
+    setTablePage((page) => Math.min(page, tablePageCount))
+  }, [tablePageCount])
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setSearchTerm(value)
+    setTablePage(1)
     navigate({
       search: (prev) => ({
         ...prev,
@@ -763,6 +798,7 @@ export function Apps({
 
   const handleTypeChange = (value: AppType) => {
     setAppType(value)
+    setTablePage(1)
     navigate({
       search: (prev) => ({
         ...prev,
@@ -773,6 +809,7 @@ export function Apps({
 
   const handleSortChange = (nextSort: 'asc' | 'desc') => {
     setSort(nextSort)
+    setTablePage(1)
     navigate({ search: (prev) => ({ ...prev, sort: nextSort }) })
   }
 
@@ -780,7 +817,7 @@ export function Apps({
     navigate({
       search: (prev) => ({
         ...prev,
-        view: nextView === 'cards' ? undefined : nextView,
+        view: nextView === 'rows' ? undefined : nextView,
       }),
     })
   }
@@ -1713,68 +1750,144 @@ export function Apps({
         ) : null}
 
         {!loading && viewMode === 'rows' ? (
-          <div className='overflow-hidden rounded-md border'>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Health</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className='text-right'>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProviders.length ? (
-                  filteredProviders.map((provider) => (
-                    <TableRow
-                      key={provider.provider_id}
-                      onClick={(event) => handleRowClick(provider, event)}
-                      onDoubleClick={(event) =>
-                        handleRowDoubleClick(provider, event)
-                      }
-                    >
-                      <TableCell>
-                        <div className='flex items-center gap-2'>
-                          <div className='flex size-8 items-center justify-center rounded-md bg-muted p-1.5'>
-                            <Store className='size-4' />
-                          </div>
-                          <span className='font-medium'>
-                            {provider.display_name}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {isConnected(provider, settings)
-                          ? 'Connected'
-                          : 'Not Connected'}
-                      </TableCell>
-                      <TableCell>
-                        {provider.health?.status ?? 'unknown'}
-                      </TableCell>
-                      <TableCell className='text-muted-foreground'>
-                        {provider.integration_mode}
-                      </TableCell>
-                      <TableCell className='text-right'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => openIntegration(provider)}
+          <div className='space-y-3' data-testid='integrations-table-surface'>
+            <div className='overflow-x-auto rounded-md border'>
+              <Table className='min-w-[72rem] table-fixed'>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className='w-[18rem]'>Provider</TableHead>
+                    <TableHead className='w-[14rem]'>Category / Type</TableHead>
+                    <TableHead className='w-[11rem]'>Connection</TableHead>
+                    <TableHead>Actions</TableHead>
+                    <TableHead className='w-[14rem]'>
+                      Health / Last run
+                    </TableHead>
+                    <TableHead className='w-[8rem] text-right'>
+                      Row actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedProviders.length ? (
+                    paginatedProviders.map((provider) => {
+                      const capabilities = capabilityLabels(provider)
+                      return (
+                        <TableRow
+                          key={provider.provider_id}
+                          data-testid={`provider-row-${provider.provider_id}`}
+                          onClick={(event) => handleRowClick(provider, event)}
+                          onDoubleClick={(event) =>
+                            handleRowDoubleClick(provider, event)
+                          }
                         >
-                          {isConnected(provider, settings) ? 'Edit' : 'Connect'}
-                        </Button>
+                          <TableCell className='align-top'>
+                            <div className='flex min-w-0 items-center gap-2'>
+                              <div className='flex size-8 shrink-0 items-center justify-center rounded-md bg-muted p-1.5'>
+                                <Store className='size-4' />
+                              </div>
+                              <div className='min-w-0'>
+                                <p className='truncate font-medium'>
+                                  {provider.display_name}
+                                </p>
+                                <p className='truncate text-xs text-muted-foreground'>
+                                  {provider.base_domain || provider.provider_id}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className='align-top text-sm'>
+                            <p className='truncate'>
+                              {provider.integration_mode}
+                            </p>
+                            <p className='truncate text-xs text-muted-foreground'>
+                              API Family: {provider.api_family ?? 'custom'}
+                            </p>
+                          </TableCell>
+                          <TableCell className='align-top text-sm'>
+                            {isConnected(provider, settings)
+                              ? 'Connected'
+                              : 'Not Connected'}
+                            <p className='text-xs text-muted-foreground'>
+                              Auth: {provider.auth_mode}
+                            </p>
+                          </TableCell>
+                          <TableCell className='align-top text-sm text-muted-foreground'>
+                            {capabilities.length
+                              ? capabilities.join(', ')
+                              : 'None'}
+                          </TableCell>
+                          <TableCell className='align-top text-sm'>
+                            <p>
+                              Health: {provider.health?.status ?? 'unknown'}
+                            </p>
+                            <p className='text-xs text-muted-foreground'>
+                              Last run: {provider.last_run?.status ?? 'never'}
+                            </p>
+                          </TableCell>
+                          <TableCell className='text-right align-top'>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              data-testid={`provider-open-${provider.provider_id}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openIntegration(provider)
+                              }}
+                            >
+                              {isConnected(provider, settings)
+                                ? 'Edit'
+                                : 'Connect'}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className='h-24 text-center'>
+                        No integrations match current filters.
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className='h-24 text-center'>
-                      No integrations match current filters.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <div
+              className='flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between'
+              data-testid='integrations-table-pagination'
+            >
+              <p>
+                Showing {tableRangeStart}-{tableRangeEnd} of{' '}
+                {filteredProviders.length} integrations
+              </p>
+              <div className='flex items-center gap-2'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  disabled={tablePage === 1}
+                  data-testid='integrations-table-prev-page'
+                  onClick={() => setTablePage((page) => Math.max(1, page - 1))}
+                >
+                  Previous
+                </Button>
+                <span data-testid='integrations-table-page-status'>
+                  Page {tablePage} of {tablePageCount}
+                </span>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  disabled={tablePage >= tablePageCount}
+                  data-testid='integrations-table-next-page'
+                  onClick={() =>
+                    setTablePage((page) => Math.min(tablePageCount, page + 1))
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
 

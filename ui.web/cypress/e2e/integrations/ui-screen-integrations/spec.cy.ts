@@ -15,7 +15,7 @@ describe('ui-screen-integrations', () => {
     cy.clearLocalStorage()
   })
 
-  it('UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to cards and supports filter/sort/view using registry data', () => {
+  it('UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to table and supports filter/sort/view using registry data', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
@@ -80,20 +80,103 @@ describe('ui-screen-integrations', () => {
     cy.contains('integrations.title').should('not.exist')
     cy.contains('integrations.description').should('not.exist')
 
-    cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
-    cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
+    cy.get('[data-testid="integrations-table-surface"]').should('be.visible')
+    cy.contains('th', 'Provider').should('be.visible')
+    cy.contains('th', 'Category / Type').should('exist')
+    cy.contains('th', 'Connection').should('exist')
+    cy.contains('th', 'Actions').should('exist')
+    cy.contains('th', 'Health / Last run').should('exist')
+    cy.contains('th', 'Row actions').should('exist')
+    cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
+    cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
       'be.visible'
     )
 
     cy.get('input[placeholder="Filter providers..."]').clear().type('bonza')
+    cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="provider-row-ebay"]').should('not.exist')
+
+    cy.contains('button', 'Cards').click()
+    cy.location('search').should('contain', 'view=cards')
     cy.get('[data-testid="provider-card-au-webshop-bonzaslotcars-com-au"]').should(
       'be.visible'
     )
-    cy.get('[data-testid="provider-card-ebay"]').should('not.exist')
-
     cy.contains('button', 'Rows').click()
-    cy.location('search').should('contain', 'view=rows')
     cy.get('table').should('be.visible')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page integrations table', () => {
+    const providers = Array.from({ length: 12 }, (_, index) => {
+      const number = index + 1
+      return {
+        provider_id: `provider-${String(number).padStart(2, '0')}`,
+        display_name: `Provider ${String(number).padStart(2, '0')}`,
+        base_domain: `provider-${number}.example.test`,
+        integration_mode: number % 2 === 0 ? 'official_api' : 'web_ingestion',
+        auth_mode: number % 2 === 0 ? 'api_key' : 'none',
+        state: 'ready',
+        has_token: number % 2 === 0,
+        setup_instructions: 'Configure provider credentials.',
+        capabilities: {
+          search: true,
+          stock_observation: number % 2 !== 0,
+          pricing: true,
+          health: true,
+        },
+        health: { status: number % 2 === 0 ? 'ok' : 'unknown' },
+        last_run: { status: number % 2 === 0 ? 'success' : 'never' },
+      }
+    })
+
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: { providers },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="integrations-table-pagination"]').should(
+      'contain',
+      'Showing 1-10 of 12 integrations'
+    )
+    cy.get('[data-testid="integrations-table-page-status"]').should(
+      'contain',
+      'Page 1 of 2'
+    )
+    cy.get('[data-testid="provider-row-provider-01"]').should('be.visible')
+    cy.get('[data-testid="provider-row-provider-11"]').should('not.exist')
+
+    cy.get('[data-testid="integrations-table-next-page"]').click()
+    cy.get('[data-testid="integrations-table-pagination"]').should(
+      'contain',
+      'Showing 11-12 of 12 integrations'
+    )
+    cy.get('[data-testid="integrations-table-page-status"]').should(
+      'contain',
+      'Page 2 of 2'
+    )
+    cy.get('[data-testid="provider-row-provider-11"]').should('be.visible')
+    cy.get('[data-testid="provider-row-provider-01"]').should('not.exist')
+
+    cy.get('input[placeholder="Filter providers..."]').clear().type('12')
+    cy.get('[data-testid="integrations-table-page-status"]').should(
+      'contain',
+      'Page 1 of 1'
+    )
+    cy.get('[data-testid="provider-row-provider-12"]').should('be.visible')
   })
 
   it('UI-SCREEN-INTEGRATIONS-010: applies direct route query state on first render', () => {
@@ -258,6 +341,7 @@ describe('ui-screen-integrations', () => {
     cy.wait('@registry')
     cy.wait('@settings')
 
+    cy.contains('button', 'Cards').click()
     cy.get('[data-testid="provider-card-telegram"]')
       .should('be.visible')
       .and('contain', 'Telegram')
@@ -851,8 +935,8 @@ describe('ui-screen-integrations', () => {
       .scrollIntoView()
       .should('be.visible')
     cy.contains('button', 'Cancel').click()
-    cy.contains('[data-testid="provider-card-ebay"]', 'Health: ok').should('be.visible')
-    cy.contains('[data-testid="provider-card-ebay"]', 'Last run: success').should('be.visible')
+    cy.contains('[data-testid="provider-row-ebay"]', 'Health: ok').should('be.visible')
+    cy.contains('[data-testid="provider-row-ebay"]', 'Last run: success').should('be.visible')
     cy.get('[data-testid="provider-open-ebay"]').click()
     cy.get('[data-testid="replace-token"]').click()
     cy.get('[data-testid="provider-token-input"]').type('new-secret-token')
@@ -945,7 +1029,7 @@ describe('ui-screen-integrations', () => {
     cy.wait('@setActiveProfile')
     cy.wait('@registryRecovered')
     cy.wait('@settingsRecovered')
-    cy.get('[data-testid="provider-card-ebay"]').should('be.visible')
+    cy.get('[data-testid="provider-row-ebay"]').should('be.visible')
     cy.get('[data-testid="integrations-bootstrap-error"]').should('not.exist')
   })
 
@@ -1019,6 +1103,7 @@ describe('ui-screen-integrations', () => {
     })
 
     signIn()
+    cy.contains('button', 'Cards').click()
     cy.get('[data-testid="provider-card-au-webshop-voglers-com-au"]').should('be.visible')
     cy.get('[data-testid="provider-api-family-au-webshop-voglers-com-au"]')
       .should('be.visible')
