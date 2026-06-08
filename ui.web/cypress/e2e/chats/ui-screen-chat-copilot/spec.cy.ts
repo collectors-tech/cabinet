@@ -630,9 +630,14 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-apply-result"]').should('contain', 'CP-008-MOBILE')
   })
 
-  it('UI-SCREEN-CHAT-COPILOT-010 keeps top-level /inbox reachable as a communications surface', () => {
+  it('UI-SCREEN-CHAT-COPILOT-009 keeps top-level /inbox reachable as a communications surface', () => {
     openInbox()
-    cy.get('[data-testid="purchase-inbox-load-reviews"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-page"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-header-title"]').should(
+      'contain',
+      'Notification Inbox'
+    )
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').should('not.exist')
     cy.contains('404').should('not.exist')
     cy.contains('Oops! Page Not Found!').should('not.exist')
   })
