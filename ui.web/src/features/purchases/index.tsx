@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   Inbox,
+  CheckCircle2,
   FileUp,
   Loader2,
   PackagePlus,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Star,
   Truck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -76,6 +78,22 @@ type PurchaseInboxReview = {
     currency?: string
   }
   items: PurchaseInboxItem[]
+}
+
+type PurchaseTableStatusFilter =
+  | 'all'
+  | 'ready_to_link_or_convert'
+  | 'needs_review'
+
+type PurchaseTableRow = {
+  key: string
+  title: string
+  source: string
+  price: string
+  status: string
+  tracking: string
+  actionCount: number
+  searchText: string
 }
 
 type ReviewResponse = {
@@ -296,6 +314,17 @@ function packageDetailValue(value?: string | number) {
   return value
 }
 
+function purchaseRowKey(review: PurchaseInboxReview, item: PurchaseInboxItem) {
+  return (
+    item.item.transaction_id ??
+    item.item.listing_id ??
+    review.order.order_id ??
+    item.item.listing_title ??
+    item.item.purchased_identity ??
+    'purchase-row'
+  )
+}
+
 export function Purchases() {
   const [reviews, setReviews] = useState<PurchaseInboxReview[]>([])
   const [loading, setLoading] = useState(false)
@@ -334,6 +363,18 @@ export function Purchases() {
     string | null
   >(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [purchaseSearch, setPurchaseSearch] = useState('')
+  const [purchaseStatusFilter, setPurchaseStatusFilter] =
+    useState<PurchaseTableStatusFilter>('all')
+  const [favoritePurchaseKeys, setFavoritePurchaseKeys] = useState<
+    Record<string, boolean>
+  >({})
+  const [arrivedPurchaseKeys, setArrivedPurchaseKeys] = useState<
+    Record<string, boolean>
+  >({})
+  const [purchaseRatings, setPurchaseRatings] = useState<Record<string, number>>(
+    {}
+  )
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [
@@ -411,6 +452,64 @@ export function Purchases() {
       }),
     [packageLinks, packageReviewFilter, packageSuggestions, packages]
   )
+
+  const purchaseRows = useMemo<PurchaseTableRow[]>(
+    () =>
+      reviews.flatMap((review) =>
+        review.items.map((item) => {
+          const source = item.item.seller_username
+            ? 'eBay / ' + item.item.seller_username
+            : 'eBay'
+          const title =
+            item.item.purchased_identity ??
+            item.item.listing_title ??
+            'Untitled purchase item'
+          const price = item.item.item_price ?? review.order.order_total ?? '-'
+          const status = item.status
+          const tracking = 'Pending'
+          const key = purchaseRowKey(review, item)
+
+          return {
+            key,
+            title,
+            source,
+            price,
+            status,
+            tracking,
+            actionCount: (item.suggested_actions ?? []).length,
+            searchText: [
+              title,
+              source,
+              price,
+              labelForStatus(status),
+              tracking,
+              review.order.order_id,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase(),
+          }
+        })
+      ),
+    [reviews]
+  )
+
+  const filteredPurchaseRows = useMemo(() => {
+    const query = purchaseSearch.trim().toLowerCase()
+
+    return purchaseRows.filter((row) => {
+      if (
+        purchaseStatusFilter !== 'all' &&
+        row.status !== purchaseStatusFilter
+      ) {
+        return false
+      }
+      if (query && !row.searchText.includes(query)) {
+        return false
+      }
+      return true
+    })
+  }, [purchaseRows, purchaseSearch, purchaseStatusFilter])
 
   const loadReviews = useCallback(async () => {
     setLoading(true)
@@ -968,6 +1067,43 @@ export function Purchases() {
           className='mt-4 overflow-x-auto rounded-md border'
           data-testid='purchases-table-shell'
         >
+          <div
+            className='flex flex-wrap items-center gap-2 border-b p-3'
+            data-testid='purchases-table-filters'
+          >
+            <Input
+              className='h-9 w-full sm:w-72'
+              data-testid='purchases-table-search'
+              placeholder='Search purchases, sources, statuses'
+              value={purchaseSearch}
+              onChange={(event) => setPurchaseSearch(event.target.value)}
+            />
+            {(
+              [
+                ['all', 'All'],
+                ['ready_to_link_or_convert', 'Ready'],
+                ['needs_review', 'Needs review'],
+              ] satisfies Array<[PurchaseTableStatusFilter, string]>
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type='button'
+                size='sm'
+                variant={purchaseStatusFilter === value ? 'default' : 'outline'}
+                data-testid={'purchases-status-filter-' + value}
+                onClick={() => setPurchaseStatusFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+            <span
+              className='text-sm text-muted-foreground'
+              data-testid='purchases-filter-result'
+            >
+              Showing {filteredPurchaseRows.length} of {purchaseRows.length}{' '}
+              purchases
+            </span>
+          </div>
           <Table className='min-w-[64rem] table-fixed'>
             <TableHeader>
               <TableRow>
@@ -980,42 +1116,90 @@ export function Purchases() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {reviews.flatMap((review) =>
-                review.items.map((item) => (
+              {filteredPurchaseRows.map((row) => (
                   <TableRow
-                    key={
-                      item.item.transaction_id ??
-                      item.item.listing_id ??
-                      item.item.listing_title
-                    }
+                    key={row.key}
                     data-testid='purchases-table-row'
                   >
                     <TableCell className='truncate font-medium'>
-                      {item.item.purchased_identity ??
-                        item.item.listing_title ??
-                        'Untitled purchase item'}
+                      {row.title}
                     </TableCell>
-                    <TableCell className='truncate'>
-                      eBay
-                      {item.item.seller_username
-                        ? ` / ${item.item.seller_username}`
-                        : ''}
+                    <TableCell className='truncate'>{row.source}</TableCell>
+                    <TableCell>{row.price}</TableCell>
+                    <TableCell>{labelForStatus(row.status)}</TableCell>
+                    <TableCell className='text-muted-foreground'>
+                      {arrivedPurchaseKeys[row.key] ? 'Arrived' : row.tracking}
                     </TableCell>
                     <TableCell>
-                      {item.item.item_price ?? review.order.order_total ?? '-'}
-                    </TableCell>
-                    <TableCell>{labelForStatus(item.status)}</TableCell>
-                    <TableCell className='text-muted-foreground'>
-                      Pending
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      {(item.suggested_actions ?? []).length} action
-                      {(item.suggested_actions ?? []).length === 1 ? '' : 's'}
+                      <div className='flex flex-wrap justify-end gap-1'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant={
+                            favoritePurchaseKeys[row.key]
+                              ? 'default'
+                              : 'outline'
+                          }
+                          aria-pressed={favoritePurchaseKeys[row.key] ?? false}
+                          data-testid='purchases-row-favorite'
+                          onClick={() =>
+                            setFavoritePurchaseKeys((current) => ({
+                              ...current,
+                              [row.key]: !current[row.key],
+                            }))
+                          }
+                        >
+                          <Star className='mr-1 h-3.5 w-3.5' />
+                          Favorite
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant={
+                            arrivedPurchaseKeys[row.key] ? 'default' : 'outline'
+                          }
+                          aria-pressed={arrivedPurchaseKeys[row.key] ?? false}
+                          data-testid='purchases-row-arrived'
+                          onClick={() =>
+                            setArrivedPurchaseKeys((current) => ({
+                              ...current,
+                              [row.key]: !current[row.key],
+                            }))
+                          }
+                        >
+                          <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
+                          Arrived
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant={
+                            purchaseRatings[row.key] === 4
+                              ? 'default'
+                              : 'outline'
+                          }
+                          data-testid='purchases-row-rating'
+                          onClick={() =>
+                            setPurchaseRatings((current) => ({
+                              ...current,
+                              [row.key]: current[row.key] === 4 ? 0 : 4,
+                            }))
+                          }
+                        >
+                          Rating {purchaseRatings[row.key] || '-'}
+                        </Button>
+                        <span
+                          className='self-center text-xs text-muted-foreground'
+                          data-testid='purchases-row-action-count'
+                        >
+                          {row.actionCount} action
+                          {row.actionCount === 1 ? '' : 's'}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-              {reviews.length === 0 ? (
+                ))}
+              {purchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-empty-row'>
                   <TableCell
                     colSpan={6}
@@ -1023,6 +1207,16 @@ export function Purchases() {
                   >
                     No purchases loaded. Add a purchase or review captured
                     purchases to populate the table.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {purchaseRows.length > 0 && filteredPurchaseRows.length === 0 ? (
+                <TableRow data-testid='purchases-table-filter-empty-row'>
+                  <TableCell
+                    colSpan={6}
+                    className='h-20 text-center text-sm text-muted-foreground'
+                  >
+                    No purchases match the current table filters.
                   </TableCell>
                 </TableRow>
               ) : null}
