@@ -265,6 +265,21 @@ The authenticated shell Assistant sidebar SHALL render assistant-ui compact anch
 - **AND** action previews MUST remain non-mutating until the user explicitly confirms apply through Cabinet's preview/apply APIs
 - **AND** assistant-ui tool-call behavior MUST NOT auto-apply inventory, wishlist, collection, import, or provider mutations
 
+### Requirement UI-SCREEN-CHAT-COPILOT-017: Chats route SHALL render the thread surface through Cabinet assistant-ui primitives
+The full `/chats` workspace SHALL render its selected thread message list and composer through Cabinet's assistant-ui external-store adapter while preserving the existing profile-scoped Go chat APIs, attachment controls, action preview/apply confirmation, provider defaults, and persisted reload behavior.
+
+#### Scenario: Send through assistant-ui composer on `/chats`
+- **GIVEN** user is on `/chats` with an active profile-scoped thread
+- **WHEN** user sends a message through the assistant-ui composer primitive
+- **THEN** `/api/chat/messages` MUST receive the active profile id, selected thread id, user role, message content, route context, profile context, and assistant provider/model defaults
+- **AND** the message MUST persist and reload through Cabinet chat APIs
+
+#### Scenario: Existing `/chats` controls stay governed
+- **GIVEN** the selected `/chats` thread is rendered through assistant-ui message primitives
+- **WHEN** attachments and action preview/apply controls render below the composer
+- **THEN** attachment upload controls MUST remain visible for the selected thread
+- **AND** action preview/apply controls MUST remain explicit Cabinet controls outside automatic assistant-ui tool-call mutation
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
@@ -304,3 +319,4 @@ The authenticated shell Assistant sidebar SHALL render assistant-ui compact anch
 | UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |
 | UC-CHAT-23 | Assistant sidebar compact chat selection/new-chat/navigation action | Sidebar selects existing assistant chats, creates a new chat, sends a layout configuration prompt, exposes an explicit screen-opening action, and navigates only after invocation | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action` |
 | UC-CHAT-24 | Assistant-ui shell adapter send/history/provider/action safety | assistant-ui external-store runtime renders shell assistant messages, sends through Cabinet chat APIs with route/profile/provider context, reloads existing history, preserves setup-needed/provider guidance, and keeps preview/apply confirmation explicit | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation` |
+| UC-CHAT-25 | Assistant-ui full Chats route surface | assistant-ui external-store runtime renders `/chats` selected thread messages and composer while preserving Cabinet profile/thread APIs, route/profile/provider context, attachments, and explicit action preview/apply controls | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-017 renders full Chats route through assistant-ui primitives while preserving Cabinet APIs` |
