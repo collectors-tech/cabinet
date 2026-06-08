@@ -7,6 +7,18 @@ import {
   type DragEvent,
 } from 'react'
 import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from '@tanstack/react-table'
+import {
   Archive,
   Download,
   Eye,
@@ -52,6 +64,11 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
+import {
+  DataTableColumnHeader,
+  DataTablePagination,
+  DataTableToolbar,
+} from '@/components/data-table'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -154,13 +171,186 @@ function analysisLabel(status: MediaAsset['analysis_status']) {
   }
 }
 
+function buildMediaColumns({
+  selectedAssetSet,
+  onToggleAssetSelection,
+  onAssign,
+}: {
+  selectedAssetSet: Set<string>
+  onToggleAssetSelection: (assetID: string, checked: boolean) => void
+  onAssign: (asset: MediaAsset) => void
+}): ColumnDef<MediaAsset>[] {
+  return [
+    {
+      id: 'select',
+      header: () => <span className='sr-only'>Select</span>,
+      cell: ({ row }) => (
+        <Checkbox
+          aria-label={`Select ${row.original.title}`}
+          checked={selectedAssetSet.has(row.original.id)}
+          data-testid={`media-row-select-${row.original.id}`}
+          onCheckedChange={(checked) =>
+            onToggleAssetSelection(row.original.id, checked === true)
+          }
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: 'title',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Media' />
+      ),
+      cell: ({ row }) => (
+        <div className='flex min-w-0 items-center gap-3'>
+          <div className='flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted'>
+            {row.original.thumbnail_url ? (
+              <img
+                src={row.original.thumbnail_url}
+                alt=''
+                className='h-full w-full object-cover'
+              />
+            ) : (
+              <FileImage className='h-5 w-5 text-muted-foreground' />
+            )}
+          </div>
+          <div className='min-w-0 space-y-1'>
+            <div className='truncate font-medium'>{row.original.title}</div>
+            <div className='truncate text-xs text-muted-foreground'>
+              {row.original.filename}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'analysis_status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Status' />
+      ),
+      cell: ({ row }) => (
+        <Badge className='max-w-full truncate' variant='outline'>
+          {analysisLabel(row.original.analysis_status)}
+        </Badge>
+      ),
+      filterFn: (row, _columnId, value) =>
+        analysisLabel(row.original.analysis_status)
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
+    },
+    {
+      accessorKey: 'linkage_state',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Linked' />
+      ),
+      cell: ({ row }) => (
+        <Badge
+          className='max-w-full truncate'
+          variant={
+            row.original.linkage_state === 'unlinked' ? 'default' : 'secondary'
+          }
+        >
+          {linkageLabel(row.original.linkage_state)}
+        </Badge>
+      ),
+      filterFn: (row, _columnId, value) =>
+        linkageLabel(row.original.linkage_state)
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
+    },
+    {
+      accessorKey: 'uploaded_at',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Uploaded' />
+      ),
+      cell: ({ row }) => (
+        <span className='block truncate'>
+          {row.original.uploaded_at || 'Unknown'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'source',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Source' />
+      ),
+      cell: ({ row }) => (
+        <span className='block truncate'>{row.original.source}</span>
+      ),
+    },
+    {
+      accessorKey: 'download_filename',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='Filename' />
+      ),
+      cell: ({ row }) => (
+        <span className='block truncate'>{row.original.download_filename}</span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: () => <div className='text-right'>Actions</div>,
+      cell: ({ row }) => (
+        <div className='flex justify-end gap-1'>
+          <Button
+            variant='outline'
+            size='icon'
+            className='h-7 w-7'
+            aria-label={`Open ${row.original.title}`}
+            data-testid={`media-row-open-${row.original.id}`}
+          >
+            <Eye />
+          </Button>
+          <Button
+            variant='outline'
+            size='icon'
+            className='h-7 w-7'
+            aria-label={`Analyze ${row.original.title}`}
+            data-testid={`media-row-analyze-${row.original.id}`}
+            disabled={row.original.analysis_status === 'ready'}
+          >
+            <WandSparkles />
+          </Button>
+          <Button
+            variant='outline'
+            size='icon'
+            className='h-7 w-7'
+            aria-label={`Assign ${row.original.title}`}
+            data-testid={`media-row-assign-${row.original.id}`}
+            disabled={row.original.linkage_state !== 'unlinked'}
+            onClick={() => onAssign(row.original)}
+          >
+            <Link2 />
+          </Button>
+          <Button
+            variant='outline'
+            size='icon'
+            className='h-7 w-7'
+            aria-label={`Archive ${row.original.title}`}
+            data-testid={`media-row-archive-${row.original.id}`}
+          >
+            <Archive />
+          </Button>
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+  ]
+}
+
 export function Media() {
   const [filter, setFilter] = useState<'all' | 'unlinked'>('all')
   const [viewMode, setViewMode] = useState<MediaViewMode>(() => {
-    if (typeof window === 'undefined') return 'cards'
+    if (typeof window === 'undefined') return 'rows'
     const saved = window.localStorage.getItem(MEDIA_VIEW_MODE_STORAGE_KEY)
-    return saved === 'rows' ? 'rows' : 'cards'
+    return saved === 'cards' ? 'cards' : 'rows'
   })
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'uploaded_at', desc: true },
+  ])
+  const [globalFilter, setGlobalFilter] = useState('')
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [summary, setSummary] = useState<MediaSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
@@ -236,16 +426,19 @@ export function Media() {
     [selectedAssetIds]
   )
 
-  const toggleAssetSelection = (assetID: string, checked: boolean) => {
-    setDownloadPreview(null)
-    setDownloadError(null)
-    setSelectedAssetIds((current) => {
-      if (checked) {
-        return current.includes(assetID) ? current : [...current, assetID]
-      }
-      return current.filter((id) => id !== assetID)
-    })
-  }
+  const toggleAssetSelection = useCallback(
+    (assetID: string, checked: boolean) => {
+      setDownloadPreview(null)
+      setDownloadError(null)
+      setSelectedAssetIds((current) => {
+        if (checked) {
+          return current.includes(assetID) ? current : [...current, assetID]
+        }
+        return current.filter((id) => id !== assetID)
+      })
+    },
+    []
+  )
 
   const resetAddMedia = () => {
     setAddMediaOpen(false)
@@ -372,14 +565,60 @@ export function Media() {
     setAssignmentLoading(false)
   }
 
-  const openAssignment = (asset: MediaAsset) => {
+  const openAssignment = useCallback((asset: MediaAsset) => {
     setAssignmentAsset(asset)
     setAssignmentTargetType('wishlist')
     setAssignmentTargetID(asset.wishlist_id ?? asset.item_id ?? '')
     setAssignmentPreview(null)
     setAssignmentError(null)
     setAssignmentSuccess(null)
-  }
+  }, [])
+
+  const columns = useMemo(
+    () =>
+      buildMediaColumns({
+        selectedAssetSet,
+        onToggleAssetSelection: toggleAssetSelection,
+        onAssign: openAssignment,
+      }),
+    [openAssignment, selectedAssetSet, toggleAssetSelection]
+  )
+
+  const table = useReactTable({
+    data: assets,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const searchValue = String(filterValue).trim().toLowerCase()
+      if (!searchValue) {
+        return true
+      }
+      return [
+        row.original.title,
+        row.original.filename,
+        row.original.download_filename,
+        row.original.source,
+        row.original.uploaded_at,
+        analysisLabel(row.original.analysis_status),
+        linkageLabel(row.original.linkage_state),
+        row.original.item_id ?? '',
+        row.original.wishlist_id ?? '',
+      ].some((value) => value.toLowerCase().includes(searchValue))
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+  })
+
+  const filteredAssetCount = table.getFilteredRowModel().rows.length
 
   const previewAssignment = async () => {
     if (!assignmentAsset) return
@@ -776,119 +1015,102 @@ export function Media() {
             ))}
           </div>
         ) : !error ? (
-          <Card>
-            <CardContent className='p-0'>
+          <div className='space-y-3' data-testid='media-table-section'>
+            <div data-testid='media-table-toolbar'>
+              <DataTableToolbar
+                table={table}
+                searchPlaceholder='Filter media...'
+                searchInputTestId='media-table-search-input'
+              />
+            </div>
+            <div
+              className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'
+              data-testid='media-table-summary'
+            >
+              <span>
+                Showing {filteredAssetCount} of {assets.length} media assets.
+              </span>
+              <span>
+                {filter === 'unlinked' ? 'Unlinked media' : 'All media'}
+              </span>
+            </div>
+            <div
+              className='overflow-auto rounded-md border'
+              data-table-surface='true'
+              data-testid='media-shared-table'
+            >
               <Table
-                className='table-fixed text-xs'
+                className='w-full min-w-[920px] table-fixed text-xs'
                 data-testid='media-row-table'
               >
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className='w-12'>Select</TableHead>
-                    <TableHead className='w-[18%]'>Title</TableHead>
-                    <TableHead className='w-[13%]'>Status</TableHead>
-                    <TableHead className='w-[14%]'>Linked</TableHead>
-                    <TableHead className='w-[12%]'>Uploaded</TableHead>
-                    <TableHead className='w-[12%]'>Source</TableHead>
-                    <TableHead className='w-[17%]'>Filename</TableHead>
-                    <TableHead className='w-32 text-end'>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {assets.map((asset) => (
-                    <TableRow
-                      key={asset.id}
-                      data-testid={`media-row-${asset.id}`}
-                    >
-                      <TableCell>
-                        <Checkbox
-                          aria-label={`Select ${asset.title}`}
-                          checked={selectedAssetSet.has(asset.id)}
-                          data-testid={`media-row-select-${asset.id}`}
-                          onCheckedChange={(checked) =>
-                            toggleAssetSelection(asset.id, checked === true)
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className='truncate font-medium'>
-                        {asset.title}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className='max-w-full truncate'
-                          variant='outline'
-                        >
-                          {analysisLabel(asset.analysis_status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className='max-w-full truncate'
-                          variant={
-                            asset.linkage_state === 'unlinked'
-                              ? 'default'
-                              : 'secondary'
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead
+                          key={header.id}
+                          className={
+                            header.column.id === 'select'
+                              ? 'w-12'
+                              : header.column.id === 'actions'
+                                ? 'w-36 text-end'
+                                : 'max-w-0 truncate'
                           }
                         >
-                          {linkageLabel(asset.linkage_state)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className='truncate'>
-                        {asset.uploaded_at || 'Unknown'}
-                      </TableCell>
-                      <TableCell className='truncate'>{asset.source}</TableCell>
-                      <TableCell className='truncate'>
-                        {asset.download_filename}
-                      </TableCell>
-                      <TableCell>
-                        <div className='flex justify-end gap-1'>
-                          <Button
-                            variant='outline'
-                            size='icon'
-                            className='h-7 w-7'
-                            aria-label={`Open ${asset.title}`}
-                            data-testid={`media-row-open-${asset.id}`}
-                          >
-                            <Eye />
-                          </Button>
-                          <Button
-                            variant='outline'
-                            size='icon'
-                            className='h-7 w-7'
-                            aria-label={`Analyze ${asset.title}`}
-                            data-testid={`media-row-analyze-${asset.id}`}
-                            disabled={asset.analysis_status === 'ready'}
-                          >
-                            <WandSparkles />
-                          </Button>
-                          <Button
-                            variant='outline'
-                            size='icon'
-                            className='h-7 w-7'
-                            aria-label={`Assign ${asset.title}`}
-                            data-testid={`media-row-assign-${asset.id}`}
-                            disabled={asset.linkage_state !== 'unlinked'}
-                            onClick={() => openAssignment(asset)}
-                          >
-                            <Link2 />
-                          </Button>
-                          <Button
-                            variant='outline'
-                            size='icon'
-                            className='h-7 w-7'
-                            aria-label={`Archive ${asset.title}`}
-                            data-testid={`media-row-archive-${asset.id}`}
-                          >
-                            <Archive />
-                          </Button>
-                        </div>
-                      </TableCell>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        data-testid={`media-row-${row.original.id}`}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell
+                            key={cell.id}
+                            className={
+                              cell.column.id === 'select'
+                                ? 'w-12'
+                                : cell.column.id === 'actions'
+                                  ? 'w-36'
+                                  : 'max-w-0 truncate'
+                            }
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow data-testid='media-table-empty-row'>
+                      <TableCell
+                        colSpan={columns.length}
+                        className='h-24 text-center'
+                      >
+                        No media assets match the current table filter.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
+            <div data-testid='media-table-pagination'>
+              <DataTablePagination table={table} />
+            </div>
+          </div>
         ) : null}
 
         <Dialog

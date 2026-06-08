@@ -94,23 +94,28 @@ describe('ui-screen-media', () => {
       .and('have.attr', 'data-centered', 'true')
       .and('contain', 'Media')
     cy.get('[data-testid="media-page-icon"]').should('be.visible')
-    cy.get('[data-testid="media-card-grid"]')
+    cy.get('[data-testid="media-shared-table"]')
       .should('be.visible')
-      .find('[data-testid^="media-card-"]')
+      .and('have.attr', 'data-table-surface', 'true')
+    cy.get('[data-testid="media-table-toolbar"]').should('be.visible')
+    cy.get('[data-testid="media-row-table"]')
+      .should('be.visible')
+      .find('tr[data-testid^="media-row-media-"]')
       .should('have.length', 3)
+    cy.get('[data-testid="media-card-grid"]').should('not.exist')
 
-    cy.get('[data-testid="media-card-media-slot-car-front"]')
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
       .should('contain', 'AFX Mustang front view')
       .and('contain', 'Unlinked')
       .and('contain', 'Analysis ready')
       .and('contain', 'slot-car-front-media-sl.jpg')
-    cy.get('[data-testid="media-open-media-slot-car-front"]').should(
+    cy.get('[data-testid="media-row-open-media-slot-car-front"]').should(
       'be.enabled'
     )
-    cy.get('[data-testid="media-analyze-media-slot-car-front"]').should(
+    cy.get('[data-testid="media-row-analyze-media-slot-car-front"]').should(
       'be.disabled'
     )
-    cy.get('[data-testid="media-assign-media-slot-car-front"]').should(
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]').should(
       'be.enabled'
     )
     cy.get('[data-testid="media-upload-action"]')
@@ -122,13 +127,13 @@ describe('ui-screen-media', () => {
 
     cy.get('[data-testid="media-filter-unlinked"]').click()
     cy.wait('@unlinkedMediaAssets')
-    cy.get('[data-testid="media-card-grid"]')
-      .find('[data-testid^="media-card-"]')
+    cy.get('[data-testid="media-row-table"]')
+      .find('tr[data-testid^="media-row-media-"]')
       .should('have.length', 1)
-    cy.get('[data-testid="media-card-media-slot-car-front"]').should(
+    cy.get('[data-testid="media-row-media-slot-car-front"]').should(
       'be.visible'
     )
-    cy.get('[data-testid="media-card-media-porsche-box"]').should('not.exist')
+    cy.get('[data-testid="media-row-media-porsche-box"]').should('not.exist')
   })
 
   it('UI-SCREEN-MEDIA-008 previews selected media download filenames from API state', () => {
@@ -156,7 +161,7 @@ describe('ui-screen-media', () => {
     cy.visit('/media/')
     cy.wait('@mediaAssets')
 
-    cy.get('[data-testid="media-select-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-row-select-media-slot-car-front"]').click()
     cy.get('[data-testid="media-download-selected-action"]')
       .should('be.enabled')
       .click()
@@ -177,6 +182,7 @@ describe('ui-screen-media', () => {
     openMediaWorkspace()
     cy.visit('/media/')
     cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-view-mode-cards"]').click()
 
     cy.get('[data-testid="media-card-grid"]').should('be.visible')
     cy.get('[data-testid="media-card-media-slot-car-front"]').then(($card) => {
@@ -203,6 +209,7 @@ describe('ui-screen-media', () => {
     cy.viewport(390, 844)
     cy.reload()
     cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-view-mode-cards"]').click()
     cy.get('[data-testid="media-card-grid"]').then(($grid) => {
       const rect = $grid[0].getBoundingClientRect()
       expect(rect.left).to.be.at.least(0)
@@ -221,7 +228,7 @@ describe('ui-screen-media', () => {
     )
   })
 
-  it('UI-SCREEN-MEDIA-013 switches between Cards and Rows views and persists the mode', () => {
+  it('UI-SCREEN-MEDIA-015 defaults to the shared Media table and keeps Cards available', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 200,
       body: mediaResponse,
@@ -231,46 +238,30 @@ describe('ui-screen-media', () => {
     cy.visit('/media/')
     cy.wait('@mediaAssets')
 
-    cy.get('[data-testid="media-view-mode-cards"]')
+    cy.get('[data-testid="media-view-mode-rows"]')
       .should('have.attr', 'aria-pressed', 'true')
-      .and('contain', 'Cards')
-    cy.get('[data-testid="media-card-grid"]')
+      .and('contain', 'Rows')
+    cy.get('[data-testid="media-shared-table"]')
       .should('be.visible')
-      .find('[data-testid^="media-card-"]')
+      .and('have.attr', 'data-table-surface', 'true')
+    cy.get('[data-testid="media-table-search-input"]')
+      .should('be.visible')
+      .type('porsche')
+    cy.get('[data-testid="media-row-table"]')
+      .find('tr[data-testid^="media-row-media-"]')
+      .should('have.length', 1)
+    cy.get('[data-testid="media-row-media-porsche-box"]')
+      .should('contain', 'Porsche 917 box side')
+      .and('contain', 'Inventory linked')
+    cy.get('[data-testid="media-table-search-input"]').clear()
+    cy.get('[data-testid="media-row-table"]')
+      .find('tr[data-testid^="media-row-media-"]')
       .should('have.length', 3)
 
-    cy.get('[data-testid="media-view-mode-rows"]').click()
     cy.window()
       .its('localStorage')
       .invoke('getItem', 'cabinet.viewMode.media')
       .should('eq', 'rows')
-    cy.get('[data-testid="media-row-table"]')
-      .should('be.visible')
-      .within(() => {
-        cy.contains('th', 'Title').should('be.visible')
-        cy.contains('th', 'Status').should('be.visible')
-        cy.contains('th', 'Linked').should('be.visible')
-        cy.contains('th', 'Uploaded').should('be.visible')
-        cy.contains('th', 'Filename').should('be.visible')
-      })
-    cy.get('[data-testid="media-row-media-slot-car-front"]')
-      .should('contain', 'AFX Mustang front view')
-      .and('contain', 'Unlinked')
-      .and('contain', 'Analysis ready')
-      .and('contain', 'slot-car-front-media-sl.jpg')
-    cy.get('[data-testid="media-row-media-porsche-box"]')
-      .should('contain', 'Porsche 917 box side')
-      .and('contain', 'Inventory linked')
-    cy.get('[data-testid="media-card-grid"]').should('not.exist')
-
-    cy.reload()
-    cy.wait('@mediaAssets')
-    cy.get('[data-testid="media-view-mode-rows"]').should(
-      'have.attr',
-      'aria-pressed',
-      'true'
-    )
-    cy.get('[data-testid="media-row-table"]').should('be.visible')
 
     cy.get('[data-testid="media-view-mode-cards"]').click()
     cy.window()
@@ -278,7 +269,24 @@ describe('ui-screen-media', () => {
       .invoke('getItem', 'cabinet.viewMode.media')
       .should('eq', 'cards')
     cy.get('[data-testid="media-card-grid"]').should('be.visible')
-    cy.get('[data-testid="media-row-table"]').should('not.exist')
+    cy.get('[data-testid="media-shared-table"]').should('not.exist')
+
+    cy.reload()
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-view-mode-cards"]').should(
+      'have.attr',
+      'aria-pressed',
+      'true'
+    )
+    cy.get('[data-testid="media-card-grid"]').should('be.visible')
+
+    cy.get('[data-testid="media-view-mode-rows"]').click()
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.viewMode.media')
+      .should('eq', 'rows')
+    cy.get('[data-testid="media-shared-table"]').should('be.visible')
+    cy.get('[data-testid="media-card-grid"]').should('not.exist')
   })
 
   it('UI-SCREEN-MEDIA-014 supports page-wide image drop and metadata save', () => {
@@ -328,6 +336,7 @@ describe('ui-screen-media', () => {
     openMediaWorkspace()
     cy.visit('/media/')
     cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-view-mode-cards"]').click()
 
     cy.get('[data-testid="media-workspace"]').selectFile(
       {
@@ -518,7 +527,7 @@ describe('ui-screen-media', () => {
     cy.visit('/media/')
     cy.wait('@mediaAssets')
 
-    cy.get('[data-testid="media-assign-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]').click()
     cy.get('[data-testid="media-assignment-dialog"]').should('be.visible')
     cy.get('[data-testid="media-assignment-target-id"]').type('wish-slot-car')
     cy.get('[data-testid="media-assignment-preview-action"]').click()
@@ -532,10 +541,10 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-assignment-success"]')
       .should('be.visible')
       .and('contain', 'Preserved media asset media-slot-car-front provenance')
-    cy.get('[data-testid="media-card-media-slot-car-front"]')
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
       .should('contain', 'Wishlist linked')
       .and('not.contain', 'Unlinked')
-    cy.get('[data-testid="media-assign-media-slot-car-front"]').should(
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]').should(
       'be.disabled'
     )
   })
