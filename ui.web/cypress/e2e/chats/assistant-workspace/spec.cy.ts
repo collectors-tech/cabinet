@@ -131,4 +131,70 @@ describe('chats/assistant-workspace', () => {
       })
     })
   })
+
+  it('ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action', () => {
+    bootstrapInventory()
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-thread-select"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-thread-id"]').should(($threadId) => {
+      expect($threadId.text().trim()).not.to.eq('')
+      expect($threadId.text().trim()).not.to.eq('bootstrapping')
+    })
+    cy.get('[data-testid="shell-assistant-thread-id"]')
+      .invoke('text')
+      .then((initialThreadId) => {
+        const firstThreadId = String(initialThreadId).trim()
+        expect(firstThreadId).not.to.eq('')
+        expect(firstThreadId).not.to.eq('bootstrapping')
+
+        cy.get('[data-testid="shell-assistant-new-thread"]').click()
+        cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
+          const secondThreadId = $next.text().trim()
+          expect(secondThreadId).not.to.eq('')
+          expect(secondThreadId).not.to.eq('bootstrapping')
+          expect(secondThreadId).not.to.eq(firstThreadId)
+        })
+        cy.get('[data-testid="shell-assistant-thread-select"] option').should(
+          'have.length.at.least',
+          2
+        )
+
+        cy.get('[data-testid="shell-assistant-compose-input"]').type(
+          'show me a config for layout'
+        )
+        cy.get('[data-testid="shell-assistant-send-button"]').click()
+        cy.get('[data-testid="shell-assistant-navigation-action"]')
+          .should('be.visible')
+          .and('contain', 'Open layout settings')
+        cy.location('pathname').should('match', /^\/inventory\/?$/)
+
+        cy.get('[data-testid="shell-assistant-thread-select"]').select(
+          firstThreadId
+        )
+        cy.get('[data-testid="shell-assistant-thread-id"]').should(
+          'have.text',
+          firstThreadId
+        )
+        cy.get('[data-testid="shell-assistant-navigation-action"]').should(
+          'not.exist'
+        )
+
+        cy.get('[data-testid="shell-assistant-new-thread"]').click()
+        cy.get('[data-testid="shell-assistant-thread-id"]').should(($next) => {
+          const nextThreadId = $next.text().trim()
+          expect(nextThreadId).not.to.eq('')
+          expect(nextThreadId).not.to.eq('bootstrapping')
+          expect(nextThreadId).not.to.eq(firstThreadId)
+        })
+        cy.get('[data-testid="shell-assistant-compose-input"]').type(
+          'show me a config for layout'
+        )
+        cy.get('[data-testid="shell-assistant-send-button"]').click()
+        cy.get('[data-testid="shell-assistant-navigation-action-open"]').click()
+        cy.location('pathname', { timeout: 15000 }).should(
+          'match',
+          /^\/settings\/display\/?$/
+        )
+      })
+  })
 })

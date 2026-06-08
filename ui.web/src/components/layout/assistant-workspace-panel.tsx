@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouterState } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import {
   Bot,
   CheckCircle2,
   ExternalLink,
   GitBranchPlus,
+  MessageSquarePlus,
   RotateCcw,
   Send,
   ShieldAlert,
@@ -69,6 +70,13 @@ type ApplyActionResult = {
   item_id?: string
   wishlist_id?: string
   preview_id: string
+}
+
+type NavigationAction = {
+  id: string
+  label: string
+  target: string
+  reason: string
 }
 
 type AssistantProviderOption = {
@@ -157,6 +165,7 @@ async function loadAssistantDefaultSettings(profileId: string) {
 
 export function AssistantWorkspacePanel() {
   const { activeProfileId } = useShellWorkspace()
+  const navigate = useNavigate()
   const authUser = useAuthStore((state) => state.auth.user)
   const location = useRouterState({
     select: (state) => ({
@@ -170,6 +179,7 @@ export function AssistantWorkspacePanel() {
   )
   const [threadId, setThreadId] = useState('')
   const [threadMetadata, setThreadMetadata] = useState<ThreadMetadata>({})
+  const [threads, setThreads] = useState<Thread[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
@@ -189,6 +199,8 @@ export function AssistantWorkspacePanel() {
   const [permissionGuidance, setPermissionGuidance] = useState(
     'Read-only browsing is always allowed. Structured mutations are preview-first and confirmation-required before any apply call runs.'
   )
+  const [navigationAction, setNavigationAction] =
+    useState<NavigationAction | null>(null)
 
   const routeContext = useMemo(
     () => ({
@@ -215,6 +227,31 @@ export function AssistantWorkspacePanel() {
         ?.models || [],
     [provider]
   )
+
+  const selectedThreadTitle = useMemo(
+    () =>
+      threads.find((thread) => thread.id === threadId)?.title ||
+      'Assistant chat',
+    [threadId, threads]
+  )
+
+  function inferNavigationAction(prompt: string): NavigationAction | null {
+    const normalized = prompt.toLowerCase()
+    if (
+      normalized.includes('layout') &&
+      (normalized.includes('config') ||
+        normalized.includes('settings') ||
+        normalized.includes('configure'))
+    ) {
+      return {
+        id: 'open-layout-config',
+        label: 'Open layout settings',
+        target: '/settings/display',
+        reason: 'The request mentions layout configuration, so Cabinet can open the display settings surface.',
+      }
+    }
+    return null
+  }
 
   async function createAssistantThread(
     profileId: string,
@@ -248,6 +285,10 @@ export function AssistantWorkspacePanel() {
     const created = (await createResp.json()) as Thread
     setThreadId(created.id)
     setThreadMetadata(created.metadata ?? metadata)
+    setThreads((current) => [
+      created,
+      ...current.filter((thread) => thread.id !== created.id),
+    ])
     try {
       window.localStorage.setItem(assistantThreadKey(profileId), created.id)
       window.localStorage.setItem(assistantProviderKey(profileId), nextProvider)
@@ -302,7 +343,35 @@ export function AssistantWorkspacePanel() {
       throw new Error('failed_to_load_assistant_threads')
     }
     const payload = (await resp.json()) as { threads?: Thread[] }
-    return payload.threads ?? []
+    const nextThreads = payload.threads ?? []
+    setThreads(nextThreads)
+    return nextThreads
+  }
+
+  async function handleSelectThread(nextThreadId: string) {
+    if (!activeProfileId || !nextThreadId || nextThreadId === threadId) return
+    const selected = threads.find((thread) => thread.id === nextThreadId)
+    manualProviderModelChangeRef.current = true
+    setThreadId(nextThreadId)
+    setThreadMetadata(selected?.metadata ?? {})
+    if (selected?.metadata?.provider) setProvider(selected.metadata.provider)
+    if (selected?.metadata?.model) setModel(selected.metadata.model)
+    setActionPreview(null)
+    setApplyResult(null)
+    setExecutionState('idle')
+    setNavigationAction(null)
+    setError('')
+    setLoading(true)
+    try {
+      window.localStorage.setItem(assistantThreadKey(activeProfileId), nextThreadId)
+      await loadMessages(activeProfileId, nextThreadId)
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'failed_to_load_assistant_messages'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -509,6 +578,7 @@ export function AssistantWorkspacePanel() {
       setDraft('')
       setActionPreview(null)
       setApplyResult(null)
+      setNavigationAction(null)
       setExecutionState('idle')
       await loadMessages(activeProfileId, newThreadId)
     } catch (err) {
@@ -522,8 +592,10 @@ export function AssistantWorkspacePanel() {
 
   async function sendMessage() {
     if (!activeProfileId || !threadId || !draft.trim()) return
+    const messageDraft = draft.trim()
     setSending(true)
     setError('')
+    setNavigationAction(null)
     try {
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
@@ -532,7 +604,7 @@ export function AssistantWorkspacePanel() {
           profile_id: activeProfileId,
           thread_id: threadId,
           role: 'user',
-          content: draft.trim(),
+          content: messageDraft,
           context: {
             route: routeContext,
             profile: { id: activeProfileId },
@@ -543,6 +615,7 @@ export function AssistantWorkspacePanel() {
       })
       if (!response.ok) throw new Error('failed_to_send_assistant_message')
       setDraft('')
+      setNavigationAction(inferNavigationAction(messageDraft))
       await loadMessages(activeProfileId, threadId)
     } catch (err) {
       setError(
@@ -645,18 +718,51 @@ export function AssistantWorkspacePanel() {
                 links.
               </p>
             </div>
-            <Button
-              type='button'
-              variant='outline'
-              size='icon'
-              data-testid='shell-assistant-new-thread'
-              aria-label='New assistant thread'
-              onClick={() => void handleNewThread()}
-              disabled={loading || sending || !activeProfileId}
-            >
-              <RotateCcw className='h-3.5 w-3.5' />
-            </Button>
+            <div className='flex items-center gap-1'>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon'
+                data-testid='shell-assistant-new-thread'
+                aria-label='New assistant thread'
+                onClick={() => void handleNewThread()}
+                disabled={loading || sending || !activeProfileId}
+              >
+                <MessageSquarePlus className='h-3.5 w-3.5' />
+              </Button>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                aria-label='Reset assistant thread'
+                title='Reset assistant thread'
+                onClick={() => void handleNewThread()}
+                disabled={loading || sending || !activeProfileId}
+              >
+                <RotateCcw className='h-3.5 w-3.5' />
+              </Button>
+            </div>
           </div>
+
+          <label className='mt-3 block space-y-1 text-xs'>
+            <span className='font-medium text-foreground'>Chat</span>
+            <select
+              data-testid='shell-assistant-thread-select'
+              className='w-full rounded-md border bg-background px-2 py-1.5'
+              value={threadId}
+              onChange={(e) => void handleSelectThread(e.target.value)}
+              disabled={loading || sending || threads.length === 0}
+            >
+              {threads.length === 0 ? (
+                <option value=''>No assistant chats yet</option>
+              ) : null}
+              {threads.map((thread) => (
+                <option key={thread.id} value={thread.id}>
+                  {thread.title}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <div className='mt-3 flex flex-wrap gap-2 text-[11px]'>
             <Badge
@@ -738,6 +844,9 @@ export function AssistantWorkspacePanel() {
             <span data-testid='shell-assistant-thread-id'>
               {threadId || 'bootstrapping'}
             </span>
+            <span data-testid='shell-assistant-selected-thread-title'>
+              Chat: {selectedThreadTitle}
+            </span>
             <span data-testid='shell-assistant-boundary-note'>
               Thread continuity persists across authenticated route changes
               until an explicit reset boundary.
@@ -798,6 +907,39 @@ export function AssistantWorkspacePanel() {
                 </div>
               )
             })}
+
+            {navigationAction ? (
+              <div
+                className='rounded-md border bg-background p-3 text-sm'
+                data-testid='shell-assistant-navigation-action'
+              >
+                <div className='flex items-start gap-2'>
+                  <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
+                  <div className='min-w-0 flex-1'>
+                    <p className='font-medium'>{navigationAction.label}</p>
+                    <p
+                      className='mt-1 text-xs text-muted-foreground'
+                      data-testid='shell-assistant-navigation-reason'
+                    >
+                      {navigationAction.reason}
+                    </p>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='mt-2'
+                      data-testid='shell-assistant-navigation-action-open'
+                      onClick={() =>
+                        void navigate({ to: navigationAction.target })
+                      }
+                    >
+                      <ExternalLink className='h-3.5 w-3.5' />
+                      Open screen
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div
               className='rounded-2xl border bg-muted/10 p-3 text-xs'

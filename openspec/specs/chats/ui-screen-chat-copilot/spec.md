@@ -213,6 +213,28 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 - **THEN** Cabinet MUST render a communications surface
 - **AND** route MUST NOT render the app 404 page
 
+### Requirement UI-SCREEN-CHAT-COPILOT-010: Assistant sidebar SHALL operate as a compact chat with explicit screen-opening actions
+The authenticated shell Assistant sidebar SHALL let users select an existing assistant chat, create a new assistant chat, send messages from the compact panel, and expose assistant-proposed navigation actions without changing the current page until the user invokes the action.
+
+#### Scenario: Select an existing assistant chat from the sidebar
+- **GIVEN** an authenticated actor has an active local profile and two or more assistant chat threads exist
+- **WHEN** user opens the Assistant sidebar and selects an existing chat
+- **THEN** the sidebar MUST render that chat's message history and clear pending action state from the previously selected chat
+- **AND** the current Cabinet page route MUST remain unchanged
+
+#### Scenario: Create a new assistant chat from the sidebar
+- **GIVEN** an authenticated actor has an active local profile and the Assistant sidebar is open
+- **WHEN** user invokes the new-chat control
+- **THEN** Cabinet MUST create a fresh assistant chat for the active profile
+- **AND** the sidebar MUST select the new chat with an empty compact conversation state
+
+#### Scenario: Assistant exposes a screen-opening action from chat output
+- **GIVEN** an authenticated actor is using the Assistant sidebar from another Cabinet page
+- **WHEN** user sends a request for layout configuration help
+- **THEN** the sidebar MUST expose an explicit action to open the relevant settings screen
+- **AND** Cabinet MUST keep the current page route unchanged until user invokes that action
+- **AND** invoking the action MUST navigate to the relevant settings screen
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
@@ -250,3 +272,4 @@ Cabinet SHALL provide a reachable authenticated `/inbox` route for communication
 | UC-CHAT-20 | Failed collection assignment apply | Missing collection assignment target rejects apply, keeps the preview pending, leaves workspace collections unchanged, and avoids false assistant applied history | implemented: `internal/chat/service_test.go` `TestServiceCollectionAssignmentRejectsMissingTarget` |
 | UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |
+| UC-CHAT-23 | Assistant sidebar compact chat selection/new-chat/navigation action | Sidebar selects existing assistant chats, creates a new chat, sends a layout configuration prompt, exposes an explicit screen-opening action, and navigates only after invocation | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action` |
