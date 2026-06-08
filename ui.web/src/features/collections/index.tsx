@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type ColumnDef,
   flexRender,
@@ -320,6 +320,7 @@ export function Collections() {
   const [createValue, setCreateValue] = useState('')
   const [createError, setCreateError] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
+  const createInputRef = useRef<HTMLInputElement>(null)
   const [editValue, setEditValue] = useState('')
   const [inventoryMembers, setInventoryMembers] = useState<
     CollectionMemberRow[]
@@ -595,6 +596,7 @@ export function Collections() {
       const created = await addCollection(createValue)
       if (!created) {
         setCreateError('Enter a unique collection name.')
+        createInputRef.current?.focus()
         return
       }
       setSelectedCollectionID(collectionKey(created))
@@ -913,12 +915,20 @@ export function Collections() {
             </DialogHeader>
             <div className='space-y-2'>
               <Input
+                ref={createInputRef}
                 value={createValue}
                 onChange={(event) => {
                   setCreateValue(event.target.value)
                   if (createError) {
                     setCreateError('')
                   }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') {
+                    return
+                  }
+                  event.preventDefault()
+                  void handleCreateCollection()
                 }}
                 placeholder='Collection name'
                 aria-invalid={createError ? 'true' : undefined}

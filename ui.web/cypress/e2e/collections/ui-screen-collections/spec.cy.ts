@@ -383,6 +383,9 @@ describe('ui-screen-collections', () => {
     cy.get('[data-testid="collections-create-error"]')
       .should('be.visible')
       .and('contain.text', 'Enter a unique collection name.')
+    cy.get('[data-testid="collections-create-input"]')
+      .should('have.attr', 'aria-invalid', 'true')
+      .and('be.focused')
     cy.get('@saveCollectionSettings.all').should('have.length', 0)
 
     cy.get('[data-testid="collections-create-input"]').type(
