@@ -95,6 +95,7 @@ type PurchaseTableRow = {
   price: string
   status: string
   tracking: string
+  persistence: string
   actionCount: number
   searchText: string
 }
@@ -108,6 +109,13 @@ type ManualPurchaseForm = {
 
 type ManualPurchaseDraft = ManualPurchaseForm & {
   key: string
+  persistence?: PurchaseDraftPersistence
+}
+
+type PurchaseDraftPersistence = {
+  itemID: string
+  lifecycleEntryID: string
+  expectedArrivalID: string
 }
 
 type PurchaseImportDraft = {
@@ -122,6 +130,21 @@ type PurchaseImportDraft = {
   channel: string
   tracking: string
   delivery: string
+  persistence?: PurchaseDraftPersistence
+}
+
+type CreatedItemResponse = {
+  id?: string
+}
+
+type CommerceLifecycleResponse = {
+  entry?: {
+    id?: string
+    expected_arrival_id?: string
+  }
+  expected_arrival?: {
+    id?: string
+  } | null
 }
 
 type ReviewResponse = {
@@ -363,6 +386,32 @@ function packageDetailValue(value?: string | number) {
     return 'Pending'
   }
   return value
+}
+
+function persistenceLabel(persistence?: PurchaseDraftPersistence) {
+  if (!persistence) {
+    return 'Not persisted'
+  }
+  return (
+    'Persisted lifecycle ' +
+    persistence.lifecycleEntryID.slice(0, 8) +
+    ' / arrival ' +
+    persistence.expectedArrivalID.slice(0, 8)
+  )
+}
+
+function parsePurchaseAmount(price: string) {
+  const match = price.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
+  return match ? Number(match[0]) : 0
+}
+
+function purchasePartNumber(title: string, key: string) {
+  const slug = title
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24)
+  return 'PUR-' + (slug || 'DRAFT') + '-' + key.slice(-6).toUpperCase()
 }
 
 function valueFromImportRow(
@@ -661,6 +710,7 @@ export function Purchases() {
           price,
           status,
           tracking,
+          persistence: 'Captured review only',
           actionCount: (item.suggested_actions ?? []).length,
           searchText: [
             title,
@@ -683,6 +733,7 @@ export function Purchases() {
       price: draft.price || '-',
       status: 'manual_draft',
       tracking: draft.tracking || 'Pending',
+      persistence: persistenceLabel(draft.persistence),
       actionCount: 1,
       searchText: [
         draft.title,
@@ -690,6 +741,7 @@ export function Purchases() {
         draft.price,
         'manual draft',
         draft.tracking,
+        persistenceLabel(draft.persistence),
       ]
         .filter(Boolean)
         .join(' ')
@@ -702,6 +754,7 @@ export function Purchases() {
       price: draft.price || '-',
       status: draft.mode === 'csv' ? 'csv_import' : 'email_import',
       tracking: draft.tracking || draft.delivery || 'Pending',
+      persistence: persistenceLabel(draft.persistence),
       actionCount: 1,
       searchText: [
         draft.title,
@@ -714,6 +767,7 @@ export function Purchases() {
         draft.tracking,
         draft.delivery,
         draft.mode + ' import',
+        persistenceLabel(draft.persistence),
       ]
         .filter(Boolean)
         .join(' ')
@@ -921,6 +975,69 @@ export function Purchases() {
     setManualPurchaseResult(null)
   }
 
+  const persistPurchaseDraft = async (draft: {
+    key: string
+    title: string
+    source: string
+    price: string
+    currency?: string
+    tracking?: string
+    provenance?: string
+  }) => {
+    const itemResponse = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        part_number: purchasePartNumber(draft.title, draft.key),
+        title: draft.title,
+        brand: draft.source || draft.provenance || 'Purchase',
+        category: 'Purchases',
+        notes:
+          'Created from Purchases add/import flow. Source: ' +
+          (draft.provenance || draft.source || 'manual') +
+          (draft.tracking ? '. Tracking: ' + draft.tracking : ''),
+      }),
+    })
+    if (!itemResponse.ok) {
+      throw new Error('purchase_item_create_' + itemResponse.status)
+    }
+    const item = (await itemResponse.json()) as CreatedItemResponse
+    if (!item.id) {
+      throw new Error('purchase_item_missing_id')
+    }
+
+    const lifecycleResponse = await fetch('/api/commerce/lifecycle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: item.id,
+        state: 'purchase',
+        source: draft.provenance || draft.source || 'manual',
+        external_ref: draft.tracking || draft.key,
+        quantity: 1,
+        amount: parsePurchaseAmount(draft.price),
+        currency: draft.currency || 'AUD',
+        notes: 'Purchases UI persisted draft ' + draft.key,
+      }),
+    })
+    if (!lifecycleResponse.ok) {
+      throw new Error('purchase_lifecycle_create_' + lifecycleResponse.status)
+    }
+    const lifecycle =
+      (await lifecycleResponse.json()) as CommerceLifecycleResponse
+    const lifecycleEntryID = lifecycle.entry?.id
+    const expectedArrivalID =
+      lifecycle.expected_arrival?.id ?? lifecycle.entry?.expected_arrival_id
+    if (!lifecycleEntryID || !expectedArrivalID) {
+      throw new Error('purchase_lifecycle_missing_persistence_ids')
+    }
+    return {
+      itemID: item.id,
+      lifecycleEntryID,
+      expectedArrivalID,
+    }
+  }
+
   const previewPurchaseCSVImport = () => {
     const preview = parsePurchaseCSVImport(purchaseCSVImport)
     setPurchaseCSVPreview(preview)
@@ -943,7 +1060,7 @@ export function Purchases() {
     setManualPurchaseResult(null)
   }
 
-  const confirmPurchaseImportDrafts = (mode: 'csv' | 'email') => {
+  const confirmPurchaseImportDrafts = async (mode: 'csv' | 'email') => {
     const preview = mode === 'csv' ? purchaseCSVPreview : purchaseEmailPreview
     if (preview.length === 0) {
       setPurchaseImportError(
@@ -953,16 +1070,38 @@ export function Purchases() {
       )
       return
     }
-    setImportPurchaseDrafts((current) => [...preview, ...current])
-    setManualPurchaseResult(
-      'Confirmed ' +
-        preview.length +
-        ' ' +
-        mode.toUpperCase() +
-        ' import draft' +
-        (preview.length === 1 ? '' : 's') +
-        '. No purchase was written before explicit confirmation.'
-    )
+    try {
+      const persistedPreview = await Promise.all(
+        preview.map(async (draft) => ({
+          ...draft,
+          persistence: await persistPurchaseDraft({
+            key: draft.key,
+            title: draft.title,
+            source: draft.channel,
+            price: draft.price,
+            currency: draft.currency,
+            tracking: draft.tracking || draft.delivery,
+            provenance: draft.provenance,
+          }),
+        }))
+      )
+      setImportPurchaseDrafts((current) => [...persistedPreview, ...current])
+      setManualPurchaseResult(
+        'Confirmed and persisted ' +
+          preview.length +
+          ' ' +
+          mode.toUpperCase() +
+          ' import draft' +
+          (preview.length === 1 ? '' : 's') +
+          ' through the commerce lifecycle API.'
+      )
+    } catch (err) {
+      setPurchaseImportError(
+        err instanceof Error ? err.message : 'purchase_import_persist_failed'
+      )
+      setManualPurchaseResult(null)
+      return
+    }
     setPurchaseImportError(null)
     if (mode === 'csv') {
       setPurchaseCSVPreview([])
@@ -973,7 +1112,7 @@ export function Purchases() {
     setAddDialogOpen(false)
   }
 
-  const saveManualPurchaseDraft = () => {
+  const saveManualPurchaseDraft = async () => {
     const title = manualPurchaseForm.title.trim()
     const source = manualPurchaseForm.source.trim() || 'manual'
     const price = manualPurchaseForm.price.trim()
@@ -996,13 +1135,28 @@ export function Purchases() {
       price,
       tracking,
     }
+    try {
+      draft.persistence = await persistPurchaseDraft({
+        key: draft.key,
+        title,
+        source,
+        price,
+        tracking,
+      })
+    } catch (err) {
+      setManualPurchaseError(
+        err instanceof Error ? err.message : 'purchase_draft_persist_failed'
+      )
+      setManualPurchaseResult(null)
+      return
+    }
     setManualPurchaseDrafts((current) => [draft, ...current])
     setManualPurchaseForm(defaultManualPurchaseForm)
     setManualPurchaseError(null)
     setManualPurchaseResult(
-      'Saved manual purchase draft for ' +
+      'Persisted manual purchase draft for ' +
         title +
-        '. Persistent API storage is pending the next #1045 slice.'
+        ' through the commerce lifecycle API.'
     )
     setPurchaseStatusFilter('all')
     setAddDialogOpen(false)
@@ -1455,7 +1609,15 @@ export function Purchases() {
               {filteredPurchaseRows.map((row) => (
                 <TableRow key={row.key} data-testid='purchases-table-row'>
                   <TableCell className='truncate font-medium'>
-                    {row.title}
+                    <div className='min-w-0'>
+                      <p className='truncate'>{row.title}</p>
+                      <p
+                        className='truncate text-xs font-normal text-muted-foreground'
+                        data-testid='purchases-row-persistence'
+                      >
+                        {row.persistence}
+                      </p>
+                    </div>
                   </TableCell>
                   <TableCell className='truncate'>{row.source}</TableCell>
                   <TableCell>{row.price}</TableCell>
