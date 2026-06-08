@@ -71,9 +71,27 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inbox',
     })
+    cy.get('[data-testid="purchase-inbox-header-title"]').should(
+      'contain',
+      'Purchases'
+    )
+    cy.get('[data-testid="purchases-table-shell"]')
+      .should('be.visible')
+      .and('contain', 'Purchase')
+      .and('contain', 'Source')
+      .and('contain', 'Tracking')
+    cy.get('[data-testid="purchases-add-button"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="purchases-add-tab-new"]').should('contain', 'New')
+    cy.get('[data-testid="purchases-add-tab-csv"]').should('contain', 'CSV')
+    cy.get('[data-testid="purchases-add-tab-email"]').should('contain', 'Email')
+    cy.contains('button', 'Cancel').click()
     cy.get('[data-testid="purchase-inbox-empty-state"]').should('be.visible')
     cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
     cy.wait('@preparePurchaseReviews')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('contain', 'Accompanying Flute TWM 142')
+      .and('contain', 'eBay')
     cy.get('[data-testid="purchase-inbox-ready-state"]')
       .should('contain', '20-14595-70928')
       .and('contain', 'Accompanying Flute TWM 142')
@@ -109,7 +127,7 @@ describe('purchases/purchase-inbox', () => {
     cy.wait('@preparePurchaseReviews')
     cy.get('[data-testid="purchase-inbox-error-state"]')
       .should('be.visible')
-      .and('contain', 'Purchase Inbox could not load reviews.')
+      .and('contain', 'Purchases could not load reviews.')
   })
 
   it('EBAY-PURCHASE-CAPTURE-006 exposes loading state while reviews are prepared', () => {

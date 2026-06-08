@@ -15,7 +15,7 @@ describe('document title', () => {
       { path: '/wishlist/', title: 'Cabinet - Wishlist' },
       { path: '/integrations/', title: 'Cabinet - Integrations' },
       { path: '/chats/', title: 'Cabinet - Chats' },
-      { path: '/inbox/', title: 'Cabinet - Inbox' },
+      { path: '/inbox/', title: 'Cabinet - Purchases' },
       { path: '/discoveries/', title: 'Cabinet - Discoveries' },
       { path: '/reports/', title: 'Cabinet - Reports' },
       { path: '/settings/profile', title: 'Cabinet - Settings' },

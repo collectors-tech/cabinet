@@ -41,3 +41,11 @@ Cabinet SHALL expose forwarder-backed purchase match state from the Purchases re
 - **GIVEN** a profile has a purchase or expected-arrival candidate and forwarder source evidence that is unmatched, suggested, confirmed, or rejected
 - **WHEN** the user reviews the Purchases surface
 - **THEN** Cabinet MUST show the match state, enough source evidence to inspect the suggested match, and controls or follow-through paths to confirm a good match or reject/ignore a bad match while preserving both purchase evidence and forwarder provenance.
+
+### Requirement COMMERCE-RECONCILIATION-006: Purchases SHALL present a unified table and add/import entry point
+Cabinet SHALL label the purchase-management route as Purchases and present purchases from manual, CSV, email, desktop-app, eBay, Amazon, and other channel sources in one scannable table-oriented workspace.
+
+#### Scenario: Review and start purchase creation/import
+- **GIVEN** the user opens the Purchases route
+- **WHEN** the Purchases workspace renders
+- **THEN** Cabinet MUST show Purchases as the route title, expose a table shell with purchase/source/price/status/tracking/action columns, and provide a `+` add action that opens a creation/import dialog with New, CSV, and Email modes.
