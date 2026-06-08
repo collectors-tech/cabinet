@@ -43,7 +43,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-provider-single"]').select('amazon')
     cy.get('[data-testid="scanner-new-query-name"]').type('Amazon Scope')
     cy.get('[data-testid="scanner-new-query-keywords"]').type('slot')
-    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.get('[data-testid="market-watch-toolbar-create-query"]').click()
     cy.wait('@createScopedQuery')
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
   })
@@ -382,7 +382,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
     cy.get('[data-testid="market-watch-query-table"]').within(() => {
       cy.contains('td', 'succeeded').should('be.visible')
-      cy.contains('td', 'Candidates: 2').should('be.visible')
+      cy.contains('td', '2').should('be.visible')
     })
   })
 
@@ -450,6 +450,8 @@ describe('integrations/ui-screen-market-watch', () => {
             name: 'Bonza AFX Watch',
             keywords: ['AFX', 'Mega G+'],
             provider_scope: ['bonzaslotcars'],
+            schedule_cron: '0 */6 * * *',
+            enabled: true,
             last_run_status: 'succeeded',
             last_run_at: '2026-05-26T06:41:00Z',
             last_candidate_count: 3,
@@ -459,6 +461,9 @@ describe('integrations/ui-screen-market-watch', () => {
             name: 'eBay HO Scan',
             keywords: ['HO slot'],
             provider_scope: ['ebay'],
+            enabled: false,
+            last_run_status: 'failed',
+            last_run_message: 'Provider credentials expired',
           },
         ],
       },
@@ -478,14 +483,21 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-query-table"]').should('be.visible')
     cy.get('[data-testid="market-watch-query-table"]').within(() => {
       cy.contains('th', 'Query Name').should('be.visible')
+      cy.contains('th', 'Terms').should('be.visible')
       cy.contains('th', 'Provider Scope').should('be.visible')
-      cy.contains('th', 'Last Run Status').should('be.visible')
+      cy.contains('th', 'Schedule').should('be.visible')
+      cy.contains('th', 'Latest Status').should('be.visible')
       cy.contains('th', 'Last Run Time').should('be.visible')
-      cy.contains('th', 'Latest Output Summary').should('be.visible')
+      cy.contains('th', 'Result Count').should('be.visible')
       cy.contains('td', 'Bonza AFX Watch').should('be.visible')
+      cy.contains('td', 'AFX, Mega G+').should('be.visible')
       cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'Scheduled: 0 */6 * * *').should('be.visible')
       cy.contains('td', 'succeeded').should('be.visible')
-      cy.contains('td', 'Candidates: 3').should('be.visible')
+      cy.contains('td', '3').should('be.visible')
+      cy.contains('td', 'eBay HO Scan').should('be.visible')
+      cy.contains('td', 'Manual / paused').should('be.visible')
+      cy.contains('td', 'failed: Provider credentials expired').should('be.visible')
     })
   })
 
@@ -543,7 +555,7 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-query-table"]').within(() => {
       cy.contains('td', 'Scheduled AFX Watch').should('be.visible')
       cy.contains('td', 'never').should('be.visible')
-      cy.contains('td', 'No output').should('be.visible')
+      cy.contains('td', '0').should('be.visible')
     })
 
     cy.get('[data-testid="scanner-run-scheduled-refresh"]').click()
@@ -558,7 +570,7 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'Candidates collected: 4')
     cy.get('[data-testid="market-watch-query-table"]').within(() => {
       cy.contains('td', 'succeeded').should('be.visible')
-      cy.contains('td', 'Candidates: 4').should('be.visible')
+      cy.contains('td', '4').should('be.visible')
     })
     cy.get('[data-testid="market-watch-run-history-qs-mw-scheduled"]')
       .should('contain', 'Scheduled AFX Watch')
