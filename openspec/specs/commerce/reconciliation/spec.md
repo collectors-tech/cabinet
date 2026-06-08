@@ -78,3 +78,14 @@ Cabinet SHALL let users paste CSV rows or order/email text from the Purchases `+
 - **AND** Cabinet MUST NOT add imported purchase drafts to the Purchases table until the user explicitly confirms the preview.
 - **WHEN** the user confirms a CSV or Email preview
 - **THEN** Cabinet MUST add the confirmed import draft rows to the Purchases table with CSV or Email import status and preserve the previewed provenance, price, tracking, and delivery evidence.
+
+### Requirement COMMERCE-RECONCILIATION-010: Purchases SHALL persist add/import drafts through commerce lifecycle records
+Cabinet SHALL persist manual, CSV, and email purchase drafts from the Purchases `+` dialog through the commerce lifecycle API so confirmed purchase rows have durable lifecycle and expected-arrival evidence instead of only local UI state.
+
+#### Scenario: Persist confirmed purchase drafts
+- **GIVEN** the user opens the Purchases `+` dialog and enters a valid manual purchase or confirms a CSV/email preview
+- **WHEN** Cabinet accepts the purchase draft
+- **THEN** Cabinet MUST create the purchase item record needed by the commerce lifecycle API and then create a `purchase` lifecycle entry for that item.
+- **AND** the commerce lifecycle response MUST include an expected-arrival record linked to the lifecycle entry.
+- **AND** the Purchases table MUST show persistence evidence for the added row, including lifecycle and expected-arrival identifiers.
+- **AND** parse failures or API persistence failures MUST remain visible and MUST NOT add unpersisted manual, CSV, or email rows to the table.

@@ -248,11 +248,36 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
-  it('COMMERCE-RECONCILIATION-008 creates manual purchase drafts from the add dialog', () => {
+  it('COMMERCE-RECONCILIATION-008/010 creates and persists manual purchase drafts from the add dialog', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/items', (req) => {
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: 'purchase-item-manual-001',
+          title: req.body.title,
+          part_number: req.body.part_number,
+        },
+      })
+    }).as('createPurchaseDraftItem')
+    cy.intercept('POST', '/api/commerce/lifecycle', {
+      statusCode: 201,
+      body: {
+        entry: {
+          id: 'life-manual-001',
+          state: 'purchase',
+          expected_arrival_id: 'arrival-manual-001',
+        },
+        expected_arrival: {
+          id: 'arrival-manual-001',
+          lifecycle_entry_id: 'life-manual-001',
+          status: 'expected',
+        },
+      },
+    }).as('createPurchaseLifecycle')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
@@ -276,10 +301,31 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchases-add-new-price"]').type('AU $42.50')
     cy.get('[data-testid="purchases-add-new-tracking"]').type('TBA123456')
     cy.get('[data-testid="purchases-add-new-save"]').click()
+    cy.wait('@createPurchaseDraftItem')
+      .its('request.body')
+      .should('include', {
+        title: 'Manual Amazon order',
+        brand: 'Amazon',
+        category: 'Purchases',
+      })
+    cy.wait('@createPurchaseLifecycle')
+      .its('request.body')
+      .should('include', {
+        item_id: 'purchase-item-manual-001',
+        state: 'purchase',
+        source: 'Amazon',
+        external_ref: 'TBA123456',
+        amount: 42.5,
+        currency: 'AUD',
+      })
+    cy.log('COMMERCE-RECONCILIATION-010 persisted manual draft')
     cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
     cy.get('[data-testid="purchases-manual-draft-result"]')
-      .should('contain', 'Saved manual purchase draft for Manual Amazon order')
-      .and('contain', 'Persistent API storage is pending')
+      .should(
+        'contain',
+        'Persisted manual purchase draft for Manual Amazon order'
+      )
+      .and('contain', 'commerce lifecycle API')
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 1)
       .and('contain', 'Manual Amazon order')
@@ -287,6 +333,7 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'AU $42.50')
       .and('contain', 'manual draft')
       .and('contain', 'TBA123456')
+      .and('contain', 'Persisted lifecycle life-man')
     cy.get('[data-testid="purchases-filter-result"]').should(
       'contain',
       'Showing 1 of 1 purchases'
@@ -303,11 +350,40 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'manual draft')
   })
 
-  it('COMMERCE-RECONCILIATION-009 previews and confirms CSV and email purchase imports', () => {
+  it('COMMERCE-RECONCILIATION-009/010 previews confirms and persists CSV and email purchase imports', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
+    let persistedCount = 0
+    cy.intercept('POST', '/api/items', (req) => {
+      persistedCount += 1
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: 'purchase-import-item-' + persistedCount,
+          title: req.body.title,
+          part_number: req.body.part_number,
+        },
+      })
+    }).as('createPurchaseImportItem')
+    cy.intercept('POST', '/api/commerce/lifecycle', (req) => {
+      req.reply({
+        statusCode: 201,
+        body: {
+          entry: {
+            id: 'life-import-00' + persistedCount,
+            state: 'purchase',
+            expected_arrival_id: 'arrival-import-00' + persistedCount,
+          },
+          expected_arrival: {
+            id: 'arrival-import-00' + persistedCount,
+            lifecycle_entry_id: 'life-import-00' + persistedCount,
+            status: 'expected',
+          },
+        },
+      })
+    }).as('createPurchaseImportLifecycle')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
@@ -334,16 +410,34 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'TBA123456')
     cy.get('[data-testid="purchases-table-row"]').should('not.exist')
     cy.get('[data-testid="purchases-add-csv-confirm"]').click()
+    cy.wait('@createPurchaseImportItem')
+      .its('request.body')
+      .should('include', {
+        title: 'CSV Pokemon order',
+        brand: 'csv',
+        category: 'Purchases',
+      })
+    cy.wait('@createPurchaseImportLifecycle')
+      .its('request.body')
+      .should('include', {
+        item_id: 'purchase-import-item-1',
+        state: 'purchase',
+        source: 'Amazon CSV row 2',
+        external_ref: 'TBA123456',
+        amount: 42.5,
+        currency: 'AUD',
+      })
     cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
     cy.get('[data-testid="purchases-manual-draft-result"]')
-      .should('contain', 'Confirmed 1 CSV import draft')
-      .and('contain', 'No purchase was written before explicit confirmation')
+      .should('contain', 'Confirmed and persisted 1 CSV import draft')
+      .and('contain', 'commerce lifecycle API')
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 1)
       .and('contain', 'CSV Pokemon order')
       .and('contain', 'Amazon CSV row 2')
       .and('contain', 'csv import')
       .and('contain', 'TBA123456')
+      .and('contain', 'Persisted lifecycle life-imp')
 
     cy.get('[data-testid="purchases-add-button"]').click()
     cy.get('[data-testid="purchases-add-tab-email"]').click()
@@ -363,11 +457,29 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', '1ZEMAILPURCHASE')
     cy.get('[data-testid="purchases-table-row"]').should('have.length', 1)
     cy.get('[data-testid="purchases-add-email-confirm"]').click()
+    cy.wait('@createPurchaseImportItem')
+      .its('request.body')
+      .should('include', {
+        title: 'Email Flute order',
+        brand: 'email',
+        category: 'Purchases',
+      })
+    cy.wait('@createPurchaseImportLifecycle')
+      .its('request.body')
+      .should('include', {
+        item_id: 'purchase-import-item-2',
+        state: 'purchase',
+        source: 'eBay pasted email text',
+        external_ref: '1ZEMAILPURCHASE',
+        amount: 2.4,
+        currency: 'AUD',
+      })
     cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 2)
       .and('contain', 'Email Flute order')
       .and('contain', 'email import')
+      .and('contain', 'Persisted lifecycle life-imp')
     cy.get('[data-testid="purchases-status-filter-email_import"]').click()
     cy.get('[data-testid="purchases-table-row"]')
       .should('have.length', 1)
