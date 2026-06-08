@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -93,6 +94,116 @@ func TestMediaWorkspaceAssetsAPIScopesActiveProfileAndFiltersUnlinked(t *testing
 	}
 	if len(unlinked.Assets) != 1 || unlinked.Assets[0].ID != "media-api-attachment" || unlinked.Assets[0].LinkageState != "unlinked" || unlinked.Summary.Total != 2 {
 		t.Fatalf("unexpected unlinked media response: %+v", unlinked)
+	}
+}
+
+func TestMediaWorkspaceCreateAssetPersistsUnlinkedUploadMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Media Upload"}`), map[string]string{"Content-Type": "application/json"})
+	if profileResp.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileResp.Code, profileResp.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profileResp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activeResp := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activeResp.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", activeResp.Code, activeResp.Body.String())
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("title", "Loose chassis reference"); err != nil {
+		t.Fatalf("write title field: %v", err)
+	}
+	if err := writer.WriteField("source", "Bench intake"); err != nil {
+		t.Fatalf("write source field: %v", err)
+	}
+	if err := writer.WriteField("notes", "Rear axle detail"); err != nil {
+		t.Fatalf("write notes field: %v", err)
+	}
+	part, err := writer.CreateFormFile("file", "loose-chassis.jpg")
+	if err != nil {
+		t.Fatalf("create media form file: %v", err)
+	}
+	if _, err := part.Write(sampleJPEG(t)); err != nil {
+		t.Fatalf("write media form file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	createResp := doRequest(t, a, http.MethodPost, "/api/media/assets", &body, map[string]string{"Content-Type": writer.FormDataContentType()})
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create media asset status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var created struct {
+		AssetID  string `json:"asset_id"`
+		Filename string `json:"filename"`
+		Title    string `json:"title"`
+		Source   string `json:"source"`
+		Notes    string `json:"notes"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created media asset: %v", err)
+	}
+	if created.AssetID == "" || created.Filename != "loose-chassis.jpg" || created.Title != "Loose chassis reference" || created.Source != "Bench intake" || created.Notes != "Rear axle detail" {
+		t.Fatalf("unexpected created media asset response: %+v", created)
+	}
+
+	assetsResp := doRequest(t, a, http.MethodGet, "/api/media/assets?filter=unlinked", nil, nil)
+	if assetsResp.Code != http.StatusOK {
+		t.Fatalf("media assets status=%d body=%s", assetsResp.Code, assetsResp.Body.String())
+	}
+	var listed struct {
+		Assets []struct {
+			ID           string `json:"id"`
+			Filename     string `json:"filename"`
+			LinkageState string `json:"linkage_state"`
+		} `json:"assets"`
+		Summary struct {
+			Total    int `json:"total"`
+			Unlinked int `json:"unlinked"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(assetsResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode listed media assets: %v", err)
+	}
+	if len(listed.Assets) != 1 || listed.Assets[0].ID != created.AssetID || listed.Assets[0].Filename != "loose-chassis.jpg" || listed.Assets[0].LinkageState != "unlinked" {
+		t.Fatalf("created media asset not listed as unlinked: %+v", listed)
+	}
+	if listed.Summary.Total != 1 || listed.Summary.Unlinked != 1 {
+		t.Fatalf("unexpected created media summary: %+v", listed.Summary)
+	}
+
+	var metadataJSON string
+	if err := a.db.QueryRow(`SELECT context_json FROM chat_messages WHERE profile_id = ? AND content = 'Media asset added from Media workspace.'`, profile.ID).Scan(&metadataJSON); err != nil {
+		t.Fatalf("query saved media metadata message: %v", err)
+	}
+	if !strings.Contains(metadataJSON, `"title":"Loose chassis reference"`) || !strings.Contains(metadataJSON, `"notes":"Rear axle detail"`) {
+		t.Fatalf("metadata was not persisted in chat message context: %s", metadataJSON)
+	}
+
+	var badBody bytes.Buffer
+	badWriter := multipart.NewWriter(&badBody)
+	badPart, err := badWriter.CreateFormFile("file", "not-media.txt")
+	if err != nil {
+		t.Fatalf("create bad media form file: %v", err)
+	}
+	if _, err := badPart.Write([]byte("not image")); err != nil {
+		t.Fatalf("write bad media form file: %v", err)
+	}
+	if err := badWriter.Close(); err != nil {
+		t.Fatalf("close bad multipart writer: %v", err)
+	}
+	badResp := doRequest(t, a, http.MethodPost, "/api/media/assets", &badBody, map[string]string{"Content-Type": badWriter.FormDataContentType()})
+	if badResp.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("unsupported media status=%d body=%s", badResp.Code, badResp.Body.String())
 	}
 }
 

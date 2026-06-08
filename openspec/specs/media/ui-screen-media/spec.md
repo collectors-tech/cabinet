@@ -271,3 +271,26 @@ Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated 
 - **GIVEN** the user has selected Cards or Rows mode on `/media`
 - **WHEN** the workspace reloads
 - **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.
+
+### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
+Cabinet SHALL let authenticated users add unlinked media assets from the Media workspace by dragging supported image files anywhere over the page or by opening an explicit add-media dialog from a `+` action.
+
+#### Scenario: Start add-media flow from page-wide drop
+- **GIVEN** the user is on `/media`
+- **WHEN** the user drags and drops a supported image file anywhere over the Media workspace
+- **THEN** Cabinet MUST open the Add media dialog, preserve the dropped image, show drag/drop feedback, and allow metadata entry before save.
+
+#### Scenario: Save dropped media with metadata
+- **GIVEN** the Add media dialog contains a supported image and metadata fields
+- **WHEN** the user saves the media
+- **THEN** the UI MUST submit the same multipart `/api/media/assets` create path used by the explicit `+` dialog, refresh `/api/media/assets`, and show the newly created unlinked asset without losing metadata on success.
+
+#### Scenario: Reject unsupported media files without losing metadata
+- **GIVEN** the user has entered Add media metadata
+- **WHEN** the user drops or chooses an unsupported file type
+- **THEN** Cabinet MUST block save, show deterministic unsupported-file feedback, and preserve the entered metadata for correction.
+
+#### Scenario: Preserve add-media metadata on save failure
+- **GIVEN** the Add media dialog contains a supported image and metadata
+- **WHEN** `/api/media/assets` rejects the save
+- **THEN** Cabinet MUST keep the dialog open, preserve the selected file and metadata values, and show an actionable error.

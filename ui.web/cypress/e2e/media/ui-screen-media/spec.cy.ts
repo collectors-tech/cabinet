@@ -113,7 +113,9 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-assign-media-slot-car-front"]').should(
       'be.enabled'
     )
-    cy.get('[data-testid="media-upload-action"]').should('be.disabled')
+    cy.get('[data-testid="media-upload-action"]')
+      .should('be.enabled')
+      .and('have.attr', 'aria-label', 'Add media')
     cy.get('[data-testid="media-download-selected-action"]').should(
       'be.disabled'
     )
@@ -277,6 +279,167 @@ describe('ui-screen-media', () => {
       .should('eq', 'cards')
     cy.get('[data-testid="media-card-grid"]').should('be.visible')
     cy.get('[data-testid="media-row-table"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-MEDIA-014 supports page-wide image drop and metadata save', () => {
+    let saved = false
+    const createdAsset = {
+      id: 'media-page-drop-created',
+      title: 'Loose chassis reference',
+      filename: 'loose-chassis.jpg',
+      uploaded_at: '2026-06-08 16:35',
+      linkage_state: 'unlinked',
+      analysis_status: 'pending',
+      source: 'Chat attachment',
+      download_filename: 'loose-chassis-jpg-media-pa.jpg',
+    }
+
+    cy.intercept('GET', '/api/media/assets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: saved
+          ? {
+              ...mediaResponse,
+              summary: {
+                ...mediaResponse.summary,
+                total: mediaResponse.summary.total + 1,
+                unlinked: mediaResponse.summary.unlinked + 1,
+              },
+              assets: [createdAsset, ...mediaResponse.assets],
+            }
+          : mediaResponse,
+      })
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/media/assets', (req) => {
+      expect(req.headers['content-type']).to.contain('multipart/form-data')
+      saved = true
+      req.reply({
+        statusCode: 201,
+        body: {
+          asset_id: 'media-page-drop-created',
+          filename: 'loose-chassis.jpg',
+          title: 'Loose chassis reference',
+          source: 'Bench intake',
+          notes: 'Rear axle detail',
+        },
+      })
+    }).as('createMediaAsset')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-workspace"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('fake-image-data'),
+        fileName: 'loose-chassis.jpg',
+        mimeType: 'image/jpeg',
+      },
+      { action: 'drag-drop' }
+    )
+    cy.get('[data-testid="media-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-add-dropzone"]').should(
+      'contain',
+      'loose-chassis.jpg'
+    )
+    cy.get('[data-testid="media-add-title"]')
+      .should('have.value', 'loose-chassis')
+      .clear()
+      .type('Loose chassis reference')
+    cy.get('[data-testid="media-add-source"]').type('Bench intake')
+    cy.get('[data-testid="media-add-notes"]').type('Rear axle detail')
+    cy.get('[data-testid="media-add-save-action"]').click()
+    cy.wait('@createMediaAsset')
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-add-dialog"]').should('not.exist')
+    cy.get('[data-testid="media-assignment-success"]')
+      .should('be.visible')
+      .and('contain', 'Media asset added')
+    cy.get('[data-testid="media-card-media-page-drop-created"]')
+      .should('be.visible')
+      .and('contain', 'Loose chassis reference')
+      .and('contain', 'Unlinked')
+  })
+
+  it('UI-SCREEN-MEDIA-014 rejects unsupported files and preserves metadata', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/media/assets').as('createMediaAsset')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-upload-action"]').click()
+    cy.get('[data-testid="media-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-add-title"]').type('Metadata survives')
+    cy.get('[data-testid="media-add-source"]').type('Owner note')
+    cy.get('[data-testid="media-add-dropzone"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('plain-text'),
+        fileName: 'not-an-image.txt',
+        mimeType: 'text/plain',
+      },
+      { action: 'drag-drop' }
+    )
+    cy.get('[data-testid="media-add-error"]')
+      .should('be.visible')
+      .and('contain', 'Unsupported file type')
+    cy.get('[data-testid="media-add-title"]').should(
+      'have.value',
+      'Metadata survives'
+    )
+    cy.get('[data-testid="media-add-source"]').should('have.value', 'Owner note')
+    cy.get('@createMediaAsset.all').should('have.length', 0)
+  })
+
+  it('UI-SCREEN-MEDIA-014 preserves metadata when save fails', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/media/assets', {
+      statusCode: 500,
+      body: { error: 'failed_to_save_media_asset' },
+    }).as('createMediaAsset')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-upload-action"]').click()
+    cy.get('[data-testid="media-add-file-input"]').selectFile(
+      {
+        contents: Cypress.Buffer.from('fake-image-data'),
+        fileName: 'failed-save.png',
+        mimeType: 'image/png',
+      },
+      { force: true }
+    )
+    cy.get('[data-testid="media-add-title"]').type('Failure metadata')
+    cy.get('[data-testid="media-add-source"]').type('Page button')
+    cy.get('[data-testid="media-add-notes"]').type('Keep this note')
+    cy.get('[data-testid="media-add-save-action"]').click()
+    cy.wait('@createMediaAsset')
+    cy.get('[data-testid="media-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-add-error"]')
+      .should('be.visible')
+      .and('contain', 'media_asset_save_500')
+    cy.get('[data-testid="media-add-dropzone"]').should(
+      'contain',
+      'failed-save.png'
+    )
+    cy.get('[data-testid="media-add-title"]').should(
+      'have.value',
+      'Failure metadata'
+    )
+    cy.get('[data-testid="media-add-source"]').should('have.value', 'Page button')
+    cy.get('[data-testid="media-add-notes"]').should(
+      'have.value',
+      'Keep this note'
+    )
   })
 
   it('UI-SCREEN-MEDIA-011 confirms assignment and refreshes API-backed linkage state', () => {

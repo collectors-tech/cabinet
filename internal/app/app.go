@@ -5201,6 +5201,91 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/media/assets", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			active, err := profiles.GetActiveProfile(r.Context())
+			if err != nil || strings.TrimSpace(active.ID) == "" {
+				http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+				return
+			}
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "multipart/form-data") {
+				http.Error(w, `{"error":"multipart_form_data_required"}`, http.StatusBadRequest)
+				return
+			}
+			if err := r.ParseMultipartForm(16 << 20); err != nil {
+				http.Error(w, `{"error":"invalid_multipart"}`, http.StatusBadRequest)
+				return
+			}
+			file, hdr, err := r.FormFile("file")
+			if err != nil {
+				http.Error(w, `{"error":"file_required"}`, http.StatusBadRequest)
+				return
+			}
+			defer file.Close()
+			mimeType := strings.TrimSpace(hdr.Header.Get("Content-Type"))
+			if !isSupportedMediaUpload(mimeType, hdr.Filename) {
+				http.Error(w, `{"error":"unsupported_media_type"}`, http.StatusUnsupportedMediaType)
+				return
+			}
+			if mimeType == "" || strings.EqualFold(mimeType, "application/octet-stream") {
+				mimeType = mediaUploadContentType(hdr.Filename)
+			}
+			threadID := ""
+			threads, err := chatSvc.ListThreads(r.Context(), active.ID)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_list_media_upload_threads"}`, http.StatusBadRequest)
+				return
+			}
+			for _, thread := range threads {
+				if strings.EqualFold(strings.TrimSpace(thread.Title), "Media Uploads") {
+					threadID = thread.ID
+					break
+				}
+			}
+			if threadID == "" {
+				thread, err := chatSvc.CreateThread(r.Context(), active.ID, "Media Uploads", map[string]any{
+					"source": "media.workspace",
+				})
+				if err != nil {
+					http.Error(w, `{"error":"failed_to_create_media_upload_thread"}`, http.StatusBadRequest)
+					return
+				}
+				threadID = thread.ID
+			}
+			attachment, err := chatSvc.SaveAttachment(r.Context(), active.ID, threadID, hdr.Filename, mimeType, file)
+			if err != nil {
+				http.Error(w, `{"error":"failed_to_save_media_asset"}`, http.StatusBadRequest)
+				return
+			}
+			title := strings.TrimSpace(r.FormValue("title"))
+			source := strings.TrimSpace(r.FormValue("source"))
+			notes := strings.TrimSpace(r.FormValue("notes"))
+			if title == "" {
+				title = attachment.Filename
+			}
+			if _, err := chatSvc.CreateMessage(r.Context(), active.ID, threadID, "user", "Media asset added from Media workspace.", map[string]any{
+				"source":        "media.workspace",
+				"asset_id":      attachment.ID,
+				"title":         title,
+				"origin":        source,
+				"notes":         notes,
+				"filename":      attachment.Filename,
+				"mime_type":     attachment.MimeType,
+				"metadata_flow": "add-media-dialog",
+			}); err != nil {
+				http.Error(w, `{"error":"failed_to_save_media_metadata"}`, http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"asset_id":  attachment.ID,
+				"filename":  attachment.Filename,
+				"mime_type": attachment.MimeType,
+				"title":     title,
+				"source":    source,
+				"notes":     notes,
+			})
+			return
+		}
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
 			return
@@ -10276,6 +10361,29 @@ func contentDispositionAttachment(filename string) string {
 	name = strings.ReplaceAll(name, `\`, "_")
 	name = strings.ReplaceAll(name, `"`, "_")
 	return `attachment; filename="` + name + `"`
+}
+
+func isSupportedMediaUpload(mimeType, filename string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if strings.HasPrefix(mimeType, "image/") {
+		return true
+	}
+	return mediaUploadContentType(filename) != "application/octet-stream"
+}
+
+func mediaUploadContentType(filename string) string {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(filename))) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 type telegramCatalogCaptureRequest struct {

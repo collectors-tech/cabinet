@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from 'react'
 import {
   Archive,
   Download,
@@ -34,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -43,6 +49,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -106,6 +114,12 @@ type AssignmentPreview = {
 type MediaViewMode = 'cards' | 'rows'
 
 const MEDIA_VIEW_MODE_STORAGE_KEY = 'cabinet.viewMode.media'
+const ACCEPTED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]
 
 const EMPTY_SUMMARY: MediaSummary = {
   total: 0,
@@ -170,6 +184,15 @@ export function Media() {
   const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(
     null
   )
+  const [addMediaOpen, setAddMediaOpen] = useState(false)
+  const [addMediaFile, setAddMediaFile] = useState<File | null>(null)
+  const [addMediaTitle, setAddMediaTitle] = useState('')
+  const [addMediaSource, setAddMediaSource] = useState('')
+  const [addMediaNotes, setAddMediaNotes] = useState('')
+  const [addMediaError, setAddMediaError] = useState<string | null>(null)
+  const [addMediaSaving, setAddMediaSaving] = useState(false)
+  const [isPageDragOver, setIsPageDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadAssets = useCallback(async () => {
     setLoading(true)
@@ -222,6 +245,95 @@ export function Media() {
       }
       return current.filter((id) => id !== assetID)
     })
+  }
+
+  const resetAddMedia = () => {
+    setAddMediaOpen(false)
+    setAddMediaFile(null)
+    setAddMediaTitle('')
+    setAddMediaSource('')
+    setAddMediaNotes('')
+    setAddMediaError(null)
+    setAddMediaSaving(false)
+    setIsPageDragOver(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const validateImageFile = (file: File) => {
+    if (ACCEPTED_IMAGE_TYPES.includes(file.type)) return null
+    if (/\.(jpe?g|png|gif|webp)$/i.test(file.name)) return null
+    return 'Unsupported file type. Add a JPG, PNG, GIF, or WebP image.'
+  }
+
+  const stageAddMediaFile = (file: File, source: 'page-drop' | 'dialog') => {
+    const validationError = validateImageFile(file)
+    setAddMediaOpen(true)
+    setIsPageDragOver(false)
+    if (validationError) {
+      setAddMediaFile(null)
+      setAddMediaError(validationError)
+      return
+    }
+    setAddMediaFile(file)
+    setAddMediaError(null)
+    if (source === 'page-drop' && addMediaTitle.trim() === '') {
+      setAddMediaTitle(file.name.replace(/\.[^.]+$/, ''))
+    }
+  }
+
+  const handlePageDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setIsPageDragOver(true)
+  }
+
+  const handlePageDrop = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    const file = event.dataTransfer.files.item(0)
+    if (file) {
+      stageAddMediaFile(file, 'page-drop')
+    }
+  }
+
+  const saveAddMedia = async () => {
+    if (!addMediaFile) {
+      setAddMediaError('Choose an image before saving.')
+      return
+    }
+    const validationError = validateImageFile(addMediaFile)
+    if (validationError) {
+      setAddMediaError(validationError)
+      return
+    }
+    setAddMediaSaving(true)
+    setAddMediaError(null)
+    const formData = new FormData()
+    formData.append('file', addMediaFile)
+    formData.append('title', addMediaTitle.trim())
+    formData.append('source', addMediaSource.trim())
+    formData.append('notes', addMediaNotes.trim())
+    try {
+      const response = await fetch('/api/media/assets', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!response.ok) {
+        throw new Error(`media_asset_save_${response.status}`)
+      }
+      resetAddMedia()
+      setAssignmentSuccess('Media asset added to the unlinked review queue.')
+      await loadAssets()
+    } catch (err) {
+      setAddMediaError(
+        err instanceof Error ? err.message : 'media_asset_save_failed'
+      )
+    } finally {
+      setAddMediaSaving(false)
+    }
   }
 
   const previewDownload = async () => {
@@ -353,7 +465,22 @@ export function Media() {
         </div>
       </Header>
 
-      <Main className='space-y-6' data-testid='media-workspace'>
+      <Main
+        className='relative space-y-6'
+        data-testid='media-workspace'
+        onDragEnter={handlePageDragOver}
+        onDragOver={handlePageDragOver}
+        onDragLeave={() => setIsPageDragOver(false)}
+        onDrop={handlePageDrop}
+      >
+        {isPageDragOver ? (
+          <div
+            className='pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-background/80 text-sm font-medium shadow-sm'
+            data-testid='media-page-drop-feedback'
+          >
+            Drop image to add media
+          </div>
+        ) : null}
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Media</h1>
@@ -364,12 +491,16 @@ export function Media() {
           </div>
           <div className='flex flex-wrap gap-2'>
             <Button
-              variant='outline'
-              disabled
+              type='button'
+              size='icon'
+              aria-label='Add media'
               data-testid='media-upload-action'
+              onClick={() => {
+                setAddMediaOpen(true)
+                setAddMediaError(null)
+              }}
             >
               <ImagePlus />
-              Upload
             </Button>
             <Button
               variant='outline'
@@ -434,10 +565,7 @@ export function Media() {
               ? 'Loading view'
               : `${assets.length} asset${assets.length === 1 ? '' : 's'} in ${filter === 'unlinked' ? 'Unlinked' : 'All'} view`}
           </div>
-          <div
-            className='flex items-center gap-2'
-            aria-label='Media view mode'
-          >
+          <div className='flex items-center gap-2' aria-label='Media view mode'>
             <Button
               type='button'
               variant={viewMode === 'cards' ? 'default' : 'outline'}
@@ -686,7 +814,10 @@ export function Media() {
                         {asset.title}
                       </TableCell>
                       <TableCell>
-                        <Badge className='max-w-full truncate' variant='outline'>
+                        <Badge
+                          className='max-w-full truncate'
+                          variant='outline'
+                        >
                           {analysisLabel(asset.analysis_status)}
                         </Badge>
                       </TableCell>
@@ -759,6 +890,114 @@ export function Media() {
             </CardContent>
           </Card>
         ) : null}
+
+        <Dialog
+          open={addMediaOpen}
+          onOpenChange={(open) => {
+            if (open) {
+              setAddMediaOpen(true)
+              setAddMediaError(null)
+              return
+            }
+            resetAddMedia()
+          }}
+        >
+          <DialogContent data-testid='media-add-dialog'>
+            <DialogHeader>
+              <DialogTitle>Add media</DialogTitle>
+            </DialogHeader>
+            <div className='space-y-4'>
+              <button
+                type='button'
+                className='flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground hover:bg-muted/50'
+                data-testid='media-add-dropzone'
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'copy'
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const file = event.dataTransfer.files.item(0)
+                  if (file) {
+                    stageAddMediaFile(file, 'dialog')
+                  }
+                }}
+              >
+                <ImagePlus className='h-6 w-6' />
+                <span>
+                  {addMediaFile
+                    ? addMediaFile.name
+                    : 'Drop image or choose file'}
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='image/jpeg,image/png,image/gif,image/webp'
+                className='hidden'
+                data-testid='media-add-file-input'
+                onChange={(event) => {
+                  const file = event.target.files?.item(0)
+                  if (file) {
+                    stageAddMediaFile(file, 'dialog')
+                  }
+                }}
+              />
+              <div className='grid gap-2'>
+                <Label htmlFor='media-add-title'>Title</Label>
+                <Input
+                  id='media-add-title'
+                  value={addMediaTitle}
+                  data-testid='media-add-title'
+                  onChange={(event) => setAddMediaTitle(event.target.value)}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='media-add-source'>Source</Label>
+                <Input
+                  id='media-add-source'
+                  value={addMediaSource}
+                  data-testid='media-add-source'
+                  onChange={(event) => setAddMediaSource(event.target.value)}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='media-add-notes'>Notes</Label>
+                <Textarea
+                  id='media-add-notes'
+                  value={addMediaNotes}
+                  data-testid='media-add-notes'
+                  onChange={(event) => setAddMediaNotes(event.target.value)}
+                />
+              </div>
+              {addMediaError ? (
+                <div
+                  className='rounded-md border border-destructive/40 p-3 text-sm text-destructive'
+                  data-testid='media-add-error'
+                >
+                  {addMediaError}
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                variant='outline'
+                onClick={() => resetAddMedia()}
+                disabled={addMediaSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void saveAddMedia()}
+                disabled={addMediaSaving || addMediaFile === null}
+                data-testid='media-add-save-action'
+              >
+                {addMediaSaving ? 'Saving...' : 'Save media'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={assignmentAsset !== null}
