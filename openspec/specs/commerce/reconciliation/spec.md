@@ -49,3 +49,11 @@ Cabinet SHALL label the purchase-management route as Purchases and present purch
 - **GIVEN** the user opens the Purchases route
 - **WHEN** the Purchases workspace renders
 - **THEN** Cabinet MUST show Purchases as the route title, expose a table shell with purchase/source/price/status/tracking/action columns, and provide a `+` add action that opens a creation/import dialog with New, CSV, and Email modes.
+
+### Requirement COMMERCE-RECONCILIATION-007: Purchases SHALL support table filtering and row state actions
+Cabinet SHALL let users narrow the Purchases table by purchase text/source/status signals and expose row-level controls for common review state markers before deeper edit/persistence workflows are completed.
+
+#### Scenario: Filter and mark purchase rows
+- **GIVEN** the Purchases table contains captured or imported purchase rows
+- **WHEN** the user searches purchases, applies a review status filter, or marks a visible row as favorite, arrived, or rated
+- **THEN** Cabinet MUST keep the table scannable, show the filtered row count, preserve independent source/status evidence in visible rows, and reflect the selected favorite/arrival/rating state on the affected row without mutating unrelated rows.
