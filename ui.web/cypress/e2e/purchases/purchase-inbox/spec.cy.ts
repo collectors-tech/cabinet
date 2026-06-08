@@ -303,6 +303,86 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'manual draft')
   })
 
+  it('COMMERCE-RECONCILIATION-009 previews and confirms CSV and email purchase imports', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.get('[data-testid="purchases-table-empty-row"]').should(
+      'contain',
+      'No purchases loaded'
+    )
+    cy.get('[data-testid="purchases-add-button"]').click()
+    cy.get('[data-testid="purchases-add-tab-csv"]').click()
+    cy.get('[data-testid="purchases-add-csv-input"]')
+      .clear()
+      .type(
+        'source,title,price,currency,purchase_date,seller,channel,tracking,delivery\nAmazon,CSV Pokemon order,42.50,AUD,2026-06-08,Amazon AU,csv,TBA123456,Expected 2026-06-12',
+        { delay: 0 }
+      )
+    cy.get('[data-testid="purchases-add-csv-preview"]').click()
+    cy.get('[data-testid="purchases-add-csv-preview-result"]')
+      .should('contain', 'Previewing 1 CSV purchase draft')
+      .and('contain', 'CSV Pokemon order')
+      .and('contain', 'Amazon CSV row 2')
+      .and('contain', 'AUD 42.50')
+      .and('contain', '2026-06-08')
+      .and('contain', 'TBA123456')
+    cy.get('[data-testid="purchases-table-row"]').should('not.exist')
+    cy.get('[data-testid="purchases-add-csv-confirm"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
+    cy.get('[data-testid="purchases-manual-draft-result"]')
+      .should('contain', 'Confirmed 1 CSV import draft')
+      .and('contain', 'No purchase was written before explicit confirmation')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'CSV Pokemon order')
+      .and('contain', 'Amazon CSV row 2')
+      .and('contain', 'csv import')
+      .and('contain', 'TBA123456')
+
+    cy.get('[data-testid="purchases-add-button"]').click()
+    cy.get('[data-testid="purchases-add-tab-email"]').click()
+    cy.get('[data-testid="purchases-add-email-input"]')
+      .clear()
+      .type(
+        'Source: eBay\nTitle: Email Flute order\nPrice: AU $2.40\nPurchase Date: 2026-06-08\nSeller: seller-one\nChannel: email\nTracking: 1ZEMAILPURCHASE\nDelivery: Expected 2026-06-14',
+        { delay: 0 }
+      )
+    cy.get('[data-testid="purchases-add-email-preview"]').click()
+    cy.get('[data-testid="purchases-add-email-preview-result"]')
+      .should('contain', 'Previewing email purchase draft')
+      .and('contain', 'Email Flute order')
+      .and('contain', 'eBay pasted email text')
+      .and('contain', 'AU $2.40')
+      .and('contain', 'seller-one')
+      .and('contain', '1ZEMAILPURCHASE')
+    cy.get('[data-testid="purchases-table-row"]').should('have.length', 1)
+    cy.get('[data-testid="purchases-add-email-confirm"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 2)
+      .and('contain', 'Email Flute order')
+      .and('contain', 'email import')
+    cy.get('[data-testid="purchases-status-filter-email_import"]').click()
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Email Flute order')
+
+    cy.get('[data-testid="purchases-add-button"]').click()
+    cy.get('[data-testid="purchases-add-tab-csv"]').click()
+    cy.get('[data-testid="purchases-add-csv-input"]').clear().type('title')
+    cy.get('[data-testid="purchases-add-csv-preview"]').click()
+    cy.get('[data-testid="purchases-add-import-error"]').should(
+      'contain',
+      'CSV import needs a header row'
+    )
+  })
+
   it('EBAY-PURCHASE-CAPTURE-006 exposes a retryable error state', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
