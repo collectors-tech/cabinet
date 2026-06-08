@@ -1,5 +1,7 @@
 ## Purpose
-Define Discover screen behavior for not-in-collection triage actions.
+Define Discoveries screen behavior for candidate-item triage actions. `/discoveries`
+is the inbox for already found candidate items awaiting user decision; Market Watch and
+provider integration screens own query execution and import configuration.
 
 ## Requirements
 ### Requirement UI-SCREEN-DISCOVER-001: Discover SHALL support filterable candidate triage
@@ -45,6 +47,22 @@ Discoveries MUST focus on triage actions for already discovered candidates and m
 - **WHEN** discover API request fails
 - **THEN** screen SHALL present actionable retry state
 
+### Requirement UI-SCREEN-DISCOVER-005: Discoveries SHALL explain candidate purpose and provenance in-page
+Discoveries SHALL make the page purpose, source provenance, status, and next action clear
+without presenting the surface as a generic search or query history page.
+
+#### Scenario: Candidate inbox purpose
+- **GIVEN** authenticated user opens `/discoveries`
+- **WHEN** the page renders candidate rows or an empty state
+- **THEN** the screen MUST describe Discoveries as pending found-item triage
+- **AND** it MUST distinguish candidate findings from owned Inventory, wanted Wishlist records, and Market Watch query history
+
+#### Scenario: Candidate row provenance and actions
+- **GIVEN** a discovery candidate has source metadata
+- **WHEN** the candidate row renders
+- **THEN** row content MUST expose source/provider label, source result link when available, candidate title, price/currency when available, first-seen or last-seen recency, triage status, and confidence or review signal
+- **AND** row actions MUST provide clear paths for Wishlist promotion, Inventory/Purchase handoff where applicable, ignore/archive, and source-result review
+
 ## Acceptance Criteria
 - UC IDs cover filtering and each primary action class.
 - E2E mappings include action outcomes.
@@ -68,3 +86,5 @@ Discoveries MUST focus on triage actions for already discovered candidates and m
 | UC-DIS-06 | Apply Filters action | `Apply Filters` triggers deterministic filtered-query refresh | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `discover-apply-filters` |
 | UC-DIS-07 | Boundary enforcement | Discoveries shows triage actions only; no provider query/run controls | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 keeps Discoveries as triage-only and excludes Market Watch query/run controls` |
 | UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 provides explicit handoff action to Market Watch with preserved context` |
+| UC-DIS-09 | Candidate inbox purpose | Discoveries purpose and empty/list states distinguish found-item triage from Inventory, Wishlist, and Market Watch query history | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 explains candidate inbox purpose` |
+| UC-DIS-10 | Candidate provenance row | Candidate row exposes source/provider, source-result link, title, price/currency, recency, status, confidence/review signal, and destination actions | planned: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions` |
