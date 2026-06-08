@@ -13,11 +13,27 @@ import { ThemeSwitch } from '@/components/theme-switch'
 type DiscoveryItem = {
   candidate_id: string
   title: string
-  price: number
-  url: string
+  price?: number
+  currency?: string
+  url?: string
   last_seen: string
+  first_seen?: string
   stock_state: string
   stock_count: number
+  source?: string
+  provider?: string
+  source_provider?: string
+  source_result_url?: string
+  source_result_link?: string
+  source_result_id?: string
+  listing_id?: string
+  triage_status?: string
+  destination_status?: string
+  confidence?: number
+  needs_review?: boolean
+  review_signal?: string
+  seller_label?: string
+  source_label?: string
 }
 
 type DiscoveryActionType =
@@ -92,6 +108,58 @@ export function Discover() {
     await loadItems()
   }
 
+  const formatMoney = (item: DiscoveryItem) => {
+    if (typeof item.price !== 'number') {
+      return 'Price pending'
+    }
+    const currency = item.currency?.trim() || 'USD'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+    }).format(item.price)
+  }
+
+  const formatDate = (value?: string) => {
+    if (!value) {
+      return 'Recency pending'
+    }
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return value
+    }
+    return parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  const sourceLabel = (item: DiscoveryItem) =>
+    item.source_provider?.trim() ||
+    item.provider?.trim() ||
+    item.source?.trim() ||
+    item.source_label?.trim() ||
+    'Source pending'
+
+  const sourceResultURL = (item: DiscoveryItem) =>
+    item.source_result_url?.trim() ||
+    item.source_result_link?.trim() ||
+    item.url?.trim() ||
+    ''
+
+  const reviewSignal = (item: DiscoveryItem) => {
+    if (item.review_signal?.trim()) {
+      return item.review_signal
+    }
+    if (item.needs_review) {
+      return 'Needs review'
+    }
+    if (typeof item.confidence === 'number') {
+      return `Confidence ${Math.round(item.confidence * 100)}%`
+    }
+    return 'Review ready'
+  }
+
   return (
     <>
       <Header fixed>
@@ -118,9 +186,23 @@ export function Discover() {
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>Discoveries</h1>
           <p className='text-muted-foreground'>
-            Not-in-collection candidates with triage actions.
+            Pending found-item triage for candidates Cabinet found outside your
+            owned Inventory, wanted Wishlist records, and Market Watch query
+            history.
           </p>
         </div>
+
+        <section
+          className='rounded-md border border-dashed p-3 text-sm'
+          data-testid='discover-candidate-inbox-purpose'
+        >
+          <p className='font-medium'>Candidate inbox</p>
+          <p className='text-muted-foreground'>
+            Review found items, inspect provenance, then decide whether each
+            candidate belongs on Wishlist, needs Inventory or Purchase
+            follow-up, or should be ignored or archived.
+          </p>
+        </section>
 
         <section
           className='rounded-md border border-dashed p-3 text-sm'
@@ -202,31 +284,99 @@ export function Discover() {
               Loading discoveries...
             </p>
           ) : items.length === 0 ? (
-            <p className='p-4 text-sm text-muted-foreground'>
-              No discovery candidates match current filters.
-            </p>
+            <div className='space-y-1 p-4 text-sm'>
+              <p className='font-medium'>No pending found-item candidates.</p>
+              <p className='text-muted-foreground'>
+                Discoveries stays empty until provider runs or imports find
+                items that need triage separate from Inventory, Wishlist, and
+                Market Watch query history.
+              </p>
+            </div>
           ) : (
             <div className='divide-y'>
               {items.map((item) => (
-                <div key={item.candidate_id} className='space-y-2 p-3'>
+                <div
+                  key={item.candidate_id}
+                  className='space-y-3 p-3'
+                  data-testid={`discover-candidate-row-${item.candidate_id}`}
+                >
                   <div className='flex items-start justify-between gap-3'>
-                    <div>
+                    <div className='space-y-1'>
                       <p className='font-medium'>{item.title}</p>
                       <p className='text-xs text-muted-foreground'>
-                        {item.candidate_id} | ${item.price.toFixed(2)} | Stock{' '}
+                        {item.candidate_id} | {formatMoney(item)} | Stock{' '}
                         {item.stock_count}
                       </p>
                     </div>
-                    <a
-                      href={item.url}
-                      className='text-sm underline'
-                      target='_blank'
-                      rel='noreferrer'
-                    >
-                      Open Listing
-                    </a>
+                    {sourceResultURL(item) ? (
+                      <a
+                        href={sourceResultURL(item)}
+                        className='text-sm underline'
+                        target='_blank'
+                        rel='noreferrer'
+                        data-testid={`discover-source-result-${item.candidate_id}`}
+                      >
+                        Review source result
+                      </a>
+                    ) : null}
                   </div>
+                  <dl
+                    className='grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4'
+                    data-testid={`discover-provenance-${item.candidate_id}`}
+                  >
+                    <div>
+                      <dt className='font-medium text-foreground'>Source</dt>
+                      <dd>{sourceLabel(item)}</dd>
+                    </div>
+                    <div>
+                      <dt className='font-medium text-foreground'>Source ID</dt>
+                      <dd>
+                        {item.source_result_id?.trim() ||
+                          item.listing_id?.trim() ||
+                          item.candidate_id}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='font-medium text-foreground'>Recency</dt>
+                      <dd>
+                        First seen {formatDate(item.first_seen)}; last seen{' '}
+                        {formatDate(item.last_seen)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='font-medium text-foreground'>Status</dt>
+                      <dd>
+                        {item.triage_status?.trim() ||
+                          item.destination_status?.trim() ||
+                          item.stock_state}
+                        {' - '}
+                        {reviewSignal(item)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='font-medium text-foreground'>
+                        Seller/source
+                      </dt>
+                      <dd>
+                        {item.seller_label?.trim() ||
+                          item.source_label?.trim() ||
+                          'Seller pending'}
+                      </dd>
+                    </div>
+                  </dl>
                   <div className='flex flex-wrap gap-2'>
+                    {sourceResultURL(item) ? (
+                      <Button size='sm' variant='outline' asChild>
+                        <a
+                          href={sourceResultURL(item)}
+                          target='_blank'
+                          rel='noreferrer'
+                          data-testid={`discover-action-review-source-${item.candidate_id}`}
+                        >
+                          Review Source
+                        </a>
+                      </Button>
+                    ) : null}
                     <Button
                       size='sm'
                       variant='outline'
@@ -235,7 +385,7 @@ export function Discover() {
                         void applyAction(item.candidate_id, 'ignore')
                       }
                     >
-                      Ignore
+                      Ignore / Archive
                     </Button>
                     <Button
                       size='sm'
@@ -245,7 +395,7 @@ export function Discover() {
                         void applyAction(item.candidate_id, 'add_to_wishlist')
                       }
                     >
-                      Add to Wishlist
+                      Promote to Wishlist
                     </Button>
                     <Button
                       size='sm'
@@ -255,7 +405,7 @@ export function Discover() {
                         void applyAction(item.candidate_id, 'track_price')
                       }
                     >
-                      Track Price
+                      Purchase Follow-up
                     </Button>
                     <Button
                       size='sm'
@@ -264,7 +414,7 @@ export function Discover() {
                         void applyAction(item.candidate_id, 'create_item')
                       }
                     >
-                      Create Item
+                      Inventory Handoff
                     </Button>
                   </div>
                 </div>
