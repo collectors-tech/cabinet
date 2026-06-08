@@ -256,3 +256,148 @@ func TestApplySavedSearchActionsRetainAuditProvenance(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoveryCandidateContractIncludesStatusAndSourceResultAuditLink(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json, provider_scope_json) VALUES ('q1','Audit Query','["audit"]','[]','["ebay"]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	if _, err := conn.Exec(`
+		INSERT INTO scanner_candidates(
+			id, query_set_id, listing_id, title, price, shipping, url, image, seller,
+			first_seen, last_seen, status, source, observed_currency, reviewer_notes, source_result_url,
+			stock_state, stock_count
+		) VALUES (
+			'c-audit','q1','listing-audit','Audit Candidate',19.95,0,'https://example.test/item','','seller-a',
+			'2026-06-01T00:00:00Z','2026-06-02T00:00:00Z','reviewing','ebay','AUD','check photos','https://provider.test/result/listing-audit',
+			'in_stock',4
+		)
+	`); err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES ('c-audit','','not_in_collection',0.82,1,'AUD-001',CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("seed match: %v", err)
+	}
+
+	items, err := NewService(conn).ListNotInCollection(context.Background(), Filter{})
+	if err != nil {
+		t.Fatalf("ListNotInCollection() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one item, got %d", len(items))
+	}
+	got := items[0]
+	if got.SourceProvider != "ebay" || got.QuerySetID != "q1" || got.QueryName != "Audit Query" || got.ListingID != "listing-audit" {
+		t.Fatalf("expected source/query/listing provenance, got %+v", got)
+	}
+	if got.ObservedCurrency != "AUD" || got.Seller != "seller-a" || got.FirstSeen == "" || got.LastSeen == "" {
+		t.Fatalf("expected observed marketplace metadata, got %+v", got)
+	}
+	if got.Status != "reviewing" || got.Confidence != 0.82 || !got.NeedsReview || got.ReviewerNotes != "check photos" {
+		t.Fatalf("expected review status/confidence/notes, got %+v", got)
+	}
+	if got.SourceResultURL != "https://provider.test/result/listing-audit" || got.ExtractedPart != "AUD-001" {
+		t.Fatalf("expected source-result audit link and extracted part, got %+v", got)
+	}
+}
+
+func TestApplyActionPersistsDestinationStatusesAndWishlistDoesNotClaimOwnership(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	if _, err := conn.Exec(`INSERT INTO canonical_items(id, brand, category, part_number, title, status) VALUES ('i1','AFX','Cars','WISH-001','Wishlist Target','active')`); err != nil {
+		t.Fatalf("seed wishlist target: %v", err)
+	}
+	if _, err := conn.Exec(`INSERT INTO scanner_query_sets(id, name, keywords_json, exclusions_json) VALUES ('q1','Destination Query','["dest"]','[]')`); err != nil {
+		t.Fatalf("seed query set: %v", err)
+	}
+	seedCandidate := func(id, listingID, itemID, title, partNumber string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO scanner_candidates(id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source) VALUES (?, 'q1', ?, ?, 10, 0, 'https://example.test/source', '', 'seller', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', 'ebay')`, id, listingID, title); err != nil {
+			t.Fatalf("seed candidate %s: %v", id, err)
+		}
+		if _, err := conn.Exec(`INSERT INTO scanner_matches(candidate_id, item_id, state, confidence, needs_review, extracted_part_number, updated_at) VALUES (?, ?, 'not_in_collection', 0.7, 1, ?, CURRENT_TIMESTAMP)`, id, itemID, partNumber); err != nil {
+			t.Fatalf("seed match %s: %v", id, err)
+		}
+	}
+	seedCandidate("c-review", "L-review", "", "Review Candidate", "REV-001")
+	seedCandidate("c-wishlist", "L-wishlist", "i1", "Wishlist Candidate", "WISH-001")
+	seedCandidate("c-create-blocked", "L-create-blocked", "", "Blocked Create Candidate", "BLOCK-001")
+	seedCandidate("c-create-owned", "L-create-owned", "", "Owned Create Candidate", "OWN-001")
+	seedCandidate("c-archive", "L-archive", "", "Archive Candidate", "ARCH-001")
+
+	svc := NewService(conn)
+	actions := []Action{
+		{CandidateID: "c-review", Type: ActionReview, Payload: map[string]any{"reviewer_notes": "needs manual pricing"}},
+		{CandidateID: "c-wishlist", Type: ActionAddWishlist},
+		{CandidateID: "c-create-blocked", Type: ActionCreateItem},
+		{CandidateID: "c-create-owned", Type: ActionCreateItem, Payload: map[string]any{"ownership_confirmed": true}},
+		{CandidateID: "c-archive", Type: ActionArchive, Payload: map[string]any{"notes": "duplicate source result"}},
+	}
+	for _, action := range actions {
+		if err := svc.ApplyAction(context.Background(), action); err != nil {
+			t.Fatalf("ApplyAction(%s/%s) error = %v", action.CandidateID, action.Type, err)
+		}
+	}
+
+	expectedStatuses := map[string]string{
+		"c-review":         "reviewing",
+		"c-wishlist":       "wishlisted",
+		"c-create-blocked": "inventory_candidate",
+		"c-create-owned":   "inventory_candidate",
+		"c-archive":        "archived",
+	}
+	for candidateID, want := range expectedStatuses {
+		var got, sourceResultURL string
+		if err := conn.QueryRow(`SELECT status, source_result_url FROM scanner_candidates WHERE id = ?`, candidateID).Scan(&got, &sourceResultURL); err != nil {
+			t.Fatalf("load status for %s: %v", candidateID, err)
+		}
+		if got != want {
+			t.Fatalf("candidate %s status=%q, want %q", candidateID, got, want)
+		}
+		if sourceResultURL != "https://example.test/source" {
+			t.Fatalf("candidate %s source_result_url=%q", candidateID, sourceResultURL)
+		}
+	}
+
+	var owned, quantity int
+	if err := conn.QueryRow(`SELECT owned, quantity FROM wishlist_entries WHERE item_id = 'i1'`).Scan(&owned, &quantity); err != nil {
+		t.Fatalf("load wishlist row: %v", err)
+	}
+	if owned != 0 || quantity != 0 {
+		t.Fatalf("wishlist promotion must not claim ownership, owned=%d quantity=%d", owned, quantity)
+	}
+	var instanceCount int
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM instances WHERE item_id = 'i1'`).Scan(&instanceCount); err != nil {
+		t.Fatalf("load instance count: %v", err)
+	}
+	if instanceCount != 0 {
+		t.Fatalf("wishlist promotion must not create owned instances, got %d", instanceCount)
+	}
+
+	var blockedCreateCount, ownedCreateCount int
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE part_number = 'BLOCK-001'`).Scan(&blockedCreateCount); err != nil {
+		t.Fatalf("load blocked create count: %v", err)
+	}
+	if blockedCreateCount != 0 {
+		t.Fatalf("unconfirmed inventory promotion created %d item(s)", blockedCreateCount)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(1) FROM canonical_items WHERE part_number = 'OWN-001'`).Scan(&ownedCreateCount); err != nil {
+		t.Fatalf("load owned create count: %v", err)
+	}
+	if ownedCreateCount != 1 {
+		t.Fatalf("confirmed inventory promotion created %d item(s), want 1", ownedCreateCount)
+	}
+}
