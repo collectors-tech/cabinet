@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ScanSearch } from 'lucide-react'
+import { Plus, ScanSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -796,6 +796,39 @@ export function Scanner() {
   const formatRunStatus = (querySetID: string) =>
     runMetaByQuerySet[querySetID]?.status ?? 'never'
 
+  const formatTableStatus = (querySet: QuerySet) => {
+    const status = formatRunStatus(querySet.id)
+    if (status === 'failed' && querySet.last_run_message) {
+      return `${status}: ${querySet.last_run_message}`
+    }
+    return status
+  }
+
+  const formatScheduleMode = (querySet: QuerySet) => {
+    if (querySet.enabled === false) {
+      return 'Manual / paused'
+    }
+    if (querySet.schedule_cron?.trim()) {
+      return `Scheduled: ${querySet.schedule_cron.trim()}`
+    }
+    return 'Manual'
+  }
+
+  const formatResultCount = (querySetID: string) => {
+    const summary = runSummaryByQuerySet[querySetID]
+    if (summary) {
+      return String(summary.candidates_total)
+    }
+    const count = candidatesByQuerySet[querySetID]?.length ?? 0
+    if (count > 0) {
+      return String(count)
+    }
+    const persistedCount =
+      querySets.find((querySet) => querySet.id === querySetID)
+        ?.last_candidate_count ?? 0
+    return String(persistedCount)
+  }
+
   const formatRunTime = (querySetID: string) => {
     const ranAtISO = runMetaByQuerySet[querySetID]?.ranAtISO
     if (!ranAtISO) {
@@ -1210,6 +1243,16 @@ export function Scanner() {
           </Button>
         </section>
         <section className='flex flex-wrap items-center gap-2'>
+          <Button
+            type='button'
+            size='sm'
+            aria-label='Create Market Watch query'
+            title='Create Market Watch query'
+            data-testid='market-watch-toolbar-create-query'
+            onClick={() => void createQuerySet()}
+          >
+            <Plus className='h-4 w-4' aria-hidden='true' />
+          </Button>
           <Button
             type='button'
             size='sm'
@@ -1725,12 +1768,12 @@ export function Scanner() {
                 <thead className='bg-muted/30 text-left'>
                   <tr>
                     <th className='px-3 py-2 font-medium'>Query Name</th>
+                    <th className='px-3 py-2 font-medium'>Terms</th>
                     <th className='px-3 py-2 font-medium'>Provider Scope</th>
-                    <th className='px-3 py-2 font-medium'>Last Run Status</th>
+                    <th className='px-3 py-2 font-medium'>Schedule</th>
+                    <th className='px-3 py-2 font-medium'>Latest Status</th>
                     <th className='px-3 py-2 font-medium'>Last Run Time</th>
-                    <th className='px-3 py-2 font-medium'>
-                      Latest Output Summary
-                    </th>
+                    <th className='px-3 py-2 font-medium'>Result Count</th>
                     <th className='px-3 py-2 font-medium'>Actions</th>
                   </tr>
                 </thead>
@@ -1739,16 +1782,22 @@ export function Scanner() {
                     <tr key={querySet.id} className='border-t'>
                       <td className='px-3 py-2'>{querySet.name}</td>
                       <td className='px-3 py-2'>
+                        {querySet.keywords?.join(', ') || 'no keywords'}
+                      </td>
+                      <td className='px-3 py-2'>
                         {(querySet.provider_scope ?? []).join(', ') || 'ebay'}
                       </td>
+                      <td className='px-3 py-2'>
+                        {formatScheduleMode(querySet)}
+                      </td>
                       <td className='px-3 py-2 capitalize'>
-                        {formatRunStatus(querySet.id)}
+                        {formatTableStatus(querySet)}
                       </td>
                       <td className='px-3 py-2'>
                         {formatRunTime(querySet.id)}
                       </td>
                       <td className='px-3 py-2'>
-                        {formatOutputSummary(querySet.id)}
+                        {formatResultCount(querySet.id)}
                       </td>
                       <td className='px-3 py-2'>
                         <Button
