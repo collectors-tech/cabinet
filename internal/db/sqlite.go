@@ -235,6 +235,9 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			status TEXT NOT NULL DEFAULT 'new',
 			source TEXT NOT NULL DEFAULT '',
+			observed_currency TEXT NOT NULL DEFAULT '',
+			reviewer_notes TEXT NOT NULL DEFAULT '',
+			source_result_url TEXT NOT NULL DEFAULT '',
 			stock_state TEXT NOT NULL DEFAULT 'unknown',
 			stock_count INTEGER NOT NULL DEFAULT -1,
 			FOREIGN KEY (query_set_id) REFERENCES scanner_query_sets(id) ON DELETE CASCADE
@@ -728,6 +731,18 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "stock_count", "INTEGER NOT NULL DEFAULT -1"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_candidates.stock_count: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "observed_currency", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.observed_currency: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "reviewer_notes", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.reviewer_notes: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "scanner_candidates", "source_result_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure scanner_candidates.source_result_url: %w", err)
 	}
 	if err := ensureColumn(ctx, tx, tx, "item_photos", "display_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		conn.Close()
