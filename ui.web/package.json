@@ -20,6 +20,7 @@
     "knip": "knip"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.14.14",
     "@clerk/clerk-react": "^5.58.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
