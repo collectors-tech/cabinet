@@ -235,6 +235,36 @@ The authenticated shell Assistant sidebar SHALL let users select an existing ass
 - **AND** Cabinet MUST keep the current page route unchanged until user invokes that action
 - **AND** invoking the action MUST navigate to the relevant settings screen
 
+### Requirement UI-SCREEN-CHAT-COPILOT-011: Assistant sidebar SHALL use a Cabinet-owned assistant-ui adapter
+The authenticated shell Assistant sidebar SHALL render assistant-ui compact anchored modal, runtime, composer, and message primitives through a Cabinet-specific external-store adapter that keeps Cabinet's Go APIs as the source of truth for threads, messages, provider readiness, route context, attachments, and guarded action state.
+
+#### Scenario: Prefer Cabinet adapter over direct AI SDK runtime adoption
+- **GIVEN** Cabinet evaluates assistant-ui adoption for the shell Assistant sidebar
+- **WHEN** comparing direct AI SDK runtime adoption against a Cabinet-specific assistant-ui runtime adapter
+- **THEN** Cabinet MUST choose the Cabinet-specific adapter for the first implementation slice
+- **AND** the adapter MUST read/write thread and message state through existing Cabinet chat APIs rather than a Next.js or Vercel AI SDK route handler
+- **AND** the compact modal pattern MUST be adapted to Cabinet's existing Assistant sidepanel anchor rather than introduced as an unrelated bottom-right support bubble
+- **AND** the direct AI SDK runtime approach MUST remain a future option only for provider streaming after Cabinet exposes a governed Go transport boundary
+
+#### Scenario: Send message through assistant-ui composer without losing Cabinet context
+- **GIVEN** the shell Assistant sidebar has an active profile, active thread, selected provider/model, route context, and workspace selection context
+- **WHEN** user sends a message through the assistant-ui composer primitive
+- **THEN** Cabinet MUST persist the user message through `/api/chat/messages`
+- **AND** the request MUST include the active profile id, thread id, route context, workspace selection context, and selected assistant provider/model
+- **AND** the rendered message list MUST reload from Cabinet's persisted thread state
+
+#### Scenario: Reload existing shell assistant history
+- **GIVEN** existing assistant sidebar messages are persisted for the active profile/thread
+- **WHEN** the shell Assistant sidebar opens or the user switches back to that thread
+- **THEN** assistant-ui message primitives MUST render the existing persisted history without replacing thread ownership or provider/model metadata
+
+#### Scenario: Provider setup-needed and action confirmation remain Cabinet-governed
+- **GIVEN** provider setup/readiness or assistant action preview/apply state is unavailable, pending, or confirm-required
+- **WHEN** the assistant-ui adapter renders the shell Assistant sidebar in the compact anchored modal frame
+- **THEN** setup-needed/provider state MUST remain represented by Cabinet state and guidance
+- **AND** action previews MUST remain non-mutating until the user explicitly confirms apply through Cabinet's preview/apply APIs
+- **AND** assistant-ui tool-call behavior MUST NOT auto-apply inventory, wishlist, collection, import, or provider mutations
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
@@ -273,3 +303,4 @@ The authenticated shell Assistant sidebar SHALL let users select an existing ass
 | UC-CHAT-21 | Missing confirmation apply rejection | Apply attempts without explicit confirmation reject before mutation, keep the preview unapplied, and avoid applied assistant history | implemented: `internal/chat/service_test.go` `TestServiceThreadMessagePreviewApplyLifecycle` |
 | UC-CHAT-22 | Stale thread apply rejection | Same-profile apply attempts from the wrong thread reject as unavailable, leave inventory unchanged, keep the owner preview pending, and avoid false assistant history in either thread | implemented: `internal/chat/service_test.go` `TestServiceActionPreviewRejectsCrossThreadApply` |
 | UC-CHAT-23 | Assistant sidebar compact chat selection/new-chat/navigation action | Sidebar selects existing assistant chats, creates a new chat, sends a layout configuration prompt, exposes an explicit screen-opening action, and navigates only after invocation | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action` |
+| UC-CHAT-24 | Assistant-ui shell adapter send/history/provider/action safety | assistant-ui external-store runtime renders shell assistant messages, sends through Cabinet chat APIs with route/profile/provider context, reloads existing history, preserves setup-needed/provider guidance, and keeps preview/apply confirmation explicit | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation` |

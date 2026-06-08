@@ -34,3 +34,20 @@ Assistant context MUST only reset on explicit boundaries such as logout, active 
 - **GIVEN** user has active assistant thread in `Primary DB`
 - **WHEN** user switches to another active database/profile
 - **THEN** assistant workspace MUST apply the configured reset/isolation policy and MUST NOT leak prior profile thread state across profiles
+
+### Requirement ASSISTANT-WORKSPACE-005: Assistant SHALL adopt assistant-ui through a Cabinet-owned transport adapter
+Assistant workspace MUST compare direct assistant-ui AI SDK runtime adoption against a Cabinet-specific assistant-ui adapter, and the first implementation slice MUST adapt assistant-ui's compact anchored modal primitives into the existing shell Assistant sidepanel while keeping Cabinet Go chat APIs as the source of truth for profile-scoped threads, persisted messages, route context, provider/model metadata, attachment context, and confirm-before-apply mutation safety.
+
+#### Scenario: Render assistant-ui-compatible shell primitives without replacing Cabinet persistence
+- **GIVEN** the shell Assistant workspace has an active profile-scoped Cabinet chat thread
+- **WHEN** the anchored modal frame, message list, and composer render through the Cabinet assistant-ui adapter
+- **THEN** the user MUST still be able to send a message through `/api/chat/messages`
+- **AND** the request MUST preserve route/profile/selection/provider/model context
+- **AND** the rendered adapter surface MUST expose assistant-ui anchor/trigger/content, message, and composer primitives without moving persistence or provider secrets into a Next.js/Vercel AI SDK sample backend
+- **AND** action preview/apply controls MUST remain explicit Cabinet controls outside automatic chat tool-call mutation
+
+#### Scenario: Choose the first assistant-ui implementation slice
+- **GIVEN** direct AI SDK runtime adoption would require moving persistence/provider flow into the sample backend
+- **WHEN** Cabinet evaluates the assistant-ui adoption path
+- **THEN** the first implementation slice MUST target the shell Assistant workspace panel before broad `/chats` replacement
+- **AND** direct AI SDK runtime adoption MUST remain a later option only if Cabinet-owned transport, persistence, and confirmation boundaries are preserved

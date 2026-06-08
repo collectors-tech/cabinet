@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
+import {
+  AssistantModalPrimitive,
+  AssistantRuntimeProvider,
+  type AppendMessage,
+  useExternalStoreRuntime,
+} from '@assistant-ui/react'
 import {
   Bot,
   CheckCircle2,
@@ -7,13 +13,10 @@ import {
   GitBranchPlus,
   MessageSquarePlus,
   RotateCcw,
-  Send,
   ShieldAlert,
   Sparkles,
-  UserRound,
   Wand2,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import {
@@ -30,6 +33,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  assistantAppendMessageText,
+  CabinetAssistantUiComposer,
+  CabinetAssistantUiMessageList,
+  cabinetMessageToAssistantUi,
+} from '@/features/chats/assistant-ui-adapter'
 
 type ThreadMetadata = {
   provider?: string
@@ -155,8 +164,7 @@ async function loadAssistantDefaultSettings(profileId: string) {
     settings?: Record<string, string>
   }
   const settings = payload.settings ?? {}
-  const nextProvider =
-    settings.assistant_default_provider?.trim() || 'openai'
+  const nextProvider = settings.assistant_default_provider?.trim() || 'openai'
   const nextModel =
     settings.assistant_default_model?.trim() ||
     defaultModelForProvider(nextProvider)
@@ -181,7 +189,6 @@ export function AssistantWorkspacePanel() {
   const [threadMetadata, setThreadMetadata] = useState<ThreadMetadata>({})
   const [threads, setThreads] = useState<Thread[]>([])
   const [messages, setMessages] = useState<Message[]>([])
-  const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
@@ -247,7 +254,8 @@ export function AssistantWorkspacePanel() {
         id: 'open-layout-config',
         label: 'Open layout settings',
         target: '/settings/display',
-        reason: 'The request mentions layout configuration, so Cabinet can open the display settings surface.',
+        reason:
+          'The request mentions layout configuration, so Cabinet can open the display settings surface.',
       }
     }
     return null
@@ -363,7 +371,10 @@ export function AssistantWorkspacePanel() {
     setError('')
     setLoading(true)
     try {
-      window.localStorage.setItem(assistantThreadKey(activeProfileId), nextThreadId)
+      window.localStorage.setItem(
+        assistantThreadKey(activeProfileId),
+        nextThreadId
+      )
       await loadMessages(activeProfileId, nextThreadId)
     } catch (err) {
       setError(
@@ -575,7 +586,6 @@ export function AssistantWorkspacePanel() {
           semantics: 'manual_new_thread',
         }
       )
-      setDraft('')
       setActionPreview(null)
       setApplyResult(null)
       setNavigationAction(null)
@@ -590,41 +600,79 @@ export function AssistantWorkspacePanel() {
     }
   }
 
-  async function sendMessage() {
-    if (!activeProfileId || !threadId || !draft.trim()) return
-    const messageDraft = draft.trim()
-    setSending(true)
-    setError('')
-    setNavigationAction(null)
-    try {
-      const response = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeProfileId,
-          thread_id: threadId,
-          role: 'user',
-          content: messageDraft,
-          context: {
-            route: routeContext,
-            profile: { id: activeProfileId },
-            selection: { active_workspace_collection: selectionContext },
-            assistant: { provider, model },
+  const sendAssistantMessage = useCallback(
+    async (messageDraft: string) => {
+      const normalizedDraft = messageDraft.trim()
+      if (!activeProfileId || !threadId || !normalizedDraft) return
+      setSending(true)
+      setError('')
+      setNavigationAction(null)
+      try {
+        const response = await fetch('/api/chat/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            thread_id: threadId,
+            role: 'user',
+            content: normalizedDraft,
+            context: {
+              route: routeContext,
+              profile: { id: activeProfileId },
+              selection: { active_workspace_collection: selectionContext },
+              assistant: { provider, model },
+            },
+          }),
+        })
+        if (!response.ok) throw new Error('failed_to_send_assistant_message')
+        setNavigationAction(inferNavigationAction(normalizedDraft))
+        await loadMessages(activeProfileId, threadId)
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'failed_to_send_assistant_message'
+        )
+      } finally {
+        setSending(false)
+      }
+    },
+    [activeProfileId, model, provider, routeContext, selectionContext, threadId]
+  )
+
+  const handleAssistantUiNewMessage = useCallback(
+    async (message: AppendMessage) => {
+      await sendAssistantMessage(assistantAppendMessageText(message))
+    },
+    [sendAssistantMessage]
+  )
+
+  const assistantRuntime = useExternalStoreRuntime<Message>({
+    messages,
+    convertMessage: cabinetMessageToAssistantUi,
+    isLoading: loading,
+    isRunning: sending,
+    isSendDisabled: !activeProfileId || !threadId || loading || sending,
+    onNew: handleAssistantUiNewMessage,
+    adapters: {
+      threadList: {
+        threadId,
+        isLoading: loading,
+        threads: threads.map((thread) => ({
+          id: thread.id,
+          title: thread.title,
+          status: 'regular' as const,
+          custom: {
+            provider: thread.metadata?.provider,
+            model: thread.metadata?.model,
+            thread_semantics: thread.metadata?.thread_semantics,
           },
-        }),
-      })
-      if (!response.ok) throw new Error('failed_to_send_assistant_message')
-      setDraft('')
-      setNavigationAction(inferNavigationAction(messageDraft))
-      await loadMessages(activeProfileId, threadId)
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'failed_to_send_assistant_message'
-      )
-    } finally {
-      setSending(false)
-    }
-  }
+        })),
+        onSwitchToNewThread: handleNewThread,
+        onSwitchToThread: handleSelectThread,
+      },
+    },
+  })
 
   async function previewAction() {
     if (!activeProfileId || !threadId) return
@@ -699,413 +747,404 @@ export function AssistantWorkspacePanel() {
       className='space-y-3 px-2 py-2'
       data-testid='shell-assistant-workspace'
     >
-      <section
-        className='overflow-hidden rounded-2xl border bg-card'
-        data-testid='shell-assistant-codex-chat'
-      >
-        <div
-          className='border-b bg-muted/20 p-3'
-          data-testid='shell-chat-rail'
+      <AssistantRuntimeProvider runtime={assistantRuntime}>
+        <AssistantModalPrimitive.Root
+          defaultOpen
+          unstable_openOnRunStart={false}
         >
-          <div className='flex items-start justify-between gap-2'>
-            <div className='min-w-0'>
-              <div className='flex items-center gap-2'>
-                <Sparkles className='h-4 w-4 text-primary' />
-                <h2 className='font-semibold'>Assistant</h2>
-              </div>
-              <p className='mt-1 text-xs text-muted-foreground'>
-                Route-aware agent for database work, evidence checks, and item
-                links.
-              </p>
-            </div>
-            <div className='flex items-center gap-1'>
+          <AssistantModalPrimitive.Anchor
+            className='block'
+            data-testid='shell-assistant-modal-anchor'
+          >
+            <AssistantModalPrimitive.Trigger asChild>
               <Button
                 type='button'
                 variant='outline'
-                size='icon'
-                data-testid='shell-assistant-new-thread'
-                aria-label='New assistant thread'
-                onClick={() => void handleNewThread()}
-                disabled={loading || sending || !activeProfileId}
+                className='w-full justify-start gap-2'
+                data-testid='shell-assistant-modal-trigger'
               >
-                <MessageSquarePlus className='h-3.5 w-3.5' />
+                <Sparkles className='h-4 w-4' />
+                Assistant workspace
               </Button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                aria-label='Reset assistant thread'
-                title='Reset assistant thread'
-                onClick={() => void handleNewThread()}
-                disabled={loading || sending || !activeProfileId}
-              >
-                <RotateCcw className='h-3.5 w-3.5' />
-              </Button>
-            </div>
-          </div>
-
-          <label className='mt-3 block space-y-1 text-xs'>
-            <span className='font-medium text-foreground'>Chat</span>
-            <select
-              data-testid='shell-assistant-thread-select'
-              className='w-full rounded-md border bg-background px-2 py-1.5'
-              value={threadId}
-              onChange={(e) => void handleSelectThread(e.target.value)}
-              disabled={loading || sending || threads.length === 0}
-            >
-              {threads.length === 0 ? (
-                <option value=''>No assistant chats yet</option>
-              ) : null}
-              {threads.map((thread) => (
-                <option key={thread.id} value={thread.id}>
-                  {thread.title}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className='mt-3 flex flex-wrap gap-2 text-[11px]'>
-            <Badge
-              variant='outline'
-              data-testid='shell-assistant-context-chip'
-              className='max-w-full justify-start gap-1 truncate'
-            >
-              <GitBranchPlus className='h-3 w-3 shrink-0' />
-              <span
-                className='truncate'
-                data-testid='shell-assistant-route-context'
-              >{`${routeContext.pathname}${routeContext.search}`}</span>
-            </Badge>
-            <Badge
-              variant='secondary'
-              data-testid='shell-assistant-model-chip'
-              className='max-w-full justify-start gap-1 truncate'
-            >
-              <Bot className='h-3 w-3 shrink-0' />
-              <span
-                className='truncate'
-                data-testid='shell-assistant-thread-provider'
-              >
-                {threadMetadata.provider || provider}
-              </span>
-              <span>/</span>
-              <span
-                className='truncate'
-                data-testid='shell-assistant-thread-model'
-              >
-                {threadMetadata.model || model}
-              </span>
-            </Badge>
-          </div>
-
-          <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
-            <label className='space-y-1'>
-              <span className='font-medium text-foreground'>Provider</span>
-              <select
-                data-testid='shell-assistant-provider-select'
-                className='w-full rounded-md border bg-background px-2 py-1'
-                value={provider}
-                onChange={(e) => void handleProviderChange(e.target.value)}
-              >
-                {assistantProviderOptions.map((option) => (
-                  <option key={option.provider} value={option.provider}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className='space-y-1'>
-              <span className='font-medium text-foreground'>Model</span>
-              <select
-                data-testid='shell-assistant-model-select'
-                className='w-full rounded-md border bg-background px-2 py-1'
-                value={model}
-                onChange={(e) => void handleModelChange(e.target.value)}
-              >
-                {availableModels.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className='mt-3 grid gap-1 text-[11px] text-muted-foreground'>
-            <span>
-              Profile:{' '}
-              <span data-testid='shell-assistant-profile-scope'>
-                {activeProfileId}
-              </span>
-            </span>
-            <span data-testid='shell-assistant-selection-context'>
-              Collection: {selectionContext}
-            </span>
-            <span data-testid='shell-assistant-thread-id'>
-              {threadId || 'bootstrapping'}
-            </span>
-            <span data-testid='shell-assistant-selected-thread-title'>
-              Chat: {selectedThreadTitle}
-            </span>
-            <span data-testid='shell-assistant-boundary-note'>
-              Thread continuity persists across authenticated route changes
-              until an explicit reset boundary.
-            </span>
-            <span data-testid='shell-assistant-thread-semantics'>
-              Provider/model changes fork a new assistant thread; manual reset
-              creates a clean thread for the current profile.
-            </span>
-          </div>
-        </div>
-
-        <ScrollArea className='h-80 p-3'>
-          <div
-            className='space-y-4 pb-2'
-            data-testid='shell-assistant-message-list'
+            </AssistantModalPrimitive.Trigger>
+          </AssistantModalPrimitive.Anchor>
+          <AssistantModalPrimitive.Content
+            side='bottom'
+            align='start'
+            sideOffset={8}
+            collisionPadding={12}
+            className='z-50 flex h-[min(42rem,calc(100vh-10rem))] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border bg-card shadow-lg outline-none'
+            data-testid='shell-assistant-modal-content'
           >
-            {loading ? (
-              <p className='text-sm text-muted-foreground'>
-                Loading assistant workspace...
-              </p>
-            ) : null}
-            {!loading && messages.length === 0 ? (
-              <div className='rounded-2xl border border-dashed p-3 text-sm text-muted-foreground'>
-                Ask Cabinet to update records, create drafts, search inventory,
-                and return links to the items it touched.
-              </div>
-            ) : null}
-            {messages.map((message) => {
-              const isUser = message.role === 'user'
-              return (
-                <div
-                  key={message.id}
-                  className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
-                >
-                  <div
-                    className={cn(
-                      'max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
-                      isUser
-                        ? 'bg-muted text-foreground'
-                        : 'bg-transparent px-0 text-muted-foreground'
-                    )}
-                    data-testid={
-                      isUser
-                        ? 'shell-assistant-message-bubble-user'
-                        : 'shell-assistant-message-bubble-assistant'
-                    }
-                  >
-                    <div className='mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-                      {isUser ? (
-                        <UserRound className='h-3 w-3' />
-                      ) : (
-                        <Bot className='h-3 w-3' />
-                      )}
-                      {isUser ? 'You' : 'Assistant'}
-                    </div>
-                    <p>{message.content}</p>
-                  </div>
-                </div>
-              )
-            })}
-
-            {navigationAction ? (
+            <section
+              className='flex min-h-0 flex-1 flex-col overflow-hidden'
+              data-testid='shell-assistant-codex-chat'
+            >
               <div
-                className='rounded-md border bg-background p-3 text-sm'
-                data-testid='shell-assistant-navigation-action'
+                className='border-b bg-muted/20 p-3'
+                data-testid='shell-chat-rail'
               >
-                <div className='flex items-start gap-2'>
-                  <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
-                  <div className='min-w-0 flex-1'>
-                    <p className='font-medium'>{navigationAction.label}</p>
-                    <p
-                      className='mt-1 text-xs text-muted-foreground'
-                      data-testid='shell-assistant-navigation-reason'
-                    >
-                      {navigationAction.reason}
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='min-w-0'>
+                    <div className='flex items-center gap-2'>
+                      <Sparkles className='h-4 w-4 text-primary' />
+                      <h2 className='font-semibold'>Assistant</h2>
+                    </div>
+                    <p className='mt-1 text-xs text-muted-foreground'>
+                      Route-aware agent for database work, evidence checks, and
+                      item links.
                     </p>
+                  </div>
+                  <div className='flex items-center gap-1'>
                     <Button
                       type='button'
-                      size='sm'
                       variant='outline'
-                      className='mt-2'
-                      data-testid='shell-assistant-navigation-action-open'
-                      onClick={() =>
-                        void navigate({ to: navigationAction.target })
-                      }
+                      size='icon'
+                      data-testid='shell-assistant-new-thread'
+                      aria-label='New assistant thread'
+                      onClick={() => void handleNewThread()}
+                      disabled={loading || sending || !activeProfileId}
                     >
-                      <ExternalLink className='h-3.5 w-3.5' />
-                      Open screen
+                      <MessageSquarePlus className='h-3.5 w-3.5' />
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      aria-label='Reset assistant thread'
+                      title='Reset assistant thread'
+                      onClick={() => void handleNewThread()}
+                      disabled={loading || sending || !activeProfileId}
+                    >
+                      <RotateCcw className='h-3.5 w-3.5' />
                     </Button>
                   </div>
                 </div>
-              </div>
-            ) : null}
 
-            <div
-              className='rounded-2xl border bg-muted/10 p-3 text-xs'
-              data-testid='shell-assistant-execution-panel'
-            >
-              <div className='flex items-center justify-between gap-2'>
-                <div className='flex items-center gap-2 font-medium'>
-                  <Wand2 className='h-4 w-4 text-primary' />
-                  Agent actions
-                </div>
-                <Badge
-                  variant='outline'
-                  className='uppercase'
-                  data-testid='shell-assistant-execution-state'
-                >
-                  {executionState}
-                </Badge>
-              </div>
-              <p
-                className='mt-2 text-muted-foreground'
-                data-testid='shell-assistant-permission-guidance'
-              >
-                {permissionGuidance}
-              </p>
-              <div className='mt-3 grid gap-2'>
-                <Input
-                  data-testid='shell-assistant-preview-part-number'
-                  value={actionPartNumber}
-                  onChange={(e) => setActionPartNumber(e.target.value)}
-                  placeholder='Part number'
-                  disabled={!threadId || sending}
-                />
-                <Input
-                  data-testid='shell-assistant-preview-title'
-                  value={actionTitle}
-                  onChange={(e) => setActionTitle(e.target.value)}
-                  placeholder='Item title'
-                  disabled={!threadId || sending}
-                />
-              </div>
-              <div className='mt-3 flex flex-wrap gap-2'>
-                <Button
-                  type='button'
-                  size='sm'
-                  data-testid='shell-assistant-preview-action'
-                  onClick={() => void previewAction()}
-                  disabled={
-                    !threadId ||
-                    !actionPartNumber.trim() ||
-                    !actionTitle.trim() ||
-                    sending
-                  }
-                >
-                  Preview
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='outline'
-                  data-testid='shell-assistant-apply-action'
-                  onClick={() => setConfirmApplyOpen(true)}
-                  disabled={!actionPreview?.id || sending}
-                >
-                  Apply
-                </Button>
-              </div>
-              {actionPreview ? (
-                <div
-                  className='mt-3 rounded-xl border bg-background p-2'
-                  data-testid='shell-assistant-action-card'
-                >
-                  <div
-                    className='text-xs'
-                    data-testid='shell-assistant-action-preview'
+                <label className='mt-3 block space-y-1 text-xs'>
+                  <span className='font-medium text-foreground'>Chat</span>
+                  <select
+                    data-testid='shell-assistant-thread-select'
+                    className='w-full rounded-md border bg-background px-2 py-1.5'
+                    value={threadId}
+                    onChange={(e) => void handleSelectThread(e.target.value)}
+                    disabled={loading || sending || threads.length === 0}
                   >
-                    Preview {actionPreview.action} ({actionPreview.status}) for{' '}
-                    {actionPreview.payload?.part_number} /{' '}
-                    {actionPreview.payload?.title}
-                  </div>
+                    {threads.length === 0 ? (
+                      <option value=''>No assistant chats yet</option>
+                    ) : null}
+                    {threads.map((thread) => (
+                      <option key={thread.id} value={thread.id}>
+                        {thread.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className='mt-3 flex flex-wrap gap-2 text-[11px]'>
+                  <Badge
+                    variant='outline'
+                    data-testid='shell-assistant-context-chip'
+                    className='max-w-full justify-start gap-1 truncate'
+                  >
+                    <GitBranchPlus className='h-3 w-3 shrink-0' />
+                    <span
+                      className='truncate'
+                      data-testid='shell-assistant-route-context'
+                    >{`${routeContext.pathname}${routeContext.search}`}</span>
+                  </Badge>
+                  <Badge
+                    variant='secondary'
+                    data-testid='shell-assistant-model-chip'
+                    className='max-w-full justify-start gap-1 truncate'
+                  >
+                    <Bot className='h-3 w-3 shrink-0' />
+                    <span
+                      className='truncate'
+                      data-testid='shell-assistant-thread-provider'
+                    >
+                      {threadMetadata.provider || provider}
+                    </span>
+                    <span>/</span>
+                    <span
+                      className='truncate'
+                      data-testid='shell-assistant-thread-model'
+                    >
+                      {threadMetadata.model || model}
+                    </span>
+                  </Badge>
                 </div>
-              ) : null}
-              {applyResult ? (
-                <div
-                  className='mt-3 rounded-xl border bg-background p-2'
-                  data-testid='shell-assistant-apply-result'
-                >
-                  <div className='flex items-start gap-2'>
-                    <CheckCircle2 className='mt-0.5 h-4 w-4 text-primary' />
-                    <div className='min-w-0 flex-1'>
-                      <p>
-                        Applied {applyResult.action}{' '}
-                        {applyResult.item_id ? `to ${applyResult.item_id}` : ''}
-                      </p>
-                      {applyLink ? (
+
+                <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+                  <label className='space-y-1'>
+                    <span className='font-medium text-foreground'>
+                      Provider
+                    </span>
+                    <select
+                      data-testid='shell-assistant-provider-select'
+                      className='w-full rounded-md border bg-background px-2 py-1'
+                      value={provider}
+                      onChange={(e) =>
+                        void handleProviderChange(e.target.value)
+                      }
+                    >
+                      {assistantProviderOptions.map((option) => (
+                        <option key={option.provider} value={option.provider}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className='space-y-1'>
+                    <span className='font-medium text-foreground'>Model</span>
+                    <select
+                      data-testid='shell-assistant-model-select'
+                      className='w-full rounded-md border bg-background px-2 py-1'
+                      value={model}
+                      onChange={(e) => void handleModelChange(e.target.value)}
+                    >
+                      {availableModels.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className='mt-3 grid gap-1 text-[11px] text-muted-foreground'>
+                  <span>
+                    Profile:{' '}
+                    <span data-testid='shell-assistant-profile-scope'>
+                      {activeProfileId}
+                    </span>
+                  </span>
+                  <span data-testid='shell-assistant-selection-context'>
+                    Collection: {selectionContext}
+                  </span>
+                  <span data-testid='shell-assistant-thread-id'>
+                    {threadId || 'bootstrapping'}
+                  </span>
+                  <span data-testid='shell-assistant-selected-thread-title'>
+                    Chat: {selectedThreadTitle}
+                  </span>
+                  <span data-testid='shell-assistant-boundary-note'>
+                    Thread continuity persists across authenticated route
+                    changes until an explicit reset boundary.
+                  </span>
+                  <span data-testid='shell-assistant-thread-semantics'>
+                    Provider/model changes fork a new assistant thread; manual
+                    reset creates a clean thread for the current profile.
+                  </span>
+                </div>
+                {navigationAction ? (
+                  <div
+                    className='mt-3 rounded-md border bg-background p-3 text-sm'
+                    data-testid='shell-assistant-navigation-action'
+                  >
+                    <div className='flex items-start gap-2'>
+                      <ExternalLink className='mt-0.5 h-4 w-4 text-primary' />
+                      <div className='min-w-0 flex-1'>
+                        <p className='font-medium'>{navigationAction.label}</p>
+                        <p
+                          className='mt-1 text-xs text-muted-foreground'
+                          data-testid='shell-assistant-navigation-reason'
+                        >
+                          {navigationAction.reason}
+                        </p>
                         <Button
                           type='button'
-                          variant='link'
                           size='sm'
-                          asChild
-                          className='h-auto px-0 text-xs'
+                          variant='outline'
+                          className='mt-2'
+                          data-testid='shell-assistant-navigation-action-open'
+                          onClick={() =>
+                            void navigate({ to: navigationAction.target })
+                          }
                         >
-                          <a
-                            href={applyLink.href}
-                            data-testid='shell-assistant-result-link'
-                          >
-                            <ExternalLink className='h-3.5 w-3.5' />
-                            {applyLink.label}
-                          </a>
+                          <ExternalLink className='h-3.5 w-3.5' />
+                          Open screen
                         </Button>
-                      ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <ScrollArea className='min-h-0 flex-1 p-3'>
+                <div
+                  className='space-y-4 pb-2'
+                  data-testid='shell-assistant-message-list'
+                >
+                  {loading ? (
+                    <p className='text-sm text-muted-foreground'>
+                      Loading assistant workspace...
+                    </p>
+                  ) : null}
+                  {!loading && messages.length === 0 ? (
+                    <div className='rounded-2xl border border-dashed p-3 text-sm text-muted-foreground'>
+                      Ask Cabinet to update records, create drafts, search
+                      inventory, and return links to the items it touched.
+                    </div>
+                  ) : null}
+                  <CabinetAssistantUiMessageList messages={messages} />
+
+                  <div
+                    className='rounded-2xl border bg-muted/10 p-3 text-xs'
+                    data-testid='shell-assistant-execution-panel'
+                  >
+                    <div className='flex items-center justify-between gap-2'>
+                      <div className='flex items-center gap-2 font-medium'>
+                        <Wand2 className='h-4 w-4 text-primary' />
+                        Agent actions
+                      </div>
+                      <Badge
+                        variant='outline'
+                        className='uppercase'
+                        data-testid='shell-assistant-execution-state'
+                      >
+                        {executionState}
+                      </Badge>
+                    </div>
+                    <p
+                      className='mt-2 text-muted-foreground'
+                      data-testid='shell-assistant-permission-guidance'
+                    >
+                      {permissionGuidance}
+                    </p>
+                    <div className='mt-3 grid gap-2'>
+                      <Input
+                        data-testid='shell-assistant-preview-part-number'
+                        value={actionPartNumber}
+                        onChange={(e) => setActionPartNumber(e.target.value)}
+                        placeholder='Part number'
+                        disabled={!threadId || sending}
+                      />
+                      <Input
+                        data-testid='shell-assistant-preview-title'
+                        value={actionTitle}
+                        onChange={(e) => setActionTitle(e.target.value)}
+                        placeholder='Item title'
+                        disabled={!threadId || sending}
+                      />
+                    </div>
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        data-testid='shell-assistant-preview-action'
+                        onClick={() => void previewAction()}
+                        disabled={
+                          !threadId ||
+                          !actionPartNumber.trim() ||
+                          !actionTitle.trim() ||
+                          sending
+                        }
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-testid='shell-assistant-apply-action'
+                        onClick={() => setConfirmApplyOpen(true)}
+                        disabled={!actionPreview?.id || sending}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                    {actionPreview ? (
+                      <div
+                        className='mt-3 rounded-xl border bg-background p-2'
+                        data-testid='shell-assistant-action-card'
+                      >
+                        <div
+                          className='text-xs'
+                          data-testid='shell-assistant-action-preview'
+                        >
+                          Preview {actionPreview.action} ({actionPreview.status}
+                          ) for {actionPreview.payload?.part_number} /{' '}
+                          {actionPreview.payload?.title}
+                        </div>
+                      </div>
+                    ) : null}
+                    {applyResult ? (
+                      <div
+                        className='mt-3 rounded-xl border bg-background p-2'
+                        data-testid='shell-assistant-apply-result'
+                      >
+                        <div className='flex items-start gap-2'>
+                          <CheckCircle2 className='mt-0.5 h-4 w-4 text-primary' />
+                          <div className='min-w-0 flex-1'>
+                            <p>
+                              Applied {applyResult.action}{' '}
+                              {applyResult.item_id
+                                ? `to ${applyResult.item_id}`
+                                : ''}
+                            </p>
+                            {applyLink ? (
+                              <Button
+                                type='button'
+                                variant='link'
+                                size='sm'
+                                asChild
+                                className='h-auto px-0 text-xs'
+                              >
+                                <a
+                                  href={applyLink.href}
+                                  data-testid='shell-assistant-result-link'
+                                >
+                                  <ExternalLink className='h-3.5 w-3.5' />
+                                  {applyLink.label}
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div
+                      className='mt-3 flex items-start gap-2 rounded-xl border border-dashed p-2 text-muted-foreground'
+                      data-testid='shell-assistant-permission-boundary'
+                    >
+                      <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
+                      <div>
+                        <p className='font-medium text-foreground'>
+                          Permission boundary
+                        </p>
+                        <p>
+                          Read-only is always allowed. Mutations are
+                          preview-first, confirm-required, and may still be
+                          unavailable under the active policy.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
+              </ScrollArea>
+
+              {error ? (
+                <p
+                  className='px-3 pb-2 text-xs text-destructive'
+                  data-testid='shell-assistant-error'
+                >
+                  {error}
+                </p>
               ) : null}
-              <div
-                className='mt-3 flex items-start gap-2 rounded-xl border border-dashed p-2 text-muted-foreground'
-                data-testid='shell-assistant-permission-boundary'
-              >
-                <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
-                <div>
-                  <p className='font-medium text-foreground'>
-                    Permission boundary
-                  </p>
-                  <p>
-                    Read-only is always allowed. Mutations are preview-first,
-                    confirm-required, and may still be unavailable under the
-                    active policy.
-                  </p>
-                </div>
+
+              <div className='border-t bg-background/80 p-3'>
+                <CabinetAssistantUiComposer
+                  composer={{
+                    disabled: !threadId || loading || sending,
+                    sending,
+                  }}
+                />
               </div>
-            </div>
-          </div>
-        </ScrollArea>
-
-        {error ? (
-          <p
-            className='px-3 pb-2 text-xs text-destructive'
-            data-testid='shell-assistant-error'
-          >
-            {error}
-          </p>
-        ) : null}
-
-        <div className='border-t bg-background/80 p-3'>
-          <div className='flex items-center gap-2 rounded-2xl border bg-muted/20 p-1'>
-            <Input
-              data-testid='shell-assistant-compose-input'
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder='Ask Cabinet to update, find, or link records...'
-              disabled={!threadId || loading || sending}
-              className='border-0 bg-transparent shadow-none focus-visible:ring-0'
-            />
-            <Button
-              type='button'
-              size='icon'
-              data-testid='shell-assistant-send-button'
-              aria-label='Send assistant message'
-              onClick={() => void sendMessage()}
-              disabled={!threadId || loading || sending || !draft.trim()}
-            >
-              <Send className='h-4 w-4' />
-            </Button>
-          </div>
-        </div>
-      </section>
+            </section>
+          </AssistantModalPrimitive.Content>
+        </AssistantModalPrimitive.Root>
+      </AssistantRuntimeProvider>
 
       <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}>
         <AlertDialogContent data-testid='shell-assistant-apply-confirm-dialog'>

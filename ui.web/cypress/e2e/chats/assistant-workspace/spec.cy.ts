@@ -132,7 +132,7 @@ describe('chats/assistant-workspace', () => {
     })
   })
 
-  it('ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action', () => {
+  it('ASSISTANT-WORKSPACE-006 selects chats, creates a new chat, and exposes a layout navigation action', () => {
     bootstrapInventory()
     cy.get('[data-testid="shell-chat-toggle"]').click()
     cy.get('[data-testid="shell-assistant-thread-select"]').should('be.visible')
@@ -196,5 +196,71 @@ describe('chats/assistant-workspace', () => {
           /^\/settings\/display\/?$/
         )
       })
+  })
+
+  it('ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.get('[data-testid="shell-assistant-modal-anchor"]').should('exist')
+    cy.get('[data-testid="shell-assistant-modal-trigger"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
+    cy.get('[data-testid="shell-assistant-ui-adapter"]').should('exist')
+    cy.get('[data-testid="shell-assistant-ui-composer-primitive"]').should(
+      'be.visible'
+    )
+
+    cy.get('[data-testid="shell-assistant-compose-input"]').type(
+      'adapter should preserve cabinet context'
+    )
+    cy.get('[data-testid="shell-assistant-send-button"]').click()
+    cy.wait('@assistantMessage').then(({ request }) => {
+      expect(request.body.content).to.eq('adapter should preserve cabinet context')
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(String(request.body.thread_id).trim()).not.to.equal('')
+      expect(request.body.context.route.pathname).to.match(/^\/inventory\/?$/)
+      expect(request.body.context.profile.id).to.eq('e2e-profile-001')
+      expect(request.body.context.selection.active_workspace_collection).to.eq(
+        'All Items'
+      )
+      expect(request.body.context.assistant.provider).to.eq('openai')
+      expect(request.body.context.assistant.model).to.eq('gpt-4o-mini')
+    })
+    cy.contains(
+      '[data-testid="shell-assistant-message-list"]',
+      'adapter should preserve cabinet context'
+    ).should('exist')
+    cy.get('[data-testid="shell-assistant-ui-message-primitive"]').should(
+      'have.length.at.least',
+      1
+    )
+
+    cy.get('[data-testid="shell-assistant-preview-part-number"]')
+      .clear()
+      .type('ADAPT-1133')
+    cy.get('[data-testid="shell-assistant-preview-title"]')
+      .clear()
+      .type('Adapter Guarded Item')
+    cy.get('[data-testid="shell-assistant-preview-action"]').click()
+    cy.get('[data-testid="shell-assistant-action-card"]').should(
+      'contain',
+      'ADAPT-1133'
+    )
+    cy.get('[data-testid="shell-assistant-apply-action"]').click()
+    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]').should(
+      'contain',
+      'ADAPT-1133'
+    )
+    cy.get('[data-testid="shell-assistant-apply-cancel"]').click()
+    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="shell-assistant-action-card"]').should(
+      'contain',
+      'ADAPT-1133'
+    )
   })
 })
