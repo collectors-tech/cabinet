@@ -25,10 +25,10 @@ import {
 import { type SidebarData } from '../types'
 
 function CollectionsTagIcon(props: LucideProps) {
-  return createElement(Tag as any, {
+  return createElement(Tag, {
     ...props,
     'data-lucide': 'tag',
-  })
+  } as LucideProps)
 }
 
 export const sidebarData: SidebarData = {
@@ -92,9 +92,9 @@ export const sidebarData: SidebarData = {
           icon: ScanSearch,
         },
         {
-          title: 'Purchase Inbox',
-          testIdKey: 'purchase-inbox',
-          url: '/inbox',
+          title: 'Purchases',
+          testIdKey: 'purchases',
+          url: '/purchases',
           icon: Inbox,
         },
         {

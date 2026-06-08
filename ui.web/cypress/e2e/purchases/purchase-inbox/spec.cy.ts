@@ -1,4 +1,38 @@
 describe('purchases/purchase-inbox', () => {
+  it('COMMERCE-RECONCILIATION-006 renders first-class Purchases route and add entry point', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.location('pathname').should('eq', '/purchases')
+    cy.get('[data-testid="purchase-inbox-header-title"]').should(
+      'contain',
+      'Purchases'
+    )
+    cy.get('[data-testid="sidebar-nav-link-purchases"]')
+      .should('contain', 'Purchases')
+      .should('have.attr', 'href', '/purchases')
+    cy.get('[data-testid="purchases-table-shell"]')
+      .should('be.visible')
+      .and('contain', 'Purchase')
+      .and('contain', 'Source')
+      .and('contain', 'Price')
+      .and('contain', 'Status')
+      .and('contain', 'Tracking')
+      .and('contain', 'Actions')
+    cy.get('[data-testid="purchases-add-button"]')
+      .should('have.attr', 'aria-label', 'Add purchase')
+      .click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="purchases-add-tab-new"]').should('contain', 'New')
+    cy.get('[data-testid="purchases-add-tab-csv"]').should('contain', 'CSV')
+    cy.get('[data-testid="purchases-add-tab-email"]').should('contain', 'Email')
+  })
+
   it('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
@@ -69,7 +103,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('preparePurchaseReviews')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="purchase-inbox-header-title"]').should(
       'contain',
@@ -166,7 +200,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('preparePurchaseReviews')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
     cy.wait('@preparePurchaseReviews')
@@ -221,7 +255,7 @@ describe('purchases/purchase-inbox', () => {
     cy.e2eSetSetupState('present')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="purchases-table-empty-row"]').should(
       'contain',
@@ -280,7 +314,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('preparePurchaseReviews')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
     cy.wait('@preparePurchaseReviews')
@@ -307,7 +341,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('preparePurchaseReviews')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
     cy.get('[data-testid="purchase-inbox-loading-state"]')
@@ -369,7 +403,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('importForwarderPackage')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
     cy.get('[data-testid="forwarder-package-inbox"]')
@@ -412,7 +446,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('importForwarderPackage')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-external-id"]').clear()
     cy.get('[data-testid="forwarder-package-import"]').click()
@@ -477,7 +511,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('listForwarderPackageLinks')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-csv"]').clear()
     cy.get('[data-testid="forwarder-package-csv"]').type(
@@ -571,7 +605,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('listForwarderPackageLinks')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-email"]').clear()
     cy.get('[data-testid="forwarder-package-email"]').type(
@@ -681,7 +715,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('saveForwarderPackageLink')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
@@ -923,7 +957,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('confirmForwarderPackageLink')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
@@ -1231,7 +1265,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('confirmSuggestedForwarderPackageLink')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
@@ -1385,7 +1419,7 @@ describe('purchases/purchase-inbox', () => {
     }).as('loadForwarderPackageSuggestions')
 
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
-      path: '/inbox',
+      path: '/purchases',
     })
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
