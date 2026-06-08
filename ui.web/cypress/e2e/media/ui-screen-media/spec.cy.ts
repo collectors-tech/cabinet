@@ -219,6 +219,66 @@ describe('ui-screen-media', () => {
     )
   })
 
+  it('UI-SCREEN-MEDIA-013 switches between Cards and Rows views and persists the mode', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-view-mode-cards"]')
+      .should('have.attr', 'aria-pressed', 'true')
+      .and('contain', 'Cards')
+    cy.get('[data-testid="media-card-grid"]')
+      .should('be.visible')
+      .find('[data-testid^="media-card-"]')
+      .should('have.length', 3)
+
+    cy.get('[data-testid="media-view-mode-rows"]').click()
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.viewMode.media')
+      .should('eq', 'rows')
+    cy.get('[data-testid="media-row-table"]')
+      .should('be.visible')
+      .within(() => {
+        cy.contains('th', 'Title').should('be.visible')
+        cy.contains('th', 'Status').should('be.visible')
+        cy.contains('th', 'Linked').should('be.visible')
+        cy.contains('th', 'Uploaded').should('be.visible')
+        cy.contains('th', 'Filename').should('be.visible')
+      })
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .should('contain', 'AFX Mustang front view')
+      .and('contain', 'Unlinked')
+      .and('contain', 'Analysis ready')
+      .and('contain', 'slot-car-front-media-sl.jpg')
+    cy.get('[data-testid="media-row-media-porsche-box"]')
+      .should('contain', 'Porsche 917 box side')
+      .and('contain', 'Inventory linked')
+    cy.get('[data-testid="media-card-grid"]').should('not.exist')
+
+    cy.reload()
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-view-mode-rows"]').should(
+      'have.attr',
+      'aria-pressed',
+      'true'
+    )
+    cy.get('[data-testid="media-row-table"]').should('be.visible')
+
+    cy.get('[data-testid="media-view-mode-cards"]').click()
+    cy.window()
+      .its('localStorage')
+      .invoke('getItem', 'cabinet.viewMode.media')
+      .should('eq', 'cards')
+    cy.get('[data-testid="media-card-grid"]').should('be.visible')
+    cy.get('[data-testid="media-row-table"]').should('not.exist')
+  })
+
   it('UI-SCREEN-MEDIA-011 confirms assignment and refreshes API-backed linkage state', () => {
     let assigned = false
 

@@ -256,3 +256,18 @@ Cabinet SHALL render Media workspace asset cards in a compact grid that substant
 - **GIVEN** the Media workspace has multiple returned assets
 - **WHEN** the user opens `/media` at tablet or mobile widths
 - **THEN** the card grid MUST reflow without horizontal overflow, overlapping content, or clipped metadata/action controls.
+
+### Requirement UI-SCREEN-MEDIA-013: Media workspace SHALL provide persisted Cards and Rows view modes
+Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated Media workspace, default to Cards, preserve the existing card behavior, and persist the selected view mode using Cabinet's view-state convention.
+
+#### Scenario: Switch from Cards to Rows view
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user opens `/media`
+- **THEN** the UI MUST default to Cards mode and render the media card grid.
+- **WHEN** the user switches to Rows mode
+- **THEN** the UI MUST render a row/table listing with media title, analysis status, linkage state, upload timestamp, source, filename, selection, and open/analyze/assign/archive actions.
+
+#### Scenario: Persist Media view mode
+- **GIVEN** the user has selected Cards or Rows mode on `/media`
+- **WHEN** the workspace reloads
+- **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.

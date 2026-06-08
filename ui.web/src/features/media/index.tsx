@@ -35,6 +35,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -95,6 +103,10 @@ type AssignmentPreview = {
   applied?: boolean
 }
 
+type MediaViewMode = 'cards' | 'rows'
+
+const MEDIA_VIEW_MODE_STORAGE_KEY = 'cabinet.viewMode.media'
+
 const EMPTY_SUMMARY: MediaSummary = {
   total: 0,
   unlinked: 0,
@@ -130,6 +142,11 @@ function analysisLabel(status: MediaAsset['analysis_status']) {
 
 export function Media() {
   const [filter, setFilter] = useState<'all' | 'unlinked'>('all')
+  const [viewMode, setViewMode] = useState<MediaViewMode>(() => {
+    if (typeof window === 'undefined') return 'cards'
+    const saved = window.localStorage.getItem(MEDIA_VIEW_MODE_STORAGE_KEY)
+    return saved === 'rows' ? 'rows' : 'cards'
+  })
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [summary, setSummary] = useState<MediaSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
@@ -186,6 +203,10 @@ export function Media() {
   useEffect(() => {
     void loadAssets()
   }, [loadAssets])
+
+  useEffect(() => {
+    window.localStorage.setItem(MEDIA_VIEW_MODE_STORAGE_KEY, viewMode)
+  }, [viewMode])
 
   const selectedAssetSet = useMemo(
     () => new Set(selectedAssetIds),
@@ -407,6 +428,37 @@ export function Media() {
           </TabsList>
         </Tabs>
 
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='text-sm text-muted-foreground'>
+            {loading
+              ? 'Loading view'
+              : `${assets.length} asset${assets.length === 1 ? '' : 's'} in ${filter === 'unlinked' ? 'Unlinked' : 'All'} view`}
+          </div>
+          <div
+            className='flex items-center gap-2'
+            aria-label='Media view mode'
+          >
+            <Button
+              type='button'
+              variant={viewMode === 'cards' ? 'default' : 'outline'}
+              aria-pressed={viewMode === 'cards'}
+              data-testid='media-view-mode-cards'
+              onClick={() => setViewMode('cards')}
+            >
+              Cards
+            </Button>
+            <Button
+              type='button'
+              variant={viewMode === 'rows' ? 'default' : 'outline'}
+              aria-pressed={viewMode === 'rows'}
+              data-testid='media-view-mode-rows'
+              onClick={() => setViewMode('rows')}
+            >
+              Rows
+            </Button>
+          </div>
+        </div>
+
         {error ? (
           <Card data-testid='media-error-state'>
             <CardHeader>
@@ -477,7 +529,7 @@ export function Media() {
               </CardDescription>
             </CardHeader>
           </Card>
-        ) : !error ? (
+        ) : !error && viewMode === 'cards' ? (
           <div
             className='grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
             data-testid='media-card-grid'
@@ -595,6 +647,117 @@ export function Media() {
               </Card>
             ))}
           </div>
+        ) : !error ? (
+          <Card>
+            <CardContent className='p-0'>
+              <Table
+                className='table-fixed text-xs'
+                data-testid='media-row-table'
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className='w-12'>Select</TableHead>
+                    <TableHead className='w-[18%]'>Title</TableHead>
+                    <TableHead className='w-[13%]'>Status</TableHead>
+                    <TableHead className='w-[14%]'>Linked</TableHead>
+                    <TableHead className='w-[12%]'>Uploaded</TableHead>
+                    <TableHead className='w-[12%]'>Source</TableHead>
+                    <TableHead className='w-[17%]'>Filename</TableHead>
+                    <TableHead className='w-32 text-end'>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {assets.map((asset) => (
+                    <TableRow
+                      key={asset.id}
+                      data-testid={`media-row-${asset.id}`}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          aria-label={`Select ${asset.title}`}
+                          checked={selectedAssetSet.has(asset.id)}
+                          data-testid={`media-row-select-${asset.id}`}
+                          onCheckedChange={(checked) =>
+                            toggleAssetSelection(asset.id, checked === true)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className='truncate font-medium'>
+                        {asset.title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className='max-w-full truncate' variant='outline'>
+                          {analysisLabel(asset.analysis_status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className='max-w-full truncate'
+                          variant={
+                            asset.linkage_state === 'unlinked'
+                              ? 'default'
+                              : 'secondary'
+                          }
+                        >
+                          {linkageLabel(asset.linkage_state)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className='truncate'>
+                        {asset.uploaded_at || 'Unknown'}
+                      </TableCell>
+                      <TableCell className='truncate'>{asset.source}</TableCell>
+                      <TableCell className='truncate'>
+                        {asset.download_filename}
+                      </TableCell>
+                      <TableCell>
+                        <div className='flex justify-end gap-1'>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            aria-label={`Open ${asset.title}`}
+                            data-testid={`media-row-open-${asset.id}`}
+                          >
+                            <Eye />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            aria-label={`Analyze ${asset.title}`}
+                            data-testid={`media-row-analyze-${asset.id}`}
+                            disabled={asset.analysis_status === 'ready'}
+                          >
+                            <WandSparkles />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            aria-label={`Assign ${asset.title}`}
+                            data-testid={`media-row-assign-${asset.id}`}
+                            disabled={asset.linkage_state !== 'unlinked'}
+                            onClick={() => openAssignment(asset)}
+                          >
+                            <Link2 />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-7 w-7'
+                            aria-label={`Archive ${asset.title}`}
+                            data-testid={`media-row-archive-${asset.id}`}
+                          >
+                            <Archive />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         ) : null}
 
         <Dialog
