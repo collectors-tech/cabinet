@@ -120,6 +120,47 @@ describe('chats/ui-screen-chat-copilot', () => {
     cy.get('[data-testid="chat-action-preview"]').should('not.exist')
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-017 renders full Chats route through assistant-ui primitives while preserving Cabinet APIs', () => {
+    openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
+    createThread('E2E Chats Assistant UI Thread')
+    cy.intercept('POST', '/api/chat/messages').as('chatMessage')
+
+    cy.get('[data-testid="chat-message-list"]')
+      .should('have.attr', 'data-message-count', '0')
+    cy.get('[data-testid="chat-assistant-ui-composer-primitive"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="chat-upload-attachment-button"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="chat-preview-action-button"]').should('be.disabled')
+
+    cy.get('[data-testid="chat-compose-input"]').type(
+      'route assistant ui composer send'
+    )
+    cy.get('[data-testid="chat-send-button"]').click()
+    cy.wait('@chatMessage').then(({ request }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(String(request.body.thread_id).trim()).not.to.eq('')
+      expect(request.body.role).to.eq('user')
+      expect(request.body.content).to.eq('route assistant ui composer send')
+      expect(request.body.context.route.pathname).to.eq('/chats/')
+      expect(request.body.context.profile.id).to.eq('e2e-profile-001')
+      expect(request.body.context.assistant.provider).to.eq('anthropic')
+      expect(request.body.context.assistant.model).to.eq('claude-3-7-sonnet')
+    })
+    cy.get('[data-testid="chat-message-list"]')
+      .should('contain', 'route assistant ui composer send')
+      .invoke('attr', 'data-message-count')
+      .then((count) => {
+        expect(Number(count)).to.be.greaterThan(0)
+      })
+    cy.get('[data-testid="chat-assistant-ui-message-primitive"]').should(
+      'have.length.at.least',
+      1
+    )
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations', () => {
     openChats()
     const threadTitle = 'E2E Copilot CRUD Thread'
@@ -147,7 +188,7 @@ describe('chats/ui-screen-chat-copilot', () => {
         title?: string
       }>
       const created = items.find((item) => item.part_number === 'CP-007-INV')
-      expect(created, 'created inventory item').to.exist
+      expect(created, 'created inventory item').to.not.equal(undefined)
 
       cy.get('[data-testid="chat-preview-action-mode"]').select('update_inventory_item')
       cy.get('[data-testid="chat-preview-target-item-id"]')
@@ -195,7 +236,7 @@ describe('chats/ui-screen-chat-copilot', () => {
         title: string
       }>
       const thread = threads.find((item) => item.title === threadTitle)
-      expect(thread, 'created chat thread').to.exist
+      expect(thread, 'created chat thread').to.not.equal(undefined)
       cy.request(
         `/api/chat/messages?profile_id=e2e-profile-001&thread_id=${thread?.id}`
       ).then((messagesResponse) => {
@@ -225,7 +266,7 @@ describe('chats/ui-screen-chat-copilot', () => {
         title?: string
       }>
       const created = items.find((item) => item.part_number === 'CP-007-WISH')
-      expect(created, 'created wishlist-backed item').to.exist
+      expect(created, 'created wishlist-backed item').to.not.equal(undefined)
       expect(created?.status).to.eq('wishlist')
       expect(created?.title).to.eq('Copilot Wishlist Create')
     })
@@ -369,7 +410,7 @@ describe('chats/ui-screen-chat-copilot', () => {
         title?: string
       }>
       const target = items.find((item) => item.id === 'e2e-item-001')
-      expect(target, 'existing target item').to.exist
+      expect(target, 'existing target item').to.not.equal(undefined)
       expect(target?.part_number).to.not.eq('CP-011-CANCEL')
       expect(target?.title).to.not.eq('Copilot Cancel Preview')
     })

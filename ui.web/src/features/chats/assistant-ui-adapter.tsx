@@ -64,14 +64,21 @@ function assistantUiMessageText(message: MessageState) {
 
 type CabinetAssistantUiMessageListProps = {
   messages: CabinetAssistantUiMessage[]
+  testIds?: {
+    root?: string
+    messagePrimitive?: string
+    userBubble?: string
+    assistantBubble?: string
+  }
 }
 
 export function CabinetAssistantUiMessageList({
   messages,
+  testIds,
 }: CabinetAssistantUiMessageListProps) {
   return (
     <ThreadPrimitive.Root
-      data-testid='shell-assistant-ui-adapter'
+      data-testid={testIds?.root ?? 'shell-assistant-ui-adapter'}
       data-message-count={messages.length}
     >
       <ThreadPrimitive.Viewport asChild>
@@ -85,7 +92,10 @@ export function CabinetAssistantUiMessageList({
                     'flex',
                     isUser ? 'justify-end' : 'justify-start'
                   )}
-                  data-testid='shell-assistant-ui-message-primitive'
+                  data-testid={
+                    testIds?.messagePrimitive ??
+                    'shell-assistant-ui-message-primitive'
+                  }
                 >
                   <div
                     className={cn(
@@ -96,8 +106,10 @@ export function CabinetAssistantUiMessageList({
                     )}
                     data-testid={
                       isUser
-                        ? 'shell-assistant-message-bubble-user'
-                        : 'shell-assistant-message-bubble-assistant'
+                        ? (testIds?.userBubble ??
+                          'shell-assistant-message-bubble-user')
+                        : (testIds?.assistantBubble ??
+                          'shell-assistant-message-bubble-assistant')
                     }
                   >
                     <div className='mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground uppercase'>
@@ -122,20 +134,28 @@ export function CabinetAssistantUiMessageList({
 
 type CabinetAssistantUiComposerProps = {
   composer: CabinetAssistantUiComposerState
+  placeholder?: string
+  testIds?: {
+    root?: string
+    input?: string
+    sendButton?: string
+  }
 }
 
 export function CabinetAssistantUiComposer({
   composer,
+  placeholder = 'Ask Cabinet to update, find, or link records...',
+  testIds,
 }: CabinetAssistantUiComposerProps) {
   return (
     <ComposerPrimitive.Root
       className='flex items-center gap-2 rounded-2xl border bg-muted/20 p-1'
-      data-testid='shell-assistant-ui-composer-primitive'
+      data-testid={testIds?.root ?? 'shell-assistant-ui-composer-primitive'}
       data-sending={composer.sending ? 'true' : 'false'}
     >
       <ComposerPrimitive.Input
-        data-testid='shell-assistant-compose-input'
-        placeholder='Ask Cabinet to update, find, or link records...'
+        data-testid={testIds?.input ?? 'shell-assistant-compose-input'}
+        placeholder={placeholder}
         disabled={composer.disabled}
         className='min-h-9 flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none focus-visible:ring-0'
       />
@@ -143,7 +163,7 @@ export function CabinetAssistantUiComposer({
         <Button
           type='button'
           size='icon'
-          data-testid='shell-assistant-send-button'
+          data-testid={testIds?.sendButton ?? 'shell-assistant-send-button'}
           aria-label='Send assistant message'
           disabled={composer.disabled}
         >

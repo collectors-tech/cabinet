@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  AssistantRuntimeProvider,
+  type AppendMessage,
+  useExternalStoreRuntime,
+} from '@assistant-ui/react'
+import {
   MessageCircle,
   MessagesSquare,
   Plus,
   Search as SearchIcon,
-  Send,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -27,6 +31,12 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import {
+  assistantAppendMessageText,
+  CabinetAssistantUiComposer,
+  CabinetAssistantUiMessageList,
+  cabinetMessageToAssistantUi,
+} from './assistant-ui-adapter'
 
 type ChatThread = {
   id: string
@@ -119,16 +129,6 @@ function clearStoredActionPreview(key: string) {
   window.sessionStorage.removeItem(key)
 }
 
-function prettyRole(role: ChatMessage['role']) {
-  if (role === 'assistant') {
-    return 'Assistant'
-  }
-  if (role === 'system') {
-    return 'System'
-  }
-  return 'You'
-}
-
 function threadInitial(title: string) {
   return title.trim().charAt(0).toUpperCase() || 'C'
 }
@@ -146,7 +146,6 @@ export function Chats() {
   const [threadSearch, setThreadSearch] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [threadTitle, setThreadTitle] = useState('')
-  const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -338,29 +337,74 @@ export function Chats() {
     await loadThreads(activeProfileId, false)
   }
 
-  const sendMessage = async () => {
-    const content = draft.trim()
-    if (!activeProfileId || !selectedThreadId || !content) {
-      return
-    }
-    setSendError(null)
-    const response = await fetch('/api/chat/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        profile_id: activeProfileId,
-        thread_id: selectedThreadId,
-        role: 'user',
-        content,
-      }),
-    })
-    if (!response.ok) {
-      setSendError(`chat_message_create_${response.status}`)
-      return
-    }
-    setDraft('')
-    await loadThreads(activeProfileId)
-  }
+  const sendMessageContent = useCallback(
+    async (messageDraft: string) => {
+      const content = messageDraft.trim()
+      if (!activeProfileId || !selectedThreadId || !content) {
+        return
+      }
+      setSendError(null)
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: activeProfileId,
+          thread_id: selectedThreadId,
+          role: 'user',
+          content,
+          context: {
+            route: { pathname: '/chats/' },
+            profile: { id: activeProfileId },
+            assistant: assistantDefaults,
+          },
+        }),
+      })
+      if (!response.ok) {
+        setSendError(`chat_message_create_${response.status}`)
+        return
+      }
+      await loadThreads(activeProfileId)
+    },
+    [activeProfileId, assistantDefaults, loadThreads, selectedThreadId]
+  )
+
+  const handleAssistantUiNewMessage = useCallback(
+    async (message: AppendMessage) => {
+      await sendMessageContent(assistantAppendMessageText(message))
+    },
+    [sendMessageContent]
+  )
+
+  const chatAssistantRuntime = useExternalStoreRuntime<ChatMessage>({
+    messages,
+    convertMessage: cabinetMessageToAssistantUi,
+    isLoading: messagesLoading,
+    isRunning: false,
+    isSendDisabled: !activeProfileId || !selectedThreadId,
+    onNew: handleAssistantUiNewMessage,
+    adapters: {
+      threadList: {
+        threadId: selectedThreadId,
+        isLoading: loading,
+        threads: threads.map((thread) => ({
+          id: thread.id,
+          title: thread.title,
+          status: 'regular' as const,
+        })),
+        onSwitchToNewThread: () => {
+          document
+            .querySelector<HTMLInputElement>(
+              '[data-testid="chat-new-thread-input"]'
+            )
+            ?.focus()
+        },
+        onSwitchToThread: async (threadId) => {
+          setSelectedThreadId(threadId)
+          await loadMessages(activeProfileId, threadId)
+        },
+      },
+    },
+  })
 
   const uploadAttachment = async () => {
     if (!activeProfileId || !selectedThreadId || !pendingAttachment) {
@@ -752,8 +796,8 @@ export function Chats() {
                     {selectedThread.title}
                   </h2>
                 </div>
-                <ScrollArea className='h-[380px] rounded-md border p-3'>
-                  <div data-testid='chat-message-list' className='space-y-3'>
+                <AssistantRuntimeProvider runtime={chatAssistantRuntime}>
+                  <ScrollArea className='h-[380px] rounded-md border p-3'>
                     {messagesLoading ? (
                       <p className='text-sm text-muted-foreground'>
                         Loading messages...
@@ -766,19 +810,31 @@ export function Chats() {
                         No messages in this thread yet.
                       </p>
                     ) : null}
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className='rounded-md border p-2 text-sm'
-                      >
-                        <p className='font-medium'>
-                          {prettyRole(message.role)}
-                        </p>
-                        <p>{message.content}</p>
-                      </div>
-                    ))}
+                    <CabinetAssistantUiMessageList
+                      messages={messages}
+                      testIds={{
+                        root: 'chat-message-list',
+                        messagePrimitive: 'chat-assistant-ui-message-primitive',
+                        userBubble: 'chat-message-bubble-user',
+                        assistantBubble: 'chat-message-bubble-assistant',
+                      }}
+                    />
+                  </ScrollArea>
+                  <div className='mt-3'>
+                    <CabinetAssistantUiComposer
+                      composer={{
+                        disabled: !selectedThreadId,
+                        sending: false,
+                      }}
+                      placeholder='Type your message...'
+                      testIds={{
+                        root: 'chat-assistant-ui-composer-primitive',
+                        input: 'chat-compose-input',
+                        sendButton: 'chat-send-button',
+                      }}
+                    />
                   </div>
-                </ScrollArea>
+                </AssistantRuntimeProvider>
                 {sendError ? (
                   <p
                     className='mt-2 text-sm text-destructive'
@@ -787,24 +843,6 @@ export function Chats() {
                     {sendError}
                   </p>
                 ) : null}
-                <div className='mt-3 flex gap-2'>
-                  <Input
-                    data-testid='chat-compose-input'
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder='Type your message...'
-                    disabled={!selectedThreadId}
-                  />
-                  <Button
-                    data-testid='chat-send-button'
-                    onClick={() => void sendMessage()}
-                    disabled={!selectedThreadId || !draft.trim()}
-                  >
-                    <Send className='mr-1 h-4 w-4' />
-                    Send
-                  </Button>
-                </div>
-
                 <div className='mt-4 space-y-3 rounded-md border p-3'>
                   <p className='text-sm font-medium'>Attachments</p>
                   <div className='flex items-center gap-2'>
