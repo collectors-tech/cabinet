@@ -17,7 +17,7 @@ const TITLE_RULES: TitleRule[] = [
   { prefix: '/reports', title: 'Reports' },
   { prefix: '/integrations', title: 'Integrations' },
   { prefix: '/chats', title: 'Chats' },
-  { prefix: '/inbox', title: 'Purchases' },
+  { prefix: '/inbox', title: 'Notification Inbox' },
   { prefix: '/settings', title: 'Settings' },
   { prefix: '/help-center', title: 'Help Center' },
   { prefix: '/users', title: 'Users' },
