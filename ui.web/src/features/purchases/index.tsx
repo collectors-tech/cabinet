@@ -85,6 +85,8 @@ type PurchaseTableStatusFilter =
   | 'ready_to_link_or_convert'
   | 'needs_review'
   | 'manual_draft'
+  | 'csv_import'
+  | 'email_import'
 
 type PurchaseTableRow = {
   key: string
@@ -106,6 +108,20 @@ type ManualPurchaseForm = {
 
 type ManualPurchaseDraft = ManualPurchaseForm & {
   key: string
+}
+
+type PurchaseImportDraft = {
+  key: string
+  mode: 'csv' | 'email'
+  provenance: string
+  title: string
+  price: string
+  currency: string
+  purchaseDate: string
+  seller: string
+  channel: string
+  tracking: string
+  delivery: string
 }
 
 type ReviewResponse = {
@@ -315,6 +331,22 @@ const defaultManualPurchaseForm: ManualPurchaseForm = {
   tracking: '',
 }
 
+const defaultPurchaseCSVImport = [
+  'source,title,price,currency,purchase_date,seller,channel,tracking,delivery',
+  'Amazon,Manual Amazon order,42.50,AUD,2026-06-08,Amazon AU,email,TBA123456,Expected 2026-06-12',
+].join('\n')
+
+const defaultPurchaseEmailImport = [
+  'Source: eBay',
+  'Title: Accompanying Flute TWM 142',
+  'Price: AU $2.40',
+  'Purchase Date: 2026-06-08',
+  'Seller: seller-one',
+  'Channel: email',
+  'Tracking: 1ZEMAILPURCHASE',
+  'Delivery: Expected 2026-06-14',
+].join('\n')
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -331,6 +363,109 @@ function packageDetailValue(value?: string | number) {
     return 'Pending'
   }
   return value
+}
+
+function valueFromImportRow(
+  row: Record<string, string>,
+  keys: string[],
+  fallback = ''
+) {
+  const match = keys.find((key) => row[key]?.trim())
+  return match ? row[match].trim() : fallback
+}
+
+function parsePurchaseCSVImport(csv: string): PurchaseImportDraft[] {
+  const lines = csv
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length < 2) {
+    return []
+  }
+
+  const headers = lines[0].split(',').map((header) =>
+    header
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_')
+  )
+
+  return lines.slice(1).flatMap((line, index) => {
+    const values = line.split(',').map((value) => value.trim())
+    const row = headers.reduce<Record<string, string>>((current, header, i) => {
+      current[header] = values[i] ?? ''
+      return current
+    }, {})
+    const title = valueFromImportRow(row, ['title', 'item', 'purchase'])
+    if (!title) {
+      return []
+    }
+    const source = valueFromImportRow(row, ['source', 'provider'], 'CSV')
+    const currency = valueFromImportRow(row, ['currency'], 'AUD')
+    const price = valueFromImportRow(row, ['price', 'amount', 'total'])
+
+    return [
+      {
+        key:
+          'csv-import-preview-' +
+          index +
+          '-' +
+          title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        mode: 'csv' as const,
+        provenance: source + ' CSV row ' + (index + 2),
+        title,
+        price: price ? currency + ' ' + price.replace(/^[A-Z]{3}\s+/, '') : '-',
+        currency,
+        purchaseDate: valueFromImportRow(row, ['purchase_date', 'date']),
+        seller: valueFromImportRow(row, ['seller', 'merchant', 'source_name']),
+        channel: valueFromImportRow(row, ['channel'], 'csv'),
+        tracking: valueFromImportRow(row, ['tracking', 'tracking_number']),
+        delivery: valueFromImportRow(row, ['delivery', 'delivery_status']),
+      },
+    ]
+  })
+}
+
+function parsePurchaseEmailImport(message: string): PurchaseImportDraft[] {
+  const fields = message
+    .split(/\r?\n/)
+    .reduce<Record<string, string>>((current, line) => {
+      const [label, ...rest] = line.split(':')
+      if (!label || rest.length === 0) {
+        return current
+      }
+      current[
+        label
+          .trim()
+          .toLowerCase()
+          .replace(/[\s-]+/g, '_')
+      ] = rest.join(':').trim()
+      return current
+    }, {})
+  const title = valueFromImportRow(fields, ['title', 'item', 'purchase'])
+  if (!title) {
+    return []
+  }
+  const source = valueFromImportRow(fields, ['source', 'provider'], 'Email')
+  const price = valueFromImportRow(fields, ['price', 'amount', 'total'], '-')
+
+  return [
+    {
+      key:
+        'email-import-preview-' +
+        title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      mode: 'email',
+      provenance: source + ' pasted email text',
+      title,
+      price,
+      currency: valueFromImportRow(fields, ['currency'], 'AUD'),
+      purchaseDate: valueFromImportRow(fields, ['purchase_date', 'date']),
+      seller: valueFromImportRow(fields, ['seller', 'merchant', 'source_name']),
+      channel: valueFromImportRow(fields, ['channel'], 'email'),
+      tracking: valueFromImportRow(fields, ['tracking', 'tracking_number']),
+      delivery: valueFromImportRow(fields, ['delivery', 'delivery_status']),
+    },
+  ]
 }
 
 function purchaseRowKey(review: PurchaseInboxReview, item: PurchaseInboxItem) {
@@ -382,11 +517,32 @@ export function Purchases() {
     string | null
   >(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addDialogTab, setAddDialogTab] = useState<'new' | 'csv' | 'email'>(
+    'new'
+  )
   const [manualPurchaseForm, setManualPurchaseForm] =
     useState<ManualPurchaseForm>(defaultManualPurchaseForm)
   const [manualPurchaseDrafts, setManualPurchaseDrafts] = useState<
     ManualPurchaseDraft[]
   >([])
+  const [importPurchaseDrafts, setImportPurchaseDrafts] = useState<
+    PurchaseImportDraft[]
+  >([])
+  const [purchaseCSVImport, setPurchaseCSVImport] = useState(
+    defaultPurchaseCSVImport
+  )
+  const [purchaseEmailImport, setPurchaseEmailImport] = useState(
+    defaultPurchaseEmailImport
+  )
+  const [purchaseCSVPreview, setPurchaseCSVPreview] = useState<
+    PurchaseImportDraft[]
+  >([])
+  const [purchaseEmailPreview, setPurchaseEmailPreview] = useState<
+    PurchaseImportDraft[]
+  >([])
+  const [purchaseImportError, setPurchaseImportError] = useState<string | null>(
+    null
+  )
   const [manualPurchaseError, setManualPurchaseError] = useState<string | null>(
     null
   )
@@ -402,9 +558,9 @@ export function Purchases() {
   const [arrivedPurchaseKeys, setArrivedPurchaseKeys] = useState<
     Record<string, boolean>
   >({})
-  const [purchaseRatings, setPurchaseRatings] = useState<Record<string, number>>(
-    {}
-  )
+  const [purchaseRatings, setPurchaseRatings] = useState<
+    Record<string, number>
+  >({})
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [
@@ -483,68 +639,89 @@ export function Purchases() {
     [packageLinks, packageReviewFilter, packageSuggestions, packages]
   )
 
-  const purchaseRows = useMemo<PurchaseTableRow[]>(
-    () => {
-      const capturedRows = reviews.flatMap((review) =>
-        review.items.map((item) => {
-          const source = item.item.seller_username
-            ? 'eBay / ' + item.item.seller_username
-            : 'eBay'
-          const title =
-            item.item.purchased_identity ??
-            item.item.listing_title ??
-            'Untitled purchase item'
-          const price = item.item.item_price ?? review.order.order_total ?? '-'
-          const status = item.status
-          const tracking = 'Pending'
-          const key = purchaseRowKey(review, item)
+  const purchaseRows = useMemo<PurchaseTableRow[]>(() => {
+    const capturedRows = reviews.flatMap((review) =>
+      review.items.map((item) => {
+        const source = item.item.seller_username
+          ? 'eBay / ' + item.item.seller_username
+          : 'eBay'
+        const title =
+          item.item.purchased_identity ??
+          item.item.listing_title ??
+          'Untitled purchase item'
+        const price = item.item.item_price ?? review.order.order_total ?? '-'
+        const status = item.status
+        const tracking = 'Pending'
+        const key = purchaseRowKey(review, item)
 
-          return {
-            key,
+        return {
+          key,
+          title,
+          source,
+          price,
+          status,
+          tracking,
+          actionCount: (item.suggested_actions ?? []).length,
+          searchText: [
             title,
             source,
             price,
-            status,
+            labelForStatus(status),
             tracking,
-            actionCount: (item.suggested_actions ?? []).length,
-            searchText: [
-              title,
-              source,
-              price,
-              labelForStatus(status),
-              tracking,
-              review.order.order_id,
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase(),
-          }
-        })
-      )
-      const manualRows = manualPurchaseDrafts.map((draft) => ({
-        key: draft.key,
-        title: draft.title,
-        source: draft.source,
-        price: draft.price || '-',
-        status: 'manual_draft',
-        tracking: draft.tracking || 'Pending',
-        actionCount: 1,
-        searchText: [
-          draft.title,
-          draft.source,
-          draft.price,
-          'manual draft',
-          draft.tracking,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase(),
-      }))
+            review.order.order_id,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase(),
+        }
+      })
+    )
+    const manualRows = manualPurchaseDrafts.map((draft) => ({
+      key: draft.key,
+      title: draft.title,
+      source: draft.source,
+      price: draft.price || '-',
+      status: 'manual_draft',
+      tracking: draft.tracking || 'Pending',
+      actionCount: 1,
+      searchText: [
+        draft.title,
+        draft.source,
+        draft.price,
+        'manual draft',
+        draft.tracking,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase(),
+    }))
+    const importedRows = importPurchaseDrafts.map((draft) => ({
+      key: draft.key,
+      title: draft.title,
+      source: draft.provenance,
+      price: draft.price || '-',
+      status: draft.mode === 'csv' ? 'csv_import' : 'email_import',
+      tracking: draft.tracking || draft.delivery || 'Pending',
+      actionCount: 1,
+      searchText: [
+        draft.title,
+        draft.provenance,
+        draft.price,
+        draft.currency,
+        draft.purchaseDate,
+        draft.seller,
+        draft.channel,
+        draft.tracking,
+        draft.delivery,
+        draft.mode + ' import',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase(),
+    }))
 
-      return [...manualRows, ...capturedRows]
-    },
-    [manualPurchaseDrafts, reviews]
-  )
+    return [...importedRows, ...manualRows, ...capturedRows]
+  }, [importPurchaseDrafts, manualPurchaseDrafts, reviews])
 
   const filteredPurchaseRows = useMemo(() => {
     const query = purchaseSearch.trim().toLowerCase()
@@ -742,6 +919,58 @@ export function Purchases() {
     setManualPurchaseForm((current) => ({ ...current, [field]: value }))
     setManualPurchaseError(null)
     setManualPurchaseResult(null)
+  }
+
+  const previewPurchaseCSVImport = () => {
+    const preview = parsePurchaseCSVImport(purchaseCSVImport)
+    setPurchaseCSVPreview(preview)
+    setPurchaseImportError(
+      preview.length === 0
+        ? 'CSV import needs a header row and at least one purchase title.'
+        : null
+    )
+    setManualPurchaseResult(null)
+  }
+
+  const previewPurchaseEmailImport = () => {
+    const preview = parsePurchaseEmailImport(purchaseEmailImport)
+    setPurchaseEmailPreview(preview)
+    setPurchaseImportError(
+      preview.length === 0
+        ? 'Email import needs labeled purchase text with a Title field.'
+        : null
+    )
+    setManualPurchaseResult(null)
+  }
+
+  const confirmPurchaseImportDrafts = (mode: 'csv' | 'email') => {
+    const preview = mode === 'csv' ? purchaseCSVPreview : purchaseEmailPreview
+    if (preview.length === 0) {
+      setPurchaseImportError(
+        mode === 'csv'
+          ? 'Preview CSV purchases before confirming.'
+          : 'Preview email purchases before confirming.'
+      )
+      return
+    }
+    setImportPurchaseDrafts((current) => [...preview, ...current])
+    setManualPurchaseResult(
+      'Confirmed ' +
+        preview.length +
+        ' ' +
+        mode.toUpperCase() +
+        ' import draft' +
+        (preview.length === 1 ? '' : 's') +
+        '. No purchase was written before explicit confirmation.'
+    )
+    setPurchaseImportError(null)
+    if (mode === 'csv') {
+      setPurchaseCSVPreview([])
+    } else {
+      setPurchaseEmailPreview([])
+    }
+    setPurchaseStatusFilter('all')
+    setAddDialogOpen(false)
   }
 
   const saveManualPurchaseDraft = () => {
@@ -1188,6 +1417,8 @@ export function Purchases() {
                 ['ready_to_link_or_convert', 'Ready'],
                 ['needs_review', 'Needs review'],
                 ['manual_draft', 'Manual draft'],
+                ['csv_import', 'CSV import'],
+                ['email_import', 'Email import'],
               ] satisfies Array<[PurchaseTableStatusFilter, string]>
             ).map(([value, label]) => (
               <Button
@@ -1222,88 +1453,81 @@ export function Purchases() {
             </TableHeader>
             <TableBody>
               {filteredPurchaseRows.map((row) => (
-                  <TableRow
-                    key={row.key}
-                    data-testid='purchases-table-row'
-                  >
-                    <TableCell className='truncate font-medium'>
-                      {row.title}
-                    </TableCell>
-                    <TableCell className='truncate'>{row.source}</TableCell>
-                    <TableCell>{row.price}</TableCell>
-                    <TableCell>{labelForStatus(row.status)}</TableCell>
-                    <TableCell className='text-muted-foreground'>
-                      {arrivedPurchaseKeys[row.key] ? 'Arrived' : row.tracking}
-                    </TableCell>
-                    <TableCell>
-                      <div className='flex flex-wrap justify-end gap-1'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant={
-                            favoritePurchaseKeys[row.key]
-                              ? 'default'
-                              : 'outline'
-                          }
-                          aria-pressed={favoritePurchaseKeys[row.key] ?? false}
-                          data-testid='purchases-row-favorite'
-                          onClick={() =>
-                            setFavoritePurchaseKeys((current) => ({
-                              ...current,
-                              [row.key]: !current[row.key],
-                            }))
-                          }
-                        >
-                          <Star className='mr-1 h-3.5 w-3.5' />
-                          Favorite
-                        </Button>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant={
-                            arrivedPurchaseKeys[row.key] ? 'default' : 'outline'
-                          }
-                          aria-pressed={arrivedPurchaseKeys[row.key] ?? false}
-                          data-testid='purchases-row-arrived'
-                          onClick={() =>
-                            setArrivedPurchaseKeys((current) => ({
-                              ...current,
-                              [row.key]: !current[row.key],
-                            }))
-                          }
-                        >
-                          <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
-                          Arrived
-                        </Button>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant={
-                            purchaseRatings[row.key] === 4
-                              ? 'default'
-                              : 'outline'
-                          }
-                          data-testid='purchases-row-rating'
-                          onClick={() =>
-                            setPurchaseRatings((current) => ({
-                              ...current,
-                              [row.key]: current[row.key] === 4 ? 0 : 4,
-                            }))
-                          }
-                        >
-                          Rating {purchaseRatings[row.key] || '-'}
-                        </Button>
-                        <span
-                          className='self-center text-xs text-muted-foreground'
-                          data-testid='purchases-row-action-count'
-                        >
-                          {row.actionCount} action
-                          {row.actionCount === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                <TableRow key={row.key} data-testid='purchases-table-row'>
+                  <TableCell className='truncate font-medium'>
+                    {row.title}
+                  </TableCell>
+                  <TableCell className='truncate'>{row.source}</TableCell>
+                  <TableCell>{row.price}</TableCell>
+                  <TableCell>{labelForStatus(row.status)}</TableCell>
+                  <TableCell className='text-muted-foreground'>
+                    {arrivedPurchaseKeys[row.key] ? 'Arrived' : row.tracking}
+                  </TableCell>
+                  <TableCell>
+                    <div className='flex flex-wrap justify-end gap-1'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={
+                          favoritePurchaseKeys[row.key] ? 'default' : 'outline'
+                        }
+                        aria-pressed={favoritePurchaseKeys[row.key] ?? false}
+                        data-testid='purchases-row-favorite'
+                        onClick={() =>
+                          setFavoritePurchaseKeys((current) => ({
+                            ...current,
+                            [row.key]: !current[row.key],
+                          }))
+                        }
+                      >
+                        <Star className='mr-1 h-3.5 w-3.5' />
+                        Favorite
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={
+                          arrivedPurchaseKeys[row.key] ? 'default' : 'outline'
+                        }
+                        aria-pressed={arrivedPurchaseKeys[row.key] ?? false}
+                        data-testid='purchases-row-arrived'
+                        onClick={() =>
+                          setArrivedPurchaseKeys((current) => ({
+                            ...current,
+                            [row.key]: !current[row.key],
+                          }))
+                        }
+                      >
+                        <CheckCircle2 className='mr-1 h-3.5 w-3.5' />
+                        Arrived
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={
+                          purchaseRatings[row.key] === 4 ? 'default' : 'outline'
+                        }
+                        data-testid='purchases-row-rating'
+                        onClick={() =>
+                          setPurchaseRatings((current) => ({
+                            ...current,
+                            [row.key]: current[row.key] === 4 ? 0 : 4,
+                          }))
+                        }
+                      >
+                        Rating {purchaseRatings[row.key] || '-'}
+                      </Button>
+                      <span
+                        className='self-center text-xs text-muted-foreground'
+                        data-testid='purchases-row-action-count'
+                      >
+                        {row.actionCount} action
+                        {row.actionCount === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
               {purchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-empty-row'>
                   <TableCell
@@ -2508,7 +2732,15 @@ export function Purchases() {
         </section>
       </Main>
 
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+      <Dialog
+        open={addDialogOpen}
+        onOpenChange={(open) => {
+          setAddDialogOpen(open)
+          if (open) {
+            setPurchaseImportError(null)
+          }
+        }}
+      >
         <DialogContent data-testid='purchases-add-dialog'>
           <DialogHeader>
             <DialogTitle>New purchase</DialogTitle>
@@ -2516,7 +2748,13 @@ export function Purchases() {
               Create or import a purchase draft before confirming persistence.
             </DialogDescription>
           </DialogHeader>
-          <Tabs defaultValue='new' data-testid='purchases-add-tabs'>
+          <Tabs
+            value={addDialogTab}
+            onValueChange={(value) =>
+              setAddDialogTab(value as 'new' | 'csv' | 'email')
+            }
+            data-testid='purchases-add-tabs'
+          >
             <TabsList aria-label='Purchase creation modes'>
               <TabsTrigger value='new' data-testid='purchases-add-tab-new'>
                 New
@@ -2593,7 +2831,53 @@ export function Purchases() {
                 id='purchase-csv-import'
                 data-testid='purchases-add-csv-input'
                 placeholder='Paste CSV rows with source, title, price, date, and tracking fields'
+                value={purchaseCSVImport}
+                onChange={(event) => {
+                  setPurchaseCSVImport(event.target.value)
+                  setPurchaseCSVPreview([])
+                  setPurchaseImportError(null)
+                }}
               />
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='purchases-add-csv-preview'
+                onClick={previewPurchaseCSVImport}
+              >
+                Preview CSV
+              </Button>
+              {purchaseCSVPreview.length > 0 ? (
+                <div
+                  className='rounded-md border bg-muted/20 p-3 text-sm'
+                  data-testid='purchases-add-csv-preview-result'
+                >
+                  <p className='font-medium'>
+                    Previewing {purchaseCSVPreview.length} CSV purchase draft
+                    {purchaseCSVPreview.length === 1 ? '' : 's'}
+                  </p>
+                  <div className='mt-2 space-y-2'>
+                    {purchaseCSVPreview.map((draft) => (
+                      <div
+                        key={draft.key}
+                        className='rounded-md border bg-background p-2'
+                        data-testid='purchases-import-preview-row'
+                      >
+                        <p className='font-medium'>{draft.title}</p>
+                        <p className='text-muted-foreground'>
+                          {draft.provenance} · {draft.price} ·{' '}
+                          {draft.purchaseDate || 'date pending'}
+                        </p>
+                        <p className='text-muted-foreground'>
+                          Seller {draft.seller || 'pending'} · Channel{' '}
+                          {draft.channel} · Tracking{' '}
+                          {draft.tracking || 'pending'} · Delivery{' '}
+                          {draft.delivery || 'pending'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </TabsContent>
             <TabsContent value='email' className='space-y-3 pt-4'>
               <Label htmlFor='purchase-email-import'>Email or order text</Label>
@@ -2601,20 +2885,88 @@ export function Purchases() {
                 id='purchase-email-import'
                 data-testid='purchases-add-email-input'
                 placeholder='Paste order confirmation text for preview parsing'
+                value={purchaseEmailImport}
+                onChange={(event) => {
+                  setPurchaseEmailImport(event.target.value)
+                  setPurchaseEmailPreview([])
+                  setPurchaseImportError(null)
+                }}
               />
+              <Button
+                type='button'
+                variant='outline'
+                data-testid='purchases-add-email-preview'
+                onClick={previewPurchaseEmailImport}
+              >
+                Preview email
+              </Button>
+              {purchaseEmailPreview.length > 0 ? (
+                <div
+                  className='rounded-md border bg-muted/20 p-3 text-sm'
+                  data-testid='purchases-add-email-preview-result'
+                >
+                  <p className='font-medium'>Previewing email purchase draft</p>
+                  {purchaseEmailPreview.map((draft) => (
+                    <div
+                      key={draft.key}
+                      className='mt-2 rounded-md border bg-background p-2'
+                      data-testid='purchases-import-preview-row'
+                    >
+                      <p className='font-medium'>{draft.title}</p>
+                      <p className='text-muted-foreground'>
+                        {draft.provenance} · {draft.price} ·{' '}
+                        {draft.purchaseDate || 'date pending'}
+                      </p>
+                      <p className='text-muted-foreground'>
+                        Seller {draft.seller || 'pending'} · Channel{' '}
+                        {draft.channel} · Tracking {draft.tracking || 'pending'}{' '}
+                        · Delivery {draft.delivery || 'pending'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </TabsContent>
           </Tabs>
+          {purchaseImportError ? (
+            <p
+              className='text-sm text-destructive'
+              data-testid='purchases-add-import-error'
+            >
+              {purchaseImportError}
+            </p>
+          ) : null}
           <DialogFooter>
             <Button variant='outline' onClick={() => setAddDialogOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type='button'
-              data-testid='purchases-add-new-save'
-              onClick={saveManualPurchaseDraft}
-            >
-              Save draft
-            </Button>
+            {addDialogTab === 'new' ? (
+              <Button
+                type='button'
+                data-testid='purchases-add-new-save'
+                onClick={saveManualPurchaseDraft}
+              >
+                Save draft
+              </Button>
+            ) : null}
+            {addDialogTab === 'csv' ? (
+              <Button
+                type='button'
+                data-testid='purchases-add-csv-confirm'
+                onClick={() => confirmPurchaseImportDrafts('csv')}
+              >
+                Confirm CSV drafts
+              </Button>
+            ) : null}
+            {addDialogTab === 'email' ? (
+              <Button
+                type='button'
+                data-testid='purchases-add-email-confirm'
+                onClick={() => confirmPurchaseImportDrafts('email')}
+              >
+                Confirm email draft
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

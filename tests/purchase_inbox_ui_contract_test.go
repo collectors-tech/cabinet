@@ -33,6 +33,10 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchase-inbox-confirm-dialog",
 		"requires_confirmation",
 		"Confirmation required",
+		"purchases-add-csv-preview",
+		"purchases-add-email-preview",
+		"purchases-add-csv-confirm",
+		"purchases-add-email-confirm",
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
@@ -46,6 +50,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 
 	requiredCypressSnippets := []string{
 		"COMMERCE-RECONCILIATION-006",
+		"COMMERCE-RECONCILIATION-009",
 		"path: '/purchases'",
 		"EBAY-PURCHASE-CAPTURE-006",
 		"purchase-inbox-empty-state",

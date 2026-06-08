@@ -66,3 +66,15 @@ Cabinet SHALL let users create a manual purchase draft from the Purchases `+` di
 - **GIVEN** the user opens the Purchases `+` dialog and selects the New mode
 - **WHEN** the user enters a purchase title with optional source, price, and tracking evidence and saves the draft
 - **THEN** Cabinet MUST add a manual-draft row to the Purchases table, preserve the entered source/price/tracking evidence in the visible row, expose the row through table search/filtering, and clearly state that durable API persistence remains pending a follow-up slice.
+
+### Requirement COMMERCE-RECONCILIATION-009: Purchases SHALL preview CSV and email imports before confirmation
+Cabinet SHALL let users paste CSV rows or order/email text from the Purchases `+` dialog, preview parsed purchase draft fields, and require explicit confirmation before imported purchase drafts appear in the table.
+
+#### Scenario: Preview and confirm purchase imports
+- **GIVEN** the user opens the Purchases `+` dialog and selects CSV or Email mode
+- **WHEN** the user enters import text and requests a preview
+- **THEN** Cabinet MUST show parsed draft fields including source/provenance, title, price/currency, purchase date when available, seller/source/channel, and tracking/delivery evidence when available.
+- **AND** Cabinet MUST show actionable empty or parse-failure feedback when no purchase draft can be parsed.
+- **AND** Cabinet MUST NOT add imported purchase drafts to the Purchases table until the user explicitly confirms the preview.
+- **WHEN** the user confirms a CSV or Email preview
+- **THEN** Cabinet MUST add the confirmed import draft rows to the Purchases table with CSV or Email import status and preserve the previewed provenance, price, tracking, and delivery evidence.
