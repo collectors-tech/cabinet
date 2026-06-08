@@ -57,3 +57,11 @@ Cabinet SHALL let users narrow the Purchases table by purchase text/source/statu
 - **GIVEN** the Purchases table contains captured or imported purchase rows
 - **WHEN** the user searches purchases, applies a review status filter, or marks a visible row as favorite, arrived, or rated
 - **THEN** Cabinet MUST keep the table scannable, show the filtered row count, preserve independent source/status evidence in visible rows, and reflect the selected favorite/arrival/rating state on the affected row without mutating unrelated rows.
+
+### Requirement COMMERCE-RECONCILIATION-008: Purchases SHALL support manual purchase draft creation
+Cabinet SHALL let users create a manual purchase draft from the Purchases `+` dialog before the durable purchase API workflow is completed.
+
+#### Scenario: Create a manual purchase draft
+- **GIVEN** the user opens the Purchases `+` dialog and selects the New mode
+- **WHEN** the user enters a purchase title with optional source, price, and tracking evidence and saves the draft
+- **THEN** Cabinet MUST add a manual-draft row to the Purchases table, preserve the entered source/price/tracking evidence in the visible row, expose the row through table search/filtering, and clearly state that durable API persistence remains pending a follow-up slice.

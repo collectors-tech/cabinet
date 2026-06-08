@@ -214,6 +214,61 @@ describe('purchases/purchase-inbox', () => {
     )
   })
 
+  it('COMMERCE-RECONCILIATION-008 creates manual purchase drafts from the add dialog', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inbox',
+    })
+    cy.get('[data-testid="purchases-table-empty-row"]').should(
+      'contain',
+      'No purchases loaded'
+    )
+    cy.get('[data-testid="purchases-add-button"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('be.visible')
+    cy.get('[data-testid="purchases-add-new-save"]').click()
+    cy.get('[data-testid="purchases-add-new-error"]').should(
+      'contain',
+      'Purchase title is required.'
+    )
+
+    cy.get('[data-testid="purchases-add-new-title"]').type(
+      'Manual Amazon order'
+    )
+    cy.get('[data-testid="purchases-add-new-source"]').clear().type('Amazon')
+    cy.get('[data-testid="purchases-add-new-price"]').type('AU $42.50')
+    cy.get('[data-testid="purchases-add-new-tracking"]').type('TBA123456')
+    cy.get('[data-testid="purchases-add-new-save"]').click()
+    cy.get('[data-testid="purchases-add-dialog"]').should('not.exist')
+    cy.get('[data-testid="purchases-manual-draft-result"]')
+      .should('contain', 'Saved manual purchase draft for Manual Amazon order')
+      .and('contain', 'Persistent API storage is pending')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Manual Amazon order')
+      .and('contain', 'Amazon')
+      .and('contain', 'AU $42.50')
+      .and('contain', 'manual draft')
+      .and('contain', 'TBA123456')
+    cy.get('[data-testid="purchases-filter-result"]').should(
+      'contain',
+      'Showing 1 of 1 purchases'
+    )
+
+    cy.get('[data-testid="purchases-table-search"]').type('Amazon')
+    cy.get('[data-testid="purchases-table-row"]').should(
+      'contain',
+      'Manual Amazon order'
+    )
+    cy.get('[data-testid="purchases-status-filter-manual_draft"]').click()
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'manual draft')
+  })
+
   it('EBAY-PURCHASE-CAPTURE-006 exposes a retryable error state', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
