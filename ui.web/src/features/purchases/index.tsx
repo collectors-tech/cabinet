@@ -84,6 +84,7 @@ type PurchaseTableStatusFilter =
   | 'all'
   | 'ready_to_link_or_convert'
   | 'needs_review'
+  | 'manual_draft'
 
 type PurchaseTableRow = {
   key: string
@@ -94,6 +95,17 @@ type PurchaseTableRow = {
   tracking: string
   actionCount: number
   searchText: string
+}
+
+type ManualPurchaseForm = {
+  title: string
+  source: string
+  price: string
+  tracking: string
+}
+
+type ManualPurchaseDraft = ManualPurchaseForm & {
+  key: string
 }
 
 type ReviewResponse = {
@@ -296,6 +308,13 @@ const defaultPackageLinkForm: ForwarderPackageLinkForm = {
   notes: 'Matched from package inbox review',
 }
 
+const defaultManualPurchaseForm: ManualPurchaseForm = {
+  title: '',
+  source: 'manual',
+  price: '',
+  tracking: '',
+}
+
 function actionTone(action: PurchaseInboxAction) {
   if (action.requires_confirmation) {
     return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
@@ -363,6 +382,17 @@ export function Purchases() {
     string | null
   >(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [manualPurchaseForm, setManualPurchaseForm] =
+    useState<ManualPurchaseForm>(defaultManualPurchaseForm)
+  const [manualPurchaseDrafts, setManualPurchaseDrafts] = useState<
+    ManualPurchaseDraft[]
+  >([])
+  const [manualPurchaseError, setManualPurchaseError] = useState<string | null>(
+    null
+  )
+  const [manualPurchaseResult, setManualPurchaseResult] = useState<
+    string | null
+  >(null)
   const [purchaseSearch, setPurchaseSearch] = useState('')
   const [purchaseStatusFilter, setPurchaseStatusFilter] =
     useState<PurchaseTableStatusFilter>('all')
@@ -454,8 +484,8 @@ export function Purchases() {
   )
 
   const purchaseRows = useMemo<PurchaseTableRow[]>(
-    () =>
-      reviews.flatMap((review) =>
+    () => {
+      const capturedRows = reviews.flatMap((review) =>
         review.items.map((item) => {
           const source = item.item.seller_username
             ? 'eBay / ' + item.item.seller_username
@@ -490,8 +520,30 @@ export function Purchases() {
               .toLowerCase(),
           }
         })
-      ),
-    [reviews]
+      )
+      const manualRows = manualPurchaseDrafts.map((draft) => ({
+        key: draft.key,
+        title: draft.title,
+        source: draft.source,
+        price: draft.price || '-',
+        status: 'manual_draft',
+        tracking: draft.tracking || 'Pending',
+        actionCount: 1,
+        searchText: [
+          draft.title,
+          draft.source,
+          draft.price,
+          'manual draft',
+          draft.tracking,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase(),
+      }))
+
+      return [...manualRows, ...capturedRows]
+    },
+    [manualPurchaseDrafts, reviews]
   )
 
   const filteredPurchaseRows = useMemo(() => {
@@ -681,6 +733,50 @@ export function Purchases() {
 
   const updatePackageForm = (field: keyof PackageImportForm, value: string) => {
     setPackageForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const updateManualPurchaseForm = (
+    field: keyof ManualPurchaseForm,
+    value: string
+  ) => {
+    setManualPurchaseForm((current) => ({ ...current, [field]: value }))
+    setManualPurchaseError(null)
+    setManualPurchaseResult(null)
+  }
+
+  const saveManualPurchaseDraft = () => {
+    const title = manualPurchaseForm.title.trim()
+    const source = manualPurchaseForm.source.trim() || 'manual'
+    const price = manualPurchaseForm.price.trim()
+    const tracking = manualPurchaseForm.tracking.trim()
+
+    if (!title) {
+      setManualPurchaseError('Purchase title is required.')
+      setManualPurchaseResult(null)
+      return
+    }
+
+    const draft: ManualPurchaseDraft = {
+      key:
+        'manual-purchase-' +
+        Date.now().toString(36) +
+        '-' +
+        title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      title,
+      source,
+      price,
+      tracking,
+    }
+    setManualPurchaseDrafts((current) => [draft, ...current])
+    setManualPurchaseForm(defaultManualPurchaseForm)
+    setManualPurchaseError(null)
+    setManualPurchaseResult(
+      'Saved manual purchase draft for ' +
+        title +
+        '. Persistent API storage is pending the next #1045 slice.'
+    )
+    setPurchaseStatusFilter('all')
+    setAddDialogOpen(false)
   }
 
   const packageLinkFormFor = (packageID: string) =>
@@ -1062,6 +1158,14 @@ export function Purchases() {
             </Button>
           </div>
         </div>
+        {manualPurchaseResult ? (
+          <div
+            className='mt-3 rounded-md border bg-muted/30 p-3 text-sm'
+            data-testid='purchases-manual-draft-result'
+          >
+            {manualPurchaseResult}
+          </div>
+        ) : null}
 
         <div
           className='mt-4 overflow-x-auto rounded-md border'
@@ -1083,6 +1187,7 @@ export function Purchases() {
                 ['all', 'All'],
                 ['ready_to_link_or_convert', 'Ready'],
                 ['needs_review', 'Needs review'],
+                ['manual_draft', 'Manual draft'],
               ] satisfies Array<[PurchaseTableStatusFilter, string]>
             ).map(([value, label]) => (
               <Button
@@ -2424,12 +2529,63 @@ export function Purchases() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value='new' className='space-y-3 pt-4'>
-              <Label htmlFor='purchase-manual-title'>Purchase title</Label>
-              <Input
-                id='purchase-manual-title'
-                data-testid='purchases-add-new-title'
-                placeholder='Item name or order title'
-              />
+              <div className='grid gap-1.5'>
+                <Label htmlFor='purchase-manual-title'>Purchase title</Label>
+                <Input
+                  id='purchase-manual-title'
+                  data-testid='purchases-add-new-title'
+                  placeholder='Item name or order title'
+                  value={manualPurchaseForm.title}
+                  onChange={(event) =>
+                    updateManualPurchaseForm('title', event.target.value)
+                  }
+                />
+              </div>
+              <div className='grid gap-3 sm:grid-cols-3'>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='purchase-manual-source'>Source</Label>
+                  <Input
+                    id='purchase-manual-source'
+                    data-testid='purchases-add-new-source'
+                    value={manualPurchaseForm.source}
+                    onChange={(event) =>
+                      updateManualPurchaseForm('source', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='purchase-manual-price'>Price</Label>
+                  <Input
+                    id='purchase-manual-price'
+                    data-testid='purchases-add-new-price'
+                    placeholder='AU $0.00'
+                    value={manualPurchaseForm.price}
+                    onChange={(event) =>
+                      updateManualPurchaseForm('price', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='purchase-manual-tracking'>Tracking</Label>
+                  <Input
+                    id='purchase-manual-tracking'
+                    data-testid='purchases-add-new-tracking'
+                    placeholder='Carrier or tracking number'
+                    value={manualPurchaseForm.tracking}
+                    onChange={(event) =>
+                      updateManualPurchaseForm('tracking', event.target.value)
+                    }
+                  />
+                </div>
+              </div>
+              {manualPurchaseError ? (
+                <p
+                  className='text-sm text-destructive'
+                  data-testid='purchases-add-new-error'
+                >
+                  {manualPurchaseError}
+                </p>
+              ) : null}
             </TabsContent>
             <TabsContent value='csv' className='space-y-3 pt-4'>
               <Label htmlFor='purchase-csv-import'>CSV import</Label>
@@ -2452,8 +2608,12 @@ export function Purchases() {
             <Button variant='outline' onClick={() => setAddDialogOpen(false)}>
               Cancel
             </Button>
-            <Button disabled data-testid='purchases-add-save-disabled'>
-              Preview draft
+            <Button
+              type='button'
+              data-testid='purchases-add-new-save'
+              onClick={saveManualPurchaseDraft}
+            >
+              Save draft
             </Button>
           </DialogFooter>
         </DialogContent>
