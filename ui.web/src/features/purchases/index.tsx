@@ -4,6 +4,7 @@ import {
   FileUp,
   Loader2,
   PackagePlus,
+  Plus,
   RefreshCw,
   ShieldCheck,
   Truck,
@@ -20,6 +21,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -323,6 +333,7 @@ export function Purchases() {
   const [packageSuggestionResult, setPackageSuggestionResult] = useState<
     string | null
   >(null)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [packageSuggestionSummary, setPackageSuggestionSummary] =
     useState<ForwarderPackageMatchSuggestionSummary | null>(null)
   const [
@@ -902,8 +913,8 @@ export function Purchases() {
       <Header>
         <Search />
         <HeaderTitle
-          title='Purchase Inbox'
-          description='Review captured eBay purchases before linking or converting inventory.'
+          title='Purchases'
+          description='Review, import, and reconcile purchases across channels.'
           icon={Inbox}
           testId='purchase-inbox-header-title'
           iconTestId='purchase-inbox-page-icon'
@@ -922,26 +933,101 @@ export function Purchases() {
       <Main>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>
-              Purchase Inbox
-            </h1>
+            <h1 className='text-2xl font-bold tracking-tight'>Purchases</h1>
             <p className='text-muted-foreground'>
-              Captured orders stay review-only until a link or convert action is
-              confirmed.
+              Track purchases from eBay, Amazon, CSV, email, desktop imports,
+              and manual entries in one review-first workspace.
             </p>
           </div>
-          <Button
-            data-testid='purchase-inbox-load-reviews'
-            onClick={() => void loadReviews()}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-            ) : (
-              <RefreshCw className='mr-2 h-4 w-4' />
-            )}
-            Review captured purchases
-          </Button>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button
+              data-testid='purchases-add-button'
+              onClick={() => setAddDialogOpen(true)}
+              aria-label='Add purchase'
+            >
+              <Plus className='mr-2 h-4 w-4' />
+              Add
+            </Button>
+            <Button
+              variant='outline'
+              data-testid='purchase-inbox-load-reviews'
+              onClick={() => void loadReviews()}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : (
+                <RefreshCw className='mr-2 h-4 w-4' />
+              )}
+              Review captured purchases
+            </Button>
+          </div>
+        </div>
+
+        <div
+          className='mt-4 overflow-x-auto rounded-md border'
+          data-testid='purchases-table-shell'
+        >
+          <Table className='min-w-[64rem] table-fixed'>
+            <TableHeader>
+              <TableRow>
+                <TableHead className='w-[18rem]'>Purchase</TableHead>
+                <TableHead className='w-[12rem]'>Source</TableHead>
+                <TableHead className='w-[10rem]'>Price</TableHead>
+                <TableHead className='w-[12rem]'>Status</TableHead>
+                <TableHead className='w-[14rem]'>Tracking</TableHead>
+                <TableHead className='w-[10rem] text-right'>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reviews.flatMap((review) =>
+                review.items.map((item) => (
+                  <TableRow
+                    key={
+                      item.item.transaction_id ??
+                      item.item.listing_id ??
+                      item.item.listing_title
+                    }
+                    data-testid='purchases-table-row'
+                  >
+                    <TableCell className='truncate font-medium'>
+                      {item.item.purchased_identity ??
+                        item.item.listing_title ??
+                        'Untitled purchase item'}
+                    </TableCell>
+                    <TableCell className='truncate'>
+                      eBay
+                      {item.item.seller_username
+                        ? ` / ${item.item.seller_username}`
+                        : ''}
+                    </TableCell>
+                    <TableCell>
+                      {item.item.item_price ?? review.order.order_total ?? '-'}
+                    </TableCell>
+                    <TableCell>{labelForStatus(item.status)}</TableCell>
+                    <TableCell className='text-muted-foreground'>
+                      Pending
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      {(item.suggested_actions ?? []).length} action
+                      {(item.suggested_actions ?? []).length === 1 ? '' : 's'}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+              {reviews.length === 0 ? (
+                <TableRow data-testid='purchases-table-empty-row'>
+                  <TableCell
+                    colSpan={6}
+                    className='h-20 text-center text-sm text-muted-foreground'
+                  >
+                    No purchases loaded. Add a purchase or review captured
+                    purchases to populate the table.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
         </div>
 
         <Separator className='my-4' />
@@ -951,9 +1037,7 @@ export function Purchases() {
             className='rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm'
             data-testid='purchase-inbox-error-state'
           >
-            <p className='font-medium'>
-              Purchase Inbox could not load reviews.
-            </p>
+            <p className='font-medium'>Purchases could not load reviews.</p>
             <p className='mt-1 text-muted-foreground'>{error}</p>
           </section>
         ) : null}
@@ -2124,6 +2208,62 @@ export function Purchases() {
           </div>
         </section>
       </Main>
+
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent data-testid='purchases-add-dialog'>
+          <DialogHeader>
+            <DialogTitle>New purchase</DialogTitle>
+            <DialogDescription>
+              Create or import a purchase draft before confirming persistence.
+            </DialogDescription>
+          </DialogHeader>
+          <Tabs defaultValue='new' data-testid='purchases-add-tabs'>
+            <TabsList aria-label='Purchase creation modes'>
+              <TabsTrigger value='new' data-testid='purchases-add-tab-new'>
+                New
+              </TabsTrigger>
+              <TabsTrigger value='csv' data-testid='purchases-add-tab-csv'>
+                CSV
+              </TabsTrigger>
+              <TabsTrigger value='email' data-testid='purchases-add-tab-email'>
+                Email
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value='new' className='space-y-3 pt-4'>
+              <Label htmlFor='purchase-manual-title'>Purchase title</Label>
+              <Input
+                id='purchase-manual-title'
+                data-testid='purchases-add-new-title'
+                placeholder='Item name or order title'
+              />
+            </TabsContent>
+            <TabsContent value='csv' className='space-y-3 pt-4'>
+              <Label htmlFor='purchase-csv-import'>CSV import</Label>
+              <Textarea
+                id='purchase-csv-import'
+                data-testid='purchases-add-csv-input'
+                placeholder='Paste CSV rows with source, title, price, date, and tracking fields'
+              />
+            </TabsContent>
+            <TabsContent value='email' className='space-y-3 pt-4'>
+              <Label htmlFor='purchase-email-import'>Email or order text</Label>
+              <Textarea
+                id='purchase-email-import'
+                data-testid='purchases-add-email-input'
+                placeholder='Paste order confirmation text for preview parsing'
+              />
+            </TabsContent>
+          </Tabs>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setAddDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled data-testid='purchases-add-save-disabled'>
+              Preview draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={pendingAction !== null}
