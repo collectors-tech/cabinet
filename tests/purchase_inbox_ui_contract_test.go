@@ -17,11 +17,11 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 	}
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), ".."))
 	featurePath := filepath.Join(repoRoot, "ui.web", "src", "features", "purchases", "index.tsx")
-	routePath := filepath.Join(repoRoot, "ui.web", "src", "routes", "_authenticated", "inbox", "index.tsx")
+	purchasesRoutePath := filepath.Join(repoRoot, "ui.web", "src", "routes", "_authenticated", "purchases", "index.tsx")
 	cypressPath := filepath.Join(repoRoot, "ui.web", "cypress", "e2e", "purchases", "purchase-inbox", "spec.cy.ts")
 
 	feature := readContractFile(t, featurePath)
-	route := readContractFile(t, routePath)
+	purchasesRoute := readContractFile(t, purchasesRoutePath)
 	cypressSpec := readContractFile(t, cypressPath)
 
 	requiredFeatureSnippets := []string{
@@ -40,11 +40,13 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(route, "@/features/purchases") || !strings.Contains(route, "Purchases") {
-		t.Fatalf("/inbox route must render Purchase Inbox feature, got %s", route)
+	if !strings.Contains(purchasesRoute, "@/features/purchases") || !strings.Contains(purchasesRoute, "Purchases") {
+		t.Fatalf("/purchases route must render Purchases feature, got %s", purchasesRoute)
 	}
 
 	requiredCypressSnippets := []string{
+		"COMMERCE-RECONCILIATION-006",
+		"path: '/purchases'",
 		"EBAY-PURCHASE-CAPTURE-006",
 		"purchase-inbox-empty-state",
 		"purchase-inbox-error-state",
