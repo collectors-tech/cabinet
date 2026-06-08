@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Archive,
   Bell,
@@ -165,7 +165,7 @@ export function NotificationInbox() {
   const [error, setError] = useState('')
   const [updating, setUpdating] = useState(false)
 
-  async function loadItems() {
+  const loadItems = useCallback(async () => {
     if (!activeProfileId) {
       return
     }
@@ -189,7 +189,7 @@ export function NotificationInbox() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeProfileId])
 
   async function updateItems(ids: string[], status: 'read' | 'unread' | 'archived') {
     if (!activeProfileId || ids.length === 0) {
@@ -237,7 +237,7 @@ export function NotificationInbox() {
 
   useEffect(() => {
     void loadItems()
-  }, [activeProfileId])
+  }, [loadItems])
 
   useEffect(() => {
     setSelectedIds([])
