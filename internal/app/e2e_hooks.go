@@ -251,28 +251,37 @@ func registerE2ETestHooks(mux *http.ServeMux, conn *sql.DB, cfg config.Config) {
 }
 
 func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign keys: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`) }()
+
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin reset tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return fmt.Errorf("disable foreign keys: %w", err)
-	}
-
 	tables := []string{
 		"activity_logs",
 		"ai_failures",
 		"app_state",
+		"assistant_workflow_runs",
+		"audit_events",
 		"chat_action_previews",
 		"chat_attachments",
+		"chat_inbox_items",
 		"chat_messages",
 		"chat_threads",
 		"discovery_actions",
+		"expected_arrivals",
+		"forwarder_package_link_events",
+		"forwarder_package_links",
+		"forwarder_packages",
 		"ignored_candidates",
 		"item_barcodes",
 		"item_photos",
+		"media_asset_links",
 		"price_snapshots",
 		"profile_licenses",
 		"profile_secrets",
@@ -285,6 +294,7 @@ func resetE2EDatabase(ctx context.Context, conn *sql.DB) error {
 		"webauthn_credentials",
 		"wishlist_entries",
 		"pokemon_graded_overrides",
+		"commerce_lifecycle_entries",
 		"instances",
 		"profile_settings",
 		"scanner_query_sets",
