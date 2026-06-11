@@ -35,9 +35,17 @@ Define Display settings screen behavior.
 - **WHEN** user clicks `Update display`
 - **THEN** runtime MUST persist display preferences and render deterministic success feedback
 
+### Requirement UI-SCREEN-SETTINGS-DISPLAY-005: Display screen SHALL preserve editable selection on save failure
+
+#### Scenario: Display save failure
+- **GIVEN** user changes display item selection
+- **WHEN** runtime rejects the display settings update
+- **THEN** UI MUST show deterministic save-error feedback and preserve the edited item selection for retry without route transition
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-DIS-01 | Retry display load failure | `Retry` re-attempts display fetch deterministically | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-003 retries display settings load failure without route reload` |
 | UC-SET-DIS-02 | Clear selection action | `Clear selection` clears selected display items | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 clears selection without route transition` |
 | UC-SET-DIS-03 | Update display action | `Update display` persists display selections | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 updates display with deterministic success feedback` |
+| UC-SET-DIS-04 | Display save failure | Save failure shows error feedback and preserves edited selection | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-005 preserves selection and shows an error when display save fails` |
