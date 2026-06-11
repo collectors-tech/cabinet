@@ -70,6 +70,9 @@ type WishlistItemPayload = {
   packaging_grade_type?: string
   condition?: string
   priority?: string
+  status?: string
+  notes?: string
+  description?: string
 }
 
 type WishlistPriceTrend = 'up' | 'steady' | 'down' | 'unknown'
@@ -767,14 +770,54 @@ export function Tasks({
     )
   }, [])
 
+  const loadInventoryData = useCallback(async () => {
+    const response = await fetch('/api/items')
+    if (!response.ok) {
+      throw new Error('inventory_bootstrap_failed')
+    }
+    const payload = (await response.json()) as {
+      items?: WishlistItemPayload[]
+    }
+    return (payload.items ?? []).map((item, index) => {
+      const itemID = item.id?.trim() || `inventory-item-${index + 1}`
+      return {
+        id: item.part_number?.trim() || itemID,
+        itemID,
+        title: item.title?.trim() || item.part_number?.trim() || itemID,
+        thumbnailUrl: item.thumbnail_url?.trim(),
+        partNumber: item.part_number?.trim(),
+        itemType: item.item_type?.trim(),
+        packagingGradeType: item.packaging_grade_type?.trim(),
+        condition: item.condition?.trim(),
+        status: item.status?.trim() || 'owned',
+        label: item.category?.trim() || 'collection',
+        priority: item.priority?.trim() || 'medium',
+        notes: item.notes?.trim() || item.description?.trim(),
+      } satisfies Task
+    })
+  }, [])
+
   useEffect(() => {
     tableDataRef.current = tableData
   }, [tableData])
 
   useEffect(() => {
     if (!isWishlistRoute) {
-      setTableData(tasks)
-      return
+      let cancelled = false
+      void loadInventoryData()
+        .then((mapped) => {
+          if (!cancelled) {
+            setTableData(mapped.length > 0 ? mapped : tasks)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setTableData(tasks)
+          }
+        })
+      return () => {
+        cancelled = true
+      }
     }
 
     let cancelled = false
@@ -794,7 +837,7 @@ export function Tasks({
     return () => {
       cancelled = true
     }
-  }, [isWishlistRoute, loadWishlistData])
+  }, [isWishlistRoute, loadInventoryData, loadWishlistData])
 
   const refreshWishlistTable = useCallback(async () => {
     const mapped = await loadWishlistData()

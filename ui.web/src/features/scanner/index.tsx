@@ -646,7 +646,7 @@ export function Scanner() {
       setHandoffStatus(`inventory_handoff_failed_${response.status}`)
       return
     }
-    setHandoffStatus('inventory_handoff_ok')
+    setHandoffStatus(`inventory_handoff_ok_${firstCandidate.id}`)
   }
 
   const runNow = async (querySet: QuerySet) => {
