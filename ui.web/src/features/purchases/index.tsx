@@ -49,6 +49,8 @@ type PurchaseCard = {
   purchased_identity?: string
   quantity?: number
   item_price?: string
+  item_url?: string
+  purchase_date?: string
   seller_username?: string
   order_total?: string
   currency?: string
@@ -93,8 +95,11 @@ type PurchaseTableRow = {
   title: string
   source: string
   price: string
+  purchaseDate: string
+  delivery: string
   status: string
   tracking: string
+  orderLink: string
   persistence: string
   actionCount: number
   searchText: string
@@ -701,6 +706,9 @@ export function Purchases() {
         const price = item.item.item_price ?? review.order.order_total ?? '-'
         const status = item.status
         const tracking = 'Pending'
+        const purchaseDate = item.item.purchase_date ?? 'Pending'
+        const delivery = 'Pending'
+        const orderLink = item.item.item_url ?? ''
         const key = purchaseRowKey(review, item)
 
         return {
@@ -708,16 +716,22 @@ export function Purchases() {
           title,
           source,
           price,
+          purchaseDate,
+          delivery,
           status,
           tracking,
+          orderLink,
           persistence: 'Captured review only',
           actionCount: (item.suggested_actions ?? []).length,
           searchText: [
             title,
             source,
             price,
+            purchaseDate,
+            delivery,
             labelForStatus(status),
             tracking,
+            orderLink,
             review.order.order_id,
           ]
             .filter(Boolean)
@@ -731,14 +745,19 @@ export function Purchases() {
       title: draft.title,
       source: draft.source,
       price: draft.price || '-',
+      purchaseDate: 'Pending',
+      delivery: 'Pending',
       status: 'manual_draft',
       tracking: draft.tracking || 'Pending',
+      orderLink: '',
       persistence: persistenceLabel(draft.persistence),
       actionCount: 1,
       searchText: [
         draft.title,
         draft.source,
         draft.price,
+        'date pending',
+        'delivery pending',
         'manual draft',
         draft.tracking,
         persistenceLabel(draft.persistence),
@@ -752,8 +771,11 @@ export function Purchases() {
       title: draft.title,
       source: draft.provenance,
       price: draft.price || '-',
+      purchaseDate: draft.purchaseDate || 'Pending',
+      delivery: draft.delivery || 'Pending',
       status: draft.mode === 'csv' ? 'csv_import' : 'email_import',
       tracking: draft.tracking || draft.delivery || 'Pending',
+      orderLink: '',
       persistence: persistenceLabel(draft.persistence),
       actionCount: 1,
       searchText: [
@@ -762,6 +784,7 @@ export function Purchases() {
         draft.price,
         draft.currency,
         draft.purchaseDate,
+        draft.delivery,
         draft.seller,
         draft.channel,
         draft.tracking,
@@ -1594,14 +1617,17 @@ export function Purchases() {
               purchases
             </span>
           </div>
-          <Table className='min-w-[64rem] table-fixed'>
+          <Table className='min-w-[88rem] table-fixed'>
             <TableHeader>
               <TableRow>
                 <TableHead className='w-[18rem]'>Purchase</TableHead>
                 <TableHead className='w-[12rem]'>Source</TableHead>
                 <TableHead className='w-[10rem]'>Price</TableHead>
+                <TableHead className='w-[9rem]'>Purchase date</TableHead>
+                <TableHead className='w-[12rem]'>Delivery</TableHead>
                 <TableHead className='w-[12rem]'>Status</TableHead>
                 <TableHead className='w-[14rem]'>Tracking</TableHead>
+                <TableHead className='w-[9rem]'>Order link</TableHead>
                 <TableHead className='w-[10rem] text-right'>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -1621,9 +1647,38 @@ export function Purchases() {
                   </TableCell>
                   <TableCell className='truncate'>{row.source}</TableCell>
                   <TableCell>{row.price}</TableCell>
+                  <TableCell data-testid='purchases-row-purchase-date'>
+                    {row.purchaseDate}
+                  </TableCell>
+                  <TableCell
+                    className='text-muted-foreground'
+                    data-testid='purchases-row-delivery'
+                  >
+                    {row.delivery}
+                  </TableCell>
                   <TableCell>{labelForStatus(row.status)}</TableCell>
                   <TableCell className='text-muted-foreground'>
                     {arrivedPurchaseKeys[row.key] ? 'Arrived' : row.tracking}
+                  </TableCell>
+                  <TableCell>
+                    {row.orderLink ? (
+                      <a
+                        className='text-sm font-medium text-primary underline-offset-4 hover:underline'
+                        data-testid='purchases-row-order-link'
+                        href={row.orderLink}
+                        target='_blank'
+                        rel='noreferrer'
+                      >
+                        Open order
+                      </a>
+                    ) : (
+                      <span
+                        className='text-sm text-muted-foreground'
+                        data-testid='purchases-row-order-link-empty'
+                      >
+                        Pending
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className='flex flex-wrap justify-end gap-1'>
@@ -1693,7 +1748,7 @@ export function Purchases() {
               {purchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-empty-row'>
                   <TableCell
-                    colSpan={6}
+                    colSpan={9}
                     className='h-20 text-center text-sm text-muted-foreground'
                   >
                     No purchases loaded. Add a purchase or review captured
@@ -1704,7 +1759,7 @@ export function Purchases() {
               {purchaseRows.length > 0 && filteredPurchaseRows.length === 0 ? (
                 <TableRow data-testid='purchases-table-filter-empty-row'>
                   <TableCell
-                    colSpan={6}
+                    colSpan={9}
                     className='h-20 text-center text-sm text-muted-foreground'
                   >
                     No purchases match the current table filters.
