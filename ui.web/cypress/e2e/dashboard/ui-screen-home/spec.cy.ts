@@ -187,6 +187,41 @@ describe("UI-SCREEN-HOME", () => {
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/inventory\/?$/)
   })
 
+  it("UI-SCREEN-HOME-005 refreshes dashboard data without route transition", () => {
+    let attempts = 0
+    cy.intercept("GET", "/api/dashboard", (req) => {
+      attempts += 1
+      req.reply({
+        statusCode: 200,
+        body: {
+          new_discoveries: 0,
+          wishlist_hits: attempts === 1 ? 1 : 4,
+          price_drops: 0,
+          low_stock_discoveries: 0,
+          restocks: 0,
+          recently_added:
+            attempts === 1 ? ["Before Refresh"] : ["After Refresh"],
+          total_items: attempts === 1 ? 1 : 4,
+          total_instances: attempts === 1 ? 1 : 4,
+          estimated_value: attempts === 1 ? 100 : 400,
+          cards: [],
+        },
+      })
+    }).as("dashboardRefresh")
+
+    signInToHome()
+    cy.wait("@dashboardRefresh")
+    cy.contains("Before Refresh").should("be.visible")
+
+    cy.contains("button", "Refresh dashboard").click()
+    cy.wait("@dashboardRefresh")
+
+    cy.location("pathname", { timeout: 15000 }).should("eq", "/dashboard")
+    cy.contains("Before Refresh").should("not.exist")
+    cy.contains("After Refresh").should("be.visible")
+    cy.contains("$400.00").should("be.visible")
+  })
+
   it("UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability", () => {
     cy.intercept("GET", "/api/dashboard", {
       statusCode: 200,
