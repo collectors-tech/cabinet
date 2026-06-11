@@ -39,6 +39,9 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchases-add-email-confirm",
 		"/api/commerce/lifecycle",
 		"purchases-row-persistence",
+		"purchases-row-purchase-date",
+		"purchases-row-delivery",
+		"purchases-row-order-link",
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
@@ -54,6 +57,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"COMMERCE-RECONCILIATION-006",
 		"COMMERCE-RECONCILIATION-009",
 		"COMMERCE-RECONCILIATION-010",
+		"COMMERCE-RECONCILIATION-011",
 		"path: '/purchases'",
 		"EBAY-PURCHASE-CAPTURE-006",
 		"purchase-inbox-empty-state",

@@ -89,3 +89,13 @@ Cabinet SHALL persist manual, CSV, and email purchase drafts from the Purchases 
 - **AND** the commerce lifecycle response MUST include an expected-arrival record linked to the lifecycle entry.
 - **AND** the Purchases table MUST show persistence evidence for the added row, including lifecycle and expected-arrival identifiers.
 - **AND** parse failures or API persistence failures MUST remain visible and MUST NOT add unpersisted manual, CSV, or email rows to the table.
+
+### Requirement COMMERCE-RECONCILIATION-011: Purchases SHALL expose purchase metadata and order links in table rows
+Cabinet SHALL keep purchase date, delivery, and original order-link evidence visible in the Purchases table so cross-platform rows remain scannable without opening a separate detail surface.
+
+#### Scenario: Review row metadata and source order links
+- **GIVEN** the Purchases table contains captured, manual, CSV, or email purchase rows
+- **WHEN** the row renders
+- **THEN** Cabinet MUST show purchase date and delivery evidence when available and a pending state when they are not available.
+- **AND** rows with a source order URL MUST expose an external open-order action without replacing the purchase row.
+- **AND** table search MUST include purchase date, delivery, and order-link evidence so users can locate rows by those metadata fields.

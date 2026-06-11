@@ -21,8 +21,11 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Purchase')
       .and('contain', 'Source')
       .and('contain', 'Price')
+      .and('contain', 'Purchase date')
+      .and('contain', 'Delivery')
       .and('contain', 'Status')
       .and('contain', 'Tracking')
+      .and('contain', 'Order link')
       .and('contain', 'Actions')
     cy.get('[data-testid="purchases-add-button"]')
       .should('have.attr', 'aria-label', 'Add purchase')
@@ -173,6 +176,8 @@ describe('purchases/purchase-inbox', () => {
                   quantity: 4,
                   item_price: 'AU $2.40',
                   seller_username: 'seller-one',
+                  purchase_date: '2026-06-08',
+                  item_url: 'https://www.ebay.com.au/itm/316046161178',
                 },
                 suggested_actions: [
                   {
@@ -226,6 +231,11 @@ describe('purchases/purchase-inbox', () => {
       .should('have.length', 1)
       .and('contain', 'Accompanying Flute TWM 142')
       .and('contain', 'ready to link or convert')
+      .and('contain', '2026-06-08')
+      .and('contain', 'Pending')
+    cy.get('[data-testid="purchases-row-order-link"]')
+      .should('have.attr', 'href', 'https://www.ebay.com.au/itm/316046161178')
+      .and('contain', 'Open order')
     cy.get('[data-testid="purchases-row-favorite"]')
       .click()
       .should('have.attr', 'aria-pressed', 'true')
@@ -437,6 +447,8 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Amazon CSV row 2')
       .and('contain', 'csv import')
       .and('contain', 'TBA123456')
+      .and('contain', '2026-06-08')
+      .and('contain', 'Expected 2026-06-12')
       .and('contain', 'Persisted lifecycle life-imp')
 
     cy.get('[data-testid="purchases-add-button"]').click()
@@ -479,6 +491,7 @@ describe('purchases/purchase-inbox', () => {
       .should('have.length', 2)
       .and('contain', 'Email Flute order')
       .and('contain', 'email import')
+      .and('contain', 'Expected 2026-06-14')
       .and('contain', 'Persisted lifecycle life-imp')
     cy.get('[data-testid="purchases-status-filter-email_import"]').click()
     cy.get('[data-testid="purchases-table-row"]')
@@ -493,6 +506,73 @@ describe('purchases/purchase-inbox', () => {
       'contain',
       'CSV import needs a header row'
     )
+  })
+
+  it('COMMERCE-RECONCILIATION-011 shows row purchase metadata and order links', () => {
+    cy.viewport(1400, 900)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('POST', '/api/integrations/ebay/purchase-inbox/reviews', {
+      statusCode: 200,
+      body: {
+        source: 'ebay_purchase_capture',
+        profile_id: 'e2e-profile-001',
+        reviews: [
+          {
+            status: 'needs_review',
+            order: {
+              order_id: '20-14595-70928',
+              seller_usernames: ['seller-one'],
+              order_total: 'AU $8.10',
+              currency: 'AUD',
+            },
+            items: [
+              {
+                status: 'ready_to_link_or_convert',
+                item: {
+                  transaction_id: '10080684936020',
+                  listing_title: 'Accompanying Flute listing',
+                  purchased_identity: 'Accompanying Flute TWM 142',
+                  item_price: 'AU $2.40',
+                  seller_username: 'seller-one',
+                  purchase_date: '2026-06-08',
+                  item_url: 'https://www.ebay.com.au/itm/316046161178',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }).as('preparePurchaseReviews')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/purchases',
+    })
+    cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
+    cy.wait('@preparePurchaseReviews')
+
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Accompanying Flute TWM 142')
+      .and('contain', '2026-06-08')
+      .and('contain', 'Pending')
+    cy.get('[data-testid="purchases-row-purchase-date"]').should(
+      'contain',
+      '2026-06-08'
+    )
+    cy.get('[data-testid="purchases-row-delivery"]').should(
+      'contain',
+      'Pending'
+    )
+    cy.get('[data-testid="purchases-row-order-link"]')
+      .should('have.attr', 'target', '_blank')
+      .and('have.attr', 'href', 'https://www.ebay.com.au/itm/316046161178')
+
+    cy.get('[data-testid="purchases-table-search"]').type('316046161178')
+    cy.get('[data-testid="purchases-table-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Accompanying Flute TWM 142')
   })
 
   it('EBAY-PURCHASE-CAPTURE-006 exposes a retryable error state', () => {
