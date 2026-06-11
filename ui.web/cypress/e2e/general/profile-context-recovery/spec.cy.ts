@@ -61,4 +61,51 @@ describe('profile-context-recovery', () => {
     visibleByTestId('active-profile-name').should('contain', 'Showcase DB')
     visibleByTestId('active-profile-status').should('have.text', 'Showcase sample data')
   })
+
+  it('PROFILES-003 recovers a blocked active profile state from the switcher retry', () => {
+    let activeProfileCalls = 0
+
+    cy.intercept('GET', '/api/profiles', {
+      statusCode: 200,
+      body: {
+        profiles: [
+          { id: 'blocked-db', name: 'Blocked DB' },
+          { id: 'working-db', name: 'Working DB' },
+        ],
+      },
+    }).as('profiles')
+    cy.intercept('GET', '/api/profiles/active', (req) => {
+      activeProfileCalls += 1
+      if (activeProfileCalls === 1) {
+        req.reply({
+          statusCode: 403,
+          body: { error: 'active_profile_blocked' },
+        })
+        return
+      }
+
+      req.reply({
+        statusCode: 200,
+        body: { id: 'working-db', name: 'Working DB' },
+      })
+    }).as('activeProfile')
+
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.wait('@activeProfile')
+
+    visibleByTestId('active-profile-status')
+      .should('be.visible')
+      .and('contain', 'Profile unavailable')
+
+    visibleByTestId('team-switcher-trigger').click()
+    visibleByTestId('team-switcher-profile-error')
+      .should('be.visible')
+      .and('contain', 'Retry loading databases')
+    visibleByTestId('team-switcher-retry-profiles').click()
+    cy.wait('@activeProfile')
+
+    visibleByTestId('active-profile-name').should('contain', 'Working DB')
+    visibleByTestId('active-profile-status').should('have.text', 'Database')
+  })
 })
