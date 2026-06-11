@@ -75,6 +75,7 @@ type DataTableProps = {
       targetPrice?: number
       priority?: string
       owned?: boolean
+      delivered?: boolean
       pricePaid?: number
       purchaseUrl?: string
       purchaseDate?: string
@@ -897,6 +898,7 @@ export function TasksTable({
 
     await onWishlistInlineUpdate?.(purchaseTask, {
       owned: true,
+      delivered: purchaseTask.delivered,
       pricePaid: parsedPrice,
       purchaseUrl: purchaseUrl.trim(),
       purchaseDate: purchaseDate || todayISODate(),
@@ -1277,9 +1279,19 @@ export function TasksTable({
                       : row.original.status}
                   </span>
                   <span>Priority: {row.original.priority}</span>
-                  <span>Type: {row.original.label}</span>
+                  <span>Category: {row.original.label}</span>
                   {routePath === '/_authenticated/wishlist/' ? (
                     <>
+                      <span
+                        data-testid={`wishlist-card-purchased-${row.original.id}`}
+                      >
+                        Purchased: {row.original.owned ? 'Yes' : 'No'}
+                      </span>
+                      <span
+                        data-testid={`wishlist-card-delivered-${row.original.id}`}
+                      >
+                        Delivered: {row.original.delivered ? 'Yes' : 'No'}
+                      </span>
                       <span
                         data-testid={`wishlist-card-date-added-${row.original.id}`}
                       >

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   BarcodeIcon,
@@ -53,6 +53,7 @@ type WishlistInlineChanges = {
   targetPrice?: number
   priority?: string
   owned?: boolean
+  delivered?: boolean
   pricePaid?: number
   purchaseUrl?: string
   purchaseDate?: string
@@ -416,10 +417,6 @@ function WishlistCostCell({
 }) {
   const [draft, setDraft] = useState(formatCostDraft(task.targetPrice))
 
-  useEffect(() => {
-    setDraft(formatCostDraft(task.targetPrice))
-  }, [task.targetPrice])
-
   const persistValue = async (rawValue: string) => {
     const trimmed = rawValue.trim()
     const nextValue = trimmed === '' ? 0 : Number(trimmed)
@@ -537,7 +534,7 @@ function WishlistPriorityCell({
   )
 }
 
-function WishlistOwnedCell({
+function WishlistPurchasedCell({
   task,
   onWishlistPurchaseRow,
 }: {
@@ -556,12 +553,51 @@ function WishlistOwnedCell({
         size='icon'
         className='h-8 w-8'
         data-testid={`wishlist-purchase-open-${task.id}`}
-        aria-label={`Add purchase details for ${task.title}`}
+        aria-label={
+          task.owned
+            ? `Edit purchase details for ${task.title}`
+            : `Add purchase details for ${task.title}`
+        }
         onClick={() => onWishlistPurchaseRow?.(task)}
       >
         <PlusIcon className='h-4 w-4' />
+        <span className='sr-only'>{task.owned ? 'Purchased' : 'Add'}</span>
       </Button>
+      <span
+        className='ml-2 text-xs text-muted-foreground'
+        data-testid={`wishlist-purchased-state-${task.id}`}
+      >
+        {task.owned ? 'Yes' : 'No'}
+      </span>
     </div>
+  )
+}
+
+function WishlistDeliveredCell({
+  task,
+  onWishlistInlineUpdate,
+}: {
+  task: Task
+  onWishlistInlineUpdate?: (
+    task: Task,
+    changes: WishlistInlineChanges
+  ) => Promise<void>
+}) {
+  const toggleDelivered = (checked: boolean) => {
+    void onWishlistInlineUpdate?.(task, {
+      delivered: checked,
+      owned: checked ? true : task.owned,
+    })
+  }
+
+  return (
+    <Checkbox
+      checked={Boolean(task.delivered)}
+      data-testid={`wishlist-delivered-checkbox-${task.id}`}
+      aria-label={`Delivered for ${task.title}`}
+      onClick={(event) => event.stopPropagation()}
+      onCheckedChange={(checked) => toggleDelivered(Boolean(checked))}
+    />
   )
 }
 
@@ -596,10 +632,6 @@ function WishlistNumberCell({
 }) {
   const normalizedValue = value ?? minValue
   const [draft, setDraft] = useState(String(normalizedValue))
-
-  useEffect(() => {
-    setDraft(String(normalizedValue))
-  }, [normalizedValue])
 
   const persistValue = async (rawValue: string) => {
     const parsed = Number(rawValue.trim())
@@ -872,19 +904,48 @@ export function getTasksColumns({
           {
             accessorKey: 'owned',
             header: ({ column }) => (
-              <DataTableColumnHeader column={column} title='Owned' />
+              <DataTableColumnHeader column={column} title='Purchased' />
             ),
             meta: {
-              className: 'w-16 min-w-16 ps-1',
+              className: 'w-[7.5rem] min-w-[7.5rem] ps-1',
               tdClassName: 'ps-4 pe-3',
             },
             cell: ({ row }) => (
-              <WishlistOwnedCell
+              <WishlistPurchasedCell
                 task={row.original}
                 onWishlistPurchaseRow={onWishlistPurchaseRow}
               />
             ),
             enableSorting: false,
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'delivered',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Delivered' />
+            ),
+            meta: {
+              className: 'w-[7rem] min-w-[7rem] ps-1',
+              tdClassName: 'ps-4 pe-3',
+            },
+            cell: ({ row }) => (
+              <WishlistDeliveredCell
+                task={row.original}
+                onWishlistInlineUpdate={onWishlistInlineUpdate}
+              />
+            ),
+            enableSorting: false,
+          } satisfies ColumnDef<Task>,
+          {
+            accessorKey: 'label',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title='Category' />
+            ),
+            meta: { className: 'ps-1', tdClassName: 'ps-4' },
+            cell: ({ row }) => (
+              <span data-testid={`wishlist-category-${row.original.id}`}>
+                {row.original.label || 'General'}
+              </span>
+            ),
           } satisfies ColumnDef<Task>,
           {
             accessorKey: 'pricePaid',
@@ -957,6 +1018,7 @@ export function getTasksColumns({
             meta: { className: 'ps-1', tdClassName: 'ps-4' },
             cell: ({ row }) => (
               <WishlistCostCell
+                key={`${row.original.id}-${row.original.targetPrice ?? 0}`}
                 task={row.original}
                 onWishlistInlineUpdate={onWishlistInlineUpdate}
               />
@@ -970,6 +1032,7 @@ export function getTasksColumns({
             meta: { className: 'ps-1', tdClassName: 'ps-4' },
             cell: ({ row }) => (
               <WishlistNumberCell
+                key={`${row.original.id}-quantity-${row.original.quantity ?? 0}`}
                 task={row.original}
                 field='quantity'
                 label='Quantity'
@@ -987,6 +1050,7 @@ export function getTasksColumns({
             meta: { className: 'ps-1', tdClassName: 'ps-4' },
             cell: ({ row }) => (
               <WishlistNumberCell
+                key={`${row.original.id}-needed-${row.original.neededQuantity ?? 1}`}
                 task={row.original}
                 field='neededQuantity'
                 label='Needs'

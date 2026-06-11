@@ -35,6 +35,23 @@ func TestE2EResetEndpointSkipsMissingLegacyTables(t *testing.T) {
 	assertLegacyResetCleared(t, a)
 }
 
+func TestE2EResetEndpointClearsWishlistPurchaseDeliveryState(t *testing.T) {
+	t.Parallel()
+
+	a := newE2ETestApp(t)
+	seedWishlistPurchaseDeliveryResetState(t, a)
+
+	reset := doRequest(t, a, http.MethodPost, "/api/test/reset", nil, nil)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	assertTableEmpty(t, a, "expected_arrivals")
+	assertTableEmpty(t, a, "commerce_lifecycle_entries")
+	assertTableEmpty(t, a, "wishlist_entries")
+	assertTableEmpty(t, a, "instances")
+	assertTableEmpty(t, a, "canonical_items")
+}
+
 func seedLegacyResetState(t *testing.T, a *App) {
 	t.Helper()
 	ctx := context.Background()
@@ -46,14 +63,57 @@ func seedLegacyResetState(t *testing.T, a *App) {
 	}
 }
 
+func seedWishlistPurchaseDeliveryResetState(t *testing.T, a *App) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := a.db.ExecContext(ctx, `INSERT INTO profiles(id, name) VALUES ('reset-profile', 'Reset Profile')`); err != nil {
+		t.Fatalf("seed profile: %v", err)
+	}
+	if _, err := a.db.ExecContext(ctx, `
+		INSERT INTO canonical_items(id, profile_id, brand, part_number, title, status, category)
+		VALUES ('reset-item', 'reset-profile', 'Reset Brand', 'RESET-001', 'Reset Item', 'wishlist', 'Trading Cards')
+	`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	if _, err := a.db.ExecContext(ctx, `
+		INSERT INTO wishlist_entries(id, profile_id, item_id, owned, delivered)
+		VALUES ('reset-wish', 'reset-profile', 'reset-item', 1, 1)
+	`); err != nil {
+		t.Fatalf("seed wishlist: %v", err)
+	}
+	if _, err := a.db.ExecContext(ctx, `
+		INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity)
+		VALUES ('reset-life', 'reset-profile', 'reset-item', 'purchase', 'wishlist', 'reset-wish', 1)
+	`); err != nil {
+		t.Fatalf("seed lifecycle: %v", err)
+	}
+	if _, err := a.db.ExecContext(ctx, `
+		INSERT INTO instances(id, item_id, status, quantity)
+		VALUES ('reset-instance', 'reset-item', 'sealed', 1)
+	`); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+	if _, err := a.db.ExecContext(ctx, `
+		INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, status, reconciled_instance_id)
+		VALUES ('reset-arrival', 'reset-profile', 'reset-item', 'reset-life', 'wishlist', 'reset-wish', 1, 'delivered', 'reset-instance')
+	`); err != nil {
+		t.Fatalf("seed arrival: %v", err)
+	}
+}
+
 func assertLegacyResetCleared(t *testing.T, a *App) {
 	t.Helper()
+	assertTableEmpty(t, a, "activity_logs")
+}
+
+func assertTableEmpty(t *testing.T, a *App, table string) {
+	t.Helper()
 	var remaining int
-	if err := a.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM activity_logs`).Scan(&remaining); err != nil {
-		t.Fatalf("count activity logs after reset: %v", err)
+	if err := a.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM `+table).Scan(&remaining); err != nil {
+		t.Fatalf("count %s after reset: %v", table, err)
 	}
 	if remaining != 0 {
-		t.Fatalf("expected reset to clear present tables, got %d activity logs", remaining)
+		t.Fatalf("expected reset to clear %s, got %d rows", table, remaining)
 	}
 }
 

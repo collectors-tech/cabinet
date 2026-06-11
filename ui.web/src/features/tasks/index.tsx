@@ -133,6 +133,7 @@ type WishlistEntryPayload = {
   target_price?: number
   highlight_hit?: boolean
   owned?: boolean
+  delivered?: boolean
   price_paid?: number
   purchase_url?: string
   purchase_date?: string
@@ -154,6 +155,7 @@ type WishlistInlineChanges = {
   targetPrice?: number
   priority?: string
   owned?: boolean
+  delivered?: boolean
   pricePaid?: number
   purchaseUrl?: string
   purchaseDate?: string
@@ -750,6 +752,7 @@ export function Tasks({
           priceStockCount: pricingSummary.priceStockCount,
           highlightHit: Boolean(wishlistEntry?.highlight_hit),
           owned: Boolean(wishlistEntry?.owned),
+          delivered: Boolean(wishlistEntry?.delivered),
           pricePaid:
             typeof wishlistEntry?.price_paid === 'number'
               ? wishlistEntry.price_paid
@@ -927,6 +930,7 @@ export function Tasks({
           notes: draft.notes,
           target_price: normalizeTargetPrice(draft.targetPrice),
           owned: draft.owned,
+          delivered: draft.delivered,
           price_paid: normalizeOptionalMoney(draft.pricePaid),
           purchase_url: draft.purchaseUrl,
           purchase_date: draft.purchaseDate,
@@ -1003,6 +1007,7 @@ export function Tasks({
       )
       let nextTargetPrice = changes.targetPrice ?? currentTask.targetPrice ?? 0
       const nextOwned = changes.owned ?? currentTask.owned ?? false
+      const nextDelivered = changes.delivered ?? currentTask.delivered ?? false
       const nextPricePaid = changes.pricePaid ?? currentTask.pricePaid ?? 0
       const nextPurchaseUrl =
         changes.purchaseUrl ?? currentTask.purchaseUrl ?? ''
@@ -1041,6 +1046,7 @@ export function Tasks({
               priority: nextPriority,
               targetPrice: nextTargetPrice,
               owned: nextOwned,
+              delivered: nextDelivered,
               pricePaid: nextPricePaid,
               purchaseUrl: nextPurchaseUrl,
               purchaseDate: nextPurchaseDate,
@@ -1059,6 +1065,7 @@ export function Tasks({
                 priority: nextPriority,
                 targetPrice: nextTargetPrice,
                 owned: nextOwned,
+                delivered: nextDelivered,
                 pricePaid: nextPricePaid,
                 purchaseUrl: nextPurchaseUrl,
                 purchaseDate: nextPurchaseDate,
@@ -1081,6 +1088,12 @@ export function Tasks({
         }
         if (changes.owned !== undefined) {
           requestBody.owned = nextOwned
+        }
+        if (changes.delivered !== undefined) {
+          requestBody.delivered = nextDelivered
+          if (nextDelivered) {
+            requestBody.owned = true
+          }
         }
         if (changes.pricePaid !== undefined) {
           requestBody.price_paid = nextPricePaid
@@ -1350,6 +1363,7 @@ export function Tasks({
       notes: content,
       targetPrice: '',
       owned: false,
+      delivered: false,
       pricePaid: '',
       purchaseUrl: extractFirstUrl(content),
       purchaseDate: '',
@@ -1406,6 +1420,7 @@ export function Tasks({
         notes: 'Created from screenshot.',
         targetPrice: '',
         owned: false,
+        delivered: false,
         pricePaid: '',
         purchaseUrl: '',
         purchaseDate: '',
@@ -1464,6 +1479,7 @@ export function Tasks({
           notes: `Created from dropped image: ${file.name}`,
           targetPrice: '',
           owned: false,
+          delivered: false,
           pricePaid: '',
           purchaseUrl: '',
           purchaseDate: '',
@@ -1587,6 +1603,7 @@ export function Tasks({
         notes: `Created from barcode ${barcode}.`,
         targetPrice: '',
         owned: false,
+        delivered: false,
         pricePaid: '',
         purchaseUrl: '',
         purchaseDate: '',
