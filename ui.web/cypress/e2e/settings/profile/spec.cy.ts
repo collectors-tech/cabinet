@@ -86,6 +86,32 @@ describe('settings/profile', () => {
     )
   })
 
+  it('UI-SCREEN-SETTINGS-PROFILE-001 blocks invalid profile URL submission before save', () => {
+    let profileSaveCalls = 0
+    cy.intercept('PUT', '/api/profiles/*/settings', (req) => {
+      profileSaveCalls += 1
+      req.reply({
+        statusCode: 500,
+        body: { error: 'unexpected_profile_save' },
+      })
+    })
+
+    cy.contains('button', 'Update profile').should('not.be.disabled')
+    cy.get('input[name="username"]').clear().type('collector-profile')
+    cy.get('textarea[name="bio"]')
+      .clear()
+      .type('Collector profile bio for invalid URL coverage.')
+    cy.contains('button', 'Add URL').click()
+    cy.get('input[name="urls.0.value"]').type('not-a-url')
+    cy.contains('button', 'Update profile').click()
+
+    cy.contains('Please enter a valid URL.').should('be.visible')
+    cy.get('input[name="urls.0.value"]').should('have.value', 'not-a-url')
+    cy.then(() => {
+      expect(profileSaveCalls).to.equal(0)
+    })
+  })
+
   it('UI-SCREEN-SETTINGS-PROFILE-003 retries profile settings load failure without route reload', () => {
     let settingsAttempt = 0
     cy.intercept('GET', '/api/profiles/*/settings', (req) => {

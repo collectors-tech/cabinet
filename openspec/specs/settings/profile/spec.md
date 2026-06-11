@@ -39,6 +39,11 @@ Profile screen SHALL allow editing username, display email, bio, URL list, and T
 - **WHEN** user clicks `Add URL`
 - **THEN** UI MUST append a new editable URL row without losing existing form state
 
+#### Scenario: Invalid profile URL submission
+- **GIVEN** user adds a profile URL row with an invalid URL value
+- **WHEN** user clicks `Update profile`
+- **THEN** UI MUST block the save, show a field-level URL validation error, and avoid sending a profile settings update request
+
 #### Scenario: Update profile action
 - **GIVEN** profile form contains valid values
 - **WHEN** user clicks `Update profile`
@@ -51,3 +56,4 @@ Profile screen SHALL allow editing username, display email, bio, URL list, and T
 | UC-SET-PROF-02 | Add URL action | `Add URL` appends editable URL row | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API` |
 | UC-SET-PROF-03 | Update profile action | `Update profile` persists profile values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API` |
 | UC-SET-PROF-04 | Update Telegram catalog capture authorization | `Update profile` persists Telegram sender/chat authorization values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001` |
+| UC-SET-PROF-05 | Invalid profile URL submission | Profile URL validation blocks save and keeps profile settings API untouched | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 blocks invalid profile URL submission before save` |
