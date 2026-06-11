@@ -95,6 +95,20 @@ Market Watch SHALL provide query table filters for provider, latest run status, 
 - **AND WHEN** user resets filters
 - **THEN** all saved query rows MUST be visible again
 
+### Requirement UI-SCREEN-MARKET-WATCH-008: Market Watch SHALL show output result provenance and handoff state
+Market Watch output details SHALL render latest result items in a structured table or panel that exposes provenance and handoff state for each result.
+
+#### Scenario: Inspect output result provenance
+- **GIVEN** a Market Watch query has latest output items
+- **WHEN** user opens output details from the query table
+- **THEN** each result row MUST show provider/source, listing or item title, price/currency when available, source URL or listing identifier when available, stock/status when available, and handoff state
+- **AND** existing output-detail handoff actions MUST remain available
+
+#### Scenario: Inspect output with no result items
+- **GIVEN** a Market Watch query has no latest output items
+- **WHEN** user opens output details from the query table
+- **THEN** Market Watch MUST show an explicit no-output state instead of an empty table
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -108,3 +122,4 @@ Market Watch SHALL provide query table filters for provider, latest run status, 
 | UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |
 | UC-MW-09 | Edit and delete provider-scoped query set | Edited name/keywords/schedule persist while provider scope remains intact, then delete removes the saved query | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle` |
 | UC-MW-10 | Filter query table and history | Provider/status/schedule/attention/result filters narrow rows and history, with no-match reset recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state` |
+| UC-MW-11 | Inspect output result provenance | Output detail table shows provider, title, price/currency, source identifier, stock/status, and handoff state while preserving handoff actions | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state` |

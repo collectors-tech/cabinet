@@ -46,6 +46,14 @@ type Candidate = {
   listing_id: string
   title: string
   source?: string
+  price?: number | string
+  currency?: string
+  url?: string
+  source_url?: string
+  stock_status?: string
+  status?: string
+  handoff_state?: string
+  handoff_status?: string
 }
 
 type RunSummary = {
@@ -872,6 +880,36 @@ export function Scanner() {
     }
     return 'No output'
   }
+
+  const formatCandidatePrice = (candidate: Candidate) => {
+    if (candidate.price === undefined || candidate.price === null) {
+      return 'Not provided'
+    }
+    const price =
+      typeof candidate.price === 'number'
+        ? candidate.price.toFixed(2)
+        : candidate.price.trim()
+    if (!price) {
+      return 'Not provided'
+    }
+    return candidate.currency?.trim()
+      ? `${price} ${candidate.currency.trim()}`
+      : price
+  }
+
+  const formatCandidateSource = (candidate: Candidate) =>
+    candidate.url?.trim() ||
+    candidate.source_url?.trim() ||
+    candidate.listing_id?.trim() ||
+    'Not provided'
+
+  const formatCandidateStock = (candidate: Candidate) =>
+    candidate.stock_status?.trim() || candidate.status?.trim() || 'Not provided'
+
+  const formatCandidateHandoff = (candidate: Candidate) =>
+    candidate.handoff_state?.trim() ||
+    candidate.handoff_status?.trim() ||
+    'Not handed off'
 
   const querySetHasResults = (querySetID: string) =>
     Number(formatResultCount(querySetID)) > 0
@@ -2083,15 +2121,50 @@ export function Scanner() {
                   No output available yet.
                 </p>
               ) : (
-                <ul className='mt-1 space-y-1 text-xs text-muted-foreground'>
-                  {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).map(
-                    (candidate) => (
-                      <li key={candidate.id || candidate.listing_id}>
-                        {candidate.title} ({candidate.source ?? 'unknown'})
-                      </li>
-                    )
-                  )}
-                </ul>
+                <div className='mt-2 overflow-x-auto'>
+                  <table
+                    className='w-full text-xs'
+                    data-testid='market-watch-output-results-table'
+                  >
+                    <thead className='bg-muted/30 text-left'>
+                      <tr>
+                        <th className='px-2 py-1 font-medium'>Provider</th>
+                        <th className='px-2 py-1 font-medium'>Result</th>
+                        <th className='px-2 py-1 font-medium'>Price</th>
+                        <th className='px-2 py-1 font-medium'>Source</th>
+                        <th className='px-2 py-1 font-medium'>Stock</th>
+                        <th className='px-2 py-1 font-medium'>Handoff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(
+                        candidatesByQuerySet[selectedOutputQuerySetID] ?? []
+                      ).map((candidate) => (
+                        <tr
+                          key={candidate.id || candidate.listing_id}
+                          className='border-t'
+                        >
+                          <td className='px-2 py-1'>
+                            {candidate.source ?? 'unknown'}
+                          </td>
+                          <td className='px-2 py-1'>{candidate.title}</td>
+                          <td className='px-2 py-1'>
+                            {formatCandidatePrice(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateSource(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateStock(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateHandoff(candidate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
             <div className='mt-3 flex flex-wrap gap-2'>
