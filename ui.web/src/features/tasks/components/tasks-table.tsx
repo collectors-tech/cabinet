@@ -936,6 +936,11 @@ export function TasksTable({
             ? 'Filter by title, part number, type, condition, or packaging...'
             : 'Filter by title or part number...'
         }
+        searchInputTestId={
+          isInventoryRoute
+            ? 'inventory-table-search-input'
+            : 'wishlist-table-search-input'
+        }
         filters={
           isInventoryRoute
             ? [
