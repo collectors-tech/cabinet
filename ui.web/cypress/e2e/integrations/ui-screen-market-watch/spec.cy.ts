@@ -789,7 +789,10 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
-  it('UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state', () => {
+  it('UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -835,6 +838,59 @@ describe('integrations/ui-screen-market-watch', () => {
         },
       },
     }).as('runBonzaQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-provenance-1')
+      expect(req.body.type).to.equal('add_to_wishlist')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-provenance-1',
+      })
+      wishlistEntries = [
+        {
+          id: 'wish-mw-provenance-1',
+          item_id: 'item-mw-provenance-1',
+          priority: 'medium',
+          target_price: 89.95,
+          notes:
+            'source_provider=bonzaslotcars; query_set_id=qs-mw-provenance-1; query_name=Bonza AFX Provenance; provider_scope=bonzaslotcars',
+          created_at: '2026-06-11T12:52:00Z',
+          updated_at: '2026-06-11T12:52:00Z',
+        },
+      ]
+      wishlistItems = [
+        {
+          id: 'item-mw-provenance-1',
+          title: 'AFX Camaro Mega-G+',
+          part_number: 'bonza-afx-camaro',
+          status: 'wishlist',
+          category: 'Slot Cars',
+          priority: 'medium',
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('wishlistHandoff')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { min: 89.95, median: 89.95, latest: 89.95 },
+    }).as('wishlistPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('wishlistPriceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('wishlistPriceHistory')
 
     signInToMarketWatch()
     cy.wait(['@querySets', '@failures', '@providerHealth'])
@@ -856,9 +912,20 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('td', 'in_stock').should('be.visible')
       cy.contains('td', 'wishlist_ready').should('be.visible')
     })
-    cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-provenance-1"]').should(
-      'be.visible'
+    cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-provenance-1"]').click()
+    cy.wait('@wishlistHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'wishlist_handoff_ok_cand-mw-provenance-1'
     )
+
+    cy.visit('/wishlist/')
+    cy.wait(['@wishlistEntries', '@wishlistItems'])
+    cy.contains('AFX Camaro Mega-G+').should('be.visible')
+    cy.contains('source_provider=bonzaslotcars').should('be.visible')
+    cy.contains('query_set_id=qs-mw-provenance-1').should('be.visible')
+    cy.contains('query_name=Bonza AFX Provenance').should('be.visible')
+    cy.contains('provider_scope=bonzaslotcars').should('be.visible')
   })
 
   it('UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit', () => {

@@ -134,6 +134,17 @@ Market Watch output details SHALL render latest result items in a structured tab
 - **WHEN** user opens output details from the query table
 - **THEN** Market Watch MUST show an explicit no-output state instead of an empty table
 
+### Requirement UI-SCREEN-MARKET-WATCH-009: Market Watch SHALL persist output-detail Wishlist handoff provenance
+Market Watch output-detail Wishlist handoff SHALL persist the selected result to Wishlist with Market Watch, provider, query, and scope provenance visible after downstream route reload.
+
+#### Scenario: Persist Wishlist handoff from output details
+- **GIVEN** a Market Watch output detail has at least one result row
+- **WHEN** user activates `Add First Result to Wishlist`
+- **THEN** UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
+- **AND** UI MUST show a testable handoff success state for the selected candidate
+- **AND WHEN** user opens or reloads `/wishlist`
+- **THEN** the Wishlist route MUST render the handed-off result and its Market Watch/provider/query provenance
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -148,3 +159,4 @@ Market Watch output details SHALL render latest result items in a structured tab
 | UC-MW-09 | Edit and delete provider-scoped query set | Edited name/keywords/schedule persist while provider scope remains intact, then delete removes the saved query | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle` |
 | UC-MW-10 | Filter query table and history | Provider/status/schedule/attention/result filters narrow rows and history, with no-match reset recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state` |
 | UC-MW-11 | Inspect output result provenance | Output detail table shows provider, title, price/currency, source identifier, stock/status, and handoff state while preserving handoff actions | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state` |
+| UC-MW-12 | Wishlist handoff from output detail | Output detail Wishlist handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Wishlist route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance` |

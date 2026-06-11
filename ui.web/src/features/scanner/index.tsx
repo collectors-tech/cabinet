@@ -618,7 +618,7 @@ export function Scanner() {
       setHandoffStatus(`wishlist_handoff_failed_${response.status}`)
       return
     }
-    setHandoffStatus('wishlist_handoff_ok')
+    setHandoffStatus(`wishlist_handoff_ok_${firstCandidate.id}`)
   }
 
   const handoffFirstCandidateToInventory = async (querySetID: string) => {
