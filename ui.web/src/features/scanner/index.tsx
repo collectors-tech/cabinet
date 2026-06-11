@@ -618,7 +618,7 @@ export function Scanner() {
       setHandoffStatus(`wishlist_handoff_failed_${response.status}`)
       return
     }
-    setHandoffStatus('wishlist_handoff_ok')
+    setHandoffStatus(`wishlist_handoff_ok_${firstCandidate.id}`)
   }
 
   const handoffFirstCandidateToInventory = async (querySetID: string) => {
@@ -962,6 +962,11 @@ export function Scanner() {
     tableScheduleFilter !== 'all' ||
     tableAttentionOnly ||
     tableResultsOnly
+  const hasProviderAttention =
+    !loading &&
+    !error &&
+    providerHealth !== 'unknown' &&
+    providerHealth !== 'ok'
 
   const latestRunHistory = filteredQuerySets.map((querySet) => ({
     id: querySet.id,
@@ -1777,8 +1782,12 @@ export function Scanner() {
         ) : null}
 
         {loading ? (
-          <div className='rounded-md border p-4 text-sm text-muted-foreground'>
-            Loading Market Watch workspace...
+          <div
+            className='rounded-md border p-4 text-sm text-muted-foreground'
+            data-testid='scanner-loading-state'
+          >
+            Loading Market Watch workspace data, provider health, and failure
+            history...
           </div>
         ) : null}
 
@@ -1793,10 +1802,27 @@ export function Scanner() {
               className='mt-3'
               variant='outline'
               size='sm'
+              data-testid='scanner-error-retry'
               onClick={() => void loadScanner()}
             >
               Retry
             </Button>
+          </div>
+        ) : null}
+
+        {hasProviderAttention ? (
+          <div
+            className='rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100'
+            data-testid='market-watch-provider-attention-state'
+          >
+            <p className='font-medium'>Provider needs attention.</p>
+            <p className='mt-1'>
+              eBay provider health is <strong>{providerHealth}</strong>.
+            </p>
+            <ul className='mt-2 list-disc ps-4'>
+              <li>Review provider credentials and API access.</li>
+              <li>Retry failed Market Watch runs after provider health recovers.</li>
+            </ul>
           </div>
         ) : null}
 
@@ -2117,8 +2143,15 @@ export function Scanner() {
               <p className='text-xs font-medium'>Latest output items</p>
               {(candidatesByQuerySet[selectedOutputQuerySetID] ?? []).length ===
               0 ? (
-                <p className='text-xs text-muted-foreground'>
+                <p
+                  className='text-xs text-muted-foreground'
+                  data-testid='market-watch-output-no-results'
+                >
                   No output available yet.
+                  <span className='ms-1'>
+                    Run this query or adjust provider scope to collect visible
+                    results.
+                  </span>
                 </p>
               ) : (
                 <div className='mt-2 overflow-x-auto'>
