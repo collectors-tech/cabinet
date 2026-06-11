@@ -38,6 +38,31 @@ Results and errors SHALL clearly indicate source provider and actionable recover
 ### Requirement UI-SCREEN-MARKET-WATCH-004: Market Watch SHALL support deterministic states
 Screen SHALL support loading, empty, ready, and error states with retry controls.
 
+#### Scenario: Load workspace state
+- **GIVEN** user opens `/market-watch`
+- **WHEN** query-set, failure, and provider-health data is loading
+- **THEN** UI MUST show a deterministic loading state
+
+#### Scenario: Empty saved-query setup
+- **GIVEN** query-set loading succeeds with no saved queries
+- **WHEN** screen renders the workspace
+- **THEN** UI MUST show create-first guidance for the first provider-scoped query set
+
+#### Scenario: Provider needs attention
+- **GIVEN** provider health reports a non-`ok` status
+- **WHEN** Market Watch renders saved-query controls
+- **THEN** UI MUST show provider/auth attention guidance with the reported health status and recovery direction
+
+#### Scenario: Load failure retry
+- **GIVEN** query-set, failure, or provider-health loading fails
+- **WHEN** the error state renders
+- **THEN** UI MUST show a retry control that reloads Market Watch workspace data
+
+#### Scenario: Output detail with no result rows
+- **GIVEN** a saved query has latest run metadata but no visible output rows
+- **WHEN** user opens output details from the query table
+- **THEN** UI MUST show an explicit no-output state with direction to run the query or adjust provider scope
+
 ### Requirement UI-SCREEN-MARKET-WATCH-005: Market Watch SHALL provide query-set table view with run output visibility
 Market Watch SHALL provide a table view for query sets so users can find saved queries quickly, inspect latest run outputs, and create new watched queries from the page toolbar.
 
@@ -115,7 +140,7 @@ Market Watch output details SHALL render latest result items in a structured tab
 | UC-MW-01 | Create query set with provider scope | Query set persists with provider metadata from either the form submit action or toolbar `+` create action | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls` |
 | UC-MW-02 | Run scoped query | Runtime payload and results are provider-scoped | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-002 sends provider scope in run payload and shows provider-attributed results`; `UI-SCREEN-MARKET-WATCH-002 runs eBay-only saved searches through the provider route` |
 | UC-MW-03 | Handle run failure | Human-readable error + retry shown, then durable failure/query-set state reloads after recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-003 surfaces run failure guidance and retry action` |
-| UC-MW-04 | Empty state | Create-first guidance shown | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-empty-state` |
+| UC-MW-04 | Deterministic workspace states | Loading, empty, provider/auth attention, API load failure retry, and no-output detail states are explicit and testable | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states`; `UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery`; `UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit` |
 | UC-MW-05 | Query-set table review | Table shows saved queries with terms, provider scope, schedule/manual state, durable status/error, time, result count, and action columns across reloads and scheduled-refresh snapshot reloads | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 renders query table view with saved-query columns for rapid inspection`; `UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-005 runs saved searches now and through scheduled refresh`; `TestScannerRunItemsPerPageSummaryAppliesSafeCap`; `TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot` |
 | UC-MW-06 | Inspect run outputs from table | Row action opens latest run output detail for verification and handoff persistence | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-005 opens deterministic output details from query-table row action`; `ui.web/cypress/e2e/integrations/default-site-search/spec.cy.ts` `DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries and persisted wishlist flows` |
 | UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |

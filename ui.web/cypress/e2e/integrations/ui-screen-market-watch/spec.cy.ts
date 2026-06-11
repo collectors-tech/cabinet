@@ -12,6 +12,66 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.clearLocalStorage()
   })
 
+  it('UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      delay: 500,
+      statusCode: 200,
+      body: { query_sets: [] },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'auth_required' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.get('[data-testid="scanner-loading-state"]').should('be.visible')
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-empty-state"]')
+      .should('be.visible')
+      .and('contain', 'Create your first query set')
+    cy.get('[data-testid="market-watch-provider-attention-state"]')
+      .should('be.visible')
+      .and('contain', 'Provider needs attention')
+      .and('contain', 'auth_required')
+      .and('contain', 'Review provider credentials')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery', () => {
+    let failedOnce = false
+
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      if (!failedOnce) {
+        failedOnce = true
+        req.reply({ statusCode: 500, body: { error: 'scanner unavailable' } })
+        return
+      }
+      req.reply({ statusCode: 200, body: { query_sets: [] } })
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-error-state"]')
+      .should('be.visible')
+      .and('contain', 'Market Watch data is unavailable.')
+      .and('contain', 'query_sets_500')
+    cy.get('[data-testid="scanner-error-retry"]').click()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-error-state"]').should('not.exist')
+    cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls', () => {
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
       'querySets'
@@ -799,5 +859,41 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-provenance-1"]').should(
       'be.visible'
     )
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-no-output',
+            name: 'No Output Watch',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+            last_run_status: 'succeeded',
+            last_run_at: '2026-06-11T10:30:00Z',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-no-output"]').click()
+    cy.get('[data-testid="market-watch-output-no-results"]')
+      .should('be.visible')
+      .and('contain', 'No output available yet.')
+      .and('contain', 'Run this query or adjust provider scope')
   })
 })
