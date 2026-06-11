@@ -27,8 +27,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import { flushSync } from 'react-dom'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1243,6 +1242,7 @@ function inventoryItemToTask(item: InventoryItem): Task {
     status: item.condition || item.status || 'todo',
     label: item.category || 'feature',
     priority: item.priority || 'medium',
+    notes: item.notes || item.description,
   }
 }
 
@@ -4253,7 +4253,6 @@ export function Collection({
   }, [
     itemCreateBarcodeInput,
     itemCreateCollectionName,
-    itemCreateIntent,
     itemCreatePhotoFile,
     itemDraft,
     itemInstanceDraft,

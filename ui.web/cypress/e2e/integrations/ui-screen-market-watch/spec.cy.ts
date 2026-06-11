@@ -12,6 +12,66 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.clearLocalStorage()
   })
 
+  it('UI-SCREEN-MARKET-WATCH-004 shows deterministic workspace states', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      delay: 500,
+      statusCode: 200,
+      body: { query_sets: [] },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'auth_required' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.get('[data-testid="scanner-loading-state"]').should('be.visible')
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-empty-state"]')
+      .should('be.visible')
+      .and('contain', 'Create your first query set')
+    cy.get('[data-testid="market-watch-provider-attention-state"]')
+      .should('be.visible')
+      .and('contain', 'Provider needs attention')
+      .and('contain', 'auth_required')
+      .and('contain', 'Review provider credentials')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-004 shows load failure with retry recovery', () => {
+    let failedOnce = false
+
+    cy.intercept('GET', '/api/scanner/query-sets', (req) => {
+      if (!failedOnce) {
+        failedOnce = true
+        req.reply({ statusCode: 500, body: { error: 'scanner unavailable' } })
+        return
+      }
+      req.reply({ statusCode: 200, body: { query_sets: [] } })
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-error-state"]')
+      .should('be.visible')
+      .and('contain', 'Market Watch data is unavailable.')
+      .and('contain', 'query_sets_500')
+    cy.get('[data-testid="scanner-error-retry"]').click()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-error-state"]').should('not.exist')
+    cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-001 creates provider-scoped query sets from selector controls', () => {
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
       'querySets'
@@ -501,6 +561,99 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-filter-bonza',
+            name: 'Bonza Scheduled Results',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+            schedule_cron: '0 */6 * * *',
+            enabled: true,
+            last_run_status: 'succeeded',
+            last_run_at: '2026-05-26T06:41:00Z',
+            last_candidate_count: 4,
+          },
+          {
+            id: 'qs-mw-filter-ebay',
+            name: 'eBay Failed Manual',
+            keywords: ['HO slot'],
+            provider_scope: ['ebay'],
+            enabled: false,
+            last_run_status: 'failed',
+            last_run_message: 'Provider credentials expired',
+            last_candidate_count: 0,
+          },
+          {
+            id: 'qs-mw-filter-amazon',
+            name: 'Amazon Never Run',
+            keywords: ['diecast'],
+            provider_scope: ['amazon'],
+            enabled: true,
+            last_run_status: 'never',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 3 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Bonza Scheduled Results').should('be.visible')
+      cy.contains('td', 'eBay Failed Manual').should('be.visible')
+      cy.contains('td', 'Amazon Never Run').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-run-history"]').within(() => {
+      cy.contains('Bonza Scheduled Results').should('be.visible')
+      cy.contains('eBay Failed Manual').should('be.visible')
+      cy.contains('Amazon Never Run').should('be.visible')
+    })
+
+    cy.get('[data-testid="market-watch-filter-provider"]').select('bonzaslotcars')
+    cy.get('[data-testid="market-watch-filter-status"]').select('succeeded')
+    cy.get('[data-testid="market-watch-filter-schedule"]').select('scheduled')
+    cy.get('[data-testid="market-watch-filter-results"]').check()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 1 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Bonza Scheduled Results').should('be.visible')
+      cy.contains('td', 'eBay Failed Manual').should('not.exist')
+      cy.contains('td', 'Amazon Never Run').should('not.exist')
+    })
+    cy.get('[data-testid="market-watch-run-history"]').within(() => {
+      cy.contains('Bonza Scheduled Results').should('be.visible')
+      cy.contains('eBay Failed Manual').should('not.exist')
+    })
+
+    cy.get('[data-testid="market-watch-filter-status"]').select('failed')
+    cy.get('[data-testid="market-watch-filter-empty"]')
+      .should('be.visible')
+      .and('contain', 'No Market Watch queries match')
+    cy.get('[data-testid="market-watch-filter-empty-reset"]').click()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 3 of 3')
+
+    cy.get('[data-testid="market-watch-filter-attention"]').check()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 1 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'eBay Failed Manual').should('be.visible')
+      cy.contains('td', 'Provider credentials expired').should('be.visible')
+      cy.contains('td', 'Bonza Scheduled Results').should('not.exist')
+    })
+  })
+
   it('UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh', () => {
     let scheduledCompleted = false
 
@@ -634,5 +787,295 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('2').should('be.visible')
       cy.contains('Candidates').should('be.visible')
     })
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-provenance-1',
+            name: 'Bonza AFX Provenance',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-provenance-1',
+        candidates: [
+          {
+            id: 'cand-mw-provenance-1',
+            query_set_id: 'qs-mw-provenance-1',
+            listing_id: 'bonza-afx-camaro',
+            title: 'AFX Camaro Mega-G+',
+            source: 'bonzaslotcars',
+            price: 89.95,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-camaro',
+            stock_status: 'in_stock',
+            handoff_state: 'wishlist_ready',
+          },
+        ],
+        run_summary: {
+          page_count: 1,
+          observed_page_size: 1,
+          candidates_total: 1,
+        },
+      },
+    }).as('runBonzaQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-provenance-1')
+      expect(req.body.type).to.equal('add_to_wishlist')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-provenance-1',
+      })
+      wishlistEntries = [
+        {
+          id: 'wish-mw-provenance-1',
+          item_id: 'item-mw-provenance-1',
+          priority: 'medium',
+          target_price: 89.95,
+          notes:
+            'source_provider=bonzaslotcars; query_set_id=qs-mw-provenance-1; query_name=Bonza AFX Provenance; provider_scope=bonzaslotcars',
+          created_at: '2026-06-11T12:52:00Z',
+          updated_at: '2026-06-11T12:52:00Z',
+        },
+      ]
+      wishlistItems = [
+        {
+          id: 'item-mw-provenance-1',
+          title: 'AFX Camaro Mega-G+',
+          part_number: 'bonza-afx-camaro',
+          status: 'wishlist',
+          category: 'Slot Cars',
+          priority: 'medium',
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('wishlistHandoff')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { min: 89.95, median: 89.95, latest: 89.95 },
+    }).as('wishlistPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('wishlistPriceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=item-mw-provenance-1', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('wishlistPriceHistory')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-provenance-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-provenance-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('th', 'Provider').should('be.visible')
+      cy.contains('th', 'Handoff').should('be.visible')
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'AFX Camaro Mega-G+').should('be.visible')
+      cy.contains('td', '89.95 AUD').should('be.visible')
+      cy.contains('td', 'https://bonzaslotcars.example/products/afx-camaro').should(
+        'be.visible'
+      )
+      cy.contains('td', 'in_stock').should('be.visible')
+      cy.contains('td', 'wishlist_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-provenance-1"]').click()
+    cy.wait('@wishlistHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'wishlist_handoff_ok_cand-mw-provenance-1'
+    )
+
+    cy.visit('/wishlist/')
+    cy.wait(['@wishlistEntries', '@wishlistItems'])
+    cy.contains('AFX Camaro Mega-G+').should('be.visible')
+    cy.contains('source_provider=bonzaslotcars').should('be.visible')
+    cy.contains('query_set_id=qs-mw-provenance-1').should('be.visible')
+    cy.contains('query_name=Bonza AFX Provenance').should('be.visible')
+    cy.contains('provider_scope=bonzaslotcars').should('be.visible')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance', () => {
+    let inventoryItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-inventory-1',
+            name: 'Bonza Inventory Provenance',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-inventory-1',
+        candidates: [
+          {
+            id: 'cand-mw-inventory-1',
+            query_set_id: 'qs-mw-inventory-1',
+            listing_id: 'bonza-afx-mustang',
+            title: 'AFX Mustang GT',
+            source: 'bonzaslotcars',
+            price: 76.5,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-mustang',
+            stock_status: 'in_stock',
+            handoff_state: 'inventory_ready',
+          },
+        ],
+        run_summary: {
+          page_count: 1,
+          observed_page_size: 1,
+          candidates_total: 1,
+        },
+      },
+    }).as('runBonzaQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-inventory-1')
+      expect(req.body.type).to.equal('create_item')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-inventory-1',
+      })
+      inventoryItems = [
+        {
+          id: 'item-mw-inventory-1',
+          title: 'AFX Mustang GT',
+          part_number: 'bonza-afx-mustang',
+          status: 'owned',
+          category: 'Slot Cars',
+          priority: 'medium',
+          notes:
+            '{"source_provider":"bonzaslotcars","query_set_id":"qs-mw-inventory-1","query_name":"Bonza Inventory Provenance","provider_scope":"bonzaslotcars","source_result_url":"https://bonzaslotcars.example/products/afx-mustang"}',
+          description:
+            '{"source_provider":"bonzaslotcars","query_set_id":"qs-mw-inventory-1","query_name":"Bonza Inventory Provenance","provider_scope":"bonzaslotcars","source_result_url":"https://bonzaslotcars.example/products/afx-mustang"}',
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('inventoryHandoff')
+    cy.intercept('GET', '/api/items', (req) => {
+      req.reply({ statusCode: 200, body: { items: inventoryItems } })
+    }).as('inventoryItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-inventory-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-inventory-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'AFX Mustang GT').should('be.visible')
+      cy.contains('td', '76.50 AUD').should('be.visible')
+      cy.contains('td', 'inventory_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-inventory-qs-mw-inventory-1"]').click()
+    cy.wait('@inventoryHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'inventory_handoff_ok_cand-mw-inventory-1'
+    )
+
+    cy.visit('/inventory/')
+    cy.wait('@inventoryItems')
+    cy.contains('button', 'Cards').click()
+    cy.get('[data-testid="inventory-item-row-item-mw-inventory-1"]')
+      .should('contain', 'AFX Mustang GT')
+    cy.get('[data-testid="inventory-card-notes-item-mw-inventory-1"]')
+      .should('be.visible')
+      .and('contain', 'source_provider')
+      .and('contain', 'bonzaslotcars')
+      .and('contain', 'query_set_id')
+      .and('contain', 'qs-mw-inventory-1')
+      .and('contain', 'source_result_url')
+      .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-no-output',
+            name: 'No Output Watch',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+            last_run_status: 'succeeded',
+            last_run_at: '2026-06-11T10:30:00Z',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-no-output"]').click()
+    cy.get('[data-testid="market-watch-output-no-results"]')
+      .should('be.visible')
+      .and('contain', 'No output available yet.')
+      .and('contain', 'Run this query or adjust provider scope')
   })
 })
