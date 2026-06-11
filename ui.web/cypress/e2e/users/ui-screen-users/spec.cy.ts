@@ -137,4 +137,53 @@ describe('ui-screen-users', () => {
           })
       })
   })
+
+  it('UI-SCREEN-USERS-004 retries users list after a fetch failure', () => {
+    let listAttempt = 0
+
+    cy.intercept('GET', '/api/users*', (req) => {
+      listAttempt += 1
+      if (listAttempt === 1) {
+        req.reply({
+          statusCode: 503,
+          body: { error: 'users_unavailable' },
+        })
+        return
+      }
+
+      req.reply({
+        statusCode: 200,
+        body: {
+          users: [
+            {
+              id: 'retry-user-001',
+              firstName: 'Retry',
+              lastName: 'User',
+              username: 'retry_user',
+              email: 'retry.user@example.com',
+              phoneNumber: '+61000000001',
+              status: 'active',
+              role: 'admin',
+              createdAt: '2026-01-01T00:00:00Z',
+              updatedAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+      })
+    }).as('retryUsersList')
+
+    cy.reload()
+    cy.wait('@retryUsersList').its('response.statusCode').should('eq', 503)
+    cy.get('[data-testid="users-load-error"]').should('be.visible')
+    cy.contains('Users load failed').should('be.visible')
+    cy.contains('users_fetch_failed_503').should('be.visible')
+    cy.get('[data-testid="users-load-error"]')
+      .contains('button', 'Retry')
+      .click()
+    cy.wait('@retryUsersList').its('response.statusCode').should('eq', 200)
+
+    cy.get('[data-testid="users-load-error"]').should('not.exist')
+    cy.contains('h2', 'User List').should('be.visible')
+    cy.contains('retry_user').should('be.visible')
+  })
 })
