@@ -728,4 +728,76 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('Candidates').should('be.visible')
     })
   })
+
+  it('UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-provenance-1',
+            name: 'Bonza AFX Provenance',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-provenance-1',
+        candidates: [
+          {
+            id: 'cand-mw-provenance-1',
+            query_set_id: 'qs-mw-provenance-1',
+            listing_id: 'bonza-afx-camaro',
+            title: 'AFX Camaro Mega-G+',
+            source: 'bonzaslotcars',
+            price: 89.95,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-camaro',
+            stock_status: 'in_stock',
+            handoff_state: 'wishlist_ready',
+          },
+        ],
+        run_summary: {
+          page_count: 1,
+          observed_page_size: 1,
+          candidates_total: 1,
+        },
+      },
+    }).as('runBonzaQuery')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-provenance-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-provenance-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('th', 'Provider').should('be.visible')
+      cy.contains('th', 'Handoff').should('be.visible')
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'AFX Camaro Mega-G+').should('be.visible')
+      cy.contains('td', '89.95 AUD').should('be.visible')
+      cy.contains('td', 'https://bonzaslotcars.example/products/afx-camaro').should(
+        'be.visible'
+      )
+      cy.contains('td', 'in_stock').should('be.visible')
+      cy.contains('td', 'wishlist_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-provenance-1"]').should(
+      'be.visible'
+    )
+  })
 })
