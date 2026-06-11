@@ -18,6 +18,7 @@ type Entry struct {
 	HighlightHit      bool    `json:"highlight_hit"`
 	BelowTargetNow    bool    `json:"below_target_now"`
 	Owned             bool    `json:"owned"`
+	Delivered         bool    `json:"delivered"`
 	PricePaid         float64 `json:"price_paid"`
 	PurchaseURL       string  `json:"purchase_url"`
 	PurchaseDate      string  `json:"purchase_date"`
@@ -68,16 +69,25 @@ func (s *Service) CreateForProfile(ctx context.Context, profileID string, in Ent
 	if in.Owned {
 		owned = 1
 	}
+	delivered := 0
+	if in.Delivered {
+		in.Owned = true
+		owned = 1
+		delivered = 1
+	}
 	in.Quantity = normalizeWishlistCount(in.Quantity)
 	in.NeededQuantity = normalizeWishlistCount(in.NeededQuantity)
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity)
+		INSERT INTO wishlist_entries(id, profile_id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, delivered, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ID, trimmedProfileID, in.ItemID, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, delivered, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity)
 	if err != nil {
 		return Entry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
 	if err := s.syncItemWishlistState(ctx, trimmedProfileID, in.ItemID, "wishlist", in.Priority); err != nil {
+		return Entry{}, err
+	}
+	if err := s.syncPurchaseDeliveryState(ctx, trimmedProfileID, in.ID, in); err != nil {
 		return Entry{}, err
 	}
 	return s.GetByIDForProfile(ctx, trimmedProfileID, in.ID)
@@ -109,17 +119,26 @@ func (s *Service) UpdateForProfile(ctx context.Context, profileID string, in Ent
 	if in.Owned {
 		owned = 1
 	}
+	delivered := 0
+	if in.Delivered {
+		in.Owned = true
+		owned = 1
+		delivered = 1
+	}
 	in.Quantity = normalizeWishlistCount(in.Quantity)
 	in.NeededQuantity = normalizeWishlistCount(in.NeededQuantity)
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE wishlist_entries
-		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, below_target_now = ?, owned = ?, price_paid = ?, purchase_url = ?, purchase_date = ?, purchase_condition = ?, quantity = ?, needed_quantity = ?, updated_at = CURRENT_TIMESTAMP
+		SET target_price = ?, priority = ?, notes = ?, highlight_hit = ?, below_target_now = ?, owned = ?, delivered = ?, price_paid = ?, purchase_url = ?, purchase_date = ?, purchase_condition = ?, quantity = ?, needed_quantity = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity, in.ID, trimmedProfileID, trimmedProfileID)
+	`, in.TargetPrice, in.Priority, in.Notes, highlight, belowTargetNow, owned, delivered, in.PricePaid, strings.TrimSpace(in.PurchaseURL), strings.TrimSpace(in.PurchaseDate), strings.TrimSpace(in.PurchaseCondition), in.Quantity, in.NeededQuantity, in.ID, trimmedProfileID, trimmedProfileID)
 	if err != nil {
 		return err
 	}
-	return s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "wishlist", in.Priority)
+	if err := s.syncItemWishlistState(ctx, trimmedProfileID, itemID, "wishlist", in.Priority); err != nil {
+		return err
+	}
+	return s.syncPurchaseDeliveryState(ctx, trimmedProfileID, in.ID, in)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
@@ -160,10 +179,11 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 	var highlight int
 	var belowTargetNow int
 	var owned int
+	var delivered int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity, created_at, updated_at
+		SELECT id, item_id, target_price, priority, notes, highlight_hit, below_target_now, owned, delivered, price_paid, purchase_url, purchase_date, purchase_condition, quantity, needed_quantity, created_at, updated_at
 		FROM wishlist_entries WHERE id = ? AND (? = '' OR profile_id = ?)
-	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &owned, &e.PricePaid, &e.PurchaseURL, &e.PurchaseDate, &e.PurchaseCondition, &e.Quantity, &e.NeededQuantity, &e.CreatedAt, &e.UpdatedAt)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(profileID)).Scan(&e.ID, &e.ItemID, &e.TargetPrice, &e.Priority, &e.Notes, &highlight, &belowTargetNow, &owned, &delivered, &e.PricePaid, &e.PurchaseURL, &e.PurchaseDate, &e.PurchaseCondition, &e.Quantity, &e.NeededQuantity, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Entry{}, fmt.Errorf("wishlist entry not found")
@@ -173,6 +193,7 @@ func (s *Service) GetByIDForProfile(ctx context.Context, profileID, id string) (
 	e.HighlightHit = highlight == 1
 	e.BelowTargetNow = belowTargetNow == 1 || s.isBelowTarget(ctx, e.ItemID, e.TargetPrice)
 	e.Owned = owned == 1
+	e.Delivered = delivered == 1
 	return e, nil
 }
 
@@ -296,4 +317,177 @@ func (s *Service) syncItemWishlistState(ctx context.Context, profileID, itemID, 
 		return fmt.Errorf("sync wishlist item status: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) syncPurchaseDeliveryState(ctx context.Context, profileID, entryID string, in Entry) error {
+	if !in.Owned && !in.Delivered {
+		return nil
+	}
+	lifecycleID, err := s.ensurePurchaseLifecycle(ctx, profileID, entryID, in)
+	if err != nil {
+		return err
+	}
+	if !in.Delivered {
+		return nil
+	}
+	instanceID, err := s.ensureDeliveredInstance(ctx, in)
+	if err != nil {
+		return err
+	}
+	if err := s.markPurchaseArrivalDelivered(ctx, profileID, lifecycleID, instanceID, in); err != nil {
+		return err
+	}
+	if err := s.syncItemWishlistState(ctx, profileID, in.ItemID, "active", in.Priority); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) ensurePurchaseLifecycle(ctx context.Context, profileID, entryID string, in Entry) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM commerce_lifecycle_entries
+		WHERE (? = '' OR profile_id = ?) AND item_id = ? AND state = 'purchase' AND source = 'wishlist' AND external_ref = ?
+		LIMIT 1
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID), strings.TrimSpace(in.ItemID), strings.TrimSpace(entryID)).Scan(&id)
+	if err == nil {
+		_, updateErr := s.db.ExecContext(ctx, `
+			UPDATE commerce_lifecycle_entries
+			SET quantity = ?, amount = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, purchaseQuantity(in), in.PricePaid, purchaseNotes(in), id)
+		if updateErr != nil {
+			return "", fmt.Errorf("update wishlist purchase lifecycle: %w", updateErr)
+		}
+		if err := s.ensureExpectedArrival(ctx, profileID, id, in); err != nil {
+			return "", err
+		}
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("load wishlist purchase lifecycle: %w", err)
+	}
+	id = uuid.NewString()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO commerce_lifecycle_entries(id, profile_id, item_id, state, source, external_ref, quantity, amount, currency, notes)
+		VALUES (?, ?, ?, 'purchase', 'wishlist', ?, ?, ?, 'AUD', ?)
+	`, id, strings.TrimSpace(profileID), strings.TrimSpace(in.ItemID), strings.TrimSpace(entryID), purchaseQuantity(in), in.PricePaid, purchaseNotes(in))
+	if err != nil {
+		return "", fmt.Errorf("create wishlist purchase lifecycle: %w", err)
+	}
+	if err := s.ensureExpectedArrival(ctx, profileID, id, in); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *Service) ensureExpectedArrival(ctx context.Context, profileID, lifecycleID string, in Entry) error {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM expected_arrivals
+		WHERE (? = '' OR profile_id = ?) AND lifecycle_entry_id = ?
+		LIMIT 1
+	`, strings.TrimSpace(profileID), strings.TrimSpace(profileID), strings.TrimSpace(lifecycleID)).Scan(&id)
+	if err == nil {
+		_, updateErr := s.db.ExecContext(ctx, `
+			UPDATE expected_arrivals
+			SET quantity = ?, amount = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, purchaseQuantity(in), in.PricePaid, purchaseNotes(in), id)
+		if updateErr != nil {
+			return fmt.Errorf("update wishlist expected arrival: %w", updateErr)
+		}
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return fmt.Errorf("load wishlist expected arrival: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO expected_arrivals(id, profile_id, item_id, lifecycle_entry_id, source, external_ref, quantity, amount, currency, status, expected_on, delivered_on, reconciled_instance_id, notes)
+		VALUES (?, ?, ?, ?, 'wishlist', ?, ?, ?, 'AUD', 'expected', '', '', '', ?)
+	`, uuid.NewString(), strings.TrimSpace(profileID), strings.TrimSpace(in.ItemID), strings.TrimSpace(lifecycleID), strings.TrimSpace(in.ID), purchaseQuantity(in), in.PricePaid, purchaseNotes(in))
+	if err != nil {
+		return fmt.Errorf("create wishlist expected arrival: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ensureDeliveredInstance(ctx context.Context, in Entry) (string, error) {
+	notes := "wishlist:" + strings.TrimSpace(in.ID)
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM instances
+		WHERE item_id = ? AND notes = ?
+		LIMIT 1
+	`, strings.TrimSpace(in.ItemID), notes).Scan(&id)
+	if err == nil {
+		_, updateErr := s.db.ExecContext(ctx, `
+			UPDATE instances
+			SET condition = ?, status = ?, quantity = ?, acquisition_price = ?, acquisition_date = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, deliveredCondition(in), deliveredCondition(in), purchaseQuantity(in), in.PricePaid, strings.TrimSpace(in.PurchaseDate), id)
+		if updateErr != nil {
+			return "", fmt.Errorf("update wishlist delivered instance: %w", updateErr)
+		}
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("load wishlist delivered instance: %w", err)
+	}
+	id = uuid.NewString()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO instances(id, item_id, condition, status, quantity, storage_location, acquisition_price, acquisition_date, notes)
+		VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)
+	`, id, strings.TrimSpace(in.ItemID), deliveredCondition(in), deliveredCondition(in), purchaseQuantity(in), in.PricePaid, strings.TrimSpace(in.PurchaseDate), notes)
+	if err != nil {
+		return "", fmt.Errorf("create wishlist delivered instance: %w", err)
+	}
+	return id, nil
+}
+
+func (s *Service) markPurchaseArrivalDelivered(ctx context.Context, profileID, lifecycleID, instanceID string, in Entry) error {
+	deliveredOn := strings.TrimSpace(in.PurchaseDate)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE expected_arrivals
+		SET status = 'delivered', delivered_on = ?, reconciled_instance_id = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE (? = '' OR profile_id = ?) AND lifecycle_entry_id = ?
+	`, deliveredOn, strings.TrimSpace(instanceID), strings.TrimSpace(profileID), strings.TrimSpace(profileID), strings.TrimSpace(lifecycleID))
+	if err != nil {
+		return fmt.Errorf("mark wishlist expected arrival delivered: %w", err)
+	}
+	return nil
+}
+
+func purchaseQuantity(in Entry) int {
+	if in.Quantity > 0 {
+		return in.Quantity
+	}
+	if in.NeededQuantity > 0 {
+		return in.NeededQuantity
+	}
+	return 1
+}
+
+func purchaseNotes(in Entry) string {
+	notes := strings.TrimSpace(in.Notes)
+	if notes == "" {
+		return "Wishlist purchase"
+	}
+	return notes
+}
+
+func deliveredCondition(in Entry) string {
+	condition := strings.ToLower(strings.TrimSpace(in.PurchaseCondition))
+	if condition == "" {
+		return "custom"
+	}
+	switch condition {
+	case "sealed", "blister", "loose", "custom", "on_track":
+		return condition
+	default:
+		return "custom"
+	}
 }

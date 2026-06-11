@@ -101,15 +101,28 @@ Wishlist screen SHALL remain table-first and MUST NOT render the old planning su
 
 ### Requirement UI-SCREEN-WISHLIST-009: Wishlist rows SHALL capture purchase details without row-menu ownership hacks
 
-Wishlist rows SHALL expose owned state and purchase details through dedicated row fields and purchase dialog controls, not through a `Mark owned` row action.
+Wishlist rows SHALL expose Purchased state and purchase details through dedicated row fields and purchase dialog controls, not through a `Mark owned` row action.
 
 #### Scenario: Add purchase details
 
 - **GIVEN** wishlist route shows a wanted item with wishlist entry metadata
 - **WHEN** user clicks the row purchase action
 - **THEN** the purchase dialog MUST open with sensible defaults
-- **AND** saving MUST persist owned state, price paid, quantity, condition, purchase date, and URL
+- **AND** saving MUST persist Purchased state, price paid, quantity, condition, purchase date, and URL
 - **AND** Wishlist row actions MUST NOT include `Mark owned`
+
+### Requirement UI-SCREEN-WISHLIST-020: Wishlist rows SHALL expose Purchased, Delivered, and Category workflow fields
+
+Wishlist rows, cards, filters, forms, and detail surfaces SHALL use `Purchased` wording instead of `Owned`, SHALL expose explicit Delivered state, and SHALL preserve Category when wishlist items move into downstream purchase and inventory records.
+
+#### Scenario: Edit purchase-to-delivery workflow fields
+
+- **GIVEN** wishlist route shows a wanted item with wishlist entry metadata and canonical item category
+- **WHEN** user edits Purchased, Delivered, and Category fields
+- **THEN** the UI MUST persist Purchased and Delivered values through `/api/wishlist`
+- **AND** the UI MUST persist Category on the canonical item record
+- **AND** Delivered MUST either set Purchased or block the save with clear validation guidance
+- **AND** downstream Purchases and Inventory views MUST be able to show the resulting records with wishlist provenance
 
 ### Requirement UI-SCREEN-WISHLIST-016: Wishlist rows and cards SHALL render stable date context
 Wishlist rows and cards SHALL render date context without implying that normal edits refreshed price data.
