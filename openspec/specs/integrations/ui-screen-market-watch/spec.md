@@ -79,6 +79,22 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 - **WHEN** screen loads
 - **THEN** empty state SHALL guide user to create first provider-scoped query set
 
+### Requirement UI-SCREEN-MARKET-WATCH-007: Market Watch SHALL filter query table rows by operational state
+Market Watch SHALL provide query table filters for provider, latest run status, schedule mode, attention state, and result presence so users can narrow large saved-query workspaces without mutating saved query state.
+
+#### Scenario: Filter query table rows
+- **GIVEN** saved Market Watch queries exist with different providers, schedule modes, latest statuses, and result counts
+- **WHEN** user applies provider, status, schedule, attention, or result filters
+- **THEN** Market Watch MUST update the visible query rows and latest-run history summary to only include matching query sets
+- **AND** saved query definitions MUST remain unchanged
+
+#### Scenario: Filter no-match recovery
+- **GIVEN** saved Market Watch queries exist
+- **WHEN** current filters match no query rows
+- **THEN** Market Watch MUST show a no-matches state with a reset action
+- **AND WHEN** user resets filters
+- **THEN** all saved query rows MUST be visible again
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -91,3 +107,4 @@ Market Watch SHALL support creating and running provider-scoped watched query `A
 | UC-MW-07 | Create Bonza watched query AFX | Query persists with provider scope=Bonza and watched metadata | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-create-bonza-afx-query` |
 | UC-MW-08 | Run Bonza watched query AFX | Output summary shows page-scan count + aggregated candidate count | planned: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `market-watch-run-bonza-afx-summary` |
 | UC-MW-09 | Edit and delete provider-scoped query set | Edited name/keywords/schedule persist while provider scope remains intact, then delete removes the saved query | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle` |
+| UC-MW-10 | Filter query table and history | Provider/status/schedule/attention/result filters narrow rows and history, with no-match reset recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state` |

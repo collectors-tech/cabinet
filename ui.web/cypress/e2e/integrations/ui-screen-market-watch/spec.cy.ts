@@ -501,6 +501,99 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-filter-bonza',
+            name: 'Bonza Scheduled Results',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+            schedule_cron: '0 */6 * * *',
+            enabled: true,
+            last_run_status: 'succeeded',
+            last_run_at: '2026-05-26T06:41:00Z',
+            last_candidate_count: 4,
+          },
+          {
+            id: 'qs-mw-filter-ebay',
+            name: 'eBay Failed Manual',
+            keywords: ['HO slot'],
+            provider_scope: ['ebay'],
+            enabled: false,
+            last_run_status: 'failed',
+            last_run_message: 'Provider credentials expired',
+            last_candidate_count: 0,
+          },
+          {
+            id: 'qs-mw-filter-amazon',
+            name: 'Amazon Never Run',
+            keywords: ['diecast'],
+            provider_scope: ['amazon'],
+            enabled: true,
+            last_run_status: 'never',
+            last_candidate_count: 0,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 3 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Bonza Scheduled Results').should('be.visible')
+      cy.contains('td', 'eBay Failed Manual').should('be.visible')
+      cy.contains('td', 'Amazon Never Run').should('be.visible')
+    })
+    cy.get('[data-testid="market-watch-run-history"]').within(() => {
+      cy.contains('Bonza Scheduled Results').should('be.visible')
+      cy.contains('eBay Failed Manual').should('be.visible')
+      cy.contains('Amazon Never Run').should('be.visible')
+    })
+
+    cy.get('[data-testid="market-watch-filter-provider"]').select('bonzaslotcars')
+    cy.get('[data-testid="market-watch-filter-status"]').select('succeeded')
+    cy.get('[data-testid="market-watch-filter-schedule"]').select('scheduled')
+    cy.get('[data-testid="market-watch-filter-results"]').check()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 1 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Bonza Scheduled Results').should('be.visible')
+      cy.contains('td', 'eBay Failed Manual').should('not.exist')
+      cy.contains('td', 'Amazon Never Run').should('not.exist')
+    })
+    cy.get('[data-testid="market-watch-run-history"]').within(() => {
+      cy.contains('Bonza Scheduled Results').should('be.visible')
+      cy.contains('eBay Failed Manual').should('not.exist')
+    })
+
+    cy.get('[data-testid="market-watch-filter-status"]').select('failed')
+    cy.get('[data-testid="market-watch-filter-empty"]')
+      .should('be.visible')
+      .and('contain', 'No Market Watch queries match')
+    cy.get('[data-testid="market-watch-filter-empty-reset"]').click()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 3 of 3')
+
+    cy.get('[data-testid="market-watch-filter-attention"]').check()
+    cy.get('[data-testid="market-watch-filter-summary"]').should('contain', 'Showing 1 of 3')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'eBay Failed Manual').should('be.visible')
+      cy.contains('td', 'Provider credentials expired').should('be.visible')
+      cy.contains('td', 'Bonza Scheduled Results').should('not.exist')
+    })
+  })
+
   it('UI-SCREEN-MARKET-WATCH-005 refreshes table run history after scheduled refresh', () => {
     let scheduledCompleted = false
 
