@@ -145,6 +145,17 @@ Market Watch output-detail Wishlist handoff SHALL persist the selected result to
 - **AND WHEN** user opens or reloads `/wishlist`
 - **THEN** the Wishlist route MUST render the handed-off result and its Market Watch/provider/query provenance
 
+### Requirement UI-SCREEN-MARKET-WATCH-010: Market Watch SHALL persist output-detail Inventory handoff provenance
+Market Watch output-detail Inventory handoff SHALL persist the selected result to Inventory with Market Watch, provider, query, source URL, and scope provenance visible after downstream route reload.
+
+#### Scenario: Persist Inventory handoff from output details
+- **GIVEN** a Market Watch output detail has at least one result row
+- **WHEN** user activates `Add First Result to Inventory`
+- **THEN** UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
+- **AND** UI MUST show a testable handoff success state for the selected candidate
+- **AND WHEN** user opens or reloads `/inventory`
+- **THEN** the Inventory route MUST render the handed-off result and its Market Watch/provider/query/source provenance
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -160,3 +171,4 @@ Market Watch output-detail Wishlist handoff SHALL persist the selected result to
 | UC-MW-10 | Filter query table and history | Provider/status/schedule/attention/result filters narrow rows and history, with no-match reset recovery | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-007 filters query table rows by provider status schedule attention and result state` |
 | UC-MW-11 | Inspect output result provenance | Output detail table shows provider, title, price/currency, source identifier, stock/status, and handoff state while preserving handoff actions | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state` |
 | UC-MW-12 | Wishlist handoff from output detail | Output detail Wishlist handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Wishlist route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance` |
+| UC-MW-13 | Inventory handoff from output detail | Output detail Inventory handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Inventory route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance` |

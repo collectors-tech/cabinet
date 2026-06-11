@@ -1293,9 +1293,17 @@ export function TasksTable({
                     </>
                   ) : null}
                 </div>
-                {routePath === '/_authenticated/wishlist/' &&
+                {(routePath === '/_authenticated/wishlist/' ||
+                  routePath === '/_authenticated/inventory/') &&
                 row.original.notes ? (
-                  <p className='text-xs text-muted-foreground'>
+                  <p
+                    className='text-xs text-muted-foreground'
+                    data-testid={
+                      routePath === '/_authenticated/inventory/'
+                        ? `inventory-card-notes-${row.original.itemID ?? row.original.id}`
+                        : undefined
+                    }
+                  >
                     Notes: {row.original.notes}
                   </p>
                 ) : null}

@@ -928,6 +928,121 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.contains('provider_scope=bonzaslotcars').should('be.visible')
   })
 
+  it('UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance', () => {
+    let inventoryItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-inventory-1',
+            name: 'Bonza Inventory Provenance',
+            keywords: ['AFX'],
+            provider_scope: ['bonzaslotcars'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/bonza/run', {
+      statusCode: 200,
+      body: {
+        query_set_id: 'qs-mw-inventory-1',
+        candidates: [
+          {
+            id: 'cand-mw-inventory-1',
+            query_set_id: 'qs-mw-inventory-1',
+            listing_id: 'bonza-afx-mustang',
+            title: 'AFX Mustang GT',
+            source: 'bonzaslotcars',
+            price: 76.5,
+            currency: 'AUD',
+            url: 'https://bonzaslotcars.example/products/afx-mustang',
+            stock_status: 'in_stock',
+            handoff_state: 'inventory_ready',
+          },
+        ],
+        run_summary: {
+          page_count: 1,
+          observed_page_size: 1,
+          candidates_total: 1,
+        },
+      },
+    }).as('runBonzaQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-inventory-1')
+      expect(req.body.type).to.equal('create_item')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-inventory-1',
+      })
+      inventoryItems = [
+        {
+          id: 'item-mw-inventory-1',
+          title: 'AFX Mustang GT',
+          part_number: 'bonza-afx-mustang',
+          status: 'owned',
+          category: 'Slot Cars',
+          priority: 'medium',
+          notes:
+            '{"source_provider":"bonzaslotcars","query_set_id":"qs-mw-inventory-1","query_name":"Bonza Inventory Provenance","provider_scope":"bonzaslotcars","source_result_url":"https://bonzaslotcars.example/products/afx-mustang"}',
+          description:
+            '{"source_provider":"bonzaslotcars","query_set_id":"qs-mw-inventory-1","query_name":"Bonza Inventory Provenance","provider_scope":"bonzaslotcars","source_result_url":"https://bonzaslotcars.example/products/afx-mustang"}',
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('inventoryHandoff')
+    cy.intercept('GET', '/api/items', (req) => {
+      req.reply({ statusCode: 200, body: { items: inventoryItems } })
+    }).as('inventoryItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-inventory-1"]').click()
+    cy.wait('@runBonzaQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-inventory-1"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'bonzaslotcars').should('be.visible')
+      cy.contains('td', 'AFX Mustang GT').should('be.visible')
+      cy.contains('td', '76.50 AUD').should('be.visible')
+      cy.contains('td', 'inventory_ready').should('be.visible')
+    })
+    cy.get('[data-testid="scanner-handoff-inventory-qs-mw-inventory-1"]').click()
+    cy.wait('@inventoryHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'inventory_handoff_ok_cand-mw-inventory-1'
+    )
+
+    cy.visit('/inventory/')
+    cy.wait('@inventoryItems')
+    cy.contains('button', 'Cards').click()
+    cy.get('[data-testid="inventory-item-row-item-mw-inventory-1"]')
+      .should('contain', 'AFX Mustang GT')
+    cy.get('[data-testid="inventory-card-notes-item-mw-inventory-1"]')
+      .should('be.visible')
+      .and('contain', 'source_provider')
+      .and('contain', 'bonzaslotcars')
+      .and('contain', 'query_set_id')
+      .and('contain', 'qs-mw-inventory-1')
+      .and('contain', 'source_result_url')
+      .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
