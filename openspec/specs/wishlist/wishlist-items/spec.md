@@ -32,3 +32,22 @@ Cabinet SHALL provide an explicit active-profile scoped conversion action that m
 - **WHEN** the user submits `POST /api/wishlist/convert-owned` with that wishlist entry `id`
 - **THEN** API MUST reject the conversion
 - **AND** the original wishlist entry and canonical item status MUST remain unchanged
+
+### Requirement WISHLIST-ITEMS-003: Wishlist purchase and delivery state SHALL synchronize downstream records
+Cabinet SHALL treat wishlist `owned`/Purchased state as purchase intent evidence and explicit `delivered` state as inventory receipt evidence while preserving category on the canonical item.
+
+#### Scenario: Purchased wishlist entry creates purchase lifecycle evidence
+- **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
+- **WHEN** the user creates or updates the wishlist entry with `owned=true`
+- **THEN** Cabinet MUST persist the wishlist entry as Purchased
+- **AND** Cabinet MUST create or update one `purchase` commerce lifecycle entry with `source=wishlist`, `external_ref` equal to the wishlist entry id, purchase amount, quantity, and notes
+- **AND** Cabinet MUST create or update the linked expected-arrival record for that purchase lifecycle entry
+
+#### Scenario: Delivered wishlist entry creates inventory receipt evidence
+- **GIVEN** an authenticated user has an active profile with a wishlist entry for a canonical item
+- **WHEN** the user creates or updates the wishlist entry with `delivered=true`
+- **THEN** Cabinet MUST persist the wishlist entry as both Delivered and Purchased
+- **AND** Cabinet MUST mark the linked purchase arrival as `delivered`
+- **AND** Cabinet MUST create or update one inventory instance with purchase condition, quantity, acquisition price, and acquisition date from wishlist purchase details
+- **AND** Cabinet MUST mark the canonical item lifecycle status as `active`
+- **AND** the canonical item category MUST remain unchanged for Inventory visibility

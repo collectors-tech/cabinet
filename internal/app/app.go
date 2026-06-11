@@ -3535,6 +3535,9 @@ func New(cfg config.Config) (*App, error) {
 					if _, ok := raw["owned"]; !ok {
 						req.Owned = existing.Owned
 					}
+					if _, ok := raw["delivered"]; !ok {
+						req.Delivered = existing.Delivered
+					}
 					if _, ok := raw["price_paid"]; !ok {
 						req.PricePaid = existing.PricePaid
 					}
