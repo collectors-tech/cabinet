@@ -641,6 +641,127 @@ describe("ui-screen-wishlist", () => {
     });
   });
 
+  it("UI-SCREEN-WISHLIST-020 edits Purchased, Delivered, and Category workflow fields", () => {
+    let wishlistEntries = [
+      {
+        id: "wish-workflow-1",
+        item_id: "item-collector-1",
+        priority: "medium",
+        below_target_now: false,
+        owned: false,
+        delivered: false,
+        target_price: 20,
+        quantity: 0,
+        needed_quantity: 1,
+      },
+    ];
+    let wishlistItems = [
+      {
+        id: "item-collector-1",
+        title: "AFX Mega-G+ Camaro Wildfire",
+        part_number: "22073",
+        status: "wishlist",
+        category: "Slot Cars",
+        priority: "medium",
+      },
+    ];
+
+    cy.intercept("GET", "/api/wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } });
+    }).as("wishlistItems");
+    cy.intercept("GET", "/api/items?status=wishlist", (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } });
+    }).as("catalogItems");
+    cy.intercept("PUT", "/api/items/item-collector-1", (req) => {
+      expect(req.body.category).to.eq("Race Cars");
+      wishlistItems = wishlistItems.map((item) =>
+        item.id === "item-collector-1"
+          ? { ...item, category: req.body.category }
+          : item
+      );
+      req.reply({ statusCode: 200, body: wishlistItems[0] });
+    }).as("updateWishlistItemCategory");
+    cy.intercept("PUT", "/api/wishlist", (req) => {
+      expect(req.body).to.include({
+        id: "wish-workflow-1",
+        item_id: "item-collector-1",
+        owned: true,
+        delivered: true,
+      });
+      wishlistEntries = wishlistEntries.map((entry) =>
+        entry.id === "wish-workflow-1"
+          ? { ...entry, owned: req.body.owned, delivered: req.body.delivered }
+          : entry
+      );
+      req.reply({ statusCode: 204, body: "" });
+    }).as("updateWishlistWorkflow");
+
+    signInToWishlist({ skipStub: true, useExistingIntercepts: true });
+    cy.get('button[aria-label="Switch to rows view"]').click();
+    cy.get('[data-testid="wishlist-table-surface"]').scrollTo("left", {
+      ensureScrollable: false,
+    });
+    cy.contains("th", "Purchased").should("exist");
+    cy.contains("th", "Delivered").should("exist");
+    cy.contains("th", "Category").should("exist");
+    cy.contains("th", "Owned").should("not.exist");
+    cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
+      "contain.text",
+      "Slot Cars"
+    );
+    cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .and("have.attr", "aria-checked", "false");
+
+    openWishlistRowActions("AFX Mega-G+ Camaro Wildfire");
+    cy.contains('[role="menuitem"]', "Edit").click({ force: true });
+    cy.contains("Edit Wishlist Entry").should("be.visible");
+    cy.contains("Owned").should("not.exist");
+    cy.contains("Purchased").should("exist");
+    cy.contains("Delivered").should("exist");
+    cy.get('input[name="category"]').clear().type("Race Cars");
+    cy.get('[data-testid="wishlist-edit-owned"]')
+      .scrollIntoView()
+      .should("be.visible");
+    cy.get('[data-testid="wishlist-edit-delivered"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .click();
+    cy.get('[data-testid="wishlist-edit-owned"]').should(
+      "have.attr",
+      "aria-checked",
+      "true"
+    );
+    cy.contains("button", "Save changes").click();
+
+    cy.wait("@updateWishlistItemCategory");
+    cy.wait("@updateWishlistWorkflow");
+    cy.wait("@wishlistItems");
+    cy.wait("@catalogItems");
+    cy.get('[data-testid="wishlist-edit-panel"]').should("not.exist");
+    cy.get('[data-testid="wishlist-category-item-collector-1"]').should(
+      "contain.text",
+      "Race Cars"
+    );
+    cy.get('[data-testid="wishlist-delivered-checkbox-item-collector-1"]').should(
+      "have.attr",
+      "aria-checked",
+      "true"
+    );
+
+    cy.contains("button", "Cards").click();
+    cy.get('[data-testid="wishlist-card-purchased-item-collector-1"]').should(
+      "contain.text",
+      "Purchased: Yes"
+    );
+    cy.get('[data-testid="wishlist-card-delivered-item-collector-1"]').should(
+      "contain.text",
+      "Delivered: Yes"
+    );
+    cy.contains("Category: Race Cars").should("be.visible");
+  });
+
   it("UI-SCREEN-WISHLIST-006 does not expose Mark owned from the row action menu", () => {
     const wishlistEntries = [
       {

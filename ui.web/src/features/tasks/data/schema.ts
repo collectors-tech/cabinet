@@ -32,6 +32,7 @@ export const taskSchema = z.object({
   priceStockCount: z.number().optional(),
   highlightHit: z.boolean().optional(),
   owned: z.boolean().optional(),
+  delivered: z.boolean().optional(),
   pricePaid: z.number().optional(),
   purchaseUrl: z.string().optional(),
   purchaseDate: z.string().optional(),

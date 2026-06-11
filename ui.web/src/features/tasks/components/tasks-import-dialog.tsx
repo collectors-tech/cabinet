@@ -107,6 +107,7 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
       notes: cells[columnIndex('notes')]?.trim() ?? '',
       targetPrice: cells[columnIndex('target_price')]?.trim() ?? '',
       owned: false,
+      delivered: false,
       pricePaid: '',
       purchaseUrl: '',
       purchaseDate: '',

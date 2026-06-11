@@ -38,6 +38,7 @@ export type WishlistEntryDraft = {
   notes: string
   targetPrice: string
   owned: boolean
+  delivered: boolean
   pricePaid: string
   purchaseUrl: string
   purchaseDate: string
@@ -82,6 +83,7 @@ const wishlistFormSchema = z.object({
   priority: z.string().trim().min(1, 'Please choose a priority.'),
   notes: z.string(),
   owned: z.boolean(),
+  delivered: z.boolean(),
   targetPrice: z.string().refine((value) => {
       if (value.trim() === '') {
         return true
@@ -130,6 +132,7 @@ function wishlistDefaults(currentRow?: Task): WishlistForm {
     priority: currentRow?.priority ?? 'medium',
     notes: currentRow?.notes ?? '',
     owned: Boolean(currentRow?.owned),
+    delivered: Boolean(currentRow?.delivered),
     targetPrice:
       typeof currentRow?.targetPrice === 'number' && currentRow.targetPrice > 0
         ? String(currentRow.targetPrice)
@@ -220,7 +223,8 @@ export function TasksMutateDrawer({
         priority: data.priority.trim(),
         notes: data.notes.trim(),
         targetPrice: data.targetPrice.trim(),
-        owned: data.owned,
+        owned: data.owned || data.delivered,
+        delivered: data.delivered,
         pricePaid: data.pricePaid.trim(),
         purchaseUrl: data.purchaseUrl.trim(),
         purchaseDate: data.purchaseDate.trim(),
@@ -435,7 +439,7 @@ export function TasksMutateDrawer({
                 name='owned'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Owned</FormLabel>
+                    <FormLabel>Purchased</FormLabel>
                     <FormControl>
                       <button
                         type='button'
@@ -446,13 +450,49 @@ export function TasksMutateDrawer({
                         onClick={() => field.onChange(!field.value)}
                       >
                         <span>
-                          {field.value ? 'Owned' : 'Still on wishlist'}
+                          {field.value ? 'Purchased' : 'Still on wishlist'}
                         </span>
                         <span aria-hidden='true'>
                           {field.value ? 'Yes' : 'No'}
                         </span>
                       </button>
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={wishlistForm.control}
+                name='delivered'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delivered</FormLabel>
+                    <FormControl>
+                      <button
+                        type='button'
+                        role='checkbox'
+                        aria-checked={field.value}
+                        data-testid='wishlist-edit-delivered'
+                        className='flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm'
+                        onClick={() => {
+                          const nextDelivered = !field.value
+                          field.onChange(nextDelivered)
+                          if (nextDelivered) {
+                            wishlistForm.setValue('owned', true)
+                          }
+                        }}
+                      >
+                        <span>
+                          {field.value ? 'Delivered' : 'Awaiting delivery'}
+                        </span>
+                        <span aria-hidden='true'>
+                          {field.value ? 'Yes' : 'No'}
+                        </span>
+                      </button>
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      Delivered items are also saved as Purchased.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
