@@ -56,6 +56,7 @@ export function SettingsCategories() {
   const [newItemType, setNewItemType] = useState('')
   const [newPackagingGrade, setNewPackagingGrade] = useState('')
   const [status, setStatus] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     setCategories(
@@ -84,6 +85,7 @@ export function SettingsCategories() {
     setCategories((current) => normalizeCategoryOptions([...current, next]))
     setNewCategory('')
     setStatus(null)
+    setSaveError(null)
   }
 
   const removeCategory = (category: string) => {
@@ -91,10 +93,12 @@ export function SettingsCategories() {
       normalizeCategoryOptions(current.filter((value) => value !== category))
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   const saveCategories = async () => {
     setStatus(null)
+    setSaveError(null)
     const nextSettings = {
       ...settings,
       [inventoryCategoryOptionsSettingsKey]: serializeCategoryOptions(
@@ -105,8 +109,18 @@ export function SettingsCategories() {
       [inventoryPackagingGradesSettingsKey]:
         serializePackagingGradeOptions(packagingGrades),
     }
-    await saveSettings(nextSettings)
-    setStatus('Saved categories, packaging grades, and item type condition scales.')
+    try {
+      await saveSettings(nextSettings)
+      setStatus(
+        'Saved categories, packaging grades, and item type condition scales.'
+      )
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to save taxonomy settings.'
+      )
+    }
   }
 
   const addItemType = () => {
@@ -122,6 +136,7 @@ export function SettingsCategories() {
     )
     setNewItemType('')
     setStatus(null)
+    setSaveError(null)
   }
 
   const updateItemTypeConditions = (itemType: string, value: string) => {
@@ -134,6 +149,7 @@ export function SettingsCategories() {
       )
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   const removeItemType = (itemType: string) => {
@@ -143,6 +159,7 @@ export function SettingsCategories() {
       )
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   const addPackagingGrade = () => {
@@ -155,6 +172,7 @@ export function SettingsCategories() {
     )
     setNewPackagingGrade('')
     setStatus(null)
+    setSaveError(null)
   }
 
   const removePackagingGrade = (packagingGrade: string) => {
@@ -164,6 +182,7 @@ export function SettingsCategories() {
       )
     )
     setStatus(null)
+    setSaveError(null)
   }
 
   return (
@@ -394,6 +413,15 @@ export function SettingsCategories() {
             data-testid='settings-categories-status'
           >
             {status}
+          </p>
+        ) : null}
+
+        {saveError ? (
+          <p
+            className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive'
+            data-testid='settings-categories-error'
+          >
+            {saveError}
           </p>
         ) : null}
 
