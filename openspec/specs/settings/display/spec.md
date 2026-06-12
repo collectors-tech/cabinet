@@ -42,6 +42,14 @@ Define Display settings screen behavior.
 - **WHEN** runtime rejects the display settings update
 - **THEN** UI MUST show deterministic save-error feedback and preserve the edited item selection for retry without route transition
 
+### Requirement UI-SCREEN-SETTINGS-DISPLAY-006: Display screen SHALL block editing when active profile context is missing
+
+#### Scenario: Missing active profile context
+- **GIVEN** `/settings/display` cannot resolve an active profile
+- **WHEN** Display settings renders the blocker state
+- **THEN** editable display-item controls and `Update display` MUST be hidden
+- **AND** the screen MUST expose deterministic `Retry` and `Create or Select Profile` recovery actions without leaving `/settings/display`
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -49,3 +57,4 @@ Define Display settings screen behavior.
 | UC-SET-DIS-02 | Clear selection action | `Clear selection` clears selected display items | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 clears selection without route transition` |
 | UC-SET-DIS-03 | Update display action | `Update display` persists display selections | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-004 updates display with deterministic success feedback` |
 | UC-SET-DIS-04 | Display save failure | Save failure shows error feedback and preserves edited selection | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-005 preserves selection and shows an error when display save fails` |
+| UC-SET-DIS-05 | Missing active profile blocker | Profile-context blocker hides display-item controls and exposes retry/profile-selection recovery actions | `ui.web/cypress/e2e/settings/display/spec.cy.ts` `UI-SCREEN-SETTINGS-DISPLAY-006 blocks display edits when active profile is missing` |
