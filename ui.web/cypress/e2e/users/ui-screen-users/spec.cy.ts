@@ -138,6 +138,82 @@ describe('ui-screen-users', () => {
       })
   })
 
+  it('UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row', () => {
+    const originalUser = {
+      id: 'edit-user-001',
+      firstName: 'Editable',
+      lastName: 'Collector',
+      username: 'editable_collector',
+      email: 'editable.collector@example.com',
+      phoneNumber: '+61000000002',
+      status: 'active',
+      role: 'view',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    const editedUser = {
+      ...originalUser,
+      firstName: 'Updated',
+      username: 'updated_collector',
+      email: 'updated.collector@example.com',
+      updatedAt: '2026-01-02T00:00:00Z',
+    }
+    let editSaved = false
+
+    cy.intercept('GET', '/api/users*', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: { users: [editSaved ? editedUser : originalUser] },
+      })
+    }).as('editUsersList')
+    cy.intercept('PUT', '/api/users/edit-user-001', (req) => {
+      expect(req.body).to.include({
+        firstName: 'Updated',
+        lastName: 'Collector',
+        username: 'updated_collector',
+        email: 'updated.collector@example.com',
+        phoneNumber: '+61000000002',
+        role: 'view',
+        status: 'active',
+      })
+      editSaved = true
+      req.reply({
+        statusCode: 200,
+        body: { user: editedUser },
+      })
+    }).as('editUser')
+
+    cy.reload()
+    cy.wait('@editUsersList')
+    cy.contains('editable_collector').should('be.visible')
+
+    cy.get('tbody tr').first().dblclick()
+    cy.contains('[role="dialog"]', 'Edit User')
+      .should('be.visible')
+      .within(() => {
+        cy.get('input[placeholder="John"]').clear().type('Updated')
+        cy.get('input[placeholder="john_doe"]')
+          .clear()
+          .type('updated_collector')
+        cy.get('input[placeholder="john.doe@gmail.com"]')
+          .clear()
+          .type('updated.collector@example.com')
+        cy.contains('button', 'Save changes').click()
+      })
+
+    cy.wait('@editUser').its('response.statusCode').should('eq', 200)
+    cy.wait('@editUsersList')
+    cy.contains('[role="dialog"]', 'Edit User').should('not.exist')
+    cy.contains('updated_collector').should('be.visible')
+    cy.contains('updated.collector@example.com').should('be.visible')
+    cy.contains('editable_collector').should('not.exist')
+
+    cy.reload()
+    cy.wait('@editUsersList')
+    cy.contains('updated_collector').should('be.visible')
+    cy.contains('updated.collector@example.com').should('be.visible')
+  })
+
   it('UI-SCREEN-USERS-004 retries users list after a fetch failure', () => {
     let listAttempt = 0
 
