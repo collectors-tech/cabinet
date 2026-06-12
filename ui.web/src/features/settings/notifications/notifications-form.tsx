@@ -282,6 +282,7 @@ export function NotificationsForm() {
             <FormItem className='relative flex flex-row items-start'>
               <FormControl>
                 <Checkbox
+                  data-testid='settings-notifications-mobile'
                   checked={field.value}
                   onCheckedChange={field.onChange}
                 />
