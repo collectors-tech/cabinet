@@ -1,0 +1,13 @@
+.git
+.github
+.tmp
+.work-agent
+bin
+coverage
+dist
+node_modules
+ui.web/node_modules
+ui.web/dist
+internal/ui/static
+npm-debug.log*
+*.log

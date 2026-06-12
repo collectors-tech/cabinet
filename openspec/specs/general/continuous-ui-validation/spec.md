@@ -57,3 +57,16 @@ Before running exploratory UI scripts, validator runtime SHALL ensure required N
 - **GIVEN** action exists without explicit requirement coverage
 - **WHEN** validation run reconciles action-to-spec mapping
 - **THEN** spec IDs SHALL be added append-only and committed with linked issue reference
+
+### Requirement CONT-UI-CAB-008: Cypress validation SHALL have a project-local container image path
+Cabinet SHALL provide a repo-local container image definition for isolated Cypress runtime lanes so browser validation can start from a known build artifact instead of a stale shared desktop runtime.
+
+#### Scenario: Build image from source
+- **GIVEN** the Cabinet repository is checked out at a known commit
+- **WHEN** the container image is built from the repository root
+- **THEN** the image build MUST install UI dependencies, build the static UI bundle, compile the Go Cabinet runtime, and copy the UI bundle into the Go build context before producing the runtime image.
+
+#### Scenario: Run isolated validation runtime
+- **GIVEN** a Cypress lane starts the Cabinet container image
+- **WHEN** the container runtime launches
+- **THEN** it MUST disable browser auto-open, expose a deterministic HTTP port, use a mounted `/data` directory, set an E2E profile and instance name, and allow parallel runtime execution for lane isolation.
