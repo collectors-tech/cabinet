@@ -156,4 +156,28 @@ describe('settings/display', () => {
     )
     cy.contains('button', 'Update display').should('not.be.disabled')
   })
+
+  it('UI-SCREEN-SETTINGS-DISPLAY-006 blocks display edits when active profile is missing', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.reload()
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/display\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.contains('button', 'Update display').should('not.exist')
+    cy.contains('button', 'Clear selection').should('not.exist')
+    cy.get('[data-testid^="settings-display-"]').should('not.exist')
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
+  })
 })
