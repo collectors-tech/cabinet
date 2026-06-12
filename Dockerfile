@@ -38,4 +38,4 @@ HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=12 CMD curl 
 
 USER cabinet
 ENTRYPOINT ["/app/cabinet"]
-CMD ["--no-open-browser", "--port", "17880", "--data-dir", "/data", "--profile", "e2e-cypress", "--instance-name", "cypress-container", "--allow-parallel"]
+CMD ["--no-open-browser", "--listen", "0.0.0.0:17880", "--data-dir", "/data", "--profile", "e2e-cypress", "--instance-name", "cypress-container", "--allow-parallel"]

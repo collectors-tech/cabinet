@@ -69,7 +69,7 @@ Cabinet SHALL provide a repo-local container image definition for isolated Cypre
 #### Scenario: Run isolated validation runtime
 - **GIVEN** a Cypress lane starts the Cabinet container image
 - **WHEN** the container runtime launches
-- **THEN** it MUST disable browser auto-open, expose a deterministic HTTP port, use a mounted `/data` directory, set an E2E profile and instance name, and allow parallel runtime execution for lane isolation.
+- **THEN** it MUST disable browser auto-open, listen on the container network interface at a deterministic HTTP port, use a mounted `/data` directory, set an E2E profile and instance name, and allow parallel runtime execution for lane isolation.
 
 #### Scenario: Report runtime health to lane orchestration
 - **GIVEN** a Cypress lane starts the Cabinet container image
