@@ -50,6 +50,18 @@ When account settings validation fails in the browser, the screen SHALL keep the
 - **AND** runtime MUST NOT receive a profile settings update request
 - **AND** route MUST remain `/settings/account`
 
+### Requirement UI-SCREEN-SETTINGS-ACCOUNT-007: Account screen SHALL block editing when active profile context is missing
+When the authenticated `/settings/account` route cannot resolve an active profile, the screen SHALL render the shared profile-context blocker, hide editable account controls, expose retry/profile-selection recovery actions, and avoid account settings mutation calls.
+
+#### Scenario: Missing active profile blocks account edits
+- **GIVEN** user opens `/settings/account`
+- **AND** runtime reports no active profile context
+- **WHEN** the account settings section renders
+- **THEN** UI MUST show the active-profile-required blocker
+- **AND** editable account controls and `Update account` MUST NOT render
+- **AND** `Retry` and `Create or Select Profile` recovery actions MUST render
+- **AND** clicking `Retry` MUST re-attempt active profile resolution without leaving `/settings/account`
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -57,3 +69,4 @@ When account settings validation fails in the browser, the screen SHALL keep the
 | UC-SET-ACC-02 | Retry account load failure | `Retry` re-attempts account fetch deterministically | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload` |
 | UC-SET-ACC-03 | Account save failure | Save failure shows error feedback and preserves edited field values | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-005 preserves edited account fields when save fails` |
 | UC-SET-ACC-04 | Invalid account submission no-save | Invalid required fields show validation feedback without calling the save API | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-006 blocks invalid account submission without calling save` |
+| UC-SET-ACC-05 | Missing active profile blocker | Profile-context blocker hides account controls and exposes retry/profile-selection recovery actions | `ui.web/cypress/e2e/settings/account/spec.cy.ts` `UI-SCREEN-SETTINGS-ACCOUNT-007 blocks account edits when active profile is missing` |
