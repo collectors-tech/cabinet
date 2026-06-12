@@ -28,8 +28,18 @@ Define Notifications settings screen behavior.
 - **WHEN** user clicks `Update notifications`
 - **THEN** runtime MUST persist notification preferences and show deterministic success feedback
 
+### Requirement UI-SCREEN-SETTINGS-NOTIFICATIONS-004: Notifications screen SHALL preserve editable controls on save failure
+
+#### Scenario: Notifications save failure keeps retry context
+- **GIVEN** notifications form is loaded with editable controls
+- **WHEN** user changes notification scope/channel preferences and `Update notifications` fails
+- **THEN** UI MUST show deterministic error feedback
+- **AND** edited notification scope/channel preferences MUST remain selected for retry
+- **AND** UI MUST NOT show success feedback for the failed save
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 retries notifications settings load failure without route reload`) |
 | UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 updates notifications with deterministic success feedback`) |
+| UC-SET-NOTIF-03 | Notifications save failure | Failed save shows error feedback and preserves edited notification choices | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-004 preserves edited notification choices when save fails`) |

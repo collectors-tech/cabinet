@@ -105,4 +105,63 @@ describe('settings/notifications', () => {
       'checked'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-NOTIFICATIONS-004 preserves edited notification choices when save fails', () => {
+    const setSwitchState = (testId: string, checked: boolean) => {
+      cy.get(`[data-testid="${testId}"]`).then(($switch) => {
+        if (($switch.attr('data-state') === 'checked') !== checked) {
+          cy.wrap($switch).click()
+        }
+      })
+    }
+
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 503,
+      body: { error: 'notification_settings_save_unavailable' },
+    }).as('saveNotificationsFailure')
+
+    cy.contains('button', 'Update notifications').should('not.be.disabled')
+    cy.contains('label', 'Nothing').click()
+    setSwitchState('settings-notifications-communication', true)
+    setSwitchState('settings-notifications-marketing', true)
+    setSwitchState('settings-notifications-social', false)
+    cy.get('[data-testid="settings-notifications-mobile"]').click()
+    cy.contains('button', 'Update notifications').click()
+
+    cy.wait('@saveNotificationsFailure')
+      .its('request.body.settings')
+      .should('deep.include', {
+        'notifications.type': 'none',
+        'notifications.mobile': 'true',
+        'notifications.communication_emails': 'true',
+        'notifications.marketing_emails': 'true',
+        'notifications.social_emails': 'false',
+        'notifications.security_emails': 'true',
+      })
+    cy.contains('profile_settings_save_503').should('be.visible')
+    cy.contains('Notification settings saved.').should('not.exist')
+    cy.location('pathname').should('match', /^\/settings\/notifications\/?$/)
+    cy.get('input[value="none"]').should('be.checked')
+    cy.get('[data-testid="settings-notifications-communication"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-notifications-marketing"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-notifications-social"]').should(
+      'have.attr',
+      'data-state',
+      'unchecked'
+    )
+    cy.get('[data-testid="settings-notifications-mobile"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.contains('button', 'Update notifications').should('not.be.disabled')
+  })
 })
