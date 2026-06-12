@@ -133,4 +133,36 @@ describe('settings/appearance', () => {
     cy.get('[data-testid="appearance-language-select"]').should('have.value', 'zh')
     cy.contains('span', 'Light').should('be.visible')
   })
+
+  it('UI-SCREEN-SETTINGS-APPEARANCE-006 preserves edited appearance controls without applying unpersisted preferences when save fails', () => {
+    signInToSettings()
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 503,
+      body: { error: 'appearance_settings_save_unavailable' },
+    }).as('saveAppearanceFailure')
+
+    cy.get('html').should('have.class', 'dark')
+    cy.window().its('localStorage.i18nextLng').should('not.eq', 'ja')
+    cy.get('select[name="font"]').should('not.have.value', 'manrope')
+
+    cy.get('select[name="font"]').select('manrope')
+    cy.get('[data-testid="appearance-language-select"]').select('ja')
+    cy.contains('span', 'Light').click()
+    cy.contains('button', 'Update preferences').click()
+
+    cy.wait('@saveAppearanceFailure')
+      .its('request.body.settings')
+      .should('deep.include', {
+        'appearance.theme': 'light',
+        'appearance.font': 'manrope',
+        'appearance.language': 'ja',
+      })
+    cy.contains('profile_settings_save_503').should('be.visible')
+    cy.contains('Appearance settings saved.').should('not.exist')
+    cy.get('select[name="font"]').should('have.value', 'manrope')
+    cy.get('[data-testid="appearance-language-select"]').should('have.value', 'ja')
+    cy.get('html').should('have.class', 'dark')
+    cy.window().its('localStorage.i18nextLng').should('not.eq', 'ja')
+    cy.contains('button', 'Update preferences').should('not.be.disabled')
+  })
 })
