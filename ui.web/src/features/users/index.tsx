@@ -102,7 +102,12 @@ export function Users() {
             Loading users...
           </div>
         ) : (
-          <UsersTable data={users} search={search} navigate={navigate} />
+          <UsersTable
+            data={users}
+            search={search}
+            navigate={navigate}
+            onMutated={loadUsers}
+          />
         )}
       </Main>
 

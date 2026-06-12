@@ -304,4 +304,124 @@ describe('ui-screen-users', () => {
       cy.location('pathname').should('match', /^\/users\/?$/)
     })
   })
+
+  it('UI-SCREEN-USERS-008 persists bulk invite, status, and delete actions through Cabinet API', () => {
+    let users = [
+      {
+        id: 'bulk-user-001',
+        firstName: 'Bulk',
+        lastName: 'Alpha',
+        username: 'bulk_alpha',
+        email: 'bulk.alpha@example.com',
+        phoneNumber: '+61000000101',
+        status: 'active',
+        role: 'view',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'bulk-user-002',
+        firstName: 'Bulk',
+        lastName: 'Beta',
+        username: 'bulk_beta',
+        email: 'bulk.beta@example.com',
+        phoneNumber: '+61000000102',
+        status: 'active',
+        role: 'admin',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ]
+
+    cy.intercept('GET', '/api/users*', (req) => {
+      req.reply({ statusCode: 200, body: { users } })
+    }).as('bulkUsersList')
+    cy.intercept('POST', '/api/users/invite', (req) => {
+      expect(req.body).to.include({ desc: 'Bulk invitation' })
+      expect(['bulk.alpha@example.com', 'bulk.beta@example.com']).to.include(
+        req.body.email
+      )
+      req.reply({ statusCode: 201, body: { user: req.body } })
+    }).as('bulkInviteUser')
+    cy.intercept('PUT', '/api/users/*', (req) => {
+      const id = req.url.split('/').pop()
+      expect(req.body).to.include({ status: 'inactive' })
+      users = users.map((user) =>
+        user.id === id ? { ...user, status: 'inactive' } : user
+      )
+      req.reply({
+        statusCode: 200,
+        body: { user: users.find((user) => user.id === id) },
+      })
+    }).as('bulkStatusUser')
+    cy.intercept('DELETE', '/api/users/*', (req) => {
+      const id = req.url.split('/').pop()
+      users = users.filter((user) => user.id !== id)
+      req.reply({ statusCode: 204 })
+    }).as('bulkDeleteUser')
+
+    cy.reload()
+    cy.wait('@bulkUsersList')
+    cy.contains('bulk_alpha').should('be.visible')
+    cy.contains('bulk_beta').should('be.visible')
+
+    cy.get('tbody tr')
+      .eq(0)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('tbody tr')
+      .eq(1)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('button[aria-label="Invite selected users"]').click()
+    cy.wait(['@bulkInviteUser', '@bulkInviteUser'])
+    cy.wait('@bulkUsersList')
+
+    cy.get('tbody tr')
+      .eq(0)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('tbody tr')
+      .eq(1)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('button[aria-label="Deactivate selected users"]').click()
+    cy.wait(['@bulkStatusUser', '@bulkStatusUser'])
+    cy.wait('@bulkUsersList')
+    cy.contains('bulk_alpha')
+      .parents('tr')
+      .contains('inactive')
+      .should('be.visible')
+    cy.contains('bulk_beta')
+      .parents('tr')
+      .contains('inactive')
+      .should('be.visible')
+
+    cy.get('tbody tr')
+      .eq(0)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('tbody tr')
+      .eq(1)
+      .find('[role="checkbox"]')
+      .first()
+      .click({ force: true })
+    cy.get('button[aria-label="Delete selected users"]').click()
+    cy.contains('[role="alertdialog"], [role="dialog"]', 'Delete 2 users')
+      .should('be.visible')
+      .within(() => {
+        cy.get('input[placeholder=\'Type "DELETE" to confirm.\']').type('DELETE')
+        cy.contains('button', 'Delete').click()
+      })
+    cy.wait(['@bulkDeleteUser', '@bulkDeleteUser'])
+    cy.wait('@bulkUsersList')
+    cy.contains('bulk_alpha').should('not.exist')
+    cy.contains('bulk_beta').should('not.exist')
+    cy.contains('No results.').should('be.visible')
+  })
 })

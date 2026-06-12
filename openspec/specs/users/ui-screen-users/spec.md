@@ -66,6 +66,16 @@ Users screen SHALL expose a table view-options control for hideable columns and 
 - **THEN** the table MUST hide the email header and cells while preserving username/status/role/action context
 - **AND** the route MUST remain on `/users` without losing the current users rows
 
+### Requirement UI-SCREEN-USERS-008: Users screen SHALL persist bulk toolbar actions through Cabinet API
+Users screen SHALL make selected-row bulk invite, status, and delete actions durable through Cabinet API calls and SHALL refresh the table from the resulting users source of truth.
+
+#### Scenario: Run selected-row bulk actions
+- **GIVEN** an authenticated desktop user has selected multiple users from the Users table
+- **WHEN** the user invokes bulk invite, bulk deactivate or activate, and bulk delete actions from the selected-row toolbar
+- **THEN** invite actions MUST call `POST /api/users/invite` for each selected user with the selected user's email and role
+- **AND** status actions MUST call `PUT /api/users/{id}` for each selected user and refresh the table with the persisted status
+- **AND** delete actions MUST require explicit confirmation, call `DELETE /api/users/{id}` for each selected user, refresh the table, and remove deleted rows from the visible source-of-truth state
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -77,3 +87,4 @@ Users screen SHALL expose a table view-options control for hideable columns and 
 | UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |
 | UC-USR-07 | Loading and empty list states | Pending users list shows loading feedback; empty API response renders table empty state without stale rows or error banner | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-006 renders deterministic loading and empty states` |
 | UC-USR-08 | Table view options | View menu hides optional columns while preserving core row context | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-007 hides optional table columns from the View menu` |
+| UC-USR-09 | Bulk user actions | Selected-row invite, status, and delete actions call Cabinet APIs, refresh the users list, and prove persisted table outcomes | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-008 persists bulk invite, status, and delete actions through Cabinet API` |

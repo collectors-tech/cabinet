@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react'
 import {
   createFileRoute,
@@ -102,7 +101,12 @@ function UserManagement() {
               <UsersPrimaryButtons />
             </div>
             <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-              <UsersTable data={users} navigate={navigate} search={search} />
+              <UsersTable
+                data={users}
+                navigate={navigate}
+                search={search}
+                onMutated={async () => undefined}
+              />
             </div>
           </Main>
 
