@@ -49,6 +49,14 @@ Profile screen SHALL allow editing username, display email, bio, URL list, and T
 - **WHEN** user clicks `Update profile`
 - **THEN** profile changes MUST persist and success feedback MUST render deterministically
 
+### Requirement UI-SCREEN-SETTINGS-PROFILE-005: Profile screen SHALL block editing when active profile context is missing
+
+#### Scenario: Missing active profile blocks profile edits
+- **GIVEN** `/settings/profile` cannot resolve an active profile
+- **WHEN** the screen renders the profile-context blocker
+- **THEN** editable profile controls, Telegram catalog capture controls, URL controls, `Add URL`, and `Update profile` MUST remain hidden
+- **AND** the screen MUST expose `Retry` and `Create or Select Profile` recovery actions without leaving the route
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -57,3 +65,4 @@ Profile screen SHALL allow editing username, display email, bio, URL list, and T
 | UC-SET-PROF-03 | Update profile action | `Update profile` persists profile values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 persists profile values through Cabinet settings API` |
 | UC-SET-PROF-04 | Update Telegram catalog capture authorization | `Update profile` persists Telegram sender/chat authorization values | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001` |
 | UC-SET-PROF-05 | Invalid profile URL submission | Profile URL validation blocks save and keeps profile settings API untouched | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-001 blocks invalid profile URL submission before save` |
+| UC-SET-PROF-06 | Missing active profile blocker | Profile-context blocker hides editable profile controls and exposes recovery actions | `ui.web/cypress/e2e/settings/profile/spec.cy.ts` `UI-SCREEN-SETTINGS-PROFILE-005 blocks profile edits when active profile is missing` |

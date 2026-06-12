@@ -156,4 +156,33 @@ describe('settings/profile', () => {
       'https://collector.example/recovered'
     )
   })
+
+  it('UI-SCREEN-SETTINGS-PROFILE-005 blocks profile edits when active profile is missing', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.visit('/settings/profile')
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/profile\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.get('input[name="username"]').should('not.exist')
+    cy.get('[data-testid="settings-profile-email-trigger"]').should('not.exist')
+    cy.get('textarea[name="bio"]').should('not.exist')
+    cy.get('[data-testid="settings-profile-telegram-capture"]').should(
+      'not.exist'
+    )
+    cy.contains('button', 'Add URL').should('not.exist')
+    cy.contains('button', 'Update profile').should('not.exist')
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
+  })
 })
