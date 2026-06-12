@@ -74,3 +74,4 @@ Detailed interaction specs are split per section:
 - `settings/notifications/spec.md`
 - `settings/display/spec.md`
 - `settings/storage/spec.md`
+- `settings/billing/spec.md`
