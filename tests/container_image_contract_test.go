@@ -21,6 +21,7 @@ func TestCabinetContainerImageContract(t *testing.T) {
 	requiredFragments := []string{
 		"FROM node:22-bookworm AS ui-build",
 		"RUN npm ci",
+		"COPY docs/help-center/ /src/docs/help-center/",
 		"RUN npm run build",
 		"FROM golang:1.24-bookworm AS app-build",
 		"RUN go mod download",
@@ -28,6 +29,8 @@ func TestCabinetContainerImageContract(t *testing.T) {
 		"CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build",
 		"FROM debian:bookworm-slim AS runtime",
 		"ca-certificates curl tzdata",
+		"mkdir -p /data",
+		"chown cabinet:cabinet /data",
 		"ENV CABINET_OPEN_BROWSER=0",
 		"EXPOSE 17880",
 		"VOLUME [\"/data\"]",
@@ -64,12 +67,18 @@ func TestCabinetDockerIgnoreKeepsImageBuildContextBounded(t *testing.T) {
 
 	requiredEntries := []string{
 		".git",
+		".agentbus",
+		".antfarm",
+		".logs",
 		".tmp",
 		".work-agent",
 		"bin",
+		"data",
 		"node_modules",
+		"tmp",
 		"ui.web/node_modules",
 		"internal/ui/static",
+		"cabinet.exe",
 	}
 
 	for _, entry := range requiredEntries {

@@ -64,12 +64,17 @@ Cabinet SHALL provide a repo-local container image definition for isolated Cypre
 #### Scenario: Build image from source
 - **GIVEN** the Cabinet repository is checked out at a known commit
 - **WHEN** the container image is built from the repository root
-- **THEN** the image build MUST install UI dependencies, build the static UI bundle, compile the Go Cabinet runtime, and copy the UI bundle into the Go build context before producing the runtime image.
+- **THEN** the image build MUST install UI dependencies, include UI raw-content inputs needed by the bundle, build the static UI bundle, compile the Go Cabinet runtime, and copy the UI bundle into the Go build context before producing the runtime image.
+
+#### Scenario: Bound image build context
+- **GIVEN** the Cabinet repository contains local runtime data, generated binaries, dependency folders, and work-agent logs
+- **WHEN** the container image build context is prepared
+- **THEN** `.dockerignore` MUST exclude those local artifacts while preserving source files and raw-content docs required for a reproducible image build.
 
 #### Scenario: Run isolated validation runtime
 - **GIVEN** a Cypress lane starts the Cabinet container image
 - **WHEN** the container runtime launches
-- **THEN** it MUST disable browser auto-open, listen on the container network interface at a deterministic HTTP port, use a mounted `/data` directory, set an E2E profile and instance name, and allow parallel runtime execution for lane isolation.
+- **THEN** it MUST disable browser auto-open, listen on the container network interface at a deterministic HTTP port, use a writable mounted `/data` directory, set an E2E profile and instance name, and allow parallel runtime execution for lane isolation.
 
 #### Scenario: Report runtime health to lane orchestration
 - **GIVEN** a Cypress lane starts the Cabinet container image

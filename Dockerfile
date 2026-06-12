@@ -7,6 +7,7 @@ COPY ui.web/package.json ui.web/package-lock.json ./ui.web/
 WORKDIR /src/ui.web
 RUN npm ci
 
+COPY docs/help-center/ /src/docs/help-center/
 COPY ui.web/ ./
 RUN npm run build
 
@@ -26,7 +27,9 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl tzdata \
   && rm -rf /var/lib/apt/lists/* \
-  && useradd --create-home --home-dir /home/cabinet --shell /usr/sbin/nologin cabinet
+  && useradd --create-home --home-dir /home/cabinet --shell /usr/sbin/nologin cabinet \
+  && mkdir -p /data \
+  && chown cabinet:cabinet /data
 
 WORKDIR /app
 COPY --from=app-build /out/cabinet /app/cabinet
