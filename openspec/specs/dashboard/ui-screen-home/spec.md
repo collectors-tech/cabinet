@@ -90,6 +90,16 @@ Home API summary counts, action signals, and recent activity SHALL use the activ
 - **THEN** Home summary totals, action cards, and recently-added items SHALL include only records for the active profile
 - **AND** records from inactive profiles MUST NOT inflate Home counts or recent activity
 
+### Requirement UI-SCREEN-HOME-009: Home SHALL render a collector and inventory manager signal hub
+Home SHALL present the first viewport as an operational signal hub that balances collector health, purchase pipeline, inventory readiness, and actions needed from real dashboard data.
+
+#### Scenario: Collector and inventory manager signal hub
+- **GIVEN** an authenticated actor opens Home with dashboard data containing collection totals, wishlist hits, price drops, restocks, recent additions, and action cards
+- **WHEN** the Home ready state renders
+- **THEN** the first viewport SHALL show a prioritized signal band with collection size, wishlist hits, operational alerts, and collection value
+- **AND** Home SHALL expose distinct sections for collector health, purchase pipeline, inventory readiness, and actions needed
+- **AND** each drill-through action SHALL target a live Cabinet route such as `/inventory`, `/wishlist`, `/purchases`, `/media`, `/discoveries`, or a normalized replacement for unavailable legacy destinations
+
 ## Acceptance Criteria
 - Every Home critical flow has UC ID and deterministic expected outcome.
 - E2E mapping exists for command-center render and quick actions.
@@ -111,3 +121,4 @@ Home API summary counts, action signals, and recent activity SHALL use the activ
 | UC-HOME-07 | Home renders without legacy onboarding controls | Legacy setup step controls absent from authenticated shell | planned: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-001 locks workspace until sign-in then unlocks redirect target` |
 | UC-HOME-08 | Resolve Home via canonical route and shell nav | `/dashboard` loads directly, `/` redirects to `/dashboard`, and Dashboard nav targets canonical path | planned: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `UI-SCREEN-HOME-007 resolves canonical /dashboard route, root redirect, and nav target stability` |
 | UC-HOME-09 | Open Home after switching active profile | Summary counts and recent activity include only active profile records | Go: `internal/dashboard/service_test.go` `TestSummaryScopesSignalsToProfile`; `internal/app/dashboard_api_test.go` `TestDashboardEndpointScopesToActiveProfile` |
+| UC-HOME-10 | Open Home with collector and inventory manager data | Signal hub renders KPI band, collector health, purchase pipeline, inventory readiness, actions needed, and live drill-through links | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-home/spec.cy.ts` `UI-SCREEN-HOME-009 renders the collector and inventory manager signal hub` |

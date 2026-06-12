@@ -50,6 +50,71 @@ describe("UI-SCREEN-HOME", () => {
       .should("have.attr", "href", "/inventory")
   })
 
+  it("UI-SCREEN-HOME-009 renders the collector and inventory manager signal hub", () => {
+    cy.intercept("GET", "/api/dashboard", {
+      statusCode: 200,
+      body: {
+        new_discoveries: 4,
+        wishlist_hits: 2,
+        price_drops: 1,
+        low_stock_discoveries: 1,
+        restocks: 3,
+        recently_added: ["AFX Camaro", "Mega G+ Set"],
+        total_items: 200,
+        total_instances: 240,
+        estimated_value: 12345.67,
+        cards: [
+          { title: "Review discoveries", value: 4, link: "/discoveries" },
+          { title: "Open pricing drops", value: 1, link: "/pricing" },
+          { title: "Low stock watch", value: 1, link: "/discoveries" },
+        ],
+      },
+    }).as("dashboardSignalHub")
+
+    signInToHome()
+    cy.wait("@dashboardSignalHub")
+
+    cy.get('[data-testid="dashboard-signal-hub"]').within(() => {
+      cy.contains("Signal hub").should("be.visible")
+      cy.contains("Collection size").should("be.visible")
+      cy.contains("Wishlist hits").should("be.visible")
+      cy.contains("Operational alerts").should("be.visible")
+      cy.contains("Collection value").should("be.visible")
+    })
+
+    cy.get('[data-testid="dashboard-collector-health"]').within(() => {
+      cy.contains("Collector health").should("be.visible")
+      cy.contains("Recent additions").should("be.visible")
+      cy.contains("AFX Camaro").should("be.visible")
+      cy.contains("a", "Open inventory")
+        .should("have.attr", "href", "/inventory")
+    })
+
+    cy.get('[data-testid="dashboard-purchase-pipeline"]').within(() => {
+      cy.contains("Purchase pipeline").should("be.visible")
+      cy.contains("2 wishlist hits").should("be.visible")
+      cy.contains("1 price drop").should("be.visible")
+      cy.contains("3 restocks").should("be.visible")
+      cy.contains("a", "Open wishlist")
+        .should("have.attr", "href", "/wishlist")
+    })
+
+    cy.get('[data-testid="dashboard-inventory-readiness"]').within(() => {
+      cy.contains("Inventory readiness").should("be.visible")
+      cy.contains("240 tracked units").should("be.visible")
+      cy.contains("a", "Review media")
+        .should("have.attr", "href", "/media")
+    })
+
+    cy.get('[data-testid="dashboard-actions-needed"]').within(() => {
+      cy.contains("Actions needed").should("be.visible")
+      cy.contains("Review discoveries").should("be.visible")
+      cy.contains("Open pricing drops").should("be.visible")
+      cy.get('[data-testid="dashboard-card-link-open-pricing-drops"]')
+        .should("have.attr", "href", "/wishlist")
+    })
+  })
+
   it("UI-SCREEN-HOME-001A does not leak raw dashboard translation keys into the live page", () => {
     cy.intercept("GET", "/api/dashboard", {
       statusCode: 200,
