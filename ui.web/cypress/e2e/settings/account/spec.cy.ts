@@ -67,4 +67,30 @@ describe('settings/account', () => {
     cy.get('input[name="name"]').should('have.value', 'Retry Account Name')
     cy.contains('button[role="combobox"]', 'Korean').should('be.visible')
   })
+
+  it('UI-SCREEN-SETTINGS-ACCOUNT-005 preserves edited account fields when save fails', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 503,
+      body: { error: 'account_settings_save_unavailable' },
+    }).as('saveAccountFailure')
+
+    cy.contains('button', 'Update account').should('not.be.disabled')
+    cy.get('input[name="name"]').clear().type('Unsaved Account Name')
+    cy.get('[data-testid="settings-account-language-trigger"]').click()
+    cy.contains('[role="option"]', 'Chinese').click()
+    cy.contains('button', 'Update account').click()
+
+    cy.wait('@saveAccountFailure')
+      .its('request.body.settings')
+      .should('deep.include', {
+        'account.name': 'Unsaved Account Name',
+        'account.language': 'zh',
+      })
+    cy.contains('profile_settings_save_503').should('be.visible')
+    cy.contains('Account settings saved.').should('not.exist')
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.get('input[name="name"]').should('have.value', 'Unsaved Account Name')
+    cy.contains('button[role="combobox"]', 'Chinese').should('be.visible')
+    cy.contains('button', 'Update account').should('not.be.disabled')
+  })
 })

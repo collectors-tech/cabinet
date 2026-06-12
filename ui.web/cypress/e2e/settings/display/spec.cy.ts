@@ -120,4 +120,40 @@ describe('settings/display', () => {
       })
     })
   })
+
+  it('UI-SCREEN-SETTINGS-DISPLAY-005 preserves selection and shows an error when display save fails', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings', {
+      statusCode: 503,
+      body: { error: 'display_settings_save_unavailable' },
+    }).as('saveDisplayFailure')
+
+    cy.contains('button', 'Clear selection').click()
+    cy.get('[data-testid="settings-display-downloads"]').click()
+    cy.get('[data-testid="settings-display-documents"]').click()
+    cy.contains('button', 'Update display').click()
+
+    cy.wait('@saveDisplayFailure')
+      .its('request.body.settings')
+      .should('deep.include', {
+        'display.items': 'downloads,documents',
+      })
+    cy.contains('profile_settings_save_503').should('be.visible')
+    cy.location('pathname').should('match', /^\/settings\/display\/?$/)
+    cy.get('[data-testid="settings-display-downloads"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-display-documents"]').should(
+      'have.attr',
+      'data-state',
+      'checked'
+    )
+    cy.get('[data-testid="settings-display-home"]').should(
+      'have.attr',
+      'data-state',
+      'unchecked'
+    )
+    cy.contains('button', 'Update display').should('not.be.disabled')
+  })
 })
