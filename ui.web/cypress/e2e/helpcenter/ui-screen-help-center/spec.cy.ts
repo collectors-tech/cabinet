@@ -1,6 +1,6 @@
 describe('ui-screen-help-center', () => {
-  function signInToHelpCenter() {
-    cy.visit('/sign-in?redirect=%2Fhelp-center%2F')
+  function signInToHelpCenter(targetPath = '/help-center/') {
+    cy.visit(`/sign-in?redirect=${encodeURIComponent(targetPath)}`)
     cy.get('input[name="email"]').clear().type('e2e-help@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
@@ -41,5 +41,42 @@ describe('ui-screen-help-center', () => {
     cy.get('[data-slot="sidebar-trigger"]').should('be.visible').click()
     cy.get('[data-slot="sidebar-trigger"]').should('be.visible')
     cy.contains(/ACC001|Local Admin/i).should('be.visible')
+  })
+
+  it('UI-SCREEN-HELP-CENTER-004 filters article library by search query and empty state', () => {
+    signInToHelpCenter()
+
+    cy.get('[data-testid="help-center-article-search"]').type('wishlist')
+    cy.location('search').should('include', 'q=wishlist')
+    cy.get('[data-testid="help-center-article-link-section-wishlist"]').should('be.visible')
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Wishlist')
+    cy.get('[data-testid="help-center-article-link-section-inventory"]').should('not.exist')
+
+    cy.get('[data-testid="help-center-article-search"]').clear().type('zzzz no match')
+    cy.get('[data-testid="help-center-empty-results"]').should('be.visible')
+    cy.get('[data-testid="help-center-article-viewer"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-HELP-CENTER-005 opens route-addressed articles from query parameters', () => {
+    signInToHelpCenter('/help-center/?article=section-settings')
+
+    cy.location('search').should('include', 'article=section-settings')
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Settings')
+    cy.get('[data-testid="help-center-article-content-section-settings"]').should('be.visible')
+
+    cy.reload()
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Settings')
+  })
+
+  it('UI-SCREEN-HELP-CENTER-006 filters article library by category controls', () => {
+    signInToHelpCenter()
+
+    cy.get('[data-testid="help-center-category-reference"]').click()
+    cy.location('search').should('include', 'category=Reference')
+    cy.get('[data-testid="help-center-article-link-ui-elements"]').should('be.visible')
+    cy.get(
+      '[data-testid="help-center-article-link-getting-started-login-database-setup"]'
+    ).should('not.exist')
+    cy.get('[data-testid="help-center-selected-article-title"]').should('contain.text', 'Generic UI Elements')
   })
 })

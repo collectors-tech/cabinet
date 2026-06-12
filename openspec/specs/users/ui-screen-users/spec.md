@@ -57,6 +57,15 @@ Users screen SHALL keep the route shell and primary controls visible while list 
 - **THEN** API response MUST be successful and table MUST reflect persisted role/status changes or row removal
 - **AND** an edit save MUST refresh the list and continue to show the updated row after a route refresh without retaining the stale pre-edit username/email
 
+### Requirement UI-SCREEN-USERS-007: Users screen SHALL support hiding optional table columns without losing data context
+Users screen SHALL expose a table view-options control for hideable columns and keep non-hideable identity/action columns available when optional columns are hidden.
+
+#### Scenario: Hide optional table columns
+- **GIVEN** an authenticated desktop user has the Users table loaded
+- **WHEN** the user opens `View` and hides the optional `email` column
+- **THEN** the table MUST hide the email header and cells while preserving username/status/role/action context
+- **AND** the route MUST remain on `/users` without losing the current users rows
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -67,3 +76,4 @@ Users screen SHALL keep the route shell and primary controls visible while list 
 | UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-004 retries users list after a fetch failure` |
 | UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |
 | UC-USR-07 | Loading and empty list states | Pending users list shows loading feedback; empty API response renders table empty state without stale rows or error banner | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-006 renders deterministic loading and empty states` |
+| UC-USR-08 | Table view options | View menu hides optional columns while preserving core row context | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-007 hides optional table columns from the View menu` |
