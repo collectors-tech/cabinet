@@ -26,11 +26,15 @@ describe('settings/account', () => {
     cy.contains('button[role="combobox"]', 'Japanese').should('be.visible')
   })
 
-  it('UI-SCREEN-SETTINGS-ACCOUNT-002 blocks invalid account submission with field errors', () => {
+  it('UI-SCREEN-SETTINGS-ACCOUNT-002/006 blocks invalid account submission without calling save', () => {
+    cy.intercept('PUT', '/api/profiles/*/settings').as('accountInvalidSave')
+
     cy.contains('button', 'Update account').should('not.be.disabled')
     cy.get('input[name="name"]').clear()
     cy.contains('button', 'Update account').click()
     cy.contains('Please enter your name.').should('be.visible')
+    cy.location('pathname').should('match', /^\/settings\/account\/?$/)
+    cy.get('@accountInvalidSave.all').should('have.length', 0)
   })
 
   it('UI-SCREEN-SETTINGS-ACCOUNT-004 retries account settings load failure without route reload', () => {
