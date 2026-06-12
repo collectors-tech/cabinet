@@ -285,4 +285,23 @@ describe('ui-screen-users', () => {
     cy.contains('No results.').should('be.visible')
     cy.contains('retry_user').should('not.exist')
   })
+
+  it('UI-SCREEN-USERS-007 hides optional table columns from the View menu', () => {
+    cy.viewport(1280, 900)
+    cy.contains('h2', 'User List').should('be.visible')
+    cy.contains('th', 'Username').should('be.visible')
+    cy.contains('th', 'Email').should('be.visible')
+    cy.contains('th', 'Status').should('be.visible')
+    cy.get('tbody tr').first().find('td').eq(1).invoke('text').then((usernameRaw) => {
+      const username = visibleCellText(usernameRaw)
+
+      cy.contains('button', 'View').click()
+      cy.contains('[role="menuitemcheckbox"]', 'email').click()
+      cy.contains('th', 'Email').should('not.exist')
+      cy.contains('th', 'Username').should('be.visible')
+      cy.contains('th', 'Status').should('be.visible')
+      cy.contains(username).should('be.visible')
+      cy.location('pathname').should('match', /^\/users\/?$/)
+    })
+  })
 })
