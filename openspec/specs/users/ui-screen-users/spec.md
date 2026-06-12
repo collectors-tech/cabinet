@@ -42,6 +42,15 @@ When no active profile is currently set for the authenticated session, `GET /api
 - **WHEN** the screen requests `GET /api/users`
 - **THEN** API response MUST be `200` with `users[]` payload and the screen MUST render `User List` without `users_fetch_failed_404`
 
+### Requirement UI-SCREEN-USERS-006: Users screen SHALL expose deterministic loading and empty states
+Users screen SHALL keep the route shell and primary controls visible while list data loads, and SHALL render a deterministic empty table state when the Cabinet users API returns no rows.
+
+#### Scenario: Loading and empty users list states
+- **GIVEN** an authenticated user opens `/users` and `GET /api/users` is pending or returns `200` with an empty `users[]` payload
+- **WHEN** the route renders the pending state and then receives the empty result
+- **THEN** the screen MUST show `Loading users...` without hiding the route purpose or primary actions while pending
+- **AND** the ready state MUST show the users table empty row without rendering a fetch error or stale user row
+
 #### Scenario: Edit or delete selected row
 - **GIVEN** a user row is selected from table row actions
 - **WHEN** user saves edits (`PUT /api/users/{id}`) or confirms deletion (`DELETE /api/users/{id}`)
@@ -57,3 +66,4 @@ When no active profile is currently set for the authenticated session, `GET /api
 | UC-USR-04 | Edit/delete user | Row action dialogs, row double-click selected context, edit save, and delete persistence are covered | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row`; `UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row`; `UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context` |
 | UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-004 retries users list after a fetch failure` |
 | UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |
+| UC-USR-07 | Loading and empty list states | Pending users list shows loading feedback; empty API response renders table empty state without stale rows or error banner | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-006 renders deterministic loading and empty states` |

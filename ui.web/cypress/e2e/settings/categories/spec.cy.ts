@@ -165,4 +165,40 @@ describe('settings/categories', () => {
       .should('contain', 'Slot Car')
     cy.get('[data-testid="settings-categories-save"]').should('not.be.disabled')
   })
+
+  it('UI-SCREEN-SETTINGS-CATEGORIES-003 blocks taxonomy edits when active profile is missing', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    signInToCategories()
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/categories\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.get('[data-testid="settings-categories-new"]').should('be.disabled')
+    cy.get('[data-testid="settings-categories-add"]').should('be.disabled')
+    cy.get('[data-testid="settings-packaging-grade-new"]').should(
+      'be.disabled'
+    )
+    cy.get('[data-testid="settings-packaging-grade-add"]').should(
+      'be.disabled'
+    )
+    cy.get('[data-testid="settings-item-type-new"]').should('be.disabled')
+    cy.get('[data-testid="settings-item-type-add"]').should('be.disabled')
+    cy.get('[data-testid="settings-category-remove-General"]').should(
+      'be.disabled'
+    )
+    cy.get('[data-testid="settings-categories-save"]').should('be.disabled')
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
+    cy.location('pathname').should('match', /^\/settings\/categories\/?$/)
+  })
 })
