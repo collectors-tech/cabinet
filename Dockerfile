@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates tzdata \
+  && apt-get install -y --no-install-recommends ca-certificates curl tzdata \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --create-home --home-dir /home/cabinet --shell /usr/sbin/nologin cabinet
 
@@ -34,6 +34,7 @@ COPY --from=app-build /out/cabinet /app/cabinet
 ENV CABINET_OPEN_BROWSER=0
 EXPOSE 17880
 VOLUME ["/data"]
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=12 CMD curl -fsS http://127.0.0.1:17880/healthz || exit 1
 
 USER cabinet
 ENTRYPOINT ["/app/cabinet"]
