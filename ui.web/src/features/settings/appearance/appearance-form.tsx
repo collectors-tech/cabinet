@@ -88,17 +88,17 @@ export function AppearanceForm() {
   async function onSubmit(data: AppearanceFormValues) {
     setSaveMessage(null)
     setSaveError(null)
-    if (data.font != font) setFont(data.font)
-    if (data.theme != theme) setTheme(data.theme)
     try {
-      if (data.language !== i18n.language) {
-        await i18n.changeLanguage(data.language)
-      }
       await saveSettings({
         'appearance.theme': data.theme,
         'appearance.font': data.font,
         'appearance.language': data.language,
       })
+      if (data.font != font) setFont(data.font)
+      if (data.theme != theme) setTheme(data.theme)
+      if (data.language !== i18n.language) {
+        await i18n.changeLanguage(data.language)
+      }
       setSaveMessage('Appearance settings saved.')
     } catch (err) {
       setSaveError(

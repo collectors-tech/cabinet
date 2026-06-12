@@ -47,8 +47,18 @@ Language preferences MUST include at minimum English, Chinese, and Japanese opti
 - **WHEN** user clicks `Retry`
 - **THEN** appearance section MUST re-attempt load and render ready/empty/error state deterministically
 
+### Requirement UI-SCREEN-SETTINGS-APPEARANCE-006: Appearance screen SHALL preserve edits without applying unpersisted preferences when save fails
+
+#### Scenario: Appearance save failure
+- **GIVEN** appearance controls are loaded with valid selectable values
+- **WHEN** user edits theme, font, and language and the settings save request fails
+- **THEN** UI MUST show deterministic error feedback and MUST NOT show success feedback
+- **AND** the edited control values MUST remain available for retry
+- **AND** runtime MUST NOT apply theme, font, or language side effects that were not persisted
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-APP-01 | Update preferences action | `Update preferences` persists theme/language/display selections | implemented: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` (`UI-SCREEN-SETTINGS-APPEARANCE-005 updates preferences with deterministic success feedback`) |
 | UC-SET-APP-02 | Retry appearance load failure | `Retry` re-attempts appearance fetch deterministically | implemented: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` (`UI-SCREEN-SETTINGS-APPEARANCE-005 retries appearance settings load failure without route reload`) |
+| UC-SET-APP-03 | Appearance save failure | Failed `Update preferences` shows error feedback, keeps edited controls ready for retry, and does not apply unpersisted theme/font/language side effects | implemented: `ui.web/cypress/e2e/settings/appearance/spec.cy.ts` (`UI-SCREEN-SETTINGS-APPEARANCE-006 preserves edited appearance controls without applying unpersisted preferences when save fails`) |
