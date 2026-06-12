@@ -165,4 +165,30 @@ describe('settings/appearance', () => {
     cy.window().its('localStorage.i18nextLng').should('not.eq', 'ja')
     cy.contains('button', 'Update preferences').should('not.be.disabled')
   })
+
+  it('UI-SCREEN-SETTINGS-APPEARANCE-007 blocks appearance edits when active profile is missing', () => {
+    signInToSettings()
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.reload()
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/appearance\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.contains('button', 'Update preferences').should('not.exist')
+    cy.contains('label', 'Font').should('not.exist')
+    cy.get('[data-testid="appearance-language-select"]').should('not.exist')
+    cy.contains('span', 'Light').should('not.exist')
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
+  })
 })
