@@ -46,13 +46,14 @@ When no active profile is currently set for the authenticated session, `GET /api
 - **GIVEN** a user row is selected from table row actions
 - **WHEN** user saves edits (`PUT /api/users/{id}`) or confirms deletion (`DELETE /api/users/{id}`)
 - **THEN** API response MUST be successful and table MUST reflect persisted role/status changes or row removal
+- **AND** an edit save MUST refresh the list and continue to show the updated row after a route refresh without retaining the stale pre-edit username/email
 
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-USR-01 | Filter by role/status | Table reflects filtered rows | planned: `cypress/e2e/ui/users.cy.ts` `users-filtering` |
-| UC-USR-02 | Add user | Add dialog opens and saves | planned: `cypress/e2e/ui/users.cy.ts` `users-add` |
-| UC-USR-03 | Invite user | Invite dialog opens and submits | planned: `cypress/e2e/ui/users.cy.ts` `users-invite` |
-| UC-USR-04 | Edit/delete user | Row action dialogs and row double-click open with selected context | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row` |
-| UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | planned: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `users-error-retry` |
+| UC-USR-01 | Filter by username | Table reflects filtered rows and URL state | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-001 reads users table from Cabinet API and supports filter/sort/pagination workflows` |
+| UC-USR-02 | Add user | Add dialog opens, saves, and refreshed table shows the new user | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-002 persists add and invite actions through Cabinet API` |
+| UC-USR-03 | Invite user | Invite dialog opens, submits, and refreshed table shows the invited user | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-002 persists add and invite actions through Cabinet API` |
+| UC-USR-04 | Edit/delete user | Row action dialogs, row double-click selected context, edit save, and delete persistence are covered | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-003 opens the real edit dialog for the double-clicked user row`; `UI-SCREEN-USERS-003 persists edit saves through Cabinet API and refreshes the edited row`; `UI-SCREEN-USERS-003 persists delete actions through Cabinet API row context` |
+| UC-USR-05 | Users fetch failure retry | Error state `Retry` re-attempts list fetch deterministically | implemented: `ui.web/cypress/e2e/users/ui-screen-users/spec.cy.ts` `UI-SCREEN-USERS-004 retries users list after a fetch failure` |
 | UC-USR-06 | Missing active profile fallback | Users screen loads list without 404 fallback error | `ui.web/cypress/e2e/users/ui-screen-users/fallback-profile-scope.cy.ts` |
