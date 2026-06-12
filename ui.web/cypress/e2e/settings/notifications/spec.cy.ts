@@ -164,4 +164,31 @@ describe('settings/notifications', () => {
     )
     cy.contains('button', 'Update notifications').should('not.be.disabled')
   })
+
+  it('UI-SCREEN-SETTINGS-NOTIFICATIONS-005 blocks notification edits when active profile is missing', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 404,
+      body: { error: 'active_profile_404' },
+    }).as('activeProfileMissing')
+
+    cy.visit('/settings/notifications')
+    cy.wait('@activeProfileMissing')
+
+    cy.location('pathname').should('match', /^\/settings\/notifications\/?$/)
+    cy.get('[data-testid="settings-profile-context-blocked"]').should(
+      'be.visible'
+    )
+    cy.contains('Active profile is required.').should('be.visible')
+    cy.contains('button', 'Retry').should('be.visible')
+    cy.contains('a', 'Create or Select Profile').should('be.visible')
+    cy.contains('button', 'Update notifications').should('not.exist')
+    cy.contains('label', 'Notify me about...').should('not.exist')
+    cy.get('[data-testid="settings-notifications-communication"]').should(
+      'not.exist'
+    )
+    cy.get('[data-testid="settings-notifications-mobile"]').should('not.exist')
+
+    cy.contains('button', 'Retry').click()
+    cy.wait('@activeProfileMissing')
+  })
 })

@@ -37,9 +37,18 @@ Define Notifications settings screen behavior.
 - **AND** edited notification scope/channel preferences MUST remain selected for retry
 - **AND** UI MUST NOT show success feedback for the failed save
 
+### Requirement UI-SCREEN-SETTINGS-NOTIFICATIONS-005: Notifications screen SHALL block editing when active profile context is missing
+
+#### Scenario: Missing active profile blocks notification edits
+- **GIVEN** `/settings/notifications` cannot resolve an active profile
+- **WHEN** the screen renders the profile-context blocker
+- **THEN** editable notification controls and the `Update notifications` action MUST remain hidden
+- **AND** the screen MUST expose `Retry` and `Create or Select Profile` recovery actions without leaving the route
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
 | UC-SET-NOTIF-01 | Retry notifications load failure | `Retry` re-attempts notifications fetch deterministically | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 retries notifications settings load failure without route reload`) |
 | UC-SET-NOTIF-02 | Update notifications action | `Update notifications` persists notification settings | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-003 updates notifications with deterministic success feedback`) |
 | UC-SET-NOTIF-03 | Notifications save failure | Failed save shows error feedback and preserves edited notification choices | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-004 preserves edited notification choices when save fails`) |
+| UC-SET-NOTIF-04 | Missing active profile blocker | Profile-context blocker hides editable notification controls and exposes recovery actions | `ui.web/cypress/e2e/settings/notifications/spec.cy.ts` (`UI-SCREEN-SETTINGS-NOTIFICATIONS-005 blocks notification edits when active profile is missing`) |
