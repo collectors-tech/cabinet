@@ -262,4 +262,27 @@ describe('ui-screen-users', () => {
     cy.contains('h2', 'User List').should('be.visible')
     cy.contains('retry_user').should('be.visible')
   })
+
+  it('UI-SCREEN-USERS-006 renders deterministic loading and empty states', () => {
+    cy.intercept('GET', '/api/users*', (req) => {
+      req.reply({
+        delay: 1000,
+        statusCode: 200,
+        body: { users: [] },
+      })
+    }).as('emptyUsersList')
+
+    cy.reload()
+    cy.contains('h2', 'User List').should('be.visible')
+    cy.contains('button', 'Invite User').should('be.visible')
+    cy.contains('button', 'Add User').should('be.visible')
+    cy.contains('Loading users...').should('be.visible')
+
+    cy.wait('@emptyUsersList').its('response.statusCode').should('eq', 200)
+
+    cy.contains('Loading users...').should('not.exist')
+    cy.get('[data-testid="users-load-error"]').should('not.exist')
+    cy.contains('No results.').should('be.visible')
+    cy.contains('retry_user').should('not.exist')
+  })
 })
