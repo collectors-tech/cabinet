@@ -10,7 +10,7 @@ import (
 func TestIsolatedCypressHarnessDocsCoverPrerequisitesAndFallbacks(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "docs", "testing", "isolated-cypress-harness.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "openspec", "specs", "general", "continuous-ui-validation", "isolated-cypress-harness.md"))
 	if err != nil {
 		t.Fatalf("read isolated Cypress harness docs: %v", err)
 	}
