@@ -641,6 +641,9 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       if ($apiContractSmoke) {
         $args += "-ApiContractSmoke"
       }
+      if ($apiContractSmoke -and $useContainerImage) {
+        $args += @("-ApiContractSmokeAllowedRuntimePorts", "17880")
+      }
       if ($skipDependencyPrep) {
         $args += "-SkipDependencyPrep"
       }

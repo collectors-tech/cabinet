@@ -113,6 +113,8 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **WHEN** the runner plans or executes isolated lanes
 - **THEN** `matrix.summary.json` MUST record `api_contract_smoke` at the run and lane levels.
 - **AND** each active lane MUST pass `-ApiContractSmoke` through to `cypress.ps1` so `/healthz`, `/api/runtime`, `/api/openapi.yaml`, `/sign-in`, and required E2E hook checks can fail before browser assertions.
+- **AND** container-backed lanes MUST allow the Cabinet runtime's internal container port in `/api/runtime` while still validating the externally mapped host `BaseUrl` and preserving the allowed-port metadata in the API smoke summary.
+- **AND** the repo-local runtime image MUST include the OpenAPI YAML artifact needed by `/api/openapi.yaml` so API smoke failures distinguish stale or incomplete images from browser assertion failures.
 
 #### Scenario: Preserve preflight metadata on live per-spec results
 - **GIVEN** the Cypress matrix runner executes non-plan lane work with API contract smoke enabled

@@ -28,6 +28,7 @@ func TestCabinetContainerImageContract(t *testing.T) {
 		"COPY --from=ui-build /src/internal/ui/static ./internal/ui/static",
 		"CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build",
 		"FROM debian:bookworm-slim AS runtime",
+		"COPY docs/api/openapi.yaml /app/docs/api/openapi.yaml",
 		"ca-certificates curl tzdata",
 		"mkdir -p /data",
 		"chown cabinet:cabinet /data",
