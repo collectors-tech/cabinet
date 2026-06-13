@@ -73,3 +73,21 @@ Cabinet SHALL keep the sign-in screen focused on credential entry and existing a
 - **WHEN** the sign-in form renders
 - **THEN** UI MUST NOT render the explanatory block beginning with "Sign in to unlock your Cabinet workspace."
 - **AND** the sign-in form, create-account link, forgot-password link, Terms of Service link, and Privacy Policy link MUST remain available
+
+### Requirement UI-LOGIN-SESSION-009: Cookie-backed sessions SHALL recover across browser reloads
+Cabinet SHALL recover a signed-in local session from persisted auth cookies after a browser reload so protected routes do not bounce back to sign-in.
+
+#### Scenario: Reload keeps authenticated route available
+- **GIVEN** a local user has signed in and reached a protected workspace route
+- **WHEN** the browser reloads on that protected route
+- **THEN** Cabinet MUST restore the session from auth cookies and keep the user on the protected route
+- **AND** the route MUST NOT show the sign-in form or a new unauthenticated redirect
+
+### Requirement UI-LOGIN-SESSION-010: Redirect guards SHALL preserve protected route query state
+Cabinet SHALL preserve protected deep-link path and query state through unauthenticated sign-in redirects while avoiding redundant root redirects.
+
+#### Scenario: Protected route query survives login
+- **GIVEN** user is unauthenticated and requests a protected deep link with query state such as `/inventory?view=table`
+- **WHEN** route guards redirect the user to sign-in and the user signs in successfully
+- **THEN** the post-login route MUST return to `/inventory`
+- **AND** the query state MUST remain available after session bootstrap

@@ -170,6 +170,45 @@ describe("ui-login-session", () => {
     cy.contains(/dashboard/i).should("not.exist");
   });
 
+  it("UI-LOGIN-SESSION-009 recovers cookie-backed session after protected-route reload", () => {
+    cy.e2eBootstrap().then(({ profile_id, profile_name }) => {
+      cy.useBootstrappedProfile(profile_id, profile_name, { path: "/inventory/" });
+    });
+
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/inventory\/?$/
+    );
+    cy.getCookie("thisisjustarandomstring").should("exist");
+
+    cy.reload();
+
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/inventory\/?$/
+    );
+    cy.get('input[name="email"]').should("not.exist");
+    cy.contains("button", "Sign in").should("not.exist");
+    cy.contains(/inventory/i).should("be.visible");
+  });
+
+  it("UI-LOGIN-SESSION-010 preserves protected-route query state through sign-in redirect", () => {
+    cy.visit("/inventory?view=table");
+    cy.location("pathname").should("eq", "/sign-in");
+    cy.location("search").should("include", "redirect=");
+    cy.location("search").should("include", "%2Finventory%3Fview%3Dtable");
+
+    cy.get('input[name="email"]').type("e2e-login-query-guard@example.com");
+    cy.get('input[name="password"]').type("password123");
+    cy.contains("button", "Sign in").click();
+
+    cy.location("pathname", { timeout: 15000 }).should(
+      "match",
+      /^\/inventory\/?$/
+    );
+    cy.location("search").should("eq", "?view=table");
+  });
+
   it("UI-LOGIN-SESSION-008 keeps sign-in copy focused while preserving account and legal links", () => {
     cy.visit("/sign-in");
 
