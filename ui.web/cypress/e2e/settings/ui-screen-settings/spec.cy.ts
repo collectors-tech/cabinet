@@ -183,7 +183,7 @@ describe('ui-screen-settings', () => {
     )
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
 
-    cy.contains('button', 'Retry').click()
+    cy.get('[data-testid="settings-storage-retry"]').click()
     cy.wait('@storageInfo')
     cy.location('pathname').should('match', /^\/settings\/storage\/?$/)
     cy.contains('Storage information is unavailable right now.').should(
@@ -215,5 +215,32 @@ describe('ui-screen-settings', () => {
       'aria-current',
       'page'
     )
+  })
+
+  it('UI-SCREEN-SETTINGS-008 supports keyboard navigation across settings workflow sections', () => {
+    const keyboardRoutes: Array<{ label: string; path: string }> = [
+      { label: 'Notifications', path: '/settings/notifications' },
+      { label: 'Categories', path: '/settings/categories' },
+      { label: 'Operations', path: '/settings/operations' },
+      { label: 'Billing', path: '/settings/billing' },
+    ]
+
+    keyboardRoutes.forEach(({ label, path }) => {
+      cy.get(`aside a[href="${path}"]`)
+        .focus()
+        .should('be.focused')
+        .click()
+
+      cy.location('pathname').should(
+        'match',
+        new RegExp(`^${path.replace(/\/$/, '')}\\/?$`)
+      )
+      cy.contains('h3', label).should('be.visible')
+      cy.get(`aside a[href="${path}"]`).should(
+        'have.attr',
+        'aria-current',
+        'page'
+      )
+    })
   })
 })
