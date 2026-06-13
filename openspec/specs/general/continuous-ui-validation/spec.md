@@ -104,3 +104,8 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **GIVEN** the Cypress matrix runner is invoked with an explicit failure fixture for `container_start`, `runtime_health`, or `cypress`
 - **WHEN** the selected lane reaches the requested fixture stage
 - **THEN** the runner MUST fail that lane, write `failure_fixture_stage` and `failure_fixture_lane` at the run level, and preserve the selected lane's `failure_stage`, `error_message`, and nonzero `exit_code` in `matrix.summary.json`.
+
+#### Scenario: Exercise successful multi-lane orchestration deterministically
+- **GIVEN** the Cypress matrix runner is invoked with a success fixture mode across multiple active lanes
+- **WHEN** it writes a non-plan `matrix.summary.json`
+- **THEN** the summary MUST record `cypress_fixture_mode`, all active lane summaries, each lane's unique port/data/profile/instance metadata, and passing per-spec result entries without requiring a shared desktop runtime.

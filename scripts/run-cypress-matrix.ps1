@@ -14,6 +14,8 @@ param(
   [ValidateSet("", "container_start", "runtime_health", "cypress")]
   [string]$FailureFixtureStage = "",
   [int]$FailureFixtureLane = 1,
+  [ValidateSet("", "pass")]
+  [string]$CypressFixtureMode = "",
   [switch]$PlanOnly,
   [string]$RunId = "",
   [string]$LogRoot = ".work-agent\logs\cypress-matrix"
@@ -146,6 +148,9 @@ if ($UseContainerImage) {
 if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) {
   Write-Host "[cypress-matrix] Failure fixture enabled: lane=$FailureFixtureLane stage=$FailureFixtureStage"
 }
+if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) {
+  Write-Host "[cypress-matrix] Cypress fixture mode enabled: $CypressFixtureMode"
+}
 
 $lanePlans = @()
 for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
@@ -168,6 +173,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     source_commit = $sourceCommit
     failure_stage = $null
     error_message = $null
+    cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
     log_dir = $laneLogDir
     specs = @($laneSpecs[$laneIndex])
   }
@@ -194,6 +200,7 @@ if ($PlanOnly) {
     keep_containers = $KeepContainers.IsPresent
     failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
     failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
+    cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
     active_lane_count = $activeLaneCount
     empty_lane_count = $emptyLaneCount
     spec_counts_by_lane = $specCountsByLane
@@ -233,6 +240,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $KeepContainers.IsPresent,
     $FailureFixtureStage,
     $FailureFixtureLane,
+    $CypressFixtureMode,
     $laneNumber,
     $lanePlan.data_dir,
     $lanePlan.profile,
@@ -256,6 +264,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       [bool]$keepContainers,
       [string]$failureFixtureStage,
       [int]$failureFixtureLane,
+      [string]$cypressFixtureMode,
       [int]$laneNumber,
       [string]$laneDataDir,
       [string]$laneProfile,
@@ -362,6 +371,16 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         break
       }
 
+      if ($cypressFixtureMode -eq "pass") {
+        $laneResults += [pscustomobject]@{
+          spec = $spec
+          base_url = "http://127.0.0.1:$lanePort"
+          cypress_fixture_mode = $cypressFixtureMode
+          exit_code = 0
+        }
+        continue
+      }
+
       & pwsh @args 2>&1 | ForEach-Object {
         Write-Host $_
       }
@@ -409,6 +428,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       container_started = $containerStarted
       container_kept = $keepContainers
       source_commit = $sourceCommit
+      cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($cypressFixtureMode)) { $cypressFixtureMode } else { $null }
       failure_stage = $failureStage
       error_message = $errorMessage
       log_dir = $laneLogDir
@@ -441,6 +461,7 @@ $cleanLaneResults = @(
       container_started = $_.container_started
       container_kept = $_.container_kept
       source_commit = $_.source_commit
+      cypress_fixture_mode = $_.cypress_fixture_mode
       failure_stage = $_.failure_stage
       error_message = $_.error_message
       log_dir = $_.log_dir
@@ -469,6 +490,7 @@ $summary = [ordered]@{
   keep_containers = $KeepContainers.IsPresent
   failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
   failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
+  cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
   active_lane_count = $completedActiveLaneCount
   empty_lane_count = $completedEmptyLaneCount
   spec_counts_by_lane = $specCountsByLane
