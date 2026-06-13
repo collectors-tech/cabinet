@@ -304,6 +304,23 @@ This cross-surface direction complements the existing main chat implementation i
 - **AND** assistant-ui tool-call rendering MUST NOT auto-apply inventory, wishlist, collection, import, provider, or other Cabinet data mutations
 - **AND** validation MUST cover message send, persisted reload/history, setup-needed/provider-missing state, context/attachment preservation, explicit preview/apply/cancel safety, and visual/interaction comparison against the assistant-ui AI SDK example for each affected surface
 
+### Requirement UI-SCREEN-CHAT-COPILOT-019: `/chats` SHALL provide an assistant-ui-inspired dark chat shell
+The full `/chats` workspace SHALL render a Cabinet-branded dark chat shell inspired by the assistant-ui AI SDK reference while keeping Cabinet Go APIs authoritative for profile-scoped persisted threads, messages, attachments, provider/model defaults, and explicit preview/confirm/apply action controls.
+
+#### Scenario: Render dark assistant-ui chat shell structure
+- **GIVEN** user opens `/chats` with an active profile
+- **WHEN** the chat workspace renders
+- **THEN** it MUST show a dark full-screen-style workspace, assistant-ui-style left thread/history sidebar, `New Thread` action, rounded main chat canvas, top `New Chat` action, share/export action, centered empty state, large rounded composer, attachment affordance, model selector/readiness row, voice/send controls, and prompt/action chips
+- **AND** the composer placeholder MUST preserve the mention/command affordance, for example `Send a message... (@ to mention, / for commands)`
+- **AND** the thread sidebar and thread creation MUST continue to use Cabinet `/api/chat/*` persisted state rather than client-only example state
+
+#### Scenario: Preserve Cabinet safety and side-panel visual alignment
+- **GIVEN** user uses `/chats` or the shell Assistant side-panel
+- **WHEN** assistant-ui visual patterns, tool cards, prompt chips, or composer controls render
+- **THEN** Cabinet identity, accessible names, route semantics, provider/model readiness, attachment context, and preview/confirm/apply boundaries MUST remain visible and Cabinet-governed
+- **AND** tool/action containers MUST be ready for Cabinet Agent control cards from #1207 without auto-applying mutations
+- **AND** desktop and mobile layouts MUST avoid overlapping text, clipped controls, or unusable sidebar/composer states
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
@@ -345,3 +362,4 @@ This cross-surface direction complements the existing main chat implementation i
 | UC-CHAT-24 | Assistant-ui shell adapter send/history/provider/action safety | assistant-ui external-store runtime renders shell assistant messages, sends through Cabinet chat APIs with route/profile/provider context, reloads existing history, preserves setup-needed/provider guidance, and keeps preview/apply confirmation explicit | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation` |
 | UC-CHAT-25 | Assistant-ui full Chats route surface | assistant-ui external-store runtime renders `/chats` selected thread messages and composer while preserving Cabinet profile/thread APIs, route/profile/provider context, attachments, and explicit action preview/apply controls | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-017 renders full Chats route through assistant-ui primitives while preserving Cabinet APIs` |
 | UC-CHAT-26 | Assistant-ui main chat and side-panel direction | #1205 links the 2026-06-13 Cabinet product direction across #1140 / PR #1148 for main chat and #1133 for side-panel Assistant, with assistant-ui.com / the AI SDK example as the primary UI reference and Cabinet Go APIs plus preview/confirm/apply safety remaining authoritative | planned: future affected main chat or side-panel Assistant PRs must bind validation to `UI-SCREEN-CHAT-COPILOT-018` |
+| UC-CHAT-27 | Assistant-ui dark visual shell | `/chats` renders the assistant-ui-inspired dark shell with persisted thread sidebar, rounded main canvas, top actions, centered empty state, large composer, attachment/model/voice/send affordances, prompt chips, and non-mutating tool-card readiness | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure` |
