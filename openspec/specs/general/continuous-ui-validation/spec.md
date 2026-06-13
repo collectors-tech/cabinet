@@ -135,3 +135,11 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **GIVEN** the Cypress matrix runner executes non-plan work across multiple active lanes
 - **WHEN** it writes `matrix.summary.json`
 - **THEN** the summary MUST record aggregate `passed_lane_count` and `failed_lane_count` values matching the completed lane exit codes so validators can classify mixed lane outcomes without parsing every lane entry.
+
+### Requirement CONT-UI-CAB-010: Isolated Cypress harness documentation SHALL define local prerequisites and fallback behavior
+Cabinet SHALL document how operators run isolated Cypress validation locally, including Docker/container prerequisites, single-spec and bounded-matrix commands, machine-readable evidence paths, failure-stage interpretation, and fallback behavior when Docker is unavailable.
+
+#### Scenario: Operator runs or triages an isolated Cypress harness command
+- **GIVEN** an operator needs to run a Cabinet Cypress spec or bounded matrix against isolated runtime lanes
+- **WHEN** they read the harness documentation
+- **THEN** the documentation MUST name the local prerequisites, the `cabinet:e2e` image build command, one-spec and bounded-matrix runner commands, API smoke and E2E hook switches, `matrix.summary.json` evidence path, failure stages, and the rule that stale shared desktop runtimes are not valid isolated-lane proof.
