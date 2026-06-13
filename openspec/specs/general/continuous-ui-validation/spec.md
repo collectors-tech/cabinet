@@ -94,6 +94,7 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **WHEN** an active lane starts
 - **THEN** the runner MUST start the configured Cabinet container image with a unique host port, named writable data volume, E2E hooks enabled, E2E profile, instance name, and parallel-runtime flag before invoking Cypress against that lane.
 - **AND** the runner MUST reuse the already-started lane runtime for Cypress, wait for `/healthz` before assertions, and stop/remove the lane container and volume unless keep-container diagnostics are explicitly requested.
+- **AND** `matrix.summary.json` MUST record a machine-readable container command for each container-backed lane so validators can confirm the host port mapping, writable data volume, E2E hook flag, listen address, profile, instance name, and parallel-runtime flag without scraping console logs.
 
 #### Scenario: Preflight container image availability before lane fanout
 - **GIVEN** the Cypress matrix runner executes with container image lanes enabled
