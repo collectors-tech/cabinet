@@ -15,6 +15,7 @@
     "e2e:ci-smoke": "node ../scripts/run-cypress.mjs run --browser electron --config-file cypress.config.runtime.cjs --spec \"cypress/e2e/general/ui-login-session/spec.cy.ts\"",
     "e2e:matrix": "pwsh -NoLogo -NoProfile -File ../scripts/run-cypress-matrix.ps1",
     "e2e:foundation": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
+    "e2e:api-smoke": "pwsh -NoLogo -NoProfile -File ../scripts/run-api-contract-smoke.ps1",
     "e2e:run-smoke": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/general/ui-login-session/spec.cy.ts -Browser chrome",
     "e2e:run-inventory": "pwsh -NoLogo -NoProfile -File ../cypress.ps1 -Spec cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts -Browser chrome",
     "format:check": "prettier --check .",

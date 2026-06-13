@@ -5,6 +5,7 @@ param(
   [switch]$NoServer,
   [switch]$ReuseServer,
   [switch]$RequireE2EHooks,
+  [switch]$ApiContractSmoke,
   [string]$RuntimeExecutablePath = "",
   [switch]$AllowTempRuntimePath,
   [switch]$SkipDependencyPrep,
@@ -17,6 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:CypressStepEvents = @()
+$script:LastApiContractSmokeSummaryPath = ""
 
 function Write-Step([string]$msg) {
   $timestamp = (Get-Date).ToString("o")
@@ -99,6 +101,34 @@ function Get-SourceCommit([string]$repoRoot) {
     return ""
   }
   return ""
+}
+
+function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDir, [bool]$requireE2EHooks) {
+  $runId = "cypress-preflight-$runStamp"
+  $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($logDir)) { $logDir } else { Join-Path $repoRoot $logDir }
+  $summaryPath = Join-Path (Join-Path $resolvedLogRoot $runId) "api-contract-smoke.summary.json"
+  $script:LastApiContractSmokeSummaryPath = $summaryPath
+  $args = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-File", (Join-Path $repoRoot "scripts\run-api-contract-smoke.ps1"),
+    "-BaseUrl", $url,
+    "-LogRoot", $logDir,
+    "-RunId", $runId
+  )
+  if ($requireE2EHooks) {
+    $args += "-RequireE2EHooks"
+  }
+
+  Write-Step "Running API contract smoke preflight."
+  & pwsh @args | ForEach-Object {
+    Write-Host $_
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "API contract smoke preflight failed with exit code $LASTEXITCODE."
+  }
+  Write-Step "API contract smoke summary: $summaryPath"
+  return $summaryPath
 }
 
 function Stop-PortListener([string]$url) {
@@ -273,8 +303,38 @@ function Write-RunSummary(
   [string]$runtimeExecutablePath,
   [string]$sourceCommit,
   [string]$logPath,
+  [string]$apiContractSmokeSummaryPath,
   [bool]$startedServer
 ) {
+  $apiContractSmokeStatus = ""
+  $apiContractSmokeCheckCount = $null
+  $apiContractSmokeFailedCount = $null
+  $apiContractSmokeElapsedMs = $null
+  $apiContractSmokeFailedChecks = @()
+  if (-not [string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath) -and (Test-Path $apiContractSmokeSummaryPath)) {
+    try {
+      $apiContractSmokeSummary = Get-Content -Raw -LiteralPath $apiContractSmokeSummaryPath | ConvertFrom-Json
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "status") {
+        $apiContractSmokeStatus = [string]$apiContractSmokeSummary.status
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "check_count") {
+        $apiContractSmokeCheckCount = [int]$apiContractSmokeSummary.check_count
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "failed_count") {
+        $apiContractSmokeFailedCount = [int]$apiContractSmokeSummary.failed_count
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "elapsed_ms") {
+        $apiContractSmokeElapsedMs = [int]$apiContractSmokeSummary.elapsed_ms
+      }
+      if ($apiContractSmokeSummary.PSObject.Properties.Name -contains "failed_checks") {
+        $apiContractSmokeFailedChecks = @($apiContractSmokeSummary.failed_checks)
+      }
+    }
+    catch {
+      Write-Step "Unable to read API contract smoke summary metadata: $($_.Exception.Message)"
+    }
+  }
+
   $summary = [ordered]@{
     timestamp = (Get-Date).ToString("o")
     exit_code = $exitCode
@@ -292,6 +352,12 @@ function Write-RunSummary(
     source_commit = $sourceCommit
     started_server = $startedServer
     log_path = $logPath
+    api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
+    api_contract_smoke_status = $apiContractSmokeStatus
+    api_contract_smoke_check_count = $apiContractSmokeCheckCount
+    api_contract_smoke_failed_count = $apiContractSmokeFailedCount
+    api_contract_smoke_elapsed_ms = $apiContractSmokeElapsedMs
+    api_contract_smoke_failed_checks = $apiContractSmokeFailedChecks
     steps = $script:CypressStepEvents
   }
 
@@ -363,6 +429,7 @@ if ((Test-IsEphemeralRuntimePath $resolvedRuntimeExecutablePath) -and -not $Allo
 
 $serverProc = $null
 $startedServer = $false
+$apiContractSmokeSummaryPath = ""
 $exitCode = 1
 $runError = $null
 
@@ -435,6 +502,10 @@ try {
     }
   }
 
+  if ($ApiContractSmoke) {
+    $apiContractSmokeSummaryPath = Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent
+  }
+
   Write-Step "Running Cypress spec: $specPath"
   $args = @(
     "cypress", "run",
@@ -471,6 +542,9 @@ try {
 catch {
   $runError = $_
   $exitCode = 1
+  if ([string]::IsNullOrWhiteSpace($apiContractSmokeSummaryPath)) {
+    $apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath
+  }
   Write-Step "Run failed: $($_.Exception.Message)"
 }
 finally {
@@ -495,6 +569,7 @@ finally {
     -runtimeExecutablePath $resolvedRuntimeExecutablePath `
     -sourceCommit $sourceCommit `
     -logPath $logPath `
+    -apiContractSmokeSummaryPath $apiContractSmokeSummaryPath `
     -startedServer $startedServer
   Write-Step "Run summary written: $summaryPath"
   if ($transcriptStarted) {

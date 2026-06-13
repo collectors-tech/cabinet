@@ -1,0 +1,1289 @@
+package tests
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+func TestApiContractSmokeScriptWritesMachineReadableSummary(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("api contract smoke script failed: %v\n%s", err, string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode      int    `json:"exit_code"`
+		Status        string `json:"status"`
+		RunID         string `json:"run_id"`
+		BaseURLScheme string `json:"base_url_scheme"`
+		BaseURLHost   string `json:"base_url_host"`
+		BaseURLPort   int    `json:"base_url_port"`
+		CheckCount    int    `json:"check_count"`
+		FailedCount   int    `json:"failed_count"`
+		FailedChecks  []struct {
+			Name string `json:"name"`
+		} `json:"failed_checks"`
+		SourceCommit string `json:"source_commit"`
+		TimeoutSec   int    `json:"timeout_sec"`
+		ElapsedMS    *int   `json:"elapsed_ms"`
+		SummaryPath  string `json:"summary_path"`
+		Checks       []struct {
+			Name       string         `json:"name"`
+			DurationMS *int           `json:"duration_ms"`
+			JsonFields map[string]any `json:"json_fields"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.Status != "passed" {
+		t.Fatalf("summary status = %q, want passed", summary.Status)
+	}
+	if len(summary.FailedChecks) != 0 {
+		t.Fatalf("passing summary unexpectedly listed failed checks: %+v", summary.FailedChecks)
+	}
+	if summary.RunID != runID || summary.TimeoutSec != 5 || summary.SummaryPath != summaryPath {
+		t.Fatalf("summary metadata was not traceable: %+v", summary)
+	}
+	mockRuntimeURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	if summary.BaseURLScheme != mockRuntimeURL.Scheme || summary.BaseURLHost != mockRuntimeURL.Hostname() || fmt.Sprint(summary.BaseURLPort) != mockRuntimeURL.Port() {
+		t.Fatalf("summary base URL metadata = %s://%s:%d, want %s://%s:%s", summary.BaseURLScheme, summary.BaseURLHost, summary.BaseURLPort, mockRuntimeURL.Scheme, mockRuntimeURL.Hostname(), mockRuntimeURL.Port())
+	}
+	if summary.ElapsedMS == nil || *summary.ElapsedMS < 0 {
+		t.Fatalf("summary did not include elapsed_ms timing: %+v", summary)
+	}
+	if len(summary.Checks) != summary.CheckCount {
+		t.Fatalf("summary checks length = %d, want %d", len(summary.Checks), summary.CheckCount)
+	}
+	for _, check := range summary.Checks {
+		if check.DurationMS == nil || *check.DurationMS < 0 {
+			t.Fatalf("check %q did not include duration_ms timing: %+v", check.Name, check)
+		}
+		if check.Name == "runtime API" {
+			if check.JsonFields["app_version"] != "test" || check.JsonFields["runtime_host"] != mockRuntimeURL.Hostname() || fmt.Sprint(check.JsonFields["runtime_port"]) != mockRuntimeURL.Port() {
+				t.Fatalf("runtime API check did not record runtime metadata fields: %+v", check.JsonFields)
+			}
+		}
+	}
+	expectedCommit := currentGitCommit(t, repoRoot)
+	if summary.SourceCommit != expectedCommit {
+		t.Fatalf("summary source_commit = %q, want %q", summary.SourceCommit, expectedCommit)
+	}
+}
+
+func TestApiContractSmokeScriptWritesFailureSummary(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`not-json`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode     int    `json:"exit_code"`
+		Status       string `json:"status"`
+		CheckCount   int    `json:"check_count"`
+		FailedCount  int    `json:"failed_count"`
+		FailedChecks []struct {
+			Name           string `json:"name"`
+			Method         string `json:"method"`
+			Path           string `json:"path"`
+			ExpectedStatus int    `json:"expected_status"`
+			Status         int    `json:"status"`
+			DurationMS     *int   `json:"duration_ms"`
+			Error          string `json:"error"`
+		} `json:"failed_checks"`
+		Checks []struct {
+			Name   string `json:"name"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected failure summary: %+v", summary)
+	}
+	if summary.Status != "failed" {
+		t.Fatalf("failure summary status = %q, want failed", summary.Status)
+	}
+	if len(summary.FailedChecks) != 1 {
+		t.Fatalf("failure summary did not include compact failed_checks triage: %+v", summary.FailedChecks)
+	}
+	failedCheck := summary.FailedChecks[0]
+	if failedCheck.Name != "runtime API" || failedCheck.Method != http.MethodGet || failedCheck.Path != "/api/runtime" || failedCheck.ExpectedStatus != http.StatusOK || failedCheck.Status != http.StatusOK {
+		t.Fatalf("failed_checks entry did not identify runtime API failure: %+v", failedCheck)
+	}
+	if failedCheck.DurationMS == nil || *failedCheck.DurationMS < 0 {
+		t.Fatalf("failed_checks entry did not include compact timing evidence: %+v", failedCheck)
+	}
+	if !strings.Contains(failedCheck.Error, "not valid JSON") {
+		t.Fatalf("failed_checks error was not diagnostic: %q", failedCheck.Error)
+	}
+
+	var runtimeCheckError string
+	for _, check := range summary.Checks {
+		if check.Name == "runtime API" {
+			if check.Passed {
+				t.Fatalf("runtime API check unexpectedly passed: %+v", check)
+			}
+			runtimeCheckError = check.Error
+			break
+		}
+	}
+	if !strings.Contains(runtimeCheckError, "not valid JSON") {
+		t.Fatalf("runtime API failure was not diagnostic: %q", runtimeCheckError)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesRuntimeMetadataMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"mode":"other-runtime"}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-runtime-metadata-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed with wrong runtime metadata\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read runtime metadata failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode runtime metadata failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected runtime metadata failure summary: %+v", summary)
+	}
+
+	var runtimeCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "runtime API" {
+			runtimeCheck = check
+			break
+		}
+	}
+	if runtimeCheck.Name == "" {
+		t.Fatalf("summary did not include runtime API check: %+v", summary.Checks)
+	}
+	if runtimeCheck.Passed || runtimeCheck.Status != http.StatusOK {
+		t.Fatalf("runtime API check did not record metadata mismatch: %+v", runtimeCheck)
+	}
+	if !strings.Contains(runtimeCheck.Error, "required field app_version") {
+		t.Fatalf("runtime metadata failure was not diagnostic: %q", runtimeCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesRuntimeHostMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			mockRuntimeURL, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatalf("parse mock runtime URL: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"app_version":"test","runtime_host":"stale-runtime.local","runtime_port":%s}`, mockRuntimeURL.Port())))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-runtime-host-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed with mismatched runtime host\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read runtime host failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode runtime host failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected runtime host failure summary: %+v", summary)
+	}
+
+	var runtimeCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "runtime API" {
+			runtimeCheck = check
+			break
+		}
+	}
+	if runtimeCheck.Name == "" {
+		t.Fatalf("summary did not include runtime API check: %+v", summary.Checks)
+	}
+	if runtimeCheck.Passed || runtimeCheck.Status != http.StatusOK {
+		t.Fatalf("runtime API check did not record host mismatch: %+v", runtimeCheck)
+	}
+	mockRuntimeURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	if !strings.Contains(runtimeCheck.Error, "runtime_host stale-runtime.local") || !strings.Contains(runtimeCheck.Error, mockRuntimeURL.Hostname()) {
+		t.Fatalf("runtime host mismatch failure was not diagnostic: %q", runtimeCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptAcceptsWildcardRuntimeHostForLoopback(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			mockRuntimeURL, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatalf("parse mock runtime URL: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"app_version":"test","runtime_host":"0.0.0.0","runtime_port":%s}`, mockRuntimeURL.Port())))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-wildcard-host"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("api contract smoke script rejected wildcard runtime host for loopback base URL: %v\n%s", err, string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read wildcard host summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode wildcard host summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
+		t.Fatalf("unexpected wildcard host summary: %+v", summary)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesRuntimePortMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"127.0.0.1","runtime_port":1}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-runtime-port-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed with mismatched runtime port\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read runtime port failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode runtime port failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected runtime port failure summary: %+v", summary)
+	}
+
+	var runtimeCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "runtime API" {
+			runtimeCheck = check
+			break
+		}
+	}
+	if runtimeCheck.Name == "" {
+		t.Fatalf("summary did not include runtime API check: %+v", summary.Checks)
+	}
+	if runtimeCheck.Passed || runtimeCheck.Status != http.StatusOK {
+		t.Fatalf("runtime API check did not record port mismatch: %+v", runtimeCheck)
+	}
+	mockRuntimeURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	if !strings.Contains(runtimeCheck.Error, "runtime_port 1") || !strings.Contains(runtimeCheck.Error, mockRuntimeURL.Port()) {
+		t.Fatalf("runtime port mismatch failure was not diagnostic: %q", runtimeCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesHealthzFailure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			http.Error(w, "stale runtime", http.StatusServiceUnavailable)
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-healthz-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read healthz failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode healthz failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected healthz failure summary: %+v", summary)
+	}
+
+	var healthzCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "healthz" {
+			healthzCheck = check
+			break
+		}
+	}
+	if healthzCheck.Name == "" {
+		t.Fatalf("summary did not include healthz check: %+v", summary.Checks)
+	}
+	if healthzCheck.Passed || healthzCheck.Status != http.StatusServiceUnavailable {
+		t.Fatalf("healthz check did not record stale runtime status: %+v", healthzCheck)
+	}
+	if !strings.Contains(healthzCheck.Error, "503") {
+		t.Fatalf("healthz failure was not diagnostic: %q", healthzCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesDeadRuntime(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve dead runtime port: %v", err)
+	}
+	deadBaseURL := fmt.Sprintf("http://%s", listener.Addr().String())
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release dead runtime port: %v", err)
+	}
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-dead-runtime"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", deadBaseURL, "-LogRoot", logRoot, "-RunId", runID, "-TimeoutSec", "1")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed against dead runtime\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read dead runtime summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode dead runtime summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 4 {
+		t.Fatalf("unexpected dead runtime summary: %+v", summary)
+	}
+
+	var healthzCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "healthz" {
+			healthzCheck = check
+			break
+		}
+	}
+	if healthzCheck.Name == "" {
+		t.Fatalf("summary did not include healthz check: %+v", summary.Checks)
+	}
+	if healthzCheck.Passed || healthzCheck.Status != 0 {
+		t.Fatalf("healthz check did not record dead runtime failure: %+v", healthzCheck)
+	}
+	lowerError := strings.ToLower(healthzCheck.Error)
+	if !strings.Contains(lowerError, "connection") && !strings.Contains(lowerError, "refused") && !strings.Contains(lowerError, "timeout") {
+		t.Fatalf("dead runtime failure was not diagnostic: %q", healthzCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesSignInContentMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"error":"wrong route"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-sign-in-content-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read sign-in content failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode sign-in content failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected sign-in content failure summary: %+v", summary)
+	}
+
+	var signInCheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "sign-in route" {
+			signInCheck = check
+			break
+		}
+	}
+	if signInCheck.Name == "" {
+		t.Fatalf("summary did not include sign-in route check: %+v", summary.Checks)
+	}
+	if signInCheck.Passed || signInCheck.Status != http.StatusOK {
+		t.Fatalf("sign-in check did not record route content mismatch: %+v", signInCheck)
+	}
+	if !strings.Contains(signInCheck.Error, "required marker") {
+		t.Fatalf("sign-in content failure was not diagnostic: %q", signInCheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesOpenAPIContentTypeMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-openapi-content-type-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read OpenAPI content-type failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode OpenAPI content-type failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected OpenAPI content-type failure summary: %+v", summary)
+	}
+
+	var openAPICheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "OpenAPI YAML" {
+			openAPICheck = check
+			break
+		}
+	}
+	if openAPICheck.Name == "" {
+		t.Fatalf("summary did not include OpenAPI YAML check: %+v", summary.Checks)
+	}
+	if openAPICheck.Passed || openAPICheck.Status != http.StatusOK {
+		t.Fatalf("OpenAPI check did not record content-type mismatch: %+v", openAPICheck)
+	}
+	if !strings.Contains(openAPICheck.Error, "content type") {
+		t.Fatalf("OpenAPI content-type failure was not diagnostic: %q", openAPICheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesOpenAPIBodyMismatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("info:\n  title: Wrong Runtime\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-openapi-body-failure"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read OpenAPI body failure summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+		Checks      []struct {
+			Name   string `json:"name"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode OpenAPI body failure summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 4 || summary.FailedCount != 1 {
+		t.Fatalf("unexpected OpenAPI body failure summary: %+v", summary)
+	}
+
+	var openAPICheck struct {
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "OpenAPI YAML" {
+			openAPICheck = check
+			break
+		}
+	}
+	if openAPICheck.Name == "" {
+		t.Fatalf("summary did not include OpenAPI YAML check: %+v", summary.Checks)
+	}
+	if openAPICheck.Passed || openAPICheck.Status != http.StatusOK {
+		t.Fatalf("OpenAPI check did not record body mismatch: %+v", openAPICheck)
+	}
+	if !strings.Contains(openAPICheck.Error, "required marker") {
+		t.Fatalf("OpenAPI body failure was not diagnostic: %q", openAPICheck.Error)
+	}
+}
+
+func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		case "/api/test/reset":
+			if r.Method != http.MethodPost {
+				t.Fatalf("reset hook used method %s, want POST", r.Method)
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("ok"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-e2e-hooks"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID, "-RequireE2EHooks")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("api contract smoke script with E2E hooks failed: %v\n%s", err, string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read E2E hooks summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode        int  `json:"exit_code"`
+		CheckCount      int  `json:"check_count"`
+		FailedCount     int  `json:"failed_count"`
+		RequireE2EHooks bool `json:"require_e2e_hooks"`
+		Checks          []struct {
+			Name   string `json:"name"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Passed bool   `json:"passed"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode E2E hooks summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 0 || summary.CheckCount != 5 || summary.FailedCount != 0 || !summary.RequireE2EHooks {
+		t.Fatalf("unexpected E2E hooks summary: %+v", summary)
+	}
+
+	var sawResetHook bool
+	for _, check := range summary.Checks {
+		if check.Name == "E2E reset hook" {
+			sawResetHook = true
+			if check.Method != http.MethodPost || check.Path != "/api/test/reset" || !check.Passed {
+				t.Fatalf("unexpected reset hook check: %+v", check)
+			}
+			break
+		}
+	}
+	if !sawResetHook {
+		t.Fatalf("summary did not include E2E reset hook check: %+v", summary.Checks)
+	}
+}
+
+func TestApiContractSmokeScriptDiagnosesMissingE2EHooksWhenRequired(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mockRuntimeMetadataJSON(t, srv.URL))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-missing-e2e-hooks"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID, "-RequireE2EHooks")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("api contract smoke script unexpectedly passed without E2E hooks\n%s", string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read missing E2E hooks summary: %v\n%s", readErr, string(output))
+	}
+
+	var summary struct {
+		ExitCode        int  `json:"exit_code"`
+		CheckCount      int  `json:"check_count"`
+		FailedCount     int  `json:"failed_count"`
+		RequireE2EHooks bool `json:"require_e2e_hooks"`
+		Checks          []struct {
+			Name   string `json:"name"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Status int    `json:"status"`
+			Passed bool   `json:"passed"`
+			Error  string `json:"error"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode missing E2E hooks summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 1 || summary.CheckCount != 5 || summary.FailedCount != 1 || !summary.RequireE2EHooks {
+		t.Fatalf("unexpected missing E2E hooks summary: %+v", summary)
+	}
+
+	var resetHookCheck struct {
+		Name   string `json:"name"`
+		Method string `json:"method"`
+		Path   string `json:"path"`
+		Status int    `json:"status"`
+		Passed bool   `json:"passed"`
+		Error  string `json:"error"`
+	}
+	for _, check := range summary.Checks {
+		if check.Name == "E2E reset hook" {
+			resetHookCheck = check
+			break
+		}
+	}
+	if resetHookCheck.Name == "" {
+		t.Fatalf("summary did not include E2E reset hook check: %+v", summary.Checks)
+	}
+	if resetHookCheck.Passed || resetHookCheck.Method != http.MethodPost || resetHookCheck.Path != "/api/test/reset" || resetHookCheck.Status != http.StatusNotFound {
+		t.Fatalf("reset hook check did not record missing hook failure: %+v", resetHookCheck)
+	}
+	if !strings.Contains(resetHookCheck.Error, "404") {
+		t.Fatalf("missing E2E hook failure was not diagnostic: %q", resetHookCheck.Error)
+	}
+}
+
+func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
+	repoRoot := filepath.Dir(currentFileDir(t))
+	cypressPath := filepath.Join(repoRoot, "cypress.ps1")
+	raw, err := os.ReadFile(cypressPath)
+	if err != nil {
+		t.Fatalf("read cypress.ps1: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"[switch]$ApiContractSmoke",
+		"scripts\\run-api-contract-smoke.ps1",
+		"Running API contract smoke preflight.",
+		"API contract smoke summary:",
+		"$script:LastApiContractSmokeSummaryPath = $summaryPath",
+		"api_contract_smoke_summary_path",
+		"api_contract_smoke_check_count",
+		"$apiContractSmokeSummaryPath = $script:LastApiContractSmokeSummaryPath",
+		"API contract smoke preflight failed",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("cypress.ps1 missing API smoke preflight snippet %q", snippet)
+		}
+	}
+}
+
+func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve dead runtime port: %v", err)
+	}
+	deadBaseURL := fmt.Sprintf("http://%s", listener.Addr().String())
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release dead runtime port: %v", err)
+	}
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File", filepath.Join(repoRoot, "cypress.ps1"),
+		"-NoServer",
+		"-SkipDependencyPrep",
+		"-RuntimeExecutablePath", filepath.Join(repoRoot, "cypress.ps1"),
+		"-ApiContractSmoke",
+		"-BaseUrl", deadBaseURL,
+		"-LogDir", logRoot,
+		"-LogName", "api-smoke-failure-artifact",
+	)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("cypress harness unexpectedly passed against dead API smoke runtime\n%s", string(output))
+	}
+
+	cypressSummaries, err := filepath.Glob(filepath.Join(logRoot, "*-api-smoke-failure-artifact.summary.json"))
+	if err != nil {
+		t.Fatalf("glob Cypress summaries: %v", err)
+	}
+	if len(cypressSummaries) != 1 {
+		t.Fatalf("expected one Cypress summary, got %d: %v\n%s", len(cypressSummaries), cypressSummaries, string(output))
+	}
+
+	raw, err := os.ReadFile(cypressSummaries[0])
+	if err != nil {
+		t.Fatalf("read Cypress summary: %v", err)
+	}
+	var cypressSummary struct {
+		ExitCode                     int    `json:"exit_code"`
+		Error                        string `json:"error"`
+		ApiContractSmokeSummaryPath  string `json:"api_contract_smoke_summary_path"`
+		ApiContractSmokeStatus       string `json:"api_contract_smoke_status"`
+		ApiContractSmokeCheckCount   *int   `json:"api_contract_smoke_check_count"`
+		ApiContractSmokeFailedCount  *int   `json:"api_contract_smoke_failed_count"`
+		ApiContractSmokeElapsedMS    *int   `json:"api_contract_smoke_elapsed_ms"`
+		ApiContractSmokeFailedChecks []struct {
+			Name   string `json:"name"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Error  string `json:"error"`
+		} `json:"api_contract_smoke_failed_checks"`
+	}
+	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
+		t.Fatalf("decode Cypress summary: %v\n%s", err, string(raw))
+	}
+	if cypressSummary.ExitCode != 1 {
+		t.Fatalf("Cypress summary exit_code = %d, want 1: %+v", cypressSummary.ExitCode, cypressSummary)
+	}
+	if !strings.Contains(cypressSummary.Error, "API contract smoke preflight failed") {
+		t.Fatalf("Cypress summary error did not identify API smoke failure: %q", cypressSummary.Error)
+	}
+	if cypressSummary.ApiContractSmokeSummaryPath == "" {
+		t.Fatalf("Cypress summary did not preserve API smoke summary path: %+v", cypressSummary)
+	}
+	if cypressSummary.ApiContractSmokeStatus != "failed" || cypressSummary.ApiContractSmokeFailedCount == nil || *cypressSummary.ApiContractSmokeFailedCount == 0 {
+		t.Fatalf("Cypress summary did not include compact API smoke failure metadata: %+v", cypressSummary)
+	}
+	if cypressSummary.ApiContractSmokeCheckCount == nil || *cypressSummary.ApiContractSmokeCheckCount == 0 {
+		t.Fatalf("Cypress summary did not include API smoke check count metadata: %+v", cypressSummary)
+	}
+	if cypressSummary.ApiContractSmokeElapsedMS == nil {
+		t.Fatalf("Cypress summary did not include API smoke elapsed timing metadata: %+v", cypressSummary)
+	}
+	if len(cypressSummary.ApiContractSmokeFailedChecks) == 0 {
+		t.Fatalf("Cypress summary did not surface compact API smoke failed checks: %+v", cypressSummary)
+	}
+	failedCheck := cypressSummary.ApiContractSmokeFailedChecks[0]
+	if failedCheck.Name != "healthz" || failedCheck.Method != http.MethodGet || failedCheck.Path != "/healthz" || failedCheck.Error == "" {
+		t.Fatalf("Cypress summary failed check was not diagnostic: %+v", failedCheck)
+	}
+	if _, err := os.Stat(cypressSummary.ApiContractSmokeSummaryPath); err != nil {
+		t.Fatalf("API smoke summary path from Cypress summary was not readable: %v", err)
+	}
+
+	apiRaw, err := os.ReadFile(cypressSummary.ApiContractSmokeSummaryPath)
+	if err != nil {
+		t.Fatalf("read API smoke summary: %v", err)
+	}
+	var apiSummary struct {
+		ExitCode    int    `json:"exit_code"`
+		Status      string `json:"status"`
+		CheckCount  int    `json:"check_count"`
+		FailedCount int    `json:"failed_count"`
+		ElapsedMS   int    `json:"elapsed_ms"`
+	}
+	if err := json.Unmarshal(apiRaw, &apiSummary); err != nil {
+		t.Fatalf("decode API smoke summary: %v\n%s", err, string(apiRaw))
+	}
+	if apiSummary.ExitCode != 1 || apiSummary.Status != "failed" || apiSummary.FailedCount == 0 {
+		t.Fatalf("API smoke summary did not record preflight failure: %+v", apiSummary)
+	}
+	if *cypressSummary.ApiContractSmokeCheckCount != apiSummary.CheckCount {
+		t.Fatalf("Cypress summary API smoke check count = %d, want nested summary count %d", *cypressSummary.ApiContractSmokeCheckCount, apiSummary.CheckCount)
+	}
+	if *cypressSummary.ApiContractSmokeElapsedMS != apiSummary.ElapsedMS {
+		t.Fatalf("Cypress summary API smoke elapsed_ms = %d, want nested summary elapsed_ms %d", *cypressSummary.ApiContractSmokeElapsedMS, apiSummary.ElapsedMS)
+	}
+}
+
+func currentFileDir(t *testing.T) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Dir(filename)
+}
+
+func mockRuntimeMetadataJSON(t *testing.T, baseURL string) []byte {
+	t.Helper()
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("parse mock runtime URL: %v", err)
+	}
+	return []byte(fmt.Sprintf(`{"app_version":"test","runtime_host":%q,"runtime_port":%s}`, parsed.Hostname(), parsed.Port()))
+}
+
+func currentGitCommit(t *testing.T, repoRoot string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD failed: %v", err)
+	}
+	return strings.TrimSpace(string(output))
+}
