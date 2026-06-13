@@ -38,6 +38,8 @@ Assistant context MUST only reset on explicit boundaries such as logout, active 
 ### Requirement ASSISTANT-WORKSPACE-005: Assistant SHALL adopt assistant-ui through a Cabinet-owned transport adapter
 Assistant workspace MUST compare direct assistant-ui AI SDK runtime adoption against a Cabinet-specific assistant-ui adapter, and the first implementation slice MUST adapt assistant-ui's compact anchored modal primitives into the existing shell Assistant sidepanel while keeping Cabinet Go chat APIs as the source of truth for profile-scoped threads, persisted messages, route context, provider/model metadata, attachment context, and confirm-before-apply mutation safety.
 
+The 2026-06-13 Cabinet product direction further requires the side-panel Assistant UI to use assistant-ui.com / `https://www.assistant-ui.com/examples/ai-sdk` as the primary UI reference alongside the main chat UI. Future Assistant workspace work MUST bind to `UI-SCREEN-CHAT-COPILOT-018` when it changes side-panel composer, message, thread/status, or tool/result interaction behavior.
+
 #### Scenario: Render assistant-ui-compatible shell primitives without replacing Cabinet persistence
 - **GIVEN** the shell Assistant workspace has an active profile-scoped Cabinet chat thread
 - **WHEN** the anchored modal frame, message list, and composer render through the Cabinet assistant-ui adapter
@@ -51,3 +53,9 @@ Assistant workspace MUST compare direct assistant-ui AI SDK runtime adoption aga
 - **WHEN** Cabinet evaluates the assistant-ui adoption path
 - **THEN** the first implementation slice MUST target the shell Assistant workspace panel before broad `/chats` replacement
 - **AND** direct AI SDK runtime adoption MUST remain a later option only if Cabinet-owned transport, persistence, and confirmation boundaries are preserved
+
+#### Scenario: Future Assistant side-panel changes name the assistant-ui direction
+- **GIVEN** a future issue, spec, or PR changes the shell Assistant workspace or compact Assistant panel
+- **WHEN** the change affects side-panel composer, message, thread/status, or tool/result interaction behavior
+- **THEN** it MUST state how the side-panel Assistant UI follows the assistant-ui AI SDK example
+- **AND** any divergence MUST link to a Cabinet issue/spec that records the reason, affected surface, and validation expectation
