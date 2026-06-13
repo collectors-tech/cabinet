@@ -38,6 +38,13 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`"--listen", "0.0.0.0:17880"`,
 		`$args += "-ReuseServer"`,
 		`container_started = $containerStarted`,
+		`failure_stage = $failureStage`,
+		`error_message = $errorMessage`,
+		`$failureStage = "container_start"`,
+		`$failureStage = "runtime_health"`,
+		`$failureStage = "cypress"`,
+		`$errorMessage = $_.Exception.Message`,
+		`Cypress spec $spec failed with exit code $exitCode.`,
 		`"-BaseUrl", "http://127.0.0.1:$lanePort"`,
 		`data_dir = Join-Path $repoRoot ".tmp\cypress-runtime-$lanePort"`,
 		`profile = "e2e-cypress-$lanePort"`,
@@ -110,13 +117,13 @@ func TestCypressMatrixPlanSummaryExposesLaneCounts(t *testing.T) {
 	}
 
 	var summary struct {
-		SpecCount        int   `json:"spec_count"`
-		LaneCount        int   `json:"lane_count"`
-		MaxWorkers       int   `json:"max_workers"`
-		WorkerLimit      int   `json:"worker_limit"`
-		ActiveLaneCount  int   `json:"active_lane_count"`
-		EmptyLaneCount   int   `json:"empty_lane_count"`
-		SpecCountsByLane []int `json:"spec_counts_by_lane"`
+		SpecCount         int   `json:"spec_count"`
+		LaneCount         int   `json:"lane_count"`
+		MaxWorkers        int   `json:"max_workers"`
+		WorkerLimit       int   `json:"worker_limit"`
+		ActiveLaneCount   int   `json:"active_lane_count"`
+		EmptyLaneCount    int   `json:"empty_lane_count"`
+		SpecCountsByLane  []int `json:"spec_counts_by_lane"`
 		UseContainerImage bool  `json:"use_container_image"`
 		ContainerImage    any   `json:"container_image"`
 	}
@@ -188,15 +195,17 @@ func TestCypressMatrixPlanSummaryExposesContainerLaneMetadata(t *testing.T) {
 	}
 
 	var summary struct {
-		UseContainerImage        bool   `json:"use_container_image"`
-		ContainerImage           string `json:"container_image"`
-		ContainerStartupTimeout  int    `json:"container_startup_timeout_sec"`
-		KeepContainers           bool   `json:"keep_containers"`
-		Lanes                    []struct {
-			UseContainerImage bool   `json:"use_container_image"`
-			ContainerImage    string `json:"container_image"`
-			ContainerName     string `json:"container_name"`
-			ContainerVolume   string `json:"container_volume"`
+		UseContainerImage       bool   `json:"use_container_image"`
+		ContainerImage          string `json:"container_image"`
+		ContainerStartupTimeout int    `json:"container_startup_timeout_sec"`
+		KeepContainers          bool   `json:"keep_containers"`
+		Lanes                   []struct {
+			UseContainerImage bool    `json:"use_container_image"`
+			ContainerImage    string  `json:"container_image"`
+			ContainerName     string  `json:"container_name"`
+			ContainerVolume   string  `json:"container_volume"`
+			FailureStage      *string `json:"failure_stage"`
+			ErrorMessage      *string `json:"error_message"`
 		} `json:"lanes"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
@@ -221,6 +230,9 @@ func TestCypressMatrixPlanSummaryExposesContainerLaneMetadata(t *testing.T) {
 		}
 		if lane.ContainerVolume != lane.ContainerName+"-data" {
 			t.Fatalf("lane %d has unexpected container volume %q for name %q", index+1, lane.ContainerVolume, lane.ContainerName)
+		}
+		if lane.FailureStage != nil || lane.ErrorMessage != nil {
+			t.Fatalf("lane %d plan should not report a failure: %+v", index+1, lane)
 		}
 	}
 }
