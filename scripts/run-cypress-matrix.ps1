@@ -82,6 +82,9 @@ function Wait-MatrixJobSlot([System.Collections.ArrayList]$jobs, [int]$maxWorker
 }
 
 function Get-SourceCommit([string]$repoRoot) {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    return "unknown"
+  }
   Push-Location $repoRoot
   try {
     $commit = (& git rev-parse HEAD 2>$null)
@@ -221,13 +224,19 @@ if ($UseContainerImage) {
   $imagePreflightError = $null
   if ($FailureFixtureStage -eq "container_image") {
     $imagePreflightError = "Failure fixture forced container_image failure for image $ContainerImage."
+  } elseif (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    $imagePreflightError = "Docker CLI is unavailable. Install Docker or make docker available on PATH before running container-backed lanes."
   } else {
-    $imageInspectOutput = (& docker image inspect $ContainerImage 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-      $imagePreflightError = "Container image preflight failed for $ContainerImage. Build the image from the repository root before running container-backed lanes."
-      if (-not [string]::IsNullOrWhiteSpace(($imageInspectOutput | Out-String).Trim())) {
-        $imagePreflightError = "$imagePreflightError Docker output: $(($imageInspectOutput | Out-String).Trim())"
+    try {
+      $imageInspectOutput = (& docker image inspect $ContainerImage 2>&1)
+      if ($LASTEXITCODE -ne 0) {
+        $imagePreflightError = "Container image preflight failed for $ContainerImage. Build the image from the repository root before running container-backed lanes."
+        if (-not [string]::IsNullOrWhiteSpace(($imageInspectOutput | Out-String).Trim())) {
+          $imagePreflightError = "$imagePreflightError Docker output: $(($imageInspectOutput | Out-String).Trim())"
+        }
       }
+    } catch {
+      $imagePreflightError = "Container image preflight failed for $ContainerImage before lane fanout. Docker error: $($_.Exception.Message)"
     }
   }
 

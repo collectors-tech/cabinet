@@ -99,6 +99,7 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **GIVEN** the Cypress matrix runner executes with container image lanes enabled
 - **WHEN** the configured container image is unavailable before any lane starts
 - **THEN** the runner MUST fail before lane fanout and write `matrix.summary.json` with `failure_stage=container_image`, a diagnostic `error_message`, `container_started=false`, no per-spec Cypress results, and aggregate failed lane counts for the active lane set.
+- **AND** if the Docker CLI is unavailable, the same preflight MUST write the machine-readable summary instead of terminating before evidence is recorded.
 
 #### Scenario: Preflight lane runtime contracts before browser assertions
 - **GIVEN** the Cypress matrix runner is invoked with API contract smoke enabled
