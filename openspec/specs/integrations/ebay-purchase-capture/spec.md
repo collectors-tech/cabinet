@@ -71,12 +71,12 @@ Cabinet SHALL expose a profile-scoped Purchase Inbox API boundary that prepares 
 - **AND** the API response SHALL identify the source as ebay_purchase_capture
 - **AND** the API MUST NOT create, link, or update inventory records while preparing review records
 
-### Requirement EBAY-PURCHASE-CAPTURE-006: Purchase Inbox UI MUST review captured purchases before confirmed mutation actions
-Cabinet SHALL expose a Purchase Inbox UI surface for captured eBay purchase reviews that covers empty, loading, error, and ready states while keeping link and convert actions confirmation-gated.
+### Requirement EBAY-PURCHASE-CAPTURE-006: Purchases UI MUST review captured purchases before confirmed mutation actions
+Cabinet SHALL expose captured eBay purchase reviews as a subordinate section of the first-class `/purchases` workspace, covering empty, loading, error, and ready states while keeping link and convert actions confirmation-gated. Cabinet MUST NOT require users to open `/inbox` for this purchase workflow.
 
 #### Scenario: Review captured purchase order and item states
 - **GIVEN** Cabinet has captured eBay purchase cards ready for review
-- **WHEN** the user opens the Purchase Inbox and prepares review records
+- **WHEN** the user opens `/purchases` and prepares review records
 - **THEN** the UI SHALL show order-level review cards with seller, total, currency, status, and child purchased items
 - **AND** ready child items SHALL expose link-existing-inventory-item and convert-to-inventory-item actions
 - **AND** incomplete child items SHALL list missing fields and expose a non-mutating completion action
