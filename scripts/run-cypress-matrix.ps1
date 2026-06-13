@@ -7,6 +7,10 @@ param(
   [switch]$RequireE2EHooks,
   [switch]$SkipDependencyPrep,
   [switch]$SkipRuntimeBuild,
+  [switch]$UseContainerImage,
+  [string]$ContainerImage = "cabinet:e2e",
+  [int]$ContainerStartupTimeoutSec = 60,
+  [switch]$KeepContainers,
   [switch]$PlanOnly,
   [string]$RunId = "",
   [string]$LogRoot = ".work-agent\logs\cypress-matrix"
@@ -85,9 +89,20 @@ function Get-SourceCommit([string]$repoRoot) {
   }
 }
 
+function ConvertTo-ContainerSegment([string]$value) {
+  $safe = ConvertTo-SafeSegment $value
+  $safe = $safe.ToLowerInvariant() -replace '[^a-z0-9_.-]+', '-'
+  $safe = $safe.Trim('-')
+  if ([string]::IsNullOrWhiteSpace($safe)) {
+    return "lane"
+  }
+  return $safe
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourceCommit = Get-SourceCommit $repoRoot
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
+$containerRunSegment = ConvertTo-ContainerSegment $runStamp
 $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($LogRoot)) { $LogRoot } else { Join-Path $repoRoot $LogRoot }
 $runLogDir = Join-Path $resolvedLogRoot $runStamp
 $summaryPath = Join-Path $runLogDir "matrix.summary.json"
@@ -119,12 +134,17 @@ for ($specIndex = 0; $specIndex -lt $specs.Count; $specIndex++) {
 Write-Host "[cypress-matrix] Run log dir: $runLogDir"
 Write-Host "[cypress-matrix] Run summary: $summaryPath"
 Write-Host "[cypress-matrix] Specs: $($specs.Count); lanes: $LaneCount; workers: $workerLimit; base port: $BasePort; commit: $sourceCommit"
+if ($UseContainerImage) {
+  Write-Host "[cypress-matrix] Container image lanes enabled: image=$ContainerImage startup_timeout_sec=$ContainerStartupTimeoutSec keep_containers=$($KeepContainers.IsPresent)"
+}
 
 $lanePlans = @()
 for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
   $laneNumber = $laneIndex + 1
   $lanePort = $BasePort + $laneIndex
   $laneLogDir = Join-Path $runLogDir "lane-$laneNumber"
+  $containerName = "cabinet-cypress-$containerRunSegment-lane-$laneNumber"
+  $containerVolume = "$containerName-data"
   $lanePlans += [pscustomobject]@{
     lane = $laneNumber
     port = $lanePort
@@ -132,6 +152,10 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     data_dir = Join-Path $repoRoot ".tmp\cypress-runtime-$lanePort"
     profile = "e2e-cypress-$lanePort"
     instance_name = "cypress-$lanePort"
+    use_container_image = $UseContainerImage.IsPresent
+    container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
+    container_name = if ($UseContainerImage) { $containerName } else { $null }
+    container_volume = if ($UseContainerImage) { $containerVolume } else { $null }
     source_commit = $sourceCommit
     log_dir = $laneLogDir
     specs = @($laneSpecs[$laneIndex])
@@ -153,6 +177,10 @@ if ($PlanOnly) {
     lane_count = $LaneCount
     max_workers = $MaxWorkers
     worker_limit = $workerLimit
+    use_container_image = $UseContainerImage.IsPresent
+    container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
+    container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }
+    keep_containers = $KeepContainers.IsPresent
     active_lane_count = $activeLaneCount
     empty_lane_count = $emptyLaneCount
     spec_counts_by_lane = $specCountsByLane
@@ -186,10 +214,16 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $RequireE2EHooks.IsPresent,
     $SkipDependencyPrep.IsPresent,
     $SkipRuntimeBuild.IsPresent,
+    $UseContainerImage.IsPresent,
+    $ContainerImage,
+    $ContainerStartupTimeoutSec,
+    $KeepContainers.IsPresent,
     $laneNumber,
     $lanePlan.data_dir,
     $lanePlan.profile,
     $lanePlan.instance_name,
+    $lanePlan.container_name,
+    $lanePlan.container_volume,
     $sourceCommit
   ) -ScriptBlock {
     param(
@@ -201,15 +235,65 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       [bool]$requireE2EHooks,
       [bool]$skipDependencyPrep,
       [bool]$skipRuntimeBuild,
+      [bool]$useContainerImage,
+      [string]$containerImage,
+      [int]$containerStartupTimeoutSec,
+      [bool]$keepContainers,
       [int]$laneNumber,
       [string]$laneDataDir,
       [string]$laneProfile,
       [string]$laneInstanceName,
+      [string]$containerName,
+      [string]$containerVolume,
       [string]$sourceCommit
     )
 
+    function Test-LaneHealth([string]$baseUrl) {
+      try {
+        $response = Invoke-WebRequest -Uri "$baseUrl/healthz" -UseBasicParsing -TimeoutSec 2
+        return $response.StatusCode -eq 200
+      } catch {
+        return $false
+      }
+    }
+
+    $containerStarted = $false
+    if ($useContainerImage) {
+      docker rm -f $containerName *> $null
+      docker volume rm $containerVolume *> $null
+      $dockerArgs = @(
+        "run", "-d",
+        "--name", $containerName,
+        "-p", "$($lanePort):17880",
+        "-v", "$($containerVolume):/data",
+        $containerImage,
+        "--no-open-browser",
+        "--listen", "0.0.0.0:17880",
+        "--data-dir", "/data",
+        "--profile", $laneProfile,
+        "--instance-name", $laneInstanceName,
+        "--allow-parallel"
+      )
+      & docker @dockerArgs | Out-Host
+      if ($LASTEXITCODE -ne 0) {
+        throw "Failed to start container lane $laneNumber from image $containerImage"
+      }
+      $containerStarted = $true
+      $deadline = (Get-Date).AddSeconds($containerStartupTimeoutSec)
+      while ((Get-Date) -lt $deadline) {
+        if (Test-LaneHealth "http://127.0.0.1:$lanePort") {
+          break
+        }
+        Start-Sleep -Seconds 1
+      }
+      if (-not (Test-LaneHealth "http://127.0.0.1:$lanePort")) {
+        throw "Container lane $laneNumber did not become healthy at http://127.0.0.1:$lanePort within $containerStartupTimeoutSec seconds."
+      }
+    }
+
     $laneResults = @()
-    foreach ($spec in $assignedSpecs) {
+    try {
+      foreach ($spec in $assignedSpecs) {
       $specRelativeToUi = $spec
       if ($specRelativeToUi.StartsWith("ui.web\")) {
         $specRelativeToUi = $specRelativeToUi.Substring("ui.web\".Length)
@@ -231,8 +315,11 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       if ($skipDependencyPrep) {
         $args += "-SkipDependencyPrep"
       }
-      if ($skipRuntimeBuild) {
+      if ($skipRuntimeBuild -or $useContainerImage) {
         $args += "-SkipRuntimeBuild"
+      }
+      if ($useContainerImage) {
+        $args += "-ReuseServer"
       }
 
       & pwsh @args 2>&1 | ForEach-Object {
@@ -248,6 +335,13 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         break
       }
     }
+    }
+    finally {
+      if ($containerStarted -and -not $keepContainers) {
+        docker rm -f $containerName *> $null
+        docker volume rm $containerVolume *> $null
+      }
+    }
 
     [pscustomobject]@{
       lane = $laneNumber
@@ -256,6 +350,12 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       data_dir = $laneDataDir
       profile = $laneProfile
       instance_name = $laneInstanceName
+      use_container_image = $useContainerImage
+      container_image = if ($useContainerImage) { $containerImage } else { $null }
+      container_name = if ($useContainerImage) { $containerName } else { $null }
+      container_volume = if ($useContainerImage) { $containerVolume } else { $null }
+      container_started = $containerStarted
+      container_kept = $keepContainers
       source_commit = $sourceCommit
       log_dir = $laneLogDir
       results = $laneResults
@@ -280,6 +380,12 @@ $cleanLaneResults = @(
       data_dir = $_.data_dir
       profile = $_.profile
       instance_name = $_.instance_name
+      use_container_image = $_.use_container_image
+      container_image = $_.container_image
+      container_name = $_.container_name
+      container_volume = $_.container_volume
+      container_started = $_.container_started
+      container_kept = $_.container_kept
       source_commit = $_.source_commit
       log_dir = $_.log_dir
       results = $_.results
@@ -301,6 +407,10 @@ $summary = [ordered]@{
   lane_count = $LaneCount
   max_workers = $MaxWorkers
   worker_limit = $workerLimit
+  use_container_image = $UseContainerImage.IsPresent
+  container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
+  container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }
+  keep_containers = $KeepContainers.IsPresent
   active_lane_count = $completedActiveLaneCount
   empty_lane_count = $completedEmptyLaneCount
   spec_counts_by_lane = $specCountsByLane

@@ -80,3 +80,17 @@ Cabinet SHALL provide a repo-local container image definition for isolated Cypre
 - **GIVEN** a Cypress lane starts the Cabinet container image
 - **WHEN** the container runtime is waiting for readiness
 - **THEN** the image MUST expose a health check against `/healthz` so orchestration can distinguish app readiness from Cypress assertion failures.
+
+### Requirement CONT-UI-CAB-009: Cypress matrix validation SHALL orchestrate isolated container lanes
+Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local container runtime per active lane so matrix execution can validate against isolated data volumes and deterministic host ports instead of shared desktop runtimes.
+
+#### Scenario: Plan container-backed lanes
+- **GIVEN** the Cypress matrix runner is invoked in plan-only mode with container image lanes enabled
+- **WHEN** it writes `matrix.summary.json`
+- **THEN** the summary MUST record the container image, startup timeout, keep-container setting, and per-lane container name and data volume alongside the lane port, profile, instance, source commit, and assigned specs.
+
+#### Scenario: Execute container-backed lanes
+- **GIVEN** the Cypress matrix runner executes with container image lanes enabled
+- **WHEN** an active lane starts
+- **THEN** the runner MUST start the configured Cabinet container image with a unique host port, named writable data volume, E2E profile, instance name, and parallel-runtime flag before invoking Cypress against that lane.
+- **AND** the runner MUST reuse the already-started lane runtime for Cypress, wait for `/healthz` before assertions, and stop/remove the lane container and volume unless keep-container diagnostics are explicitly requested.
