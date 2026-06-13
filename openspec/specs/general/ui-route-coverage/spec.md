@@ -26,6 +26,35 @@ Cabinet SHALL not leave placeholder routes undocumented.
 - **WHEN** route contract is evaluated
 - **THEN** spec MUST define deterministic placeholder behavior, shell controls, and transition expectation for future full implementation
 
+### Requirement UI-ROUTE-COVERAGE-004: Protected routes SHALL redirect unauthenticated users with deep-link state
+Cabinet SHALL guard authenticated routes by sending signed-out users to sign-in while preserving the requested route and query string as a safe redirect target.
+
+#### Scenario: Unauthenticated protected route access
+- **GIVEN** a signed-out user opens an authenticated Cabinet route with query state
+- **WHEN** route guards evaluate the request
+- **THEN** Cabinet MUST show the sign-in route and preserve the original path/query in the redirect search parameter
+
+### Requirement UI-ROUTE-COVERAGE-005: Route error pages SHALL expose deterministic recovery actions
+Cabinet SHALL render deterministic public and authenticated route-error pages with user-readable status copy and non-destructive navigation recovery.
+
+#### Scenario: Public unknown route recovery
+- **GIVEN** a user opens an unknown public route
+- **WHEN** the not-found boundary renders
+- **THEN** Cabinet MUST show the 404 state with Go Back and Back to Home recovery controls
+
+#### Scenario: Authenticated error route taxonomy
+- **GIVEN** an authenticated user opens a known error taxonomy route
+- **WHEN** the error screen renders
+- **THEN** Cabinet MUST show the matching error status, readable guidance, and safe recovery controls inside the authenticated shell
+
+### Requirement UI-ROUTE-COVERAGE-006: Document titles SHALL remain product-prefixed across route classes
+Cabinet SHALL use deterministic `Cabinet - <Page Title>` document titles for authenticated workspace routes and documented route-error surfaces.
+
+#### Scenario: Route title coverage
+- **GIVEN** authenticated workspace and route-error screens are opened
+- **WHEN** navigation completes
+- **THEN** `document.title` MUST use the Cabinet product prefix and the route-specific page title without leaking route module names
+
 ## Route Coverage Map
 | Route | Primary Spec |
 | --- | --- |

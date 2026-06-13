@@ -31,6 +31,9 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchase-inbox-error-state",
 		"purchase-inbox-ready-state",
 		"purchase-inbox-confirm-dialog",
+		"purchases-header-title",
+		"purchases-page-icon",
+		"Load captured reviews",
 		"requires_confirmation",
 		"Confirmation required",
 		"purchases-add-csv-preview",
@@ -45,7 +48,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
-			t.Fatalf("Purchase Inbox UI missing %q in %s", snippet, featurePath)
+			t.Fatalf("Purchases UI missing %q in %s", snippet, featurePath)
 		}
 	}
 
@@ -66,7 +69,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 	}
 	for _, snippet := range requiredCypressSnippets {
 		if !strings.Contains(cypressSpec, snippet) {
-			t.Fatalf("Purchase Inbox Cypress contract missing %q in %s", snippet, cypressPath)
+			t.Fatalf("Purchases Cypress contract missing %q in %s", snippet, cypressPath)
 		}
 	}
 }
