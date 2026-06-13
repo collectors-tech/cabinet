@@ -506,6 +506,29 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains('Home').should('be.visible');
   });
 
+  it('UI-SCREEN-ONBOARDING-AUTH-017 validates sign-up fields without leaving the route', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/sign-up');
+    cy.contains('button', 'Create Account').click();
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+    cy.contains(/please enter your email|invalid email/i).should('be.visible');
+    cy.contains('Please enter your password').should('be.visible');
+    cy.contains('Please confirm your password').should('be.visible');
+
+    cy.get('input[name="email"]').clear().type('invalid-email');
+    cy.get('input[name="password"]').clear().type('password123');
+    cy.get('input[name="confirmPassword"]').clear().type('password456');
+    cy.contains('button', 'Create Account').click();
+
+    cy.location('pathname').should('match', /^\/sign-up\/?$/);
+    cy.contains(/invalid email/i).should('be.visible');
+    cy.contains("Passwords don't match.").should('be.visible');
+    cy.get('[data-testid="sign-up-sign-in-link"]').should('be.visible');
+  });
+
   it('UI-SCREEN-ONBOARDING-AUTH-012 completes forgot-password submit and routes to OTP recovery', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
@@ -532,6 +555,26 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.visit('/forgot-password');
     cy.get('[data-testid="forgot-password-sign-up-link"]').click();
     cy.location('pathname').should('match', /^\/sign-up\/?$/);
+  });
+
+  it('UI-SCREEN-ONBOARDING-AUTH-017 validates forgot-password input without clearing recovery options', () => {
+    cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
+      .its('status')
+      .should('eq', 200);
+
+    cy.visit('/forgot-password');
+    cy.get('[data-testid="forgot-password-submit"]').click();
+    cy.location('pathname').should('match', /^\/forgot-password\/?$/);
+    cy.contains(/please enter your email|invalid email/i).should('be.visible');
+    cy.get('[data-testid="forgot-password-sign-up-link"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/sign-up');
+
+    cy.get('input[name="email"]').clear().type('not-an-email');
+    cy.get('[data-testid="forgot-password-submit"]').click();
+    cy.location('pathname').should('match', /^\/forgot-password\/?$/);
+    cy.contains(/invalid email/i).should('be.visible');
+    cy.get('[data-testid="forgot-password-submit"]').should('not.be.disabled');
   });
 
   it('UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route', () => {

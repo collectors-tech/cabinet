@@ -314,6 +314,23 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 - **THEN** UI MUST show deterministic in-flight handling
 - **AND** MUST complete the happy-path handoff without redirecting back to `/sign-in`
 
+### Requirement UI-SCREEN-ONBOARDING-AUTH-017: Public auth forms SHALL validate input without losing recovery paths
+Public sign-up and forgot-password forms SHALL keep users on the current public auth route when validation fails, show actionable inline validation, and preserve secondary recovery/account links.
+
+#### Scenario: Sign-up validation state
+- **GIVEN** runtime setup is complete and user is on `/sign-up`
+- **WHEN** required sign-up fields are empty, email is invalid, or confirmation password does not match
+- **THEN** UI MUST show inline validation for the affected fields
+- **AND** MUST remain on `/sign-up`
+- **AND** MUST keep account-return and legal/provider actions visible
+
+#### Scenario: Forgot-password validation state
+- **GIVEN** runtime setup is complete and user is on `/forgot-password`
+- **WHEN** required recovery email is empty or invalid
+- **THEN** UI MUST show inline validation for the email field
+- **AND** MUST remain on `/forgot-password`
+- **AND** MUST keep the sign-up secondary handoff visible and usable
+
 ## Acceptance Criteria
 - Each onboarding critical step has UC ID and deterministic outcome.
 - E2E mapping includes first-run completion and resume behavior.
@@ -352,3 +369,4 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
 | UC-ONB-14 | OTP resend flow | `/otp` resend keeps the user in OTP recovery flow with visible resend confirmation instead of redirecting to sign-in | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback` |
 | UC-ONB-15 | OTP verify control | `/otp` keeps Verify disabled until six digits are present, then submits deterministically from the OTP route | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and submit handoff` |
+| UC-ONB-17 | Public auth form validation | `/sign-up` and `/forgot-password` keep users on-route with inline validation and preserved recovery/account links when form input is empty or invalid | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-017 validates sign-up fields without leaving the route`; `UI-SCREEN-ONBOARDING-AUTH-017 validates forgot-password input without clearing recovery options` |
