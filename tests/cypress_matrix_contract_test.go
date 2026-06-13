@@ -70,8 +70,14 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }`,
 		`active_lane_count = $activeLaneCount`,
 		`empty_lane_count = $emptyLaneCount`,
+		`completed_spec_count = $null`,
+		`passed_spec_count = $null`,
+		`failed_spec_count = $null`,
 		`passed_lane_count = $null`,
 		`failed_lane_count = $null`,
+		`completed_spec_count = $completedSpecCount`,
+		`passed_spec_count = $passedSpecCount`,
+		`failed_spec_count = $failedSpecCount`,
 		`passed_lane_count = $passedLaneCount`,
 		`failed_lane_count = $failedLaneCount`,
 		`spec_counts_by_lane = $specCountsByLane`,
@@ -187,6 +193,9 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 		LaneCount          int    `json:"lane_count"`
 		ActiveLaneCount    int    `json:"active_lane_count"`
 		EmptyLaneCount     int    `json:"empty_lane_count"`
+		CompletedSpecCount int    `json:"completed_spec_count"`
+		PassedSpecCount    int    `json:"passed_spec_count"`
+		FailedSpecCount    int    `json:"failed_spec_count"`
 		PassedLaneCount    int    `json:"passed_lane_count"`
 		FailedLaneCount    int    `json:"failed_lane_count"`
 		Lanes              []struct {
@@ -221,6 +230,9 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 	}
 	if summary.PassedLaneCount != 2 || summary.FailedLaneCount != 0 {
 		t.Fatalf("expected two passing live lanes, got %+v", summary)
+	}
+	if summary.CompletedSpecCount == 0 || summary.PassedSpecCount != summary.CompletedSpecCount || summary.FailedSpecCount != 0 {
+		t.Fatalf("expected all completed fixture specs to pass, got %+v", summary)
 	}
 	if len(summary.Lanes) != 2 {
 		t.Fatalf("expected two completed lane summaries, got %d in %s", len(summary.Lanes), raw)
@@ -382,11 +394,14 @@ func TestCypressMatrixMixedLaneFixtureSummarizesOutcomeCounts(t *testing.T) {
 	}
 
 	var summary struct {
-		ExitCode        int `json:"exit_code"`
-		ActiveLaneCount int `json:"active_lane_count"`
-		PassedLaneCount int `json:"passed_lane_count"`
-		FailedLaneCount int `json:"failed_lane_count"`
-		Lanes           []struct {
+		ExitCode           int `json:"exit_code"`
+		ActiveLaneCount    int `json:"active_lane_count"`
+		CompletedSpecCount int `json:"completed_spec_count"`
+		PassedSpecCount    int `json:"passed_spec_count"`
+		FailedSpecCount    int `json:"failed_spec_count"`
+		PassedLaneCount    int `json:"passed_lane_count"`
+		FailedLaneCount    int `json:"failed_lane_count"`
+		Lanes              []struct {
 			Lane         int     `json:"lane"`
 			ExitCode     int     `json:"exit_code"`
 			FailureStage *string `json:"failure_stage"`
@@ -399,6 +414,9 @@ func TestCypressMatrixMixedLaneFixtureSummarizesOutcomeCounts(t *testing.T) {
 
 	if summary.ExitCode != 1 || summary.ActiveLaneCount != 2 || summary.PassedLaneCount != 1 || summary.FailedLaneCount != 1 {
 		t.Fatalf("unexpected mixed lane outcome counts: %+v", summary)
+	}
+	if summary.CompletedSpecCount == 0 || summary.PassedSpecCount == 0 || summary.FailedSpecCount != 1 {
+		t.Fatalf("unexpected mixed spec outcome counts: %+v", summary)
 	}
 	if len(summary.Lanes) != 2 {
 		t.Fatalf("expected two completed lane summaries, got %d in %s", len(summary.Lanes), raw)
