@@ -291,6 +291,8 @@ function Write-RunSummary(
   [string]$summaryPath,
   [int]$exitCode,
   [string]$errorMessage,
+  [datetime]$runStartedAt,
+  [string[]]$runnerCommand,
   [string]$repoRoot,
   [string]$uiRoot,
   [string]$specPath,
@@ -306,6 +308,7 @@ function Write-RunSummary(
   [string]$apiContractSmokeSummaryPath,
   [bool]$startedServer
 ) {
+  $runFinishedAt = Get-Date
   $apiContractSmokeStatus = ""
   $apiContractSmokeCheckCount = $null
   $apiContractSmokeFailedCount = $null
@@ -337,8 +340,12 @@ function Write-RunSummary(
 
   $summary = [ordered]@{
     timestamp = (Get-Date).ToString("o")
+    started_at = $runStartedAt.ToString("o")
+    finished_at = $runFinishedAt.ToString("o")
+    duration_ms = [int64][Math]::Max(0, [Math]::Round(($runFinishedAt - $runStartedAt).TotalMilliseconds))
     exit_code = $exitCode
     error = $errorMessage
+    runner_command = $runnerCommand
     repo_root = $repoRoot
     ui_root = $uiRoot
     spec = $specPath
@@ -376,6 +383,7 @@ $e2eDataDir = Join-Path $repoRoot ".tmp\cypress-runtime-$runtimePort"
 $e2eProfile = "e2e-cypress-$runtimePort"
 $e2eInstanceName = "cypress-$runtimePort"
 $sourceCommit = Get-SourceCommit $repoRoot
+$runStartedAt = Get-Date
 $resolvedLogDir = if ([System.IO.Path]::IsPathRooted($LogDir)) { $LogDir } else { Join-Path $repoRoot $LogDir }
 $runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $logSegment = if ([string]::IsNullOrWhiteSpace($LogName)) {
@@ -385,6 +393,54 @@ $logSegment = if ([string]::IsNullOrWhiteSpace($LogName)) {
 }
 $logPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.log"
 $summaryPath = Join-Path $resolvedLogDir "$runStamp-$logSegment.summary.json"
+$scriptRelativePath = (Resolve-Path -Relative $PSCommandPath).TrimStart(".\").Replace("\", "/")
+$runnerCommand = @(
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-File",
+  $scriptRelativePath,
+  "-Spec",
+  $Spec,
+  "-Browser",
+  $Browser,
+  "-BaseUrl",
+  $BaseUrl,
+  "-StartupTimeoutSec",
+  "$StartupTimeoutSec",
+  "-LogDir",
+  $LogDir
+)
+if ($Headed) {
+  $runnerCommand += "-Headed"
+}
+if ($NoServer) {
+  $runnerCommand += "-NoServer"
+}
+if ($ReuseServer) {
+  $runnerCommand += "-ReuseServer"
+}
+if ($RequireE2EHooks) {
+  $runnerCommand += "-RequireE2EHooks"
+}
+if ($ApiContractSmoke) {
+  $runnerCommand += "-ApiContractSmoke"
+}
+if (-not [string]::IsNullOrWhiteSpace($RuntimeExecutablePath)) {
+  $runnerCommand += @("-RuntimeExecutablePath", $RuntimeExecutablePath)
+}
+if ($AllowTempRuntimePath) {
+  $runnerCommand += "-AllowTempRuntimePath"
+}
+if ($SkipDependencyPrep) {
+  $runnerCommand += "-SkipDependencyPrep"
+}
+if ($SkipRuntimeBuild) {
+  $runnerCommand += "-SkipRuntimeBuild"
+}
+if (-not [string]::IsNullOrWhiteSpace($LogName)) {
+  $runnerCommand += @("-LogName", $LogName)
+}
 $transcriptStarted = $false
 
 New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
@@ -557,6 +613,8 @@ finally {
     -summaryPath $summaryPath `
     -exitCode $exitCode `
     -errorMessage $errorMessage `
+    -runStartedAt $runStartedAt `
+    -runnerCommand $runnerCommand `
     -repoRoot $repoRoot `
     -uiRoot $uiRoot `
     -specPath $specPath `
