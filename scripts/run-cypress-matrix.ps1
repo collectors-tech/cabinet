@@ -110,6 +110,7 @@ function ConvertTo-ContainerSegment([string]$value) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourceCommit = Get-SourceCommit $repoRoot
+$runStartedAt = Get-Date
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
 $containerRunSegment = ConvertTo-ContainerSegment $runStamp
 $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($LogRoot)) { $LogRoot } else { Join-Path $repoRoot $LogRoot }
@@ -188,8 +189,12 @@ $activeLaneCount = @($specCountsByLane | Where-Object { $_ -gt 0 }).Count
 $emptyLaneCount = $LaneCount - $activeLaneCount
 
 if ($PlanOnly) {
+  $runFinishedAt = Get-Date
   $summary = [ordered]@{
     timestamp = (Get-Date).ToString("o")
+    started_at = $runStartedAt.ToString("o")
+    finished_at = $runFinishedAt.ToString("o")
+    duration_ms = [int64][Math]::Max(0, [Math]::Round(($runFinishedAt - $runStartedAt).TotalMilliseconds))
     exit_code = 0
     plan_only = $true
     source_commit = $sourceCommit
@@ -245,12 +250,17 @@ if ($UseContainerImage) {
 
   if (-not [string]::IsNullOrWhiteSpace($imagePreflightError)) {
     Write-Host "[cypress-matrix] $imagePreflightError"
+    $runFinishedAt = Get-Date
     $failedLaneSummaries = @(
       $lanePlans |
         Where-Object { $_.specs.Count -gt 0 } |
         ForEach-Object {
+          $laneFinishedAt = Get-Date
           [pscustomobject]@{
             lane = $_.lane
+            started_at = $runStartedAt.ToString("o")
+            finished_at = $laneFinishedAt.ToString("o")
+            duration_ms = [int64][Math]::Max(0, [Math]::Round(($laneFinishedAt - $runStartedAt).TotalMilliseconds))
             port = $_.port
             base_url = $_.base_url
             data_dir = $_.data_dir
@@ -275,6 +285,9 @@ if ($UseContainerImage) {
     )
     $summary = [ordered]@{
       timestamp = (Get-Date).ToString("o")
+      started_at = $runStartedAt.ToString("o")
+      finished_at = $runFinishedAt.ToString("o")
+      duration_ms = [int64][Math]::Max(0, [Math]::Round(($runFinishedAt - $runStartedAt).TotalMilliseconds))
       exit_code = 1
       plan_only = $false
       source_commit = $sourceCommit
@@ -387,6 +400,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $laneExitCode = 0
     $failureStage = $null
     $errorMessage = $null
+    $laneStartedAt = Get-Date
     try {
       $fixtureApplies = (-not [string]::IsNullOrWhiteSpace($failureFixtureStage)) -and $laneNumber -eq $failureFixtureLane
       if ($useContainerImage) {
@@ -431,6 +445,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       }
       $failureStage = "cypress"
       foreach ($spec in $assignedSpecs) {
+      $specStartedAt = Get-Date
       $specRelativeToUi = $spec
       if ($specRelativeToUi.StartsWith("ui.web\")) {
         $specRelativeToUi = $specRelativeToUi.Substring("ui.web\".Length)
@@ -472,8 +487,12 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       if ($fixtureApplies -and $failureFixtureStage -eq "cypress") {
         $laneExitCode = 1
         $errorMessage = "Failure fixture forced Cypress failure for spec $spec."
+        $specFinishedAt = Get-Date
         $laneResults += [pscustomobject]@{
           spec = $spec
+          started_at = $specStartedAt.ToString("o")
+          finished_at = $specFinishedAt.ToString("o")
+          duration_ms = [int64][Math]::Max(0, [Math]::Round(($specFinishedAt - $specStartedAt).TotalMilliseconds))
           base_url = "http://127.0.0.1:$lanePort"
           api_contract_smoke = $apiContractSmoke
           cypress_summary_path = $null
@@ -487,6 +506,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         $fixtureLogPath = Join-Path $laneLogDir "$logName.log"
         $fixtureSummaryPath = Join-Path $laneLogDir "$logName.summary.json"
         "[cypress-matrix] Fixture pass for $spec" | Set-Content -LiteralPath $fixtureLogPath -Encoding UTF8
+        $specFinishedAt = Get-Date
         [ordered]@{
           timestamp = (Get-Date).ToString("o")
           exit_code = 0
@@ -504,6 +524,9 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $fixtureSummaryPath -Encoding UTF8
         $laneResults += [pscustomobject]@{
           spec = $spec
+          started_at = $specStartedAt.ToString("o")
+          finished_at = $specFinishedAt.ToString("o")
+          duration_ms = [int64][Math]::Max(0, [Math]::Round(($specFinishedAt - $specStartedAt).TotalMilliseconds))
           base_url = "http://127.0.0.1:$lanePort"
           api_contract_smoke = $apiContractSmoke
           cypress_fixture_mode = $cypressFixtureMode
@@ -518,6 +541,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         Write-Host $_
       }
       $exitCode = $LASTEXITCODE
+      $specFinishedAt = Get-Date
       $cypressSummaryPath = $null
       $cypressLogPath = $null
       $summaryCandidate = Get-ChildItem -LiteralPath $laneLogDir -File -Filter "*-$logName.summary.json" -ErrorAction SilentlyContinue |
@@ -534,6 +558,9 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       }
       $laneResults += [pscustomobject]@{
         spec = $spec
+        started_at = $specStartedAt.ToString("o")
+        finished_at = $specFinishedAt.ToString("o")
+        duration_ms = [int64][Math]::Max(0, [Math]::Round(($specFinishedAt - $specStartedAt).TotalMilliseconds))
         base_url = "http://127.0.0.1:$lanePort"
         api_contract_smoke = $apiContractSmoke
         cypress_summary_path = $cypressSummaryPath
@@ -563,9 +590,13 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         docker volume rm $containerVolume *> $null
       }
     }
+    $laneFinishedAt = Get-Date
 
     [pscustomobject]@{
       lane = $laneNumber
+      started_at = $laneStartedAt.ToString("o")
+      finished_at = $laneFinishedAt.ToString("o")
+      duration_ms = [int64][Math]::Max(0, [Math]::Round(($laneFinishedAt - $laneStartedAt).TotalMilliseconds))
       port = $lanePort
       base_url = "http://127.0.0.1:$lanePort"
       data_dir = $laneDataDir
@@ -600,6 +631,9 @@ $cleanLaneResults = @(
   $laneResults | ForEach-Object {
     [pscustomobject]@{
       lane = $_.lane
+      started_at = $_.started_at
+      finished_at = $_.finished_at
+      duration_ms = $_.duration_ms
       port = $_.port
       base_url = $_.base_url
       data_dir = $_.data_dir
@@ -631,8 +665,12 @@ $completedSpecResults = @($cleanLaneResults | ForEach-Object { $_.results })
 $completedSpecCount = $completedSpecResults.Count
 $passedSpecCount = @($completedSpecResults | Where-Object { $_.exit_code -eq 0 }).Count
 $failedSpecCount = @($completedSpecResults | Where-Object { $_.exit_code -ne 0 }).Count
+$runFinishedAt = Get-Date
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
+  started_at = $runStartedAt.ToString("o")
+  finished_at = $runFinishedAt.ToString("o")
+  duration_ms = [int64][Math]::Max(0, [Math]::Round(($runFinishedAt - $runStartedAt).TotalMilliseconds))
   exit_code = $exitCode
   plan_only = $false
   source_commit = $sourceCommit

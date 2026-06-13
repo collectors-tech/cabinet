@@ -138,6 +138,11 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **THEN** the summary MUST record aggregate `passed_lane_count` and `failed_lane_count` values matching the completed lane exit codes so validators can classify mixed lane outcomes without parsing every lane entry.
 - **AND** the summary MUST record aggregate `completed_spec_count`, `passed_spec_count`, and `failed_spec_count` values matching the completed per-spec result entries so validators can classify multi-spec outcomes without parsing every lane entry.
 
+#### Scenario: Record run, lane, and per-spec timing metadata
+- **GIVEN** the Cypress matrix runner executes non-plan work
+- **WHEN** it writes `matrix.summary.json`
+- **THEN** the run summary, each completed lane summary, and each per-spec result entry MUST record `started_at`, `finished_at`, and `duration_ms` values so operators can identify slow setup, runtime health, and browser assertion phases without scraping logs.
+
 ### Requirement CONT-UI-CAB-010: Isolated Cypress harness documentation SHALL define local prerequisites and fallback behavior
 Cabinet SHALL document how operators run isolated Cypress validation locally, including Docker/container prerequisites, single-spec and bounded-matrix commands, machine-readable evidence paths, failure-stage interpretation, and fallback behavior when Docker is unavailable.
 

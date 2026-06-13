@@ -446,6 +446,80 @@ func TestCypressMatrixMixedLaneFixtureSummarizesOutcomeCounts(t *testing.T) {
 	}
 }
 
+func TestCypressMatrixSuccessFixtureWritesTimingMetadata(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-timing-metadata-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"1",
+		"-MaxWorkers",
+		"1",
+		"-CypressFixtureMode",
+		"pass",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run timing metadata fixture: %v\n%s", err, output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read timing metadata summary: %v", err)
+	}
+
+	var summary struct {
+		StartedAt  string `json:"started_at"`
+		FinishedAt string `json:"finished_at"`
+		DurationMS int64  `json:"duration_ms"`
+		Lanes      []struct {
+			StartedAt  string `json:"started_at"`
+			FinishedAt string `json:"finished_at"`
+			DurationMS int64  `json:"duration_ms"`
+			Results    []struct {
+				StartedAt  string `json:"started_at"`
+				FinishedAt string `json:"finished_at"`
+				DurationMS int64  `json:"duration_ms"`
+				ExitCode   int    `json:"exit_code"`
+			} `json:"results"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse timing metadata summary: %v\n%s", err, raw)
+	}
+
+	if summary.StartedAt == "" || summary.FinishedAt == "" || summary.DurationMS < 0 {
+		t.Fatalf("run summary missing timing metadata: %+v", summary)
+	}
+	if len(summary.Lanes) != 1 {
+		t.Fatalf("expected one timed lane, got %d in %s", len(summary.Lanes), raw)
+	}
+	lane := summary.Lanes[0]
+	if lane.StartedAt == "" || lane.FinishedAt == "" || lane.DurationMS < 0 {
+		t.Fatalf("lane summary missing timing metadata: %+v", lane)
+	}
+	if len(lane.Results) != 1 {
+		t.Fatalf("expected one timed result, got %+v", lane.Results)
+	}
+	result := lane.Results[0]
+	if result.ExitCode != 0 || result.StartedAt == "" || result.FinishedAt == "" || result.DurationMS < 0 {
+		t.Fatalf("result summary missing timing metadata: %+v", result)
+	}
+}
+
 func TestCypressMatrixSuccessFixtureLinksPerSpecArtifacts(t *testing.T) {
 	t.Parallel()
 
