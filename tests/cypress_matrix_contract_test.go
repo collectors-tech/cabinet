@@ -67,6 +67,10 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }`,
 		`active_lane_count = $activeLaneCount`,
 		`empty_lane_count = $emptyLaneCount`,
+		`passed_lane_count = $null`,
+		`failed_lane_count = $null`,
+		`passed_lane_count = $passedLaneCount`,
+		`failed_lane_count = $failedLaneCount`,
 		`spec_counts_by_lane = $specCountsByLane`,
 		`".work-agent\logs\cypress-matrix"`,
 		`matrix.summary.json`,
@@ -180,6 +184,8 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 		LaneCount          int    `json:"lane_count"`
 		ActiveLaneCount    int    `json:"active_lane_count"`
 		EmptyLaneCount     int    `json:"empty_lane_count"`
+		PassedLaneCount    int    `json:"passed_lane_count"`
+		FailedLaneCount    int    `json:"failed_lane_count"`
 		Lanes              []struct {
 			Lane               int     `json:"lane"`
 			Port               int     `json:"port"`
@@ -193,6 +199,8 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 				Spec               string `json:"spec"`
 				BaseURL            string `json:"base_url"`
 				CypressFixtureMode string `json:"cypress_fixture_mode"`
+				CypressSummaryPath string `json:"cypress_summary_path"`
+				CypressLogPath     string `json:"cypress_log_path"`
 				ExitCode           int    `json:"exit_code"`
 			} `json:"results"`
 			ExitCode int `json:"exit_code"`
@@ -207,6 +215,9 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 	}
 	if summary.LaneCount != 2 || summary.ActiveLaneCount != 2 || summary.EmptyLaneCount != 0 {
 		t.Fatalf("expected two active live lanes, got %+v", summary)
+	}
+	if summary.PassedLaneCount != 2 || summary.FailedLaneCount != 0 {
+		t.Fatalf("expected two passing live lanes, got %+v", summary)
 	}
 	if len(summary.Lanes) != 2 {
 		t.Fatalf("expected two completed lane summaries, got %d in %s", len(summary.Lanes), raw)
@@ -224,9 +235,31 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 		if len(lane.Results) == 0 {
 			t.Fatalf("expected fixture result entries for lane %+v", lane)
 		}
+		seenSummaryPaths := map[string]bool{}
 		for _, result := range lane.Results {
 			if result.ExitCode != 0 || result.CypressFixtureMode != "pass" || result.BaseURL == "" || result.Spec == "" {
 				t.Fatalf("unexpected fixture result: %+v", result)
+			}
+			if result.CypressSummaryPath == "" || result.CypressLogPath == "" {
+				t.Fatalf("fixture result should link artifacts: %+v", result)
+			}
+			if seenSummaryPaths[result.CypressSummaryPath] {
+				t.Fatalf("fixture result summary path reused within lane: %s", result.CypressSummaryPath)
+			}
+			seenSummaryPaths[result.CypressSummaryPath] = true
+			artifactRaw, err := os.ReadFile(result.CypressSummaryPath)
+			if err != nil {
+				t.Fatalf("read Cypress fixture summary: %v", err)
+			}
+			var artifact struct {
+				Spec    string `json:"spec"`
+				LogPath string `json:"log_path"`
+			}
+			if err := json.Unmarshal(artifactRaw, &artifact); err != nil {
+				t.Fatalf("parse Cypress fixture summary: %v\n%s", err, artifactRaw)
+			}
+			if artifact.Spec != result.Spec || artifact.LogPath != result.CypressLogPath {
+				t.Fatalf("fixture artifact does not match result: artifact=%+v result=%+v", artifact, result)
 			}
 		}
 	}
@@ -303,6 +336,92 @@ func TestCypressMatrixApiSmokeSuccessFixtureWritesLiveResultMetadata(t *testing.
 				t.Fatalf("lane %d missing per-spec API smoke result metadata: %+v", laneIndex+1, result)
 			}
 		}
+	}
+}
+
+func TestCypressMatrixMixedLaneFixtureSummarizesOutcomeCounts(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-mixed-lane-outcome-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-*/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-CypressFixtureMode",
+		"pass",
+		"-FailureFixtureStage",
+		"cypress",
+		"-FailureFixtureLane",
+		"2",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected mixed lane fixture to exit nonzero\n%s", output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read mixed lane summary: %v\n%s", err, output)
+	}
+
+	var summary struct {
+		ExitCode        int `json:"exit_code"`
+		ActiveLaneCount int `json:"active_lane_count"`
+		PassedLaneCount int `json:"passed_lane_count"`
+		FailedLaneCount int `json:"failed_lane_count"`
+		Lanes           []struct {
+			Lane         int     `json:"lane"`
+			ExitCode     int     `json:"exit_code"`
+			FailureStage *string `json:"failure_stage"`
+			ErrorMessage *string `json:"error_message"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse mixed lane summary: %v\n%s", err, raw)
+	}
+
+	if summary.ExitCode != 1 || summary.ActiveLaneCount != 2 || summary.PassedLaneCount != 1 || summary.FailedLaneCount != 1 {
+		t.Fatalf("unexpected mixed lane outcome counts: %+v", summary)
+	}
+	if len(summary.Lanes) != 2 {
+		t.Fatalf("expected two completed lane summaries, got %d in %s", len(summary.Lanes), raw)
+	}
+	var sawPassingLane, sawFailingLane bool
+	for _, lane := range summary.Lanes {
+		switch lane.ExitCode {
+		case 0:
+			sawPassingLane = true
+			if lane.FailureStage != nil || lane.ErrorMessage != nil {
+				t.Fatalf("passing lane should not record failure diagnostics: %+v", lane)
+			}
+		case 1:
+			sawFailingLane = true
+			if lane.FailureStage == nil || *lane.FailureStage != "cypress" {
+				t.Fatalf("failing lane should record cypress failure stage: %+v", lane)
+			}
+			if lane.ErrorMessage == nil || !strings.Contains(*lane.ErrorMessage, "forced Cypress failure") {
+				t.Fatalf("failing lane should record fixture diagnostic: %+v", lane)
+			}
+		default:
+			t.Fatalf("unexpected lane exit code: %+v", lane)
+		}
+	}
+	if !sawPassingLane || !sawFailingLane {
+		t.Fatalf("expected one passing and one failing lane, got %+v", summary.Lanes)
 	}
 }
 

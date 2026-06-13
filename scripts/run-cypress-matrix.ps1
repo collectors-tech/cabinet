@@ -206,6 +206,8 @@ if ($PlanOnly) {
     cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
     active_lane_count = $activeLaneCount
     empty_lane_count = $emptyLaneCount
+    passed_lane_count = $null
+    failed_lane_count = $null
     spec_counts_by_lane = $specCountsByLane
     log_dir = $runLogDir
     lanes = $lanePlans
@@ -341,7 +343,14 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       if ($specRelativeToUi.StartsWith("ui.web\")) {
         $specRelativeToUi = $specRelativeToUi.Substring("ui.web\".Length)
       }
-      $logName = "lane-$laneNumber-$([System.IO.Path]::GetFileNameWithoutExtension($specRelativeToUi))"
+      $specLogSegment = ($specRelativeToUi -replace '[^A-Za-z0-9._-]+', '-').Trim('-')
+      if ([string]::IsNullOrWhiteSpace($specLogSegment)) {
+        $specLogSegment = "spec"
+      }
+      if ($specLogSegment.Length -gt 100) {
+        $specLogSegment = $specLogSegment.Substring(0, 100)
+      }
+      $logName = "lane-$laneNumber-$specLogSegment"
       $args = @(
         "-NoLogo",
         "-NoProfile",
@@ -524,6 +533,8 @@ $cleanLaneResults = @(
 $exitCode = if (($cleanLaneResults | Where-Object { $_.exit_code -ne 0 }).Count -gt 0) { 1 } else { 0 }
 $completedActiveLaneCount = @($cleanLaneResults | Where-Object { $_.results.Count -gt 0 }).Count
 $completedEmptyLaneCount = $LaneCount - $completedActiveLaneCount
+$passedLaneCount = @($cleanLaneResults | Where-Object { $_.exit_code -eq 0 }).Count
+$failedLaneCount = @($cleanLaneResults | Where-Object { $_.exit_code -ne 0 }).Count
 $summary = [ordered]@{
   timestamp = (Get-Date).ToString("o")
   exit_code = $exitCode
@@ -545,6 +556,8 @@ $summary = [ordered]@{
   cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
   active_lane_count = $completedActiveLaneCount
   empty_lane_count = $completedEmptyLaneCount
+  passed_lane_count = $passedLaneCount
+  failed_lane_count = $failedLaneCount
   spec_counts_by_lane = $specCountsByLane
   log_dir = $runLogDir
   lanes = $cleanLaneResults
