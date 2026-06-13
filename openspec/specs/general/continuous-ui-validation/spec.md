@@ -88,6 +88,7 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **GIVEN** the Cypress matrix runner is invoked in plan-only mode with container image lanes enabled
 - **WHEN** it writes `matrix.summary.json`
 - **THEN** the summary MUST record the container image, startup timeout, keep-container setting, and per-lane container name and data volume alongside the lane port, profile, instance, source commit, and assigned specs.
+- **AND** the summary MUST record a run-level `runner_command` array so validators can confirm the exact matrix invocation, selected spec glob, lane bounds, container mode, API smoke, E2E hook, fixture, and run-id inputs without scraping console logs.
 
 #### Scenario: Execute container-backed lanes
 - **GIVEN** the Cypress matrix runner executes with container image lanes enabled

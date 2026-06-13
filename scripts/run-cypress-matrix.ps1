@@ -222,6 +222,49 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
 $specCountsByLane = @($lanePlans | ForEach-Object { $_.specs.Count })
 $activeLaneCount = @($specCountsByLane | Where-Object { $_ -gt 0 }).Count
 $emptyLaneCount = $LaneCount - $activeLaneCount
+$scriptRelativePath = (Resolve-Path -Relative $PSCommandPath).TrimStart(".\").Replace("\", "/")
+$runnerCommand = @(
+  "pwsh", "-NoLogo", "-NoProfile",
+  "-File", $scriptRelativePath,
+  "-SpecGlob", $SpecGlob,
+  "-Browser", $Browser,
+  "-BasePort", "$BasePort",
+  "-LaneCount", "$LaneCount",
+  "-MaxWorkers", "$MaxWorkers"
+)
+if ($RequireE2EHooks) {
+  $runnerCommand += "-RequireE2EHooks"
+}
+if ($ApiContractSmoke) {
+  $runnerCommand += "-ApiContractSmoke"
+}
+if ($SkipDependencyPrep) {
+  $runnerCommand += "-SkipDependencyPrep"
+}
+if ($SkipRuntimeBuild) {
+  $runnerCommand += "-SkipRuntimeBuild"
+}
+if ($UseContainerImage) {
+  $runnerCommand += @("-UseContainerImage", "-ContainerImage", $ContainerImage, "-ContainerStartupTimeoutSec", "$ContainerStartupTimeoutSec")
+}
+if ($KeepContainers) {
+  $runnerCommand += "-KeepContainers"
+}
+if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) {
+  $runnerCommand += @("-FailureFixtureStage", $FailureFixtureStage, "-FailureFixtureLane", "$FailureFixtureLane")
+}
+if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) {
+  $runnerCommand += @("-CypressFixtureMode", $CypressFixtureMode)
+}
+if ($PlanOnly) {
+  $runnerCommand += "-PlanOnly"
+}
+if (-not [string]::IsNullOrWhiteSpace($RunId)) {
+  $runnerCommand += @("-RunId", $RunId)
+}
+if (-not [string]::IsNullOrWhiteSpace($LogRoot)) {
+  $runnerCommand += @("-LogRoot", $LogRoot)
+}
 
 if ($PlanOnly) {
   $runFinishedAt = Get-Date
@@ -233,6 +276,7 @@ if ($PlanOnly) {
     exit_code = 0
     plan_only = $true
     source_commit = $sourceCommit
+    runner_command = $runnerCommand
     spec_glob = $SpecGlob
     spec_count = $specs.Count
     base_port = $BasePort
@@ -319,6 +363,7 @@ if ($UseContainerImage) {
       exit_code = 1
       plan_only = $false
       source_commit = $sourceCommit
+      runner_command = $runnerCommand
       spec_glob = $SpecGlob
       spec_count = $specs.Count
       base_port = $BasePort
@@ -412,6 +457,7 @@ if ($UseContainerImage) {
       exit_code = 1
       plan_only = $false
       source_commit = $sourceCommit
+      runner_command = $runnerCommand
       spec_glob = $SpecGlob
       spec_count = $specs.Count
       base_port = $BasePort
@@ -814,6 +860,7 @@ $summary = [ordered]@{
   exit_code = $exitCode
   plan_only = $false
   source_commit = $sourceCommit
+  runner_command = $runnerCommand
   spec_glob = $SpecGlob
   spec_count = $specs.Count
   base_port = $BasePort

@@ -156,6 +156,72 @@ func TestCypressMatrixPlanSummaryExposesAPISmokeMetadata(t *testing.T) {
 	}
 }
 
+func TestCypressMatrixPlanSummaryRecordsRunnerInvocation(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-run-command-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-ApiContractSmoke",
+		"-RequireE2EHooks",
+		"-UseContainerImage",
+		"-ContainerImage",
+		"cabinet:e2e",
+		"-PlanOnly",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run command-evidence matrix plan: %v\n%s", err, output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read command-evidence matrix summary: %v", err)
+	}
+
+	var summary struct {
+		RunnerCommand []string `json:"runner_command"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse command-evidence matrix summary: %v\n%s", err, raw)
+	}
+
+	command := strings.Join(summary.RunnerCommand, " ")
+	for _, fragment := range []string{
+		"pwsh -NoLogo -NoProfile -File",
+		"scripts/run-cypress-matrix.ps1",
+		"-SpecGlob ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount 2",
+		"-MaxWorkers 2",
+		"-ApiContractSmoke",
+		"-RequireE2EHooks",
+		"-UseContainerImage",
+		"-ContainerImage cabinet:e2e",
+		"-PlanOnly",
+		"-RunId matrix-run-command-contract",
+	} {
+		if !strings.Contains(command, fragment) {
+			t.Fatalf("runner command missing %q: %q", fragment, command)
+		}
+	}
+}
+
 func TestCypressMatrixPortPreflightFailsBeforeLaneFanout(t *testing.T) {
 	t.Parallel()
 
@@ -1129,13 +1195,13 @@ func TestCypressMatrixPlanSummaryExposesContainerLaneMetadata(t *testing.T) {
 		ContainerStartupTimeout int    `json:"container_startup_timeout_sec"`
 		KeepContainers          bool   `json:"keep_containers"`
 		Lanes                   []struct {
-			UseContainerImage bool    `json:"use_container_image"`
-			ContainerImage    string  `json:"container_image"`
-			ContainerName     string  `json:"container_name"`
-			ContainerVolume   string  `json:"container_volume"`
+			UseContainerImage bool     `json:"use_container_image"`
+			ContainerImage    string   `json:"container_image"`
+			ContainerName     string   `json:"container_name"`
+			ContainerVolume   string   `json:"container_volume"`
 			ContainerCommand  []string `json:"container_command"`
-			FailureStage      *string `json:"failure_stage"`
-			ErrorMessage      *string `json:"error_message"`
+			FailureStage      *string  `json:"failure_stage"`
+			ErrorMessage      *string  `json:"error_message"`
 		} `json:"lanes"`
 	}
 	if err := json.Unmarshal(raw, &summary); err != nil {
