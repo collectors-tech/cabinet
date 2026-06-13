@@ -280,6 +280,30 @@ The full `/chats` workspace SHALL render its selected thread message list and co
 - **THEN** attachment upload controls MUST remain visible for the selected thread
 - **AND** action preview/apply controls MUST remain explicit Cabinet controls outside automatic assistant-ui tool-call mutation
 
+### Requirement UI-SCREEN-CHAT-COPILOT-018: Chat and Assistant surfaces SHALL use assistant-ui.com as the primary UI reference
+The 2026-06-13 Cabinet product direction requires Cabinet to use `https://www.assistant-ui.com/examples/ai-sdk` / assistant-ui.com as the primary chat UI reference for both the main chat UI and the side-panel Assistant UI. Cabinet SHALL evaluate future chat, Assistant side-panel, composer, message, thread/status, and tool/result work against that assistant-ui direction while preserving Cabinet-owned Go API persistence, provider/profile context, attachments, audit history, and explicit preview/confirm/apply safety.
+
+This cross-surface direction complements the existing main chat implementation in #1140 / PR #1148 (`UI-SCREEN-CHAT-COPILOT-017`) and the side-panel Assistant adapter context from #1133 / `ASSISTANT-WORKSPACE-005`.
+
+#### Scenario: Main chat UI follows assistant-ui direction
+- **GIVEN** a future issue, spec, or PR changes `/chats` or another full Cabinet chat workspace
+- **WHEN** the change defines thread, message, composer, streaming/status, or tool/result behavior
+- **THEN** the issue/spec/PR MUST state how the surface follows the assistant-ui AI SDK example
+- **AND** any intentional divergence from assistant-ui.com behavior MUST record the reason, affected surface, and validation expectation
+
+#### Scenario: Side-panel Assistant UI follows assistant-ui direction
+- **GIVEN** a future issue, spec, or PR changes the shell Assistant workspace or compact Assistant panel
+- **WHEN** the change defines side-panel chat, composer, message, thread/status, or tool/result behavior
+- **THEN** the issue/spec/PR MUST state how the side-panel Assistant UI follows the assistant-ui AI SDK example
+- **AND** overlapping main-chat and side-panel behavior MUST use consistent assistant-ui-aligned interaction semantics unless a linked issue/spec records a justified divergence
+
+#### Scenario: Cabinet safety boundaries remain authoritative
+- **GIVEN** assistant-ui components or AI SDK patterns are used for Cabinet chat or Assistant surfaces
+- **WHEN** the UI sends messages, reloads history, renders provider/setup-needed state, handles attachments, or exposes tool/action results
+- **THEN** Cabinet Go APIs MUST remain authoritative for persisted threads/messages, provider/profile state, route context, attachments, audit history, and action confirmation boundaries
+- **AND** assistant-ui tool-call rendering MUST NOT auto-apply inventory, wishlist, collection, import, provider, or other Cabinet data mutations
+- **AND** validation MUST cover message send, persisted reload/history, setup-needed/provider-missing state, context/attachment preservation, explicit preview/apply/cancel safety, and visual/interaction comparison against the assistant-ui AI SDK example for each affected surface
+
 ## Acceptance Criteria
 - UC IDs cover thread persistence, attachments, and guarded action apply.
 - E2E mapping includes chat open/close and action safety flows.
@@ -320,3 +344,4 @@ The full `/chats` workspace SHALL render its selected thread message list and co
 | UC-CHAT-23 | Assistant sidebar compact chat selection/new-chat/navigation action | Sidebar selects existing assistant chats, creates a new chat, sends a layout configuration prompt, exposes an explicit screen-opening action, and navigates only after invocation | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 selects chats, creates a new chat, and exposes a layout navigation action` |
 | UC-CHAT-24 | Assistant-ui shell adapter send/history/provider/action safety | assistant-ui external-store runtime renders shell assistant messages, sends through Cabinet chat APIs with route/profile/provider context, reloads existing history, preserves setup-needed/provider guidance, and keeps preview/apply confirmation explicit | implemented: `ui.web/cypress/e2e/chats/assistant-workspace/spec.cy.ts` `ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation` |
 | UC-CHAT-25 | Assistant-ui full Chats route surface | assistant-ui external-store runtime renders `/chats` selected thread messages and composer while preserving Cabinet profile/thread APIs, route/profile/provider context, attachments, and explicit action preview/apply controls | implemented: `ui.web/cypress/e2e/chats/ui-screen-chat-copilot/spec.cy.ts` `UI-SCREEN-CHAT-COPILOT-017 renders full Chats route through assistant-ui primitives while preserving Cabinet APIs` |
+| UC-CHAT-26 | Assistant-ui main chat and side-panel direction | #1205 links the 2026-06-13 Cabinet product direction across #1140 / PR #1148 for main chat and #1133 for side-panel Assistant, with assistant-ui.com / the AI SDK example as the primary UI reference and Cabinet Go APIs plus preview/confirm/apply safety remaining authoritative | planned: future affected main chat or side-panel Assistant PRs must bind validation to `UI-SCREEN-CHAT-COPILOT-018` |
