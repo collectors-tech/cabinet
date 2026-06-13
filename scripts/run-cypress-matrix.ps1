@@ -5,6 +5,7 @@ param(
   [int]$LaneCount = 2,
   [int]$MaxWorkers = 2,
   [switch]$RequireE2EHooks,
+  [switch]$ApiContractSmoke,
   [switch]$SkipDependencyPrep,
   [switch]$SkipRuntimeBuild,
   [switch]$UseContainerImage,
@@ -166,6 +167,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     data_dir = Join-Path $repoRoot ".tmp\cypress-runtime-$lanePort"
     profile = "e2e-cypress-$lanePort"
     instance_name = "cypress-$lanePort"
+    api_contract_smoke = $ApiContractSmoke.IsPresent
     use_container_image = $UseContainerImage.IsPresent
     container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
     container_name = if ($UseContainerImage) { $containerName } else { $null }
@@ -194,6 +196,7 @@ if ($PlanOnly) {
     lane_count = $LaneCount
     max_workers = $MaxWorkers
     worker_limit = $workerLimit
+    api_contract_smoke = $ApiContractSmoke.IsPresent
     use_container_image = $UseContainerImage.IsPresent
     container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
     container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }
@@ -232,6 +235,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $lanePort,
     $laneLogDir,
     $RequireE2EHooks.IsPresent,
+    $ApiContractSmoke.IsPresent,
     $SkipDependencyPrep.IsPresent,
     $SkipRuntimeBuild.IsPresent,
     $UseContainerImage.IsPresent,
@@ -256,6 +260,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       [int]$lanePort,
       [string]$laneLogDir,
       [bool]$requireE2EHooks,
+      [bool]$apiContractSmoke,
       [bool]$skipDependencyPrep,
       [bool]$skipRuntimeBuild,
       [bool]$useContainerImage,
@@ -350,6 +355,9 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       if ($requireE2EHooks) {
         $args += "-RequireE2EHooks"
       }
+      if ($apiContractSmoke) {
+        $args += "-ApiContractSmoke"
+      }
       if ($skipDependencyPrep) {
         $args += "-SkipDependencyPrep"
       }
@@ -421,6 +429,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       data_dir = $laneDataDir
       profile = $laneProfile
       instance_name = $laneInstanceName
+      api_contract_smoke = $apiContractSmoke
       use_container_image = $useContainerImage
       container_image = if ($useContainerImage) { $containerImage } else { $null }
       container_name = if ($useContainerImage) { $containerName } else { $null }
@@ -454,6 +463,7 @@ $cleanLaneResults = @(
       data_dir = $_.data_dir
       profile = $_.profile
       instance_name = $_.instance_name
+      api_contract_smoke = $_.api_contract_smoke
       use_container_image = $_.use_container_image
       container_image = $_.container_image
       container_name = $_.container_name
@@ -484,6 +494,7 @@ $summary = [ordered]@{
   lane_count = $LaneCount
   max_workers = $MaxWorkers
   worker_limit = $workerLimit
+  api_contract_smoke = $ApiContractSmoke.IsPresent
   use_container_image = $UseContainerImage.IsPresent
   container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
   container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }

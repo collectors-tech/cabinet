@@ -42,6 +42,9 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`"-v", "$($containerVolume):/data"`,
 		`"--listen", "0.0.0.0:17880"`,
 		`$args += "-ReuseServer"`,
+		`$args += "-ApiContractSmoke"`,
+		`api_contract_smoke = $ApiContractSmoke.IsPresent`,
+		`api_contract_smoke = $apiContractSmoke`,
 		`container_started = $containerStarted`,
 		`failure_stage = $failureStage`,
 		`error_message = $errorMessage`,
@@ -72,6 +75,65 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("expected matrix runner to contain fragment %q", fragment)
+		}
+	}
+}
+
+func TestCypressMatrixPlanSummaryExposesAPISmokeMetadata(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-api-smoke-plan-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-ApiContractSmoke",
+		"-RequireE2EHooks",
+		"-PlanOnly",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run API-smoke matrix plan: %v\n%s", err, output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read API-smoke matrix summary: %v", err)
+	}
+
+	var summary struct {
+		ApiContractSmoke bool `json:"api_contract_smoke"`
+		Lanes            []struct {
+			ApiContractSmoke bool `json:"api_contract_smoke"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse API-smoke matrix summary: %v\n%s", err, raw)
+	}
+
+	if !summary.ApiContractSmoke {
+		t.Fatalf("expected run-level API smoke metadata, got %+v", summary)
+	}
+	if len(summary.Lanes) != 2 {
+		t.Fatalf("expected two lane plans, got %d", len(summary.Lanes))
+	}
+	for index, lane := range summary.Lanes {
+		if !lane.ApiContractSmoke {
+			t.Fatalf("lane %d missing API smoke metadata: %+v", index+1, lane)
 		}
 	}
 }
