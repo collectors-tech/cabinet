@@ -253,6 +253,12 @@ The `/sign-in-2` passkey flow SHALL preserve the same redirect semantics as pass
 - **WHEN** submission fails
 - **THEN** UI MUST show actionable error feedback and remain recoverable on `/sign-up`
 
+#### Scenario: Sign-up in-flight duplicate-submit guard
+- **GIVEN** user is on `/sign-up` with valid email/password/confirm password values
+- **WHEN** user activates `Create Account`
+- **THEN** the submit control MUST enter an in-flight disabled state before route handoff
+- **AND** duplicate account-creation submits MUST be blocked while the first submit is pending
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-012: Forgot-password submit SHALL provide deterministic recovery handoff
 Forgot-password flow SHALL provide a deterministic next-step outcome after valid email submission so users are never left on a cleared form with no recovery guidance.
 
@@ -314,6 +320,12 @@ OTP verification controls SHALL keep the verify action disabled until a full six
 - **THEN** UI MUST show deterministic in-flight handling
 - **AND** MUST complete the happy-path handoff without redirecting back to `/sign-in`
 
+#### Scenario: OTP verify in-flight duplicate-submit guard
+- **GIVEN** six digits are present in the OTP input
+- **WHEN** user activates `Verify`
+- **THEN** the verify control MUST enter an in-flight disabled state before recovery handoff
+- **AND** duplicate verification submits MUST be blocked while the first verification is pending
+
 ### Requirement UI-SCREEN-ONBOARDING-AUTH-017: Public auth forms SHALL validate input without losing recovery paths
 Public sign-up and forgot-password forms SHALL keep users on the current public auth route when validation fails, show actionable inline validation, and preserve secondary recovery/account links.
 
@@ -351,7 +363,7 @@ Public sign-up and forgot-password forms SHALL keep users on the current public 
 | UC-ONB-07 | Identity mode resolution | Identity mode and provider enablement resolve from runtime config | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-007 resolves identity mode and provider enablement from runtime config` |
 | UC-ONB-08 | Passkey sign-in | Enrolled passkey auth redirects to authenticated shell without password prompt | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 signs in with passkey and redirects without password prompt` |
 | UC-ONB-09 | Passkey fallback | Unavailable passkey shows deterministic guidance and keeps alternate methods visible | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-008 shows deterministic fallback guidance when passkey is unavailable` |
-| UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell` |
+| UC-ONB-10 | Sign-up completion | Valid sign-up shows submit progress, blocks duplicate submits while pending, and navigates to authenticated shell on success | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up with in-flight duplicate-submit guard` |
 | UC-ONB-10A | Sign-in forgot-password entry | Sign-in shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010B exposes deterministic forgot-password entry from sign-in` |
 | UC-ONB-10AA | Sign-in GitHub/Facebook actions | Sign-in shows visible GitHub/Facebook actions with deterministic disabled state until provider flows are wired | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BB renders deterministic sign-in GitHub and Facebook actions` |
 | UC-ONB-10AB | Sign-in-2 forgot-password entry | `/sign-in-2` shows visible forgot-password recovery entry with deterministic keyboard/mouse navigation to `/forgot-password` | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-010BC exposes deterministic forgot-password entry from sign-in-2` |
@@ -368,5 +380,5 @@ Public sign-up and forgot-password forms SHALL keep users on the current public 
 | UC-ONB-12 | Privacy legal route | `/privacy` renders public Privacy Policy content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Privacy Policy content on the public privacy route` |
 | UC-ONB-13 | Terms legal route | `/terms` renders public Terms of Service content instead of the 404 screen | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-013 renders Terms of Service content on the public terms route` |
 | UC-ONB-14 | OTP resend flow | `/otp` resend keeps the user in OTP recovery flow with visible resend confirmation instead of redirecting to sign-in | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-014 keeps resend in OTP context with deterministic feedback` |
-| UC-ONB-15 | OTP verify control | `/otp` keeps Verify disabled until six digits are present, then submits deterministically from the OTP route | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and submit handoff` |
+| UC-ONB-15 | OTP verify control | `/otp` keeps Verify disabled until six digits are present, blocks duplicate submits while pending, then submits deterministically from the OTP route | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and in-flight submit handoff` |
 | UC-ONB-17 | Public auth form validation | `/sign-up` and `/forgot-password` keep users on-route with inline validation and preserved recovery/account links when form input is empty or invalid | implemented: `ui.web/cypress/e2e/general/ui-screen-onboarding-auth/spec.cy.ts` `UI-SCREEN-ONBOARDING-AUTH-017 validates sign-up fields without leaving the route`; `UI-SCREEN-ONBOARDING-AUTH-017 validates forgot-password input without clearing recovery options` |
