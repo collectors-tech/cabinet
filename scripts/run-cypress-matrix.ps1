@@ -374,6 +374,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         $laneResults += [pscustomobject]@{
           spec = $spec
           base_url = "http://127.0.0.1:$lanePort"
+          api_contract_smoke = $apiContractSmoke
           exit_code = 1
         }
         break
@@ -383,6 +384,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         $laneResults += [pscustomobject]@{
           spec = $spec
           base_url = "http://127.0.0.1:$lanePort"
+          api_contract_smoke = $apiContractSmoke
           cypress_fixture_mode = $cypressFixtureMode
           exit_code = 0
         }
@@ -396,6 +398,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       $laneResults += [pscustomobject]@{
         spec = $spec
         base_url = "http://127.0.0.1:$lanePort"
+        api_contract_smoke = $apiContractSmoke
         exit_code = $exitCode
       }
       if ($exitCode -ne 0) {
