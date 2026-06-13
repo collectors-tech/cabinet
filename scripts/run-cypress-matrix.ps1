@@ -11,6 +11,9 @@ param(
   [string]$ContainerImage = "cabinet:e2e",
   [int]$ContainerStartupTimeoutSec = 60,
   [switch]$KeepContainers,
+  [ValidateSet("", "container_start", "runtime_health", "cypress")]
+  [string]$FailureFixtureStage = "",
+  [int]$FailureFixtureLane = 1,
   [switch]$PlanOnly,
   [string]$RunId = "",
   [string]$LogRoot = ".work-agent\logs\cypress-matrix"
@@ -113,6 +116,9 @@ if ($LaneCount -lt 1) {
 if ($MaxWorkers -lt 1) {
   throw "MaxWorkers must be at least 1."
 }
+if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage) -and ($FailureFixtureLane -lt 1 -or $FailureFixtureLane -gt $LaneCount)) {
+  throw "FailureFixtureLane must identify a lane between 1 and LaneCount."
+}
 $workerLimit = [Math]::Min($LaneCount, $MaxWorkers)
 
 New-Item -ItemType Directory -Force -Path $runLogDir | Out-Null
@@ -136,6 +142,9 @@ Write-Host "[cypress-matrix] Run summary: $summaryPath"
 Write-Host "[cypress-matrix] Specs: $($specs.Count); lanes: $LaneCount; workers: $workerLimit; base port: $BasePort; commit: $sourceCommit"
 if ($UseContainerImage) {
   Write-Host "[cypress-matrix] Container image lanes enabled: image=$ContainerImage startup_timeout_sec=$ContainerStartupTimeoutSec keep_containers=$($KeepContainers.IsPresent)"
+}
+if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) {
+  Write-Host "[cypress-matrix] Failure fixture enabled: lane=$FailureFixtureLane stage=$FailureFixtureStage"
 }
 
 $lanePlans = @()
@@ -183,6 +192,8 @@ if ($PlanOnly) {
     container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
     container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }
     keep_containers = $KeepContainers.IsPresent
+    failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
+    failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
     active_lane_count = $activeLaneCount
     empty_lane_count = $emptyLaneCount
     spec_counts_by_lane = $specCountsByLane
@@ -220,6 +231,8 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $ContainerImage,
     $ContainerStartupTimeoutSec,
     $KeepContainers.IsPresent,
+    $FailureFixtureStage,
+    $FailureFixtureLane,
     $laneNumber,
     $lanePlan.data_dir,
     $lanePlan.profile,
@@ -241,6 +254,8 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       [string]$containerImage,
       [int]$containerStartupTimeoutSec,
       [bool]$keepContainers,
+      [string]$failureFixtureStage,
+      [int]$failureFixtureLane,
       [int]$laneNumber,
       [string]$laneDataDir,
       [string]$laneProfile,
@@ -265,7 +280,12 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     $failureStage = $null
     $errorMessage = $null
     try {
+      $fixtureApplies = (-not [string]::IsNullOrWhiteSpace($failureFixtureStage)) -and $laneNumber -eq $failureFixtureLane
       if ($useContainerImage) {
+        if ($fixtureApplies -and ($failureFixtureStage -eq "container_start" -or $failureFixtureStage -eq "runtime_health")) {
+          $failureStage = $failureFixtureStage
+          throw "Failure fixture forced $failureFixtureStage failure for lane $laneNumber."
+        }
         $failureStage = "container_cleanup"
         docker rm -f $containerName *> $null
         docker volume rm $containerVolume *> $null
@@ -329,6 +349,17 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       }
       if ($useContainerImage) {
         $args += "-ReuseServer"
+      }
+
+      if ($fixtureApplies -and $failureFixtureStage -eq "cypress") {
+        $laneExitCode = 1
+        $errorMessage = "Failure fixture forced Cypress failure for spec $spec."
+        $laneResults += [pscustomobject]@{
+          spec = $spec
+          base_url = "http://127.0.0.1:$lanePort"
+          exit_code = 1
+        }
+        break
       }
 
       & pwsh @args 2>&1 | ForEach-Object {
@@ -436,6 +467,8 @@ $summary = [ordered]@{
   container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
   container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }
   keep_containers = $KeepContainers.IsPresent
+  failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
+  failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
   active_lane_count = $completedActiveLaneCount
   empty_lane_count = $completedEmptyLaneCount
   spec_counts_by_lane = $specCountsByLane

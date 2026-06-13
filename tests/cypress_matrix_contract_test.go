@@ -30,6 +30,9 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`[string]$ContainerImage = "cabinet:e2e"`,
 		`[int]$ContainerStartupTimeoutSec = 60`,
 		`[switch]$KeepContainers`,
+		`[ValidateSet("", "container_start", "runtime_health", "cypress")]`,
+		`[string]$FailureFixtureStage = ""`,
+		`[int]$FailureFixtureLane = 1`,
 		`"run", "-d"`,
 		`"--name", $containerName`,
 		`"-e", "CABINET_E2E_MODE=1"`,
@@ -54,6 +57,8 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`container_image = if ($UseContainerImage) { $ContainerImage } else { $null }`,
 		`container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }`,
 		`keep_containers = $KeepContainers.IsPresent`,
+		`failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }`,
+		`failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }`,
 		`active_lane_count = $activeLaneCount`,
 		`empty_lane_count = $emptyLaneCount`,
 		`spec_counts_by_lane = $specCountsByLane`,
@@ -65,6 +70,142 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		if !strings.Contains(content, fragment) {
 			t.Fatalf("expected matrix runner to contain fragment %q", fragment)
 		}
+	}
+}
+
+func TestCypressMatrixFailureFixturesWriteLaneDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	fixtures := []struct {
+		name             string
+		stage            string
+		lane             string
+		useContainer     bool
+		wantStarted      bool
+		wantResult       bool
+		wantMessagePiece string
+	}{
+		{
+			name:             "container-start",
+			stage:            "container_start",
+			lane:             "1",
+			useContainer:     true,
+			wantStarted:      false,
+			wantResult:       false,
+			wantMessagePiece: "forced container_start failure",
+		},
+		{
+			name:             "runtime-health",
+			stage:            "runtime_health",
+			lane:             "1",
+			useContainer:     true,
+			wantStarted:      false,
+			wantResult:       false,
+			wantMessagePiece: "forced runtime_health failure",
+		},
+		{
+			name:             "cypress",
+			stage:            "cypress",
+			lane:             "1",
+			useContainer:     false,
+			wantStarted:      false,
+			wantResult:       true,
+			wantMessagePiece: "forced Cypress failure",
+		},
+	}
+
+	for _, fixture := range fixtures {
+		fixture := fixture
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+
+			logRoot := t.TempDir()
+			runID := "matrix-failure-fixture-" + fixture.name
+			args := []string{
+				"-NoLogo",
+				"-NoProfile",
+				"-File",
+				filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+				"-SpecGlob",
+				"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+				"-LaneCount",
+				"2",
+				"-MaxWorkers",
+				"2",
+				"-FailureFixtureStage",
+				fixture.stage,
+				"-FailureFixtureLane",
+				fixture.lane,
+				"-RunId",
+				runID,
+				"-LogRoot",
+				logRoot,
+			}
+			if fixture.useContainer {
+				args = append(args, "-UseContainerImage")
+			}
+			cmd := exec.Command("pwsh", args...)
+			output, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected failure fixture %s to exit nonzero\n%s", fixture.name, output)
+			}
+
+			summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+			raw, readErr := os.ReadFile(summaryPath)
+			if readErr != nil {
+				t.Fatalf("read failure fixture summary: %v\n%s", readErr, output)
+			}
+
+			var summary struct {
+				ExitCode            int    `json:"exit_code"`
+				FailureFixtureStage string `json:"failure_fixture_stage"`
+				FailureFixtureLane  int    `json:"failure_fixture_lane"`
+				Lanes               []struct {
+					Lane             int     `json:"lane"`
+					ExitCode         int     `json:"exit_code"`
+					ContainerStarted bool    `json:"container_started"`
+					FailureStage     *string `json:"failure_stage"`
+					ErrorMessage     *string `json:"error_message"`
+					Results          []struct {
+						Spec     string `json:"spec"`
+						ExitCode int    `json:"exit_code"`
+					} `json:"results"`
+				} `json:"lanes"`
+			}
+			if err := json.Unmarshal(raw, &summary); err != nil {
+				t.Fatalf("parse failure fixture summary: %v\n%s", err, raw)
+			}
+
+			if summary.ExitCode != 1 {
+				t.Fatalf("expected summary exit_code=1, got %+v", summary)
+			}
+			if summary.FailureFixtureStage != fixture.stage || summary.FailureFixtureLane != 1 {
+				t.Fatalf("unexpected fixture metadata: %+v", summary)
+			}
+			if len(summary.Lanes) != 1 {
+				t.Fatalf("expected only active lane result, got %d lanes in %s", len(summary.Lanes), raw)
+			}
+			lane := summary.Lanes[0]
+			if lane.Lane != 1 || lane.ExitCode != 1 {
+				t.Fatalf("unexpected failed lane summary: %+v", lane)
+			}
+			if lane.ContainerStarted != fixture.wantStarted {
+				t.Fatalf("unexpected container_started for %s: %+v", fixture.name, lane)
+			}
+			if lane.FailureStage == nil || *lane.FailureStage != fixture.stage {
+				t.Fatalf("expected failure_stage %q, got %+v", fixture.stage, lane)
+			}
+			if lane.ErrorMessage == nil || !strings.Contains(*lane.ErrorMessage, fixture.wantMessagePiece) {
+				t.Fatalf("expected diagnostic message containing %q, got %+v", fixture.wantMessagePiece, lane)
+			}
+			if fixture.wantResult {
+				if len(lane.Results) != 1 || lane.Results[0].ExitCode != 1 {
+					t.Fatalf("expected Cypress fixture to record failed spec result, got %+v", lane.Results)
+				}
+			} else if len(lane.Results) != 0 {
+				t.Fatalf("expected setup/runtime fixture to avoid spec results, got %+v", lane.Results)
+			}
+		})
 	}
 }
 
