@@ -32,6 +32,7 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`[switch]$KeepContainers`,
 		`"run", "-d"`,
 		`"--name", $containerName`,
+		`"-e", "CABINET_E2E_MODE=1"`,
 		`"-p", "$($lanePort):17880"`,
 		`"-v", "$($containerVolume):/data"`,
 		`"--listen", "0.0.0.0:17880"`,

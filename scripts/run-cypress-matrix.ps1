@@ -264,6 +264,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       $dockerArgs = @(
         "run", "-d",
         "--name", $containerName,
+        "-e", "CABINET_E2E_MODE=1",
         "-p", "$($lanePort):17880",
         "-v", "$($containerVolume):/data",
         $containerImage,
