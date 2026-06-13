@@ -232,6 +232,80 @@ func TestCypressMatrixSuccessFixtureWritesLiveMultiLaneSummary(t *testing.T) {
 	}
 }
 
+func TestCypressMatrixApiSmokeSuccessFixtureWritesLiveResultMetadata(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-api-smoke-live-fixture-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-*/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-ApiContractSmoke",
+		"-CypressFixtureMode",
+		"pass",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run API-smoke success fixture: %v\n%s", err, output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read API-smoke success summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode         int  `json:"exit_code"`
+		PlanOnly         bool `json:"plan_only"`
+		ApiContractSmoke bool `json:"api_contract_smoke"`
+		Lanes            []struct {
+			ApiContractSmoke bool `json:"api_contract_smoke"`
+			Results          []struct {
+				Spec             string `json:"spec"`
+				ApiContractSmoke bool   `json:"api_contract_smoke"`
+				ExitCode         int    `json:"exit_code"`
+			} `json:"results"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse API-smoke success summary: %v\n%s", err, raw)
+	}
+
+	if summary.ExitCode != 0 || summary.PlanOnly || !summary.ApiContractSmoke {
+		t.Fatalf("unexpected API-smoke success run metadata: %+v", summary)
+	}
+	if len(summary.Lanes) != 2 {
+		t.Fatalf("expected two live lane summaries, got %d in %s", len(summary.Lanes), raw)
+	}
+	for laneIndex, lane := range summary.Lanes {
+		if !lane.ApiContractSmoke {
+			t.Fatalf("lane %d missing API smoke metadata: %+v", laneIndex+1, lane)
+		}
+		if len(lane.Results) == 0 {
+			t.Fatalf("lane %d missing per-spec result entries: %+v", laneIndex+1, lane)
+		}
+		for _, result := range lane.Results {
+			if result.Spec == "" || result.ExitCode != 0 || !result.ApiContractSmoke {
+				t.Fatalf("lane %d missing per-spec API smoke result metadata: %+v", laneIndex+1, result)
+			}
+		}
+	}
+}
+
 func TestCypressMatrixFailureFixturesWriteLaneDiagnostics(t *testing.T) {
 	t.Parallel()
 
