@@ -30,7 +30,7 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`[string]$ContainerImage = "cabinet:e2e"`,
 		`[int]$ContainerStartupTimeoutSec = 60`,
 		`[switch]$KeepContainers`,
-		`[ValidateSet("", "container_image", "container_start", "runtime_health", "cypress")]`,
+		`[ValidateSet("", "port_preflight", "container_image", "container_start", "runtime_health", "cypress")]`,
 		`[string]$FailureFixtureStage = ""`,
 		`[int]$FailureFixtureLane = 1`,
 		`[ValidateSet("", "pass")]`,
@@ -51,6 +51,9 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`$failureStage = "container_start"`,
 		`$failureStage = "runtime_health"`,
 		`$failureStage = "cypress"`,
+		`failure_stage = "port_preflight"`,
+		`Test-TcpPortOpen $lanePlan.port`,
+		`host port $($lanePlan.port) is already accepting TCP connections`,
 		`docker image inspect $ContainerImage`,
 		`failure_stage = "container_image"`,
 		`Container image preflight failed for $ContainerImage`,
@@ -148,6 +151,86 @@ func TestCypressMatrixPlanSummaryExposesAPISmokeMetadata(t *testing.T) {
 		if !lane.ApiContractSmoke {
 			t.Fatalf("lane %d missing API smoke metadata: %+v", index+1, lane)
 		}
+	}
+}
+
+func TestCypressMatrixPortPreflightFailsBeforeLaneFanout(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-port-preflight-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-UseContainerImage",
+		"-ContainerImage",
+		"cabinet:e2e",
+		"-FailureFixtureStage",
+		"port_preflight",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected port preflight fixture to exit nonzero\n%s", output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read port preflight summary: %v\n%s", err, output)
+	}
+
+	var summary struct {
+		ExitCode            int    `json:"exit_code"`
+		PlanOnly            bool   `json:"plan_only"`
+		UseContainerImage   bool   `json:"use_container_image"`
+		FailureFixtureStage string `json:"failure_fixture_stage"`
+		ActiveLaneCount     int    `json:"active_lane_count"`
+		PassedLaneCount     int    `json:"passed_lane_count"`
+		FailedLaneCount     int    `json:"failed_lane_count"`
+		Lanes               []struct {
+			Lane             int      `json:"lane"`
+			ContainerStarted bool     `json:"container_started"`
+			FailureStage     string   `json:"failure_stage"`
+			ErrorMessage     string   `json:"error_message"`
+			Results          []string `json:"results"`
+			ExitCode         int      `json:"exit_code"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse port preflight summary: %v\n%s", err, raw)
+	}
+
+	if summary.ExitCode != 1 || summary.PlanOnly || !summary.UseContainerImage || summary.FailureFixtureStage != "port_preflight" {
+		t.Fatalf("unexpected run-level port preflight metadata: %+v", summary)
+	}
+	if summary.ActiveLaneCount != 1 || summary.PassedLaneCount != 0 || summary.FailedLaneCount != 1 {
+		t.Fatalf("unexpected lane outcome counts for port preflight: %+v", summary)
+	}
+	if len(summary.Lanes) != 1 {
+		t.Fatalf("expected only active lane failure summary, got %d in %s", len(summary.Lanes), raw)
+	}
+	lane := summary.Lanes[0]
+	if lane.Lane != 1 || lane.ExitCode != 1 || lane.ContainerStarted {
+		t.Fatalf("expected failed lane without container start: %+v", lane)
+	}
+	if lane.FailureStage != "port_preflight" || !strings.Contains(lane.ErrorMessage, "forced port_preflight failure") {
+		t.Fatalf("expected port_preflight diagnostic, got %+v", lane)
+	}
+	if len(lane.Results) != 0 {
+		t.Fatalf("port preflight should fail before Cypress result fanout, got %+v", lane.Results)
 	}
 }
 

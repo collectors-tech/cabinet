@@ -69,6 +69,7 @@ The summary records the source commit, spec count, worker limit, lane ports, dat
 Use the `failure_stage` value in `matrix.summary.json` to triage failures:
 
 - `container_image`: the configured image was unavailable before lane fanout. Build the image from the repository root and rerun.
+- `port_preflight`: an active lane host port was already accepting TCP connections before lane fanout. Stop the stale listener or choose a different `-BasePort`.
 - `container_start`: Docker accepted the image but the lane container could not start.
 - `runtime_health`: the lane container started but did not pass `/healthz` before the timeout.
 - `cypress`: the runtime was ready and Cypress or the API contract smoke preflight failed.

@@ -12,7 +12,7 @@ param(
   [string]$ContainerImage = "cabinet:e2e",
   [int]$ContainerStartupTimeoutSec = 60,
   [switch]$KeepContainers,
-  [ValidateSet("", "container_image", "container_start", "runtime_health", "cypress")]
+  [ValidateSet("", "port_preflight", "container_image", "container_start", "runtime_health", "cypress")]
   [string]$FailureFixtureStage = "",
   [int]$FailureFixtureLane = 1,
   [ValidateSet("", "pass")]
@@ -106,6 +106,22 @@ function ConvertTo-ContainerSegment([string]$value) {
     return "lane"
   }
   return $safe
+}
+
+function Test-TcpPortOpen([int]$port) {
+  $client = [System.Net.Sockets.TcpClient]::new()
+  try {
+    $connect = $client.ConnectAsync("127.0.0.1", $port)
+    if (-not $connect.Wait(200)) {
+      return $false
+    }
+    return $client.Connected
+  } catch {
+    return $false
+  }
+  finally {
+    $client.Dispose()
+  }
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -229,6 +245,90 @@ if ($PlanOnly) {
 }
 
 if ($UseContainerImage) {
+  $portPreflightErrors = @()
+  foreach ($lanePlan in @($lanePlans | Where-Object { $_.specs.Count -gt 0 })) {
+    if ($FailureFixtureStage -eq "port_preflight" -and $lanePlan.lane -eq $FailureFixtureLane) {
+      $portPreflightErrors += "Failure fixture forced port_preflight failure for lane $($lanePlan.lane) at $($lanePlan.base_url)."
+      continue
+    }
+    if (Test-TcpPortOpen $lanePlan.port) {
+      $portPreflightErrors += "Lane $($lanePlan.lane) host port $($lanePlan.port) is already accepting TCP connections. Stop the stale runtime/listener or choose a different BasePort before running container-backed lanes."
+    }
+  }
+  if ($portPreflightErrors.Count -gt 0) {
+    $portPreflightError = ($portPreflightErrors -join " ")
+    Write-Host "[cypress-matrix] $portPreflightError"
+    $runFinishedAt = Get-Date
+    $failedLaneSummaries = @(
+      $lanePlans |
+        Where-Object { $_.specs.Count -gt 0 } |
+        ForEach-Object {
+          $laneFinishedAt = Get-Date
+          [pscustomobject]@{
+            lane = $_.lane
+            started_at = $runStartedAt.ToString("o")
+            finished_at = $laneFinishedAt.ToString("o")
+            duration_ms = [int64][Math]::Max(0, [Math]::Round(($laneFinishedAt - $runStartedAt).TotalMilliseconds))
+            port = $_.port
+            base_url = $_.base_url
+            data_dir = $_.data_dir
+            profile = $_.profile
+            instance_name = $_.instance_name
+            api_contract_smoke = $_.api_contract_smoke
+            use_container_image = $_.use_container_image
+            container_image = $_.container_image
+            container_name = $_.container_name
+            container_volume = $_.container_volume
+            container_started = $false
+            container_kept = $false
+            source_commit = $_.source_commit
+            cypress_fixture_mode = $_.cypress_fixture_mode
+            failure_stage = "port_preflight"
+            error_message = $portPreflightError
+            log_dir = $_.log_dir
+            results = @()
+            exit_code = 1
+          }
+        }
+    )
+    $summary = [ordered]@{
+      timestamp = (Get-Date).ToString("o")
+      started_at = $runStartedAt.ToString("o")
+      finished_at = $runFinishedAt.ToString("o")
+      duration_ms = [int64][Math]::Max(0, [Math]::Round(($runFinishedAt - $runStartedAt).TotalMilliseconds))
+      exit_code = 1
+      plan_only = $false
+      source_commit = $sourceCommit
+      spec_glob = $SpecGlob
+      spec_count = $specs.Count
+      base_port = $BasePort
+      lane_count = $LaneCount
+      max_workers = $MaxWorkers
+      worker_limit = $workerLimit
+      api_contract_smoke = $ApiContractSmoke.IsPresent
+      use_container_image = $UseContainerImage.IsPresent
+      container_image = $ContainerImage
+      container_startup_timeout_sec = $ContainerStartupTimeoutSec
+      keep_containers = $KeepContainers.IsPresent
+      failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
+      failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
+      cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
+      active_lane_count = $activeLaneCount
+      empty_lane_count = $emptyLaneCount
+      completed_spec_count = 0
+      passed_spec_count = 0
+      failed_spec_count = 0
+      passed_lane_count = 0
+      failed_lane_count = $activeLaneCount
+      spec_counts_by_lane = $specCountsByLane
+      log_dir = $runLogDir
+      lanes = $failedLaneSummaries
+    }
+    $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
+    Write-Host "[cypress-matrix] Summary written: $summaryPath"
+    exit 1
+  }
+
   $imagePreflightError = $null
   if ($FailureFixtureStage -eq "container_image") {
     $imagePreflightError = "Failure fixture forced container_image failure for image $ContainerImage."
