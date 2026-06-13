@@ -46,3 +46,34 @@ test('cypress.ps1 logs lane isolation metadata before validation starts', () => 
     /Write-Step "Lane isolation: port=\$runtimePort data_dir=\$e2eDataDir profile=\$e2eProfile instance=\$e2eInstanceName commit=\$sourceCommit"/
   )
 })
+
+test('cypress.ps1 writes runner command and timing metadata to the run summary', () => {
+  const expectedFields = [
+    'started_at',
+    'finished_at',
+    'duration_ms',
+    'runner_command',
+  ]
+
+  for (const field of expectedFields) {
+    assert.match(
+      runnerSource,
+      new RegExp(`\\b${field}\\s*=`),
+      `missing summary field ${field}`
+    )
+  }
+
+  assert.match(
+    runnerSource,
+    /\$runnerCommand\s*=\s*@\(/,
+    'missing machine-readable runner command construction'
+  )
+  assert.ok(
+    runnerSource.includes('-runnerCommand $runnerCommand'),
+    'missing Write-RunSummary runner command argument'
+  )
+  assert.ok(
+    runnerSource.includes('-runStartedAt $runStartedAt'),
+    'missing Write-RunSummary started-at argument'
+  )
+})

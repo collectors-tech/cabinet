@@ -157,3 +157,11 @@ Cabinet SHALL document how operators run isolated Cypress validation locally, in
 - **GIVEN** an operator needs to run a Cabinet Cypress spec or bounded matrix against isolated runtime lanes
 - **WHEN** they read the harness documentation
 - **THEN** the documentation MUST name the local prerequisites, the `cabinet:e2e` image build command, one-spec and bounded-matrix runner commands, API smoke and E2E hook switches, `matrix.summary.json` evidence path, failure stages, and the rule that stale shared desktop runtimes are not valid isolated-lane proof.
+
+### Requirement CONT-UI-CAB-011: Single-spec Cypress validation SHALL emit machine-readable invocation evidence
+Cabinet SHALL make each `cypress.ps1` run summary sufficient to prove the exact one-spec invocation and runtime timing without scraping transcript logs.
+
+#### Scenario: Record single-spec runner command and timing evidence
+- **GIVEN** `cypress.ps1` runs a focused Cypress spec against an isolated or fallback runtime
+- **WHEN** it writes the per-run Cypress summary JSON
+- **THEN** the summary MUST record `runner_command`, `started_at`, `finished_at`, and `duration_ms` alongside the existing spec, base URL, runtime port, data directory, profile, instance name, executable path, source commit, and log path evidence.
