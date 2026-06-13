@@ -99,3 +99,8 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **GIVEN** a Cypress matrix lane fails during container cleanup, container start, runtime health, or Cypress execution
 - **WHEN** the runner writes `matrix.summary.json`
 - **THEN** the failed lane MUST record a nonzero exit code plus `failure_stage` and `error_message` fields so operators can distinguish setup/runtime failures from browser assertion failures.
+
+#### Scenario: Exercise lane failure diagnostics deterministically
+- **GIVEN** the Cypress matrix runner is invoked with an explicit failure fixture for `container_start`, `runtime_health`, or `cypress`
+- **WHEN** the selected lane reaches the requested fixture stage
+- **THEN** the runner MUST fail that lane, write `failure_fixture_stage` and `failure_fixture_lane` at the run level, and preserve the selected lane's `failure_stage`, `error_message`, and nonzero `exit_code` in `matrix.summary.json`.
