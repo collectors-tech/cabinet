@@ -94,3 +94,21 @@ Cabinet MUST route Telegram-originated photo, barcode, text, or mixed catalog in
 - **THEN** the intake MUST create a draft preview through catalog_add_from_photo, catalog_add_from_barcode, or catalog_add_from_text capabilities before any catalog/inventory mutation
 - **AND** ambiguous recognition MUST ask for follow-up input rather than inventing item data
 - **AND** the audit trail MUST preserve source channel, sender/chat identity, media ids, proposed fields, confirmation decision, and applied item links
+
+### Requirement ASSISTANT-EXECUTION-009: Cabinet Agent app-control tools SHALL be discoverable and governed
+Cabinet Agent MUST expose safe app-control tools for main chat and side-panel Assistant UI through the same capability, preview, confirmation, and audit boundary as existing assistant actions.
+
+#### Scenario: Discover route navigation tool
+- **GIVEN** an active profile and assistant thread context
+- **WHEN** the assistant queries the capability registry for app-control tools
+- **THEN** `navigate.open_surface` MUST be returned as an available app-control capability
+- **AND** the capability MUST restrict targets to known Cabinet surfaces, including Media
+- **AND** the capability MUST be preview-only/read-only so route opening cannot mutate Cabinet records
+
+#### Scenario: Confirm open item title mutation
+- **GIVEN** a Cabinet Agent request targets the currently open inventory item
+- **WHEN** the request proposes `update_open_item_title`
+- **THEN** Cabinet MUST create a preview tied to the active profile and thread
+- **AND** applying the preview MUST require explicit confirmation
+- **AND** the mutation MUST only update the target item for the same profile
+- **AND** the assistant audit message MUST include the action, item id, changed title, confirmation state, and mutation-applied evidence

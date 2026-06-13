@@ -399,6 +399,104 @@ func TestChatCapabilitiesDiscoveryExposesGovernedRegistry(t *testing.T) {
 	}
 }
 
+func TestCabinetAgentAppControlCapabilitiesAndOpenItemTitleMutation(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Agent Control Profile"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"}); activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+
+	itemResp := doRequest(t, a, http.MethodPost, "/api/items", strings.NewReader(`{"part_number":"AGENT-001","title":"Original Agent Title","brand":"AFX","category":"Slot Cars"}`), map[string]string{"Content-Type": "application/json"})
+	if itemResp.Code != http.StatusCreated {
+		t.Fatalf("create item status=%d body=%s", itemResp.Code, itemResp.Body.String())
+	}
+	var item struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	threadResp := doRequest(t, a, http.MethodPost, "/api/chat/threads", strings.NewReader(`{"profile_id":"`+p.ID+`","title":"Agent Control Thread"}`), map[string]string{"Content-Type": "application/json"})
+	if threadResp.Code != http.StatusCreated {
+		t.Fatalf("create thread status=%d body=%s", threadResp.Code, threadResp.Body.String())
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+
+	capabilities := doRequest(t, a, http.MethodGet, "/api/chat/capabilities?profile_id="+p.ID+"&route=/inventory/"+item.ID, nil, nil)
+	if capabilities.Code != http.StatusOK {
+		t.Fatalf("capabilities status=%d body=%s", capabilities.Code, capabilities.Body.String())
+	}
+	body := capabilities.Body.String()
+	if !strings.Contains(body, `"id":"navigate.open_surface"`) || !strings.Contains(body, `"input_schema":"agent.navigate.open_surface.v1"`) || !strings.Contains(body, `"result_link":"/media"`) {
+		t.Fatalf("expected navigate.open_surface app-control capability with Media target, body=%s", body)
+	}
+	if !strings.Contains(body, `"id":"update_open_item_title"`) || !strings.Contains(body, `"mode":"confirm-required"`) || !strings.Contains(body, `"input_schema":"agent.update_open_item_title.v1"`) {
+		t.Fatalf("expected confirm-required open item title capability, body=%s", body)
+	}
+
+	preview := doRequest(t, a, http.MethodPost, "/api/chat/actions/preview", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"thread_id":"`+thread.ID+`",
+		"action":"update_open_item_title",
+		"payload":{"item_id":"`+item.ID+`","title":"Agent Updated Title","source_route":"/inventory/`+item.ID+`"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	var previewObj struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(preview.Body).Decode(&previewObj); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+
+	withoutConfirm := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewObj.ID+`","confirm":false}`), map[string]string{"Content-Type": "application/json"})
+	if withoutConfirm.Code != http.StatusBadRequest {
+		t.Fatalf("apply without confirmation status=%d body=%s", withoutConfirm.Code, withoutConfirm.Body.String())
+	}
+
+	apply := doRequest(t, a, http.MethodPost, "/api/chat/actions/apply", strings.NewReader(`{"profile_id":"`+p.ID+`","thread_id":"`+thread.ID+`","preview_id":"`+previewObj.ID+`","confirm":true}`), map[string]string{"Content-Type": "application/json"})
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	if !strings.Contains(apply.Body.String(), `"action":"update_open_item_title"`) || !strings.Contains(apply.Body.String(), `"item_id":"`+item.ID+`"`) || !strings.Contains(apply.Body.String(), `"title":"Agent Updated Title"`) {
+		t.Fatalf("expected app-control update result evidence, body=%s", apply.Body.String())
+	}
+
+	items := doRequest(t, a, http.MethodGet, "/api/items?profile_id="+p.ID, nil, nil)
+	if items.Code != http.StatusOK {
+		t.Fatalf("list items status=%d body=%s", items.Code, items.Body.String())
+	}
+	if !strings.Contains(items.Body.String(), `"title":"Agent Updated Title"`) || strings.Contains(items.Body.String(), `"title":"Original Agent Title"`) {
+		t.Fatalf("expected persisted title update for active profile item, body=%s", items.Body.String())
+	}
+
+	messages := doRequest(t, a, http.MethodGet, "/api/chat/messages?profile_id="+p.ID+"&thread_id="+thread.ID, nil, nil)
+	if messages.Code != http.StatusOK {
+		t.Fatalf("list messages status=%d body=%s", messages.Code, messages.Body.String())
+	}
+	if !strings.Contains(messages.Body.String(), "Applied update_open_item_title") || !strings.Contains(messages.Body.String(), `"mutation_applied":true`) || !strings.Contains(messages.Body.String(), `"confirmation":"confirmed"`) {
+		t.Fatalf("expected confirmed app-control audit message, body=%s", messages.Body.String())
+	}
+}
+
 func TestAssistantContentListingGenerationRunsStayPreviewFirst(t *testing.T) {
 	t.Parallel()
 

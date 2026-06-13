@@ -718,7 +718,7 @@ func (s *Service) ApplyAction(ctx context.Context, in ApplyActionInput) (ApplyAc
 		result.ItemID = itemID
 		result.PartNumber = trimPayloadString(payload, "part_number")
 		result.Title = trimPayloadString(payload, "title")
-	case "update_inventory_item":
+	case "update_inventory_item", "update_open_item_title":
 		itemID, err := s.applyUpdateItem(ctx, in.ProfileID, payload)
 		if err != nil {
 			return ApplyActionResult{}, err
@@ -896,6 +896,16 @@ func validateActionPayload(action string, payload map[string]any) error {
 			return fmt.Errorf("at least one mutable field is required")
 		}
 		return nil
+	case "update_open_item_title":
+		itemID, _ := payload["item_id"].(string)
+		title, _ := payload["title"].(string)
+		if strings.TrimSpace(itemID) == "" {
+			return fmt.Errorf("item_id is required")
+		}
+		if strings.TrimSpace(title) == "" {
+			return fmt.Errorf("title is required")
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported action: %s", action)
 	}
@@ -930,12 +940,6 @@ func (s *Service) applyUpdateItem(ctx context.Context, profileID string, payload
 	title, _ := payload["title"].(string)
 	brand, _ := payload["brand"].(string)
 	category, _ := payload["category"].(string)
-	if strings.TrimSpace(brand) == "" {
-		brand = "Unknown"
-	}
-	if strings.TrimSpace(category) == "" {
-		category = "General"
-	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE canonical_items
 		SET part_number = COALESCE(NULLIF(?, ''), part_number),

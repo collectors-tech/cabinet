@@ -161,6 +161,52 @@ describe('chats/ui-screen-chat-copilot', () => {
     )
   })
 
+  it('UI-SCREEN-CHAT-COPILOT-019 renders assistant-ui dark shell structure', () => {
+    openChatsWithAssistantDefaults('anthropic', 'claude-3-7-sonnet')
+    createThread('E2E Dark Shell Thread')
+
+    cy.get('[data-testid="chat-layout"]').should('be.visible')
+    cy.get('[data-testid="chat-conversation-rail"]')
+      .should('be.visible')
+      .and('contain', 'Cabinet Agent')
+    cy.get('[data-testid="chat-new-thread-action"]')
+      .should('be.visible')
+      .and('contain', 'New Thread')
+    cy.get('[data-testid="chat-main-topbar"]').should('be.visible')
+    cy.get('[data-testid="chat-new-chat-button"]')
+      .should('be.visible')
+      .and('contain', 'New Chat')
+    cy.get('[data-testid="chat-share-export-button"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Share or export chat')
+    cy.get('[data-testid="chat-main-canvas"]').should('be.visible')
+    cy.get('[data-testid="chat-empty-thread-state"]')
+      .should('be.visible')
+      .and('contain', 'How can I help you today?')
+      .and('contain', 'No messages in this thread yet.')
+    cy.get('[data-testid="chat-composer-shell"]').should('be.visible')
+    cy.get('[data-testid="chat-compose-input"]').should(
+      'have.attr',
+      'placeholder',
+      'Send a message... (@ to mention, / for commands)'
+    )
+    cy.get('[data-testid="chat-composer-attachment-button"]')
+      .should('be.visible')
+      .and('contain', 'Attach')
+    cy.get('[data-testid="chat-model-selector-row"]')
+      .should('contain', 'anthropic')
+      .and('contain', 'claude-3-7-sonnet')
+    cy.get('[data-testid="chat-voice-control"]')
+      .should('be.visible')
+      .and('be.disabled')
+    cy.get('[data-testid="chat-prompt-chips"]').within(() => {
+      for (const chip of ['Weather', 'Code', 'Write', 'Analyze', 'Brainstorm']) {
+        cy.contains('button', chip).should('be.visible')
+      }
+    })
+    cy.get('[data-testid="chat-tool-card-container"]').should('be.visible')
+  })
+
   it('UI-SCREEN-CHAT-COPILOT-008 supports confirm-before-apply for inventory and wishlist mutations', () => {
     openChats()
     const threadTitle = 'E2E Copilot CRUD Thread'

@@ -59,3 +59,9 @@ The 2026-06-13 Cabinet product direction further requires the side-panel Assista
 - **WHEN** the change affects side-panel composer, message, thread/status, or tool/result interaction behavior
 - **THEN** it MUST state how the side-panel Assistant UI follows the assistant-ui AI SDK example
 - **AND** any divergence MUST link to a Cabinet issue/spec that records the reason, affected surface, and validation expectation
+
+#### Scenario: Compact side-panel aligns with the dark chat shell language
+- **GIVEN** `/chats` uses the assistant-ui-inspired dark shell from `UI-SCREEN-CHAT-COPILOT-019`
+- **WHEN** the shell Assistant side-panel renders in compact form
+- **THEN** it MUST reuse the same Cabinet assistant visual language for header, thread controls, composer, prompt/action affordances, and governed tool/action cards without crowding the current page context
+- **AND** compact visual alignment MUST NOT weaken persisted thread/message ownership, provider/model readiness, route context, or explicit preview/confirm/apply boundaries

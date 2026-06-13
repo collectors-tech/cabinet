@@ -5,10 +5,16 @@ import {
   useExternalStoreRuntime,
 } from '@assistant-ui/react'
 import {
+  Bot,
   MessageCircle,
   MessagesSquare,
+  Mic,
+  Paperclip,
+  PanelLeft,
   Plus,
   Search as SearchIcon,
+  Share2,
+  Sparkles,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -23,7 +29,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -132,6 +137,8 @@ function clearStoredActionPreview(key: string) {
 function threadInitial(title: string) {
   return title.trim().charAt(0).toUpperCase() || 'C'
 }
+
+const promptChips = ['Weather', 'Code', 'Write', 'Analyze', 'Brainstorm']
 
 export function Chats() {
   const [activeProfileId, setActiveProfileId] = useState('')
@@ -637,26 +644,18 @@ export function Chats() {
         </div>
       </Header>
 
-      <Main fixed>
-        <div className='flex items-center gap-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Chats</h1>
-          <MessagesSquare className='h-5 w-5 text-muted-foreground' />
+      <Main fixed className='overflow-hidden'>
+        <div className='sr-only'>
+          <h1>Chats</h1>
+          <p data-testid='chat-workspace-description'>
+            Persistent profile-scoped conversation threads backed by Cabinet
+            runtime.
+          </p>
+          <p data-testid='chat-workspace-boundary-note'>
+            Use Assistant for AI-guided help and actions; use Chats for durable
+            conversation threads.
+          </p>
         </div>
-        <p
-          className='text-muted-foreground'
-          data-testid='chat-workspace-description'
-        >
-          Persistent profile-scoped conversation threads backed by Cabinet
-          runtime.
-        </p>
-        <p
-          className='text-sm text-muted-foreground'
-          data-testid='chat-workspace-boundary-note'
-        >
-          Use Assistant for AI-guided help and actions; use Chats for durable
-          conversation threads.
-        </p>
-        <Separator className='my-4' />
 
         {error ? (
           <div
@@ -677,21 +676,48 @@ export function Chats() {
         ) : null}
 
         <section
-          className='grid h-full min-h-[520px] overflow-hidden rounded-md border bg-background lg:grid-cols-[320px_1fr]'
+          className='grid h-full min-h-[620px] overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl lg:grid-cols-[310px_1fr]'
           data-testid='chat-layout'
         >
           <aside
-            className='flex min-h-0 flex-col border-b bg-muted/20 p-3 lg:border-e lg:border-b-0'
+            className='flex min-h-0 flex-col border-b border-slate-800 bg-slate-950 p-3 lg:border-e lg:border-b-0'
             data-testid='chat-conversation-rail'
           >
+            <div className='mb-4 flex items-center gap-3'>
+              <div className='flex h-9 w-9 items-center justify-center rounded-md bg-cyan-400 text-slate-950'>
+                <Sparkles className='h-4 w-4' />
+              </div>
+              <div className='min-w-0'>
+                <p className='truncate text-sm font-semibold'>Cabinet Agent</p>
+                <p className='truncate text-xs text-slate-400'>
+                  Threads and governed actions
+                </p>
+              </div>
+            </div>
+            <Button
+              type='button'
+              data-testid='chat-new-thread-action'
+              className='mb-3 w-full justify-start gap-2 bg-slate-100 text-slate-950 hover:bg-white'
+              onClick={() =>
+                document
+                  .querySelector<HTMLInputElement>(
+                    '[data-testid="chat-new-thread-input"]'
+                  )
+                  ?.focus()
+              }
+              disabled={threadCreationDisabled}
+            >
+              <Plus className='h-4 w-4' />
+              New Thread
+            </Button>
             <div className='relative mb-3'>
-              <SearchIcon className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+              <SearchIcon className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500' />
               <Input
                 data-testid='chat-conversation-search'
                 placeholder='Search messages'
                 value={threadSearch}
                 onChange={(event) => setThreadSearch(event.target.value)}
-                className='ps-9'
+                className='border-slate-800 bg-slate-900 ps-9 text-slate-100 placeholder:text-slate-500'
               />
             </div>
             <div className='mb-3 flex gap-2'>
@@ -701,20 +727,22 @@ export function Chats() {
                 value={threadTitle}
                 onChange={(event) => setThreadTitle(event.target.value)}
                 disabled={threadCreationDisabled}
+                className='border-slate-800 bg-slate-900 text-slate-100 placeholder:text-slate-500'
               />
               <Button
                 data-testid='chat-create-thread-button'
                 onClick={() => void createThread()}
                 disabled={threadCreationDisabled || !threadTitle.trim()}
+                variant='outline'
+                className='border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
               >
-                <Plus className='mr-1 h-4 w-4' />
                 Create
               </Button>
             </div>
             <ScrollArea className='min-h-0 flex-1'>
               <div data-testid='chat-thread-list' className='space-y-1'>
                 {threads.length === 0 && !loading ? (
-                  <p className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'>
+                  <p className='rounded-md border border-dashed border-slate-800 p-3 text-sm text-slate-500'>
                     No chat threads yet.
                   </p>
                 ) : null}
@@ -723,10 +751,10 @@ export function Chats() {
                     key={thread.id}
                     type='button'
                     data-testid='chat-thread-item'
-                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm ${
+                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm transition ${
                       selectedThreadId === thread.id
-                        ? 'border-primary bg-primary/5'
-                        : 'hover:bg-muted/40'
+                        ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-50'
+                        : 'border-slate-800 bg-slate-900/70 text-slate-200 hover:bg-slate-800'
                     }`}
                     onClick={() => {
                       setSelectedThreadId(thread.id)
@@ -734,7 +762,7 @@ export function Chats() {
                     }}
                   >
                     <span
-                      className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary'
+                      className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-cyan-200'
                       data-testid='chat-thread-avatar'
                     >
                       {threadInitial(thread.title)}
@@ -744,7 +772,7 @@ export function Chats() {
                         {thread.title}
                       </span>
                       <span
-                        className='block truncate text-xs text-muted-foreground'
+                        className='block truncate text-xs text-slate-500'
                         data-testid='chat-thread-preview'
                       >
                         No messages yet
@@ -756,20 +784,20 @@ export function Chats() {
             </ScrollArea>
           </aside>
 
-          <div className='flex min-h-0 flex-col p-3'>
+          <div className='flex min-h-0 flex-col bg-slate-900 p-3'>
             {!selectedThread ? (
               <div
-                className='flex min-h-[420px] flex-1 items-center justify-center'
+                className='flex min-h-[520px] flex-1 items-center justify-center rounded-lg border border-slate-800 bg-slate-950'
                 data-testid='chat-empty-workspace-state'
               >
                 <div className='mx-auto max-w-sm text-center'>
-                  <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border bg-muted/40'>
-                    <MessageCircle className='h-6 w-6 text-muted-foreground' />
+                  <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900'>
+                    <MessageCircle className='h-6 w-6 text-cyan-300' />
                   </div>
-                  <h2 className='text-lg font-semibold'>
-                    Select a conversation
+                  <h2 className='text-xl font-semibold text-slate-100'>
+                    How can I help you today?
                   </h2>
-                  <p className='mt-2 text-sm text-muted-foreground'>
+                  <p className='mt-2 text-sm text-slate-400'>
                     Choose an existing thread or create a new one to continue a
                     durable Cabinet conversation.
                   </p>
@@ -791,24 +819,80 @@ export function Chats() {
               </div>
             ) : (
               <>
-                <div className='mb-3'>
-                  <h2 className='font-semibold' data-testid='chat-thread-title'>
-                    {selectedThread.title}
-                  </h2>
+                <div
+                  className='mb-3 flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3'
+                  data-testid='chat-main-topbar'
+                >
+                  <div className='min-w-0'>
+                    <div className='flex items-center gap-2 text-xs text-slate-500'>
+                      <PanelLeft className='h-3.5 w-3.5' />
+                      Assistant-ui workspace
+                    </div>
+                    <h2
+                      className='truncate font-semibold text-slate-100'
+                      data-testid='chat-thread-title'
+                    >
+                      {selectedThread.title}
+                    </h2>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      type='button'
+                      size='sm'
+                      data-testid='chat-new-chat-button'
+                      className='gap-2 bg-slate-100 text-slate-950 hover:bg-white'
+                      onClick={() =>
+                        document
+                          .querySelector<HTMLInputElement>(
+                            '[data-testid="chat-new-thread-input"]'
+                          )
+                          ?.focus()
+                      }
+                    >
+                      <Plus className='h-4 w-4' />
+                      New Chat
+                    </Button>
+                    <Button
+                      type='button'
+                      size='icon'
+                      variant='outline'
+                      data-testid='chat-share-export-button'
+                      aria-label='Share or export chat'
+                      className='border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
+                    >
+                      <Share2 className='h-4 w-4' />
+                    </Button>
+                  </div>
                 </div>
                 <AssistantRuntimeProvider runtime={chatAssistantRuntime}>
-                  <ScrollArea className='h-[380px] rounded-md border p-3'>
+                  <ScrollArea
+                    className='h-[380px] rounded-lg border border-slate-800 bg-slate-950 p-4'
+                    data-testid='chat-main-canvas'
+                  >
                     {messagesLoading ? (
-                      <p className='text-sm text-muted-foreground'>
+                      <p className='text-sm text-slate-400'>
                         Loading messages...
                       </p>
                     ) : null}
                     {!messagesLoading &&
                     selectedThread &&
                     messages.length === 0 ? (
-                      <p className='text-sm text-muted-foreground'>
-                        No messages in this thread yet.
-                      </p>
+                      <div
+                        className='flex h-full min-h-[300px] items-center justify-center'
+                        data-testid='chat-empty-thread-state'
+                      >
+                        <div className='text-center'>
+                          <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900'>
+                            <Sparkles className='h-5 w-5 text-cyan-300' />
+                          </div>
+                          <p className='text-xl font-semibold text-slate-100'>
+                            How can I help you today?
+                          </p>
+                          <p className='mt-2 text-sm text-slate-400'>
+                            No messages in this thread yet.
+                          </p>
+                        </div>
+                      </div>
                     ) : null}
                     <CabinetAssistantUiMessageList
                       messages={messages}
@@ -820,19 +904,80 @@ export function Chats() {
                       }}
                     />
                   </ScrollArea>
-                  <div className='mt-3'>
+                  <div
+                    className='mt-3 rounded-2xl border border-slate-800 bg-slate-950 p-3'
+                    data-testid='chat-composer-shell'
+                  >
+                    <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
+                      <div
+                        className='flex flex-wrap gap-2'
+                        data-testid='chat-prompt-chips'
+                      >
+                        {promptChips.map((chip) => (
+                          <button
+                            key={chip}
+                            type='button'
+                            className='rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-cyan-400/70 hover:text-cyan-100'
+                            disabled={!selectedThreadId}
+                          >
+                            {chip}
+                          </button>
+                        ))}
+                      </div>
+                      <div
+                        className='flex items-center gap-2 text-xs text-slate-400'
+                        data-testid='chat-model-selector-row'
+                      >
+                        <Bot className='h-3.5 w-3.5 text-cyan-300' />
+                        <span data-testid='chat-model-selector'>
+                          {assistantDefaults.provider} /{' '}
+                          {assistantDefaults.model}
+                        </span>
+                      </div>
+                    </div>
                     <CabinetAssistantUiComposer
                       composer={{
                         disabled: !selectedThreadId,
                         sending: false,
                       }}
-                      placeholder='Type your message...'
+                      placeholder='Send a message... (@ to mention, / for commands)'
                       testIds={{
                         root: 'chat-assistant-ui-composer-primitive',
                         input: 'chat-compose-input',
                         sendButton: 'chat-send-button',
                       }}
                     />
+                    <div className='mt-2 flex items-center justify-between gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='ghost'
+                        className='gap-2 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+                        data-testid='chat-composer-attachment-button'
+                        onClick={() =>
+                          document
+                            .querySelector<HTMLInputElement>(
+                              '[data-testid="chat-attachment-input"]'
+                            )
+                            ?.click()
+                        }
+                        disabled={!selectedThreadId}
+                      >
+                        <Paperclip className='h-4 w-4' />
+                        Attach
+                      </Button>
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='ghost'
+                        className='text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+                        data-testid='chat-voice-control'
+                        aria-label='Voice input unavailable'
+                        disabled
+                      >
+                        <Mic className='h-4 w-4' />
+                      </Button>
+                    </div>
                   </div>
                 </AssistantRuntimeProvider>
                 {sendError ? (
@@ -843,7 +988,7 @@ export function Chats() {
                     {sendError}
                   </p>
                 ) : null}
-                <div className='mt-4 space-y-3 rounded-md border p-3'>
+                <div className='mt-4 space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3'>
                   <p className='text-sm font-medium'>Attachments</p>
                   <div className='flex items-center gap-2'>
                     <Input
@@ -879,7 +1024,10 @@ export function Chats() {
                   </div>
                 </div>
 
-                <div className='mt-4 space-y-3 rounded-md border p-3'>
+                <div
+                  className='mt-4 space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3'
+                  data-testid='chat-tool-card-container'
+                >
                   <div className='flex flex-wrap items-start justify-between gap-2'>
                     <p className='text-sm font-medium'>Action Preview</p>
                     <p
