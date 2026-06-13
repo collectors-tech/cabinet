@@ -180,6 +180,24 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
   $laneLogDir = Join-Path $runLogDir "lane-$laneNumber"
   $containerName = "cabinet-cypress-$containerRunSegment-lane-$laneNumber"
   $containerVolume = "$containerName-data"
+  $containerCommand = if ($UseContainerImage) {
+    @(
+      "docker", "run", "-d",
+      "--name", $containerName,
+      "-e", "CABINET_E2E_MODE=1",
+      "-p", "$($lanePort):17880",
+      "-v", "$($containerVolume):/data",
+      $ContainerImage,
+      "--no-open-browser",
+      "--listen", "0.0.0.0:17880",
+      "--data-dir", "/data",
+      "--profile", "e2e-cypress-$lanePort",
+      "--instance-name", "cypress-$lanePort",
+      "--allow-parallel"
+    )
+  } else {
+    $null
+  }
   $lanePlans += [pscustomobject]@{
     lane = $laneNumber
     port = $lanePort
@@ -192,6 +210,7 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     container_image = if ($UseContainerImage) { $ContainerImage } else { $null }
     container_name = if ($UseContainerImage) { $containerName } else { $null }
     container_volume = if ($UseContainerImage) { $containerVolume } else { $null }
+    container_command = $containerCommand
     source_commit = $sourceCommit
     failure_stage = $null
     error_message = $null
@@ -279,6 +298,7 @@ if ($UseContainerImage) {
             container_image = $_.container_image
             container_name = $_.container_name
             container_volume = $_.container_volume
+            container_command = $_.container_command
             container_started = $false
             container_kept = $false
             source_commit = $_.source_commit
@@ -371,6 +391,7 @@ if ($UseContainerImage) {
             container_image = $_.container_image
             container_name = $_.container_name
             container_volume = $_.container_volume
+            container_command = $_.container_command
             container_started = $false
             container_kept = $false
             source_commit = $_.source_commit
@@ -704,10 +725,28 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       instance_name = $laneInstanceName
       api_contract_smoke = $apiContractSmoke
       use_container_image = $useContainerImage
-      container_image = if ($useContainerImage) { $containerImage } else { $null }
-      container_name = if ($useContainerImage) { $containerName } else { $null }
-      container_volume = if ($useContainerImage) { $containerVolume } else { $null }
-      container_started = $containerStarted
+        container_image = if ($useContainerImage) { $containerImage } else { $null }
+        container_name = if ($useContainerImage) { $containerName } else { $null }
+        container_volume = if ($useContainerImage) { $containerVolume } else { $null }
+        container_command = if ($useContainerImage) {
+          @(
+            "docker", "run", "-d",
+            "--name", $containerName,
+            "-e", "CABINET_E2E_MODE=1",
+            "-p", "$($lanePort):17880",
+            "-v", "$($containerVolume):/data",
+            $containerImage,
+            "--no-open-browser",
+            "--listen", "0.0.0.0:17880",
+            "--data-dir", "/data",
+            "--profile", $laneProfile,
+            "--instance-name", $laneInstanceName,
+            "--allow-parallel"
+          )
+        } else {
+          $null
+        }
+        container_started = $containerStarted
       container_kept = $keepContainers
       source_commit = $sourceCommit
       cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($cypressFixtureMode)) { $cypressFixtureMode } else { $null }
@@ -744,6 +783,7 @@ $cleanLaneResults = @(
       container_image = $_.container_image
       container_name = $_.container_name
       container_volume = $_.container_volume
+      container_command = $_.container_command
       container_started = $_.container_started
       container_kept = $_.container_kept
       source_commit = $_.source_commit

@@ -68,6 +68,8 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`container_image = if ($UseContainerImage) { $ContainerImage } else { $null }`,
 		`container_startup_timeout_sec = if ($UseContainerImage) { $ContainerStartupTimeoutSec } else { $null }`,
 		`keep_containers = $KeepContainers.IsPresent`,
+		`container_command = $containerCommand`,
+		`container_command = $_.container_command`,
 		`failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }`,
 		`failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }`,
 		`cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }`,
@@ -1131,6 +1133,7 @@ func TestCypressMatrixPlanSummaryExposesContainerLaneMetadata(t *testing.T) {
 			ContainerImage    string  `json:"container_image"`
 			ContainerName     string  `json:"container_name"`
 			ContainerVolume   string  `json:"container_volume"`
+			ContainerCommand  []string `json:"container_command"`
 			FailureStage      *string `json:"failure_stage"`
 			ErrorMessage      *string `json:"error_message"`
 		} `json:"lanes"`
@@ -1157,6 +1160,24 @@ func TestCypressMatrixPlanSummaryExposesContainerLaneMetadata(t *testing.T) {
 		}
 		if lane.ContainerVolume != lane.ContainerName+"-data" {
 			t.Fatalf("lane %d has unexpected container volume %q for name %q", index+1, lane.ContainerVolume, lane.ContainerName)
+		}
+		command := strings.Join(lane.ContainerCommand, " ")
+		for _, fragment := range []string{
+			"docker run -d",
+			"--name " + lane.ContainerName,
+			"-e CABINET_E2E_MODE=1",
+			"-p 1788",
+			"-v " + lane.ContainerVolume + ":/data",
+			"cabinet:e2e",
+			"--listen 0.0.0.0:17880",
+			"--data-dir /data",
+			"--profile e2e-cypress-1788",
+			"--instance-name cypress-1788",
+			"--allow-parallel",
+		} {
+			if !strings.Contains(command, fragment) {
+				t.Fatalf("lane %d container command missing %q: %q", index+1, fragment, command)
+			}
 		}
 		if lane.FailureStage != nil || lane.ErrorMessage != nil {
 			t.Fatalf("lane %d plan should not report a failure: %+v", index+1, lane)
