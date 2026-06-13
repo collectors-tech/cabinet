@@ -102,7 +102,7 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     if ($check.ContainsKey("RuntimeHostMustMatchBaseUrl") -and $check.RuntimeHostMustMatchBaseUrl) {
       $runtimeHost = [string]$jsonPayload.runtime_host
       $baseUrlHost = [string]$baseUrlMetadata.host
-      if (-not [string]::IsNullOrWhiteSpace($baseUrlHost) -and $runtimeHost -ne $baseUrlHost) {
+      if (-not (Test-RuntimeHostMatchesBaseUrl $runtimeHost $baseUrlHost)) {
         $result.error = "runtime_host $runtimeHost did not match BaseUrl host $baseUrlHost"
         $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
         return [pscustomobject]$result
@@ -164,6 +164,20 @@ function Get-BaseUrlMetadata([string]$baseUrl) {
   return $metadata
 }
 
+function Test-RuntimeHostMatchesBaseUrl([string]$runtimeHost, [string]$baseUrlHost) {
+  if ([string]::IsNullOrWhiteSpace($baseUrlHost)) {
+    return $true
+  }
+  if ($runtimeHost -eq $baseUrlHost) {
+    return $true
+  }
+  $loopbackHosts = @("127.0.0.1", "localhost", "::1", "[::1]")
+  if (($runtimeHost -eq "0.0.0.0" -or $runtimeHost -eq "::") -and ($loopbackHosts -contains $baseUrlHost.ToLowerInvariant())) {
+    return $true
+  }
+  return $false
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $runStamp = if ([string]::IsNullOrWhiteSpace($RunId)) { Get-Date -Format "yyyyMMdd-HHmmss" } else { ConvertTo-SafeSegment $RunId }
@@ -217,7 +231,6 @@ if ($RequireE2EHooks) {
     Path = "/api/test/reset"
     Status = 200
     Body = "{}"
-    ContentType = "json"
   }
 }
 

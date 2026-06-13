@@ -397,6 +397,65 @@ func TestApiContractSmokeScriptDiagnosesRuntimeHostMismatch(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptAcceptsWildcardRuntimeHostForLoopback(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			mockRuntimeURL, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatalf("parse mock runtime URL: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"app_version":"test","runtime_host":"0.0.0.0","runtime_port":%s}`, mockRuntimeURL.Port())))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-wildcard-host"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("api contract smoke script rejected wildcard runtime host for loopback base URL: %v\n%s", err, string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read wildcard host summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode    int `json:"exit_code"`
+		CheckCount  int `json:"check_count"`
+		FailedCount int `json:"failed_count"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode wildcard host summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
+		t.Fatalf("unexpected wildcard host summary: %+v", summary)
+	}
+}
+
 func TestApiContractSmokeScriptDiagnosesRuntimePortMismatch(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
@@ -911,8 +970,8 @@ func TestApiContractSmokeScriptRequiresE2EHooksWhenRequested(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Fatalf("reset hook used method %s, want POST", r.Method)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ok":true}`))
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("ok"))
 		default:
 			http.NotFound(w, r)
 		}
