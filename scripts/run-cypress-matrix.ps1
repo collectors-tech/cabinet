@@ -12,7 +12,7 @@ param(
   [string]$ContainerImage = "cabinet:e2e",
   [int]$ContainerStartupTimeoutSec = 60,
   [switch]$KeepContainers,
-  [ValidateSet("", "container_start", "runtime_health", "cypress")]
+  [ValidateSet("", "container_image", "container_start", "runtime_health", "cypress")]
   [string]$FailureFixtureStage = "",
   [int]$FailureFixtureLane = 1,
   [ValidateSet("", "pass")]
@@ -215,6 +215,83 @@ if ($PlanOnly) {
   $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
   Write-Host "[cypress-matrix] Plan-only summary written: $summaryPath"
   exit 0
+}
+
+if ($UseContainerImage) {
+  $imagePreflightError = $null
+  if ($FailureFixtureStage -eq "container_image") {
+    $imagePreflightError = "Failure fixture forced container_image failure for image $ContainerImage."
+  } else {
+    $imageInspectOutput = (& docker image inspect $ContainerImage 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+      $imagePreflightError = "Container image preflight failed for $ContainerImage. Build the image from the repository root before running container-backed lanes."
+      if (-not [string]::IsNullOrWhiteSpace(($imageInspectOutput | Out-String).Trim())) {
+        $imagePreflightError = "$imagePreflightError Docker output: $(($imageInspectOutput | Out-String).Trim())"
+      }
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($imagePreflightError)) {
+    Write-Host "[cypress-matrix] $imagePreflightError"
+    $failedLaneSummaries = @(
+      $lanePlans |
+        Where-Object { $_.specs.Count -gt 0 } |
+        ForEach-Object {
+          [pscustomobject]@{
+            lane = $_.lane
+            port = $_.port
+            base_url = $_.base_url
+            data_dir = $_.data_dir
+            profile = $_.profile
+            instance_name = $_.instance_name
+            api_contract_smoke = $_.api_contract_smoke
+            use_container_image = $_.use_container_image
+            container_image = $_.container_image
+            container_name = $_.container_name
+            container_volume = $_.container_volume
+            container_started = $false
+            container_kept = $false
+            source_commit = $_.source_commit
+            cypress_fixture_mode = $_.cypress_fixture_mode
+            failure_stage = "container_image"
+            error_message = $imagePreflightError
+            log_dir = $_.log_dir
+            results = @()
+            exit_code = 1
+          }
+        }
+    )
+    $summary = [ordered]@{
+      timestamp = (Get-Date).ToString("o")
+      exit_code = 1
+      plan_only = $false
+      source_commit = $sourceCommit
+      spec_glob = $SpecGlob
+      spec_count = $specs.Count
+      base_port = $BasePort
+      lane_count = $LaneCount
+      max_workers = $MaxWorkers
+      worker_limit = $workerLimit
+      api_contract_smoke = $ApiContractSmoke.IsPresent
+      use_container_image = $UseContainerImage.IsPresent
+      container_image = $ContainerImage
+      container_startup_timeout_sec = $ContainerStartupTimeoutSec
+      keep_containers = $KeepContainers.IsPresent
+      failure_fixture_stage = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureStage } else { $null }
+      failure_fixture_lane = if (-not [string]::IsNullOrWhiteSpace($FailureFixtureStage)) { $FailureFixtureLane } else { $null }
+      cypress_fixture_mode = if (-not [string]::IsNullOrWhiteSpace($CypressFixtureMode)) { $CypressFixtureMode } else { $null }
+      active_lane_count = $activeLaneCount
+      empty_lane_count = $emptyLaneCount
+      passed_lane_count = 0
+      failed_lane_count = $activeLaneCount
+      spec_counts_by_lane = $specCountsByLane
+      log_dir = $runLogDir
+      lanes = $failedLaneSummaries
+    }
+    $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
+    Write-Host "[cypress-matrix] Summary written: $summaryPath"
+    exit 1
+  }
 }
 
 $jobs = [System.Collections.ArrayList]::new()
