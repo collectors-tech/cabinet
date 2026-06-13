@@ -736,6 +736,90 @@ func TestCypressMatrixContainerImagePreflightFailsBeforeLaneFanout(t *testing.T)
 	}
 }
 
+func TestCypressMatrixContainerImagePreflightReportsMissingDockerCLI(t *testing.T) {
+	t.Parallel()
+
+	pwshPath, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Fatalf("resolve pwsh: %v", err)
+	}
+
+	logRoot := t.TempDir()
+	runID := "matrix-docker-cli-missing-contract"
+	emptyPath := t.TempDir()
+	cmd := exec.Command(
+		pwshPath,
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-UseContainerImage",
+		"-ContainerImage",
+		"cabinet:e2e",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	cmd.Env = append(os.Environ(), "PATH="+emptyPath, "Path="+emptyPath)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected missing Docker CLI preflight to exit nonzero\n%s", output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read missing Docker CLI preflight summary: %v\n%s", err, output)
+	}
+
+	var summary struct {
+		ExitCode          int  `json:"exit_code"`
+		PlanOnly          bool `json:"plan_only"`
+		UseContainerImage bool `json:"use_container_image"`
+		ActiveLaneCount   int  `json:"active_lane_count"`
+		PassedLaneCount   int  `json:"passed_lane_count"`
+		FailedLaneCount   int  `json:"failed_lane_count"`
+		Lanes             []struct {
+			Lane             int      `json:"lane"`
+			ContainerStarted bool     `json:"container_started"`
+			FailureStage     string   `json:"failure_stage"`
+			ErrorMessage     string   `json:"error_message"`
+			Results          []string `json:"results"`
+			ExitCode         int      `json:"exit_code"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse missing Docker CLI preflight summary: %v\n%s", err, raw)
+	}
+
+	if summary.ExitCode != 1 || summary.PlanOnly || !summary.UseContainerImage {
+		t.Fatalf("unexpected run-level missing Docker CLI metadata: %+v", summary)
+	}
+	if summary.ActiveLaneCount != 1 || summary.PassedLaneCount != 0 || summary.FailedLaneCount != 1 {
+		t.Fatalf("unexpected lane outcome counts for missing Docker CLI: %+v", summary)
+	}
+	if len(summary.Lanes) != 1 {
+		t.Fatalf("expected only active lane failure summary, got %d in %s", len(summary.Lanes), raw)
+	}
+	lane := summary.Lanes[0]
+	if lane.Lane != 1 || lane.ExitCode != 1 || lane.ContainerStarted {
+		t.Fatalf("expected failed lane without container start: %+v", lane)
+	}
+	if lane.FailureStage != "container_image" || !strings.Contains(lane.ErrorMessage, "Docker CLI is unavailable") {
+		t.Fatalf("expected missing Docker CLI diagnostic, got %+v", lane)
+	}
+	if len(lane.Results) != 0 {
+		t.Fatalf("missing Docker CLI preflight should fail before Cypress result fanout, got %+v", lane.Results)
+	}
+}
+
 func TestPackageJsonExposesCypressMatrixScript(t *testing.T) {
 	t.Parallel()
 
