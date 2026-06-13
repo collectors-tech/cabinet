@@ -306,6 +306,98 @@ func TestCypressMatrixApiSmokeSuccessFixtureWritesLiveResultMetadata(t *testing.
 	}
 }
 
+func TestCypressMatrixSuccessFixtureLinksPerSpecArtifacts(t *testing.T) {
+	t.Parallel()
+
+	logRoot := t.TempDir()
+	runID := "matrix-result-artifact-links-contract"
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File",
+		filepath.Join("..", "scripts", "run-cypress-matrix.ps1"),
+		"-SpecGlob",
+		"ui.web/cypress/e2e/general/ui-login-session/spec.cy.ts",
+		"-LaneCount",
+		"2",
+		"-MaxWorkers",
+		"2",
+		"-ApiContractSmoke",
+		"-CypressFixtureMode",
+		"pass",
+		"-RunId",
+		runID,
+		"-LogRoot",
+		logRoot,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run artifact-link fixture: %v\n%s", err, output)
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "matrix.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read artifact-link matrix summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode int `json:"exit_code"`
+		Lanes    []struct {
+			Results []struct {
+				Spec               string `json:"spec"`
+				CypressSummaryPath string `json:"cypress_summary_path"`
+				CypressLogPath     string `json:"cypress_log_path"`
+				ExitCode           int    `json:"exit_code"`
+			} `json:"results"`
+		} `json:"lanes"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("parse artifact-link matrix summary: %v\n%s", err, raw)
+	}
+
+	if summary.ExitCode != 0 {
+		t.Fatalf("expected passing artifact-link summary, got %+v", summary)
+	}
+	var linkedResults int
+	for laneIndex, lane := range summary.Lanes {
+		for _, result := range lane.Results {
+			linkedResults++
+			if result.Spec == "" || result.ExitCode != 0 {
+				t.Fatalf("lane %d has unexpected result: %+v", laneIndex+1, result)
+			}
+			if result.CypressSummaryPath == "" || result.CypressLogPath == "" {
+				t.Fatalf("lane %d result missing Cypress artifact links: %+v", laneIndex+1, result)
+			}
+			if _, err := os.Stat(result.CypressSummaryPath); err != nil {
+				t.Fatalf("lane %d summary path is not readable: %v", laneIndex+1, err)
+			}
+			if _, err := os.Stat(result.CypressLogPath); err != nil {
+				t.Fatalf("lane %d log path is not readable: %v", laneIndex+1, err)
+			}
+			artifactRaw, err := os.ReadFile(result.CypressSummaryPath)
+			if err != nil {
+				t.Fatalf("read Cypress fixture summary: %v", err)
+			}
+			var artifact struct {
+				ExitCode int    `json:"exit_code"`
+				Spec     string `json:"spec"`
+				LogPath  string `json:"log_path"`
+			}
+			if err := json.Unmarshal(artifactRaw, &artifact); err != nil {
+				t.Fatalf("parse Cypress fixture summary: %v\n%s", err, artifactRaw)
+			}
+			if artifact.ExitCode != 0 || artifact.Spec != result.Spec || artifact.LogPath != result.CypressLogPath {
+				t.Fatalf("Cypress fixture summary does not match matrix result: artifact=%+v result=%+v", artifact, result)
+			}
+		}
+	}
+	if linkedResults != 1 {
+		t.Fatalf("expected one linked result for the one-spec fixture, got %d", linkedResults)
+	}
+}
+
 func TestCypressMatrixFailureFixturesWriteLaneDiagnostics(t *testing.T) {
 	t.Parallel()
 

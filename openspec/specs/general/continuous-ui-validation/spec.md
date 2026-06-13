@@ -106,6 +106,11 @@ Cabinet SHALL allow the bounded Cypress matrix runner to start one repo-local co
 - **WHEN** it writes per-spec result entries to `matrix.summary.json`
 - **THEN** each result entry MUST record `api_contract_smoke=true` so downstream triage can distinguish runs that performed API preflight checks from browser-only assertions.
 
+#### Scenario: Link matrix results to Cypress artifacts
+- **GIVEN** the Cypress matrix runner executes non-plan lane work
+- **WHEN** it writes per-spec result entries to `matrix.summary.json`
+- **THEN** each Cypress-executed or deterministic fixture result entry MUST record readable `cypress_summary_path` and `cypress_log_path` values so downstream validation can inspect the exact per-spec evidence without scraping lane stdout.
+
 #### Scenario: Report lane failures in machine-readable summary
 - **GIVEN** a Cypress matrix lane fails during container cleanup, container start, runtime health, or Cypress execution
 - **WHEN** the runner writes `matrix.summary.json`

@@ -375,17 +375,39 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
           spec = $spec
           base_url = "http://127.0.0.1:$lanePort"
           api_contract_smoke = $apiContractSmoke
+          cypress_summary_path = $null
+          cypress_log_path = $null
           exit_code = 1
         }
         break
       }
 
       if ($cypressFixtureMode -eq "pass") {
+        $fixtureLogPath = Join-Path $laneLogDir "$logName.log"
+        $fixtureSummaryPath = Join-Path $laneLogDir "$logName.summary.json"
+        "[cypress-matrix] Fixture pass for $spec" | Set-Content -LiteralPath $fixtureLogPath -Encoding UTF8
+        [ordered]@{
+          timestamp = (Get-Date).ToString("o")
+          exit_code = 0
+          error = ""
+          spec = $spec
+          browser = $browser
+          base_url = "http://127.0.0.1:$lanePort"
+          runtime_port = $lanePort
+          runtime_data_dir = $laneDataDir
+          runtime_profile = $laneProfile
+          runtime_instance_name = $laneInstanceName
+          source_commit = $sourceCommit
+          log_path = $fixtureLogPath
+          api_contract_smoke_status = if ($apiContractSmoke) { "fixture" } else { "" }
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $fixtureSummaryPath -Encoding UTF8
         $laneResults += [pscustomobject]@{
           spec = $spec
           base_url = "http://127.0.0.1:$lanePort"
           api_contract_smoke = $apiContractSmoke
           cypress_fixture_mode = $cypressFixtureMode
+          cypress_summary_path = $fixtureSummaryPath
+          cypress_log_path = $fixtureLogPath
           exit_code = 0
         }
         continue
@@ -395,10 +417,26 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         Write-Host $_
       }
       $exitCode = $LASTEXITCODE
+      $cypressSummaryPath = $null
+      $cypressLogPath = $null
+      $summaryCandidate = Get-ChildItem -LiteralPath $laneLogDir -File -Filter "*-$logName.summary.json" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+      if ($summaryCandidate) {
+        $cypressSummaryPath = $summaryCandidate.FullName
+      }
+      $logCandidate = Get-ChildItem -LiteralPath $laneLogDir -File -Filter "*-$logName.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+      if ($logCandidate) {
+        $cypressLogPath = $logCandidate.FullName
+      }
       $laneResults += [pscustomobject]@{
         spec = $spec
         base_url = "http://127.0.0.1:$lanePort"
         api_contract_smoke = $apiContractSmoke
+        cypress_summary_path = $cypressSummaryPath
+        cypress_log_path = $cypressLogPath
         exit_code = $exitCode
       }
       if ($exitCode -ne 0) {
