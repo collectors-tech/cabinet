@@ -1,58 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { TriangleAlert } from 'lucide-react'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Header, HeaderTitle } from '@/components/layout/header'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { ForbiddenError } from '@/features/errors/forbidden'
-import { GeneralError } from '@/features/errors/general-error'
-import { MaintenanceError } from '@/features/errors/maintenance-error'
-import { NotFoundError } from '@/features/errors/not-found-error'
-import { UnauthorisedError } from '@/features/errors/unauthorized-error'
+import { RouteErrorPage } from '@/features/errors/route-error-page'
 
 export const Route = createFileRoute('/_authenticated/errors/$error')({
   component: RouteComponent,
 })
 
-// eslint-disable-next-line react-refresh/only-export-components
 function RouteComponent() {
   const { error } = Route.useParams()
-
-  const errorMap: Record<string, React.ComponentType> = {
-    unauthorized: UnauthorisedError,
-    forbidden: ForbiddenError,
-    'not-found': NotFoundError,
-    'internal-server-error': GeneralError,
-    'maintenance-error': MaintenanceError,
-  }
-  const ErrorComponent = errorMap[error] || NotFoundError
-
-  return (
-    <>
-      <Header fixed className='border-b'>
-        <Search />
-        <HeaderTitle
-          title='Error'
-          description='Review the current route error state.'
-          icon={TriangleAlert}
-          testId='error-header-title'
-          iconTestId='error-page-icon'
-        />
-        <div
-          className='ms-auto flex items-center space-x-4'
-          data-header-title-avoid='true'
-        >
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
-      <div className='flex-1 [&>div]:h-full'>
-        <ErrorComponent />
-      </div>
-    </>
-  )
+  return <RouteErrorPage error={error} />
 }
