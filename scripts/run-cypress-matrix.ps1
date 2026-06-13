@@ -157,6 +157,8 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     container_name = if ($UseContainerImage) { $containerName } else { $null }
     container_volume = if ($UseContainerImage) { $containerVolume } else { $null }
     source_commit = $sourceCommit
+    failure_stage = $null
+    error_message = $null
     log_dir = $laneLogDir
     specs = @($laneSpecs[$laneIndex])
   }
@@ -258,42 +260,48 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
     }
 
     $containerStarted = $false
-    if ($useContainerImage) {
-      docker rm -f $containerName *> $null
-      docker volume rm $containerVolume *> $null
-      $dockerArgs = @(
-        "run", "-d",
-        "--name", $containerName,
-        "-e", "CABINET_E2E_MODE=1",
-        "-p", "$($lanePort):17880",
-        "-v", "$($containerVolume):/data",
-        $containerImage,
-        "--no-open-browser",
-        "--listen", "0.0.0.0:17880",
-        "--data-dir", "/data",
-        "--profile", $laneProfile,
-        "--instance-name", $laneInstanceName,
-        "--allow-parallel"
-      )
-      & docker @dockerArgs | Out-Host
-      if ($LASTEXITCODE -ne 0) {
-        throw "Failed to start container lane $laneNumber from image $containerImage"
-      }
-      $containerStarted = $true
-      $deadline = (Get-Date).AddSeconds($containerStartupTimeoutSec)
-      while ((Get-Date) -lt $deadline) {
-        if (Test-LaneHealth "http://127.0.0.1:$lanePort") {
-          break
-        }
-        Start-Sleep -Seconds 1
-      }
-      if (-not (Test-LaneHealth "http://127.0.0.1:$lanePort")) {
-        throw "Container lane $laneNumber did not become healthy at http://127.0.0.1:$lanePort within $containerStartupTimeoutSec seconds."
-      }
-    }
-
     $laneResults = @()
+    $laneExitCode = 0
+    $failureStage = $null
+    $errorMessage = $null
     try {
+      if ($useContainerImage) {
+        $failureStage = "container_cleanup"
+        docker rm -f $containerName *> $null
+        docker volume rm $containerVolume *> $null
+        $dockerArgs = @(
+          "run", "-d",
+          "--name", $containerName,
+          "-e", "CABINET_E2E_MODE=1",
+          "-p", "$($lanePort):17880",
+          "-v", "$($containerVolume):/data",
+          $containerImage,
+          "--no-open-browser",
+          "--listen", "0.0.0.0:17880",
+          "--data-dir", "/data",
+          "--profile", $laneProfile,
+          "--instance-name", $laneInstanceName,
+          "--allow-parallel"
+        )
+        $failureStage = "container_start"
+        & docker @dockerArgs | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+          throw "Failed to start container lane $laneNumber from image $containerImage"
+        }
+        $containerStarted = $true
+        $failureStage = "runtime_health"
+        $deadline = (Get-Date).AddSeconds($containerStartupTimeoutSec)
+        while ((Get-Date) -lt $deadline) {
+          if (Test-LaneHealth "http://127.0.0.1:$lanePort") {
+            break
+          }
+          Start-Sleep -Seconds 1
+        }
+        if (-not (Test-LaneHealth "http://127.0.0.1:$lanePort")) {
+          throw "Container lane $laneNumber did not become healthy at http://127.0.0.1:$lanePort within $containerStartupTimeoutSec seconds."
+        }
+      }
+      $failureStage = "cypress"
       foreach ($spec in $assignedSpecs) {
       $specRelativeToUi = $spec
       if ($specRelativeToUi.StartsWith("ui.web\")) {
@@ -333,9 +341,21 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
         exit_code = $exitCode
       }
       if ($exitCode -ne 0) {
+        $laneExitCode = 1
+        $errorMessage = "Cypress spec $spec failed with exit code $exitCode."
         break
       }
     }
+      if ($laneExitCode -eq 0) {
+        $failureStage = $null
+      }
+    }
+    catch {
+      $laneExitCode = 1
+      if ([string]::IsNullOrWhiteSpace($failureStage)) {
+        $failureStage = "lane"
+      }
+      $errorMessage = $_.Exception.Message
     }
     finally {
       if ($containerStarted -and -not $keepContainers) {
@@ -358,9 +378,11 @@ for ($laneIndex = 0; $laneIndex -lt $LaneCount; $laneIndex++) {
       container_started = $containerStarted
       container_kept = $keepContainers
       source_commit = $sourceCommit
+      failure_stage = $failureStage
+      error_message = $errorMessage
       log_dir = $laneLogDir
       results = $laneResults
-      exit_code = if (($laneResults | Where-Object { $_.exit_code -ne 0 }).Count -gt 0) { 1 } else { 0 }
+      exit_code = if ($laneExitCode -ne 0 -or ($laneResults | Where-Object { $_.exit_code -ne 0 }).Count -gt 0) { 1 } else { 0 }
     }
   }
   [void]$jobs.Add($job)
@@ -388,6 +410,8 @@ $cleanLaneResults = @(
       container_started = $_.container_started
       container_kept = $_.container_kept
       source_commit = $_.source_commit
+      failure_stage = $_.failure_stage
+      error_message = $_.error_message
       log_dir = $_.log_dir
       results = $_.results
       exit_code = $_.exit_code
