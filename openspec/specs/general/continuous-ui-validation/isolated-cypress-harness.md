@@ -62,7 +62,7 @@ Each run writes its machine-readable matrix summary to:
 .work-agent\logs\cypress-matrix\<run-id>\matrix.summary.json
 ```
 
-The summary records the source commit, spec count, worker limit, lane ports, data directories, profiles, instance names, container names, volumes, result paths, and aggregate passed/failed lane counts. Per-spec Cypress logs and summaries are linked from each result entry.
+The summary records the source commit, spec count, worker limit, lane ports, data directories, profiles, instance names, container names, volumes, result paths, aggregate passed/failed lane and spec counts, and run/lane/per-spec timing metadata. Per-spec Cypress logs and summaries are linked from each result entry.
 
 ## Failure Stages
 
