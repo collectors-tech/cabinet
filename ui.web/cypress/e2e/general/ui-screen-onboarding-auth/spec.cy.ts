@@ -490,7 +490,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.location('pathname').should('match', /^\/sign-in-2\/?$/);
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up and redirects to authenticated shell', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-011 completes sign-up with in-flight duplicate-submit guard', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
@@ -500,7 +500,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.get('input[name="password"]').type('password123');
     cy.get('input[name="confirmPassword"]').type('password123');
 
-    cy.contains('button', 'Create Account').click();
+    cy.contains('button', 'Create Account').click().should('be.disabled');
 
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/dashboard\/?$/);
     cy.contains('Home').should('be.visible');
@@ -617,7 +617,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
     cy.contains('Sign in').should('not.exist');
   });
 
-  it('UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and submit handoff', () => {
+  it('UI-SCREEN-ONBOARDING-AUTH-015 enforces OTP verify threshold and in-flight submit handoff', () => {
     cy.request('POST', '/api/test/runtime/setup-status', { state: 'present' })
       .its('status')
       .should('eq', 200);
@@ -628,7 +628,7 @@ describe('UI-SCREEN-ONBOARDING-AUTH', () => {
 
     cy.get('[data-input-otp]').type('6', { force: true });
     cy.get('[data-testid="otp-verify"]').should('not.be.disabled');
-    cy.get('[data-testid="otp-verify"]').click();
+    cy.get('[data-testid="otp-verify"]').click().should('be.disabled');
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/sign-in\/?$/);
     cy.contains('Sign in').should('be.visible');
   });
