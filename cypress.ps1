@@ -6,6 +6,7 @@ param(
   [switch]$ReuseServer,
   [switch]$RequireE2EHooks,
   [switch]$ApiContractSmoke,
+  [int[]]$ApiContractSmokeAllowedRuntimePorts = @(),
   [string]$RuntimeExecutablePath = "",
   [switch]$AllowTempRuntimePath,
   [switch]$SkipDependencyPrep,
@@ -103,7 +104,7 @@ function Get-SourceCommit([string]$repoRoot) {
   return ""
 }
 
-function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDir, [bool]$requireE2EHooks) {
+function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDir, [bool]$requireE2EHooks, [int[]]$allowedRuntimePorts) {
   $runId = "cypress-preflight-$runStamp"
   $resolvedLogRoot = if ([System.IO.Path]::IsPathRooted($logDir)) { $logDir } else { Join-Path $repoRoot $logDir }
   $summaryPath = Join-Path (Join-Path $resolvedLogRoot $runId) "api-contract-smoke.summary.json"
@@ -118,6 +119,10 @@ function Invoke-ApiContractSmoke([string]$repoRoot, [string]$url, [string]$logDi
   )
   if ($requireE2EHooks) {
     $args += "-RequireE2EHooks"
+  }
+  if ($allowedRuntimePorts -and $allowedRuntimePorts.Count -gt 0) {
+    $args += "-AllowedRuntimePorts"
+    $args += @($allowedRuntimePorts | ForEach-Object { "$_" })
   }
 
   Write-Step "Running API contract smoke preflight."
@@ -559,7 +564,7 @@ try {
   }
 
   if ($ApiContractSmoke) {
-    $apiContractSmokeSummaryPath = Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent
+    $apiContractSmokeSummaryPath = Invoke-ApiContractSmoke $repoRoot $BaseUrl ".work-agent\logs\api-contract-smoke" $RequireE2EHooks.IsPresent $ApiContractSmokeAllowedRuntimePorts
   }
 
   Write-Step "Running Cypress spec: $specPath"

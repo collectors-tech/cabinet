@@ -543,6 +543,65 @@ func TestApiContractSmokeScriptDiagnosesRuntimePortMismatch(t *testing.T) {
 	}
 }
 
+func TestApiContractSmokeScriptAcceptsAllowedRuntimePortForMappedContainers(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"app_version":"test","runtime_host":"0.0.0.0","runtime_port":17880}`))
+		case "/api/openapi.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte("openapi: 3.0.0\ninfo:\n  title: Cabinet Mock\n"))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	runID := "go-api-contract-smoke-allowed-runtime-port"
+	cmd := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-File", filepath.Join(repoRoot, "scripts", "run-api-contract-smoke.ps1"), "-BaseUrl", srv.URL, "-LogRoot", logRoot, "-RunId", runID, "-AllowedRuntimePorts", "17880")
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("api contract smoke script rejected allowed container runtime port: %v\n%s", err, string(output))
+	}
+
+	summaryPath := filepath.Join(logRoot, runID, "api-contract-smoke.summary.json")
+	raw, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read allowed runtime port summary: %v", err)
+	}
+
+	var summary struct {
+		ExitCode            int   `json:"exit_code"`
+		CheckCount          int   `json:"check_count"`
+		FailedCount         int   `json:"failed_count"`
+		AllowedRuntimePorts []int `json:"allowed_runtime_ports"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("decode allowed runtime port summary: %v\n%s", err, string(raw))
+	}
+	if summary.ExitCode != 0 || summary.CheckCount != 4 || summary.FailedCount != 0 {
+		t.Fatalf("unexpected allowed runtime port summary: %+v", summary)
+	}
+	if len(summary.AllowedRuntimePorts) != 1 || summary.AllowedRuntimePorts[0] != 17880 {
+		t.Fatalf("summary did not preserve allowed runtime port metadata: %+v", summary)
+	}
+}
+
 func TestApiContractSmokeScriptDiagnosesHealthzFailure(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")

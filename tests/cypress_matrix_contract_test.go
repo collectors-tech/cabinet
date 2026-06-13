@@ -43,6 +43,7 @@ func TestCypressMatrixRunnerProvidesIsolatedLanes(t *testing.T) {
 		`"--listen", "0.0.0.0:17880"`,
 		`$args += "-ReuseServer"`,
 		`$args += "-ApiContractSmoke"`,
+		`$args += @("-ApiContractSmokeAllowedRuntimePorts", "17880")`,
 		`api_contract_smoke = $ApiContractSmoke.IsPresent`,
 		`api_contract_smoke = $apiContractSmoke`,
 		`container_started = $containerStarted`,

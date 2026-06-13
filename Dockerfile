@@ -33,6 +33,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=app-build /out/cabinet /app/cabinet
+COPY docs/api/openapi.yaml /app/docs/api/openapi.yaml
 
 ENV CABINET_OPEN_BROWSER=0
 EXPOSE 17880

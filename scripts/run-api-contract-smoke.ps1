@@ -3,6 +3,7 @@ param(
   [string]$RunId = "",
   [string]$LogRoot = ".work-agent\logs\api-contract-smoke",
   [int]$TimeoutSec = 5,
+  [int[]]$AllowedRuntimePorts = @(),
   [switch]$RequireE2EHooks
 )
 
@@ -112,8 +113,10 @@ function Invoke-ApiSmokeCheck([string]$baseUrl, [hashtable]$check, [int]$timeout
     if ($check.ContainsKey("RuntimePortMustMatchBaseUrl") -and $check.RuntimePortMustMatchBaseUrl) {
       $runtimePort = [int]$jsonPayload.runtime_port
       $baseUrlPort = [int]$baseUrlMetadata.port
-      if ($baseUrlPort -gt 0 -and $runtimePort -ne $baseUrlPort) {
-        $result.error = "runtime_port $runtimePort did not match BaseUrl port $baseUrlPort"
+      $allowedPorts = @($check.AllowedRuntimePorts | Where-Object { $_ -gt 0 })
+      if ($baseUrlPort -gt 0 -and $runtimePort -ne $baseUrlPort -and -not ($allowedPorts -contains $runtimePort)) {
+        $allowedPortText = if ($allowedPorts.Count -gt 0) { " or allowed runtime ports $($allowedPorts -join ',')" } else { "" }
+        $result.error = "runtime_port $runtimePort did not match BaseUrl port $baseUrlPort$allowedPortText"
         $result.duration_ms = [int]$checkStopwatch.ElapsedMilliseconds
         return [pscustomobject]$result
       }
@@ -206,6 +209,7 @@ $checks = @(
     JsonFields = @("app_version", "runtime_host", "runtime_port")
     RuntimeHostMustMatchBaseUrl = $true
     RuntimePortMustMatchBaseUrl = $true
+    AllowedRuntimePorts = $AllowedRuntimePorts
   },
   @{
     Name = "OpenAPI YAML"
@@ -270,6 +274,7 @@ $summary = [ordered]@{
   base_url_port = $baseUrlMetadata.port
   source_commit = $sourceCommit
   timeout_sec = $TimeoutSec
+  allowed_runtime_ports = @($AllowedRuntimePorts)
   elapsed_ms = [int]$runStopwatch.ElapsedMilliseconds
   check_count = $results.Count
   failed_count = $failed.Count
