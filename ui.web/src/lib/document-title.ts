@@ -21,6 +21,8 @@ const TITLE_RULES: TitleRule[] = [
   { prefix: '/settings', title: 'Settings' },
   { prefix: '/help-center', title: 'Help Center' },
   { prefix: '/users', title: 'Users' },
+  { prefix: '/errors', title: 'Error' },
+  { prefix: '/404', title: 'Not Found' },
 ]
 
 export function getDocumentTitle(pathname: string) {

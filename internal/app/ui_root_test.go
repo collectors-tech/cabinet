@@ -1,10 +1,13 @@
 package app
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/collectors-tech/cabinet/internal/ui"
 )
 
 func TestRootServesAppShell(t *testing.T) {
@@ -44,6 +47,28 @@ func TestSPADeepLinksServeAppShell(t *testing.T) {
 	body := resp.Body.String()
 	if !strings.Contains(body, "id=\"root\"") {
 		t.Fatalf("expected SPA mount node in deep-link response")
+	}
+}
+
+func TestUnderscorePrefixedUIChunksServeFromEmbeddedStatic(t *testing.T) {
+	t.Parallel()
+
+	matches, err := fs.Glob(ui.Static, "static/assets/_*.js")
+	if err != nil {
+		t.Fatalf("glob embedded underscore chunks: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatal("expected embedded underscore-prefixed UI chunks")
+	}
+
+	a := newTestApp(t)
+	assetPath := "/" + strings.TrimPrefix(matches[0], "static/")
+	resp := doRequest(t, a, http.MethodGet, assetPath, nil, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("%s status = %d, want %d", assetPath, resp.Code, http.StatusOK)
+	}
+	if !strings.Contains(resp.Body.String(), "export") {
+		t.Fatalf("expected %s to return a JavaScript module", assetPath)
 	}
 }
 
