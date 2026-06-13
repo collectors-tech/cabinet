@@ -9,10 +9,11 @@ describe('purchases/purchase-inbox', () => {
       path: '/purchases',
     })
     cy.location('pathname').should('eq', '/purchases')
-    cy.get('[data-testid="purchase-inbox-header-title"]').should(
+    cy.get('[data-testid="purchases-header-title"]').should(
       'contain',
       'Purchases'
     )
+    cy.get('[data-testid="purchases-page-icon"]').should('be.visible')
     cy.get('[data-testid="sidebar-nav-link-purchases"]')
       .should('contain', 'Purchases')
       .should('have.attr', 'href', '/purchases')
@@ -108,7 +109,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
-    cy.get('[data-testid="purchase-inbox-header-title"]').should(
+    cy.get('[data-testid="purchases-header-title"]').should(
       'contain',
       'Purchases'
     )

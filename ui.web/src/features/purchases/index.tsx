@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  ShoppingCart,
   Star,
   Truck,
 } from 'lucide-react'
@@ -1516,9 +1517,9 @@ export function Purchases() {
         <HeaderTitle
           title='Purchases'
           description='Review, import, and reconcile purchases across channels.'
-          icon={Inbox}
-          testId='purchase-inbox-header-title'
-          iconTestId='purchase-inbox-page-icon'
+          icon={ShoppingCart}
+          testId='purchases-header-title'
+          iconTestId='purchases-page-icon'
         />
         <div
           className='ms-auto flex items-center space-x-4'
@@ -1560,7 +1561,7 @@ export function Purchases() {
               ) : (
                 <RefreshCw className='mr-2 h-4 w-4' />
               )}
-              Review captured purchases
+              Load captured reviews
             </Button>
           </div>
         </div>
@@ -1797,11 +1798,11 @@ export function Purchases() {
             data-testid='purchase-inbox-empty-state'
           >
             <p className='font-medium'>
-              No captured purchases are ready for review.
+              No captured purchase reviews are loaded.
             </p>
             <p className='mt-1 text-sm text-muted-foreground'>
-              Import or capture eBay purchase cards, then prepare review records
-              before mutating inventory.
+              Add a purchase manually, import CSV or email orders, or load
+              captured purchase reviews when source records are available.
             </p>
           </section>
         ) : null}
