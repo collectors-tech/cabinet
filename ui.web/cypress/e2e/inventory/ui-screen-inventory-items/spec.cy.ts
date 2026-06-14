@@ -812,4 +812,126 @@ describe("inventory-management", () => {
     });
   });
 
+  it("UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection", () => {
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: "item-table-1",
+            part_number: "PN-TABLE-001",
+            title: "Road Alpha",
+            status: "used",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Carded",
+          },
+          {
+            id: "item-table-2",
+            part_number: "PN-TABLE-002",
+            title: "Road Zeta",
+            status: "used",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Loose",
+          },
+          {
+            id: "item-table-3",
+            part_number: "PN-TABLE-003",
+            title: "Road Bravo",
+            status: "active",
+            category: "Cars",
+            item_type: "Slot Cars",
+            packaging_grade_type: "Carded",
+          },
+          {
+            id: "item-table-4",
+            part_number: "PN-TABLE-004",
+            title: "Plane Delta",
+            status: "used",
+            category: "Planes",
+            item_type: "Model Planes",
+            packaging_grade_type: "Boxed",
+          },
+        ],
+      },
+    }).as("itemsTableControls");
+
+    signIn();
+    cy.wait("@itemsTableControls");
+
+    cy.get('button[aria-label="Switch to rows view"]')
+      .click({ force: true })
+      .should("have.attr", "aria-pressed", "true");
+
+    cy.get('[data-testid="inventory-table-search-input"]').type("Road");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Road Bravo").should("be.visible");
+    cy.contains("Plane Delta").should("not.exist");
+
+    cy.get('[data-testid="inventory-table-toolbar"]')
+      .contains("button", "Condition")
+      .click();
+    cy.contains('[role="option"]', "used").click();
+    cy.get("body").type("{esc}");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Road Bravo").should("not.exist");
+
+    cy.get('[data-testid="inventory-table-toolbar"]')
+      .contains("button", "Category")
+      .click();
+    cy.contains('[role="option"]', "Cars").click();
+    cy.get("body").type("{esc}");
+    cy.contains("Road Alpha").should("be.visible");
+    cy.contains("Road Zeta").should("be.visible");
+    cy.contains("Plane Delta").should("not.exist");
+
+    cy.contains("th", "Title").find("button").click();
+    cy.contains('[role="menuitem"]', "Desc").click();
+    cy.get("table tbody tr").first().should("contain", "PN-TABLE-002");
+
+    cy.contains("button", "Reset").click();
+    cy.get('[data-testid="inventory-table-search-input"]').should("have.value", "");
+    cy.contains("Road Bravo").should("be.visible");
+    cy.contains("Plane Delta").should("be.visible");
+
+    cy.get('[data-testid="inventory-item-row-item-table-1"]')
+      .find('button[role="checkbox"][aria-label="Select row"]')
+      .click();
+    cy.get('[data-testid="inventory-item-editor-dialog"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-row-item-table-1"]').should(
+      "have.attr",
+      "data-state",
+      "selected"
+    );
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 1 selected"]')
+      .should("be.visible")
+      .within(() => {
+        cy.contains("selected").should("be.visible");
+        cy.get('button[aria-label="Update status"]').should("be.visible");
+        cy.get('button[aria-label="Update priority"]').should("be.visible");
+        cy.get('button[aria-label="Export tasks"]').should("be.visible");
+        cy.get('button[aria-label="Delete selected tasks"]').should("be.visible");
+      });
+
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 1 selected"]')
+      .focus()
+      .type("{esc}");
+    cy.get('[role="toolbar"][aria-label^="Bulk actions"]').should("not.exist");
+    cy.get('[data-testid="inventory-item-row-item-table-1"]').should(
+      "not.have.attr",
+      "data-state",
+      "selected"
+    );
+
+    cy.get('button[role="checkbox"][aria-label="Select all"]').click();
+    cy.get('[role="toolbar"][aria-label^="Bulk actions for 4 selected"]').should(
+      "be.visible"
+    );
+    cy.get('button[aria-label="Clear selection"]').click();
+    cy.get('[role="toolbar"][aria-label^="Bulk actions"]').should("not.exist");
+  });
+
 });
