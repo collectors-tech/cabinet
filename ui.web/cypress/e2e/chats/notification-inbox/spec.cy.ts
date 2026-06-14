@@ -61,7 +61,10 @@ const baseItems: StubItem[] = [
 ]
 
 describe('chats/notification-inbox', () => {
-  function bootInbox(items: StubItem[] = baseItems) {
+  function bootInbox(
+    items: StubItem[] = baseItems,
+    options: { failUpdates?: boolean } = {}
+  ) {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -71,6 +74,13 @@ describe('chats/notification-inbox', () => {
       body: { items },
     }).as('loadNotifications')
     cy.intercept('PATCH', '/api/chat/inbox/*', (req) => {
+      if (options.failUpdates) {
+        req.reply({
+          statusCode: 500,
+          body: { error: 'failed' },
+        })
+        return
+      }
       const id = String(req.url).split('/api/chat/inbox/')[1]
       const item = items.find((candidate) => candidate.id === id)
       req.reply({
@@ -207,5 +217,31 @@ describe('chats/notification-inbox', () => {
     cy.get('[data-testid="notification-inbox-retry"]').click({ force: true })
     cy.wait('@retryNotifications')
     cy.get('[data-testid="notification-inbox-empty-state"]').should('be.visible')
+  })
+
+  it('UI-SCREEN-NOTIFICATION-INBOX-006 keeps rows retryable when triage updates fail', () => {
+    bootInbox(baseItems, { failUpdates: true })
+
+    cy.contains(
+      '[data-testid="notification-inbox-row"]',
+      'Assistant price review is ready'
+    )
+      .as('assistantRow')
+      .find('[data-testid="notification-inbox-row-read"]')
+      .click()
+    cy.wait('@updateNotification').its('request.body').should('deep.include', {
+      profile_id: 'e2e-profile-001',
+      status: 'read',
+    })
+    cy.get('[data-testid="notification-inbox-error-state"]')
+      .should('be.visible')
+      .and('contain', 'notification_inbox_update_failed')
+    cy.get('@assistantRow')
+      .should('be.visible')
+      .find('[data-testid="notification-inbox-row-status"]')
+      .should('contain', 'unread')
+    cy.get('@assistantRow')
+      .find('[data-testid="notification-inbox-row-read"]')
+      .should('be.enabled')
   })
 })

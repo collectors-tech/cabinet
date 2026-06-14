@@ -46,3 +46,12 @@ The Notification Inbox MUST show visible loading, refresh, retryable error, and 
 - **WHEN** the page renders the failure state
 - **THEN** the user MUST see a retry action
 - **AND** retrying MUST request the notification queue again.
+
+### Requirement UI-SCREEN-NOTIFICATION-INBOX-006: Notification Inbox SHALL preserve rows when triage updates fail
+When a read, unread, or archive request fails, the Notification Inbox MUST show a retryable update error and MUST keep the affected row visible with its previous status so users can retry without losing queue context.
+
+#### Scenario: Failed row update keeps queue context
+- **GIVEN** an unread notification row is visible
+- **WHEN** the user marks the row read and the update API fails
+- **THEN** the update error MUST be visible
+- **AND** the row MUST remain in the queue with its unread status.
