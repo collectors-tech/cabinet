@@ -5,7 +5,7 @@ Define Integrations screen behavior for provider cards, filters, and credential 
 ### Requirement UI-SCREEN-INTEGRATIONS-001: Integrations screen SHALL support search/filter/sort over provider cards
 Integrations screen SHALL support text filter, connection-type filter, and sort controls.
 
-### Requirement UI-SCREEN-INTEGRATIONS-008: Integrations screen SHALL support integration-type selector and rows/cards view toggles
+### Requirement UI-SCREEN-INTEGRATIONS-012: Integrations screen SHALL support integration-type selector and rows/cards view toggles
 Integrations screen SHALL expose integration-type selector (default `All Integrations`) and explicit `Rows`/`Cards` view toggles.
 
 #### Scenario: Select integration type filter
@@ -160,7 +160,7 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-05 | Registry/bootstrap failure | Error state with retry appears | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: renders deterministic bootstrap error with retry control` |
 | UC-INT-UI-06 | Registry-backed provider list | Cards derive from runtime registry response | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to cards and supports filter/sort/view using registry data` |
 | UC-INT-UI-07 | Provider detail actions visible | Validate/Save controls appear with health/last-run; dialog Sync is disabled with Market Watch guidance when unsupported | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-002 + UI-SCREEN-INTEGRATIONS-007 + INTEGRATION-020: opens provider detail panel with actions and status` |
-| UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-008 + UC-INT-UI-08: filters rows by integration type selector` |
+| UC-INT-UI-08 | Use integration type selector | Provider list updates for selected type (`All Integrations` default supported) | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-08: filters rows by integration type selector` |
 | UC-INT-UI-09 | Toggle rows/cards view | Provider presentation switches deterministically | planned: `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `integrations-rows-cards-toggle` |
 | UC-INT-UI-10 | Provider API family badge display | Cards show API family labels from registry mapping | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-10: cards show provider API family badges from registry mapping` |
 | UC-INT-UI-11 | Provider API support detail display | Detail panel shows API family + support profile metadata | `ui.web/cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-009 + UC-INT-UI-11 + INTEGRATION-024: detail panel shows API family + support profile metadata from registry` |

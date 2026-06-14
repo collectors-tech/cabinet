@@ -179,7 +179,7 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-row-provider-12"]').should('be.visible')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-008 + UC-INT-UI-08: filters rows by integration type selector', () => {
+  it('UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-08: filters rows by integration type selector', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
