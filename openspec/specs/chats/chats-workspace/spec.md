@@ -40,3 +40,14 @@ Chats workspace MUST render as a dark, sparse two-pane conversation surface with
 - **AND** conversation rows MUST preserve compact avatar, participant/title, and message preview structure
 - **AND** the right workspace MUST show a centered empty-state composition with icon, title, helper text, and primary action affordance
 - **AND** the rail and workspace MUST remain separate, readable, and unclipped at normal desktop widths
+
+### Requirement CHATS-WORKSPACE-005: `/chats` SHALL support thread discovery and new-thread entry from the two-pane rail
+Chats workspace MUST let users start a new durable thread from both the empty workspace and selected-thread topbar while keeping thread search scoped to discoverable conversation rows.
+
+#### Scenario: Create and filter conversation threads
+- **GIVEN** user opens `/chats`
+- **WHEN** user creates multiple chat threads and filters the conversation rail
+- **THEN** matching thread rows MUST remain visible
+- **AND** non-matching thread rows MUST be hidden
+- **AND** New Chat / Start a conversation affordances MUST keep the new-thread entry available without changing the active route
+- **AND** created threads MUST persist through the Cabinet chat thread API for the active profile
