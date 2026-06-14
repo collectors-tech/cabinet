@@ -65,4 +65,46 @@ describe('collections-row-side-panel', () => {
       'Store 2 Panel'
     )
   })
+
+  it('keeps the side panel open and skips persistence on duplicate rename', () => {
+    signInToCollections()
+
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'All Items'
+    )
+
+    cy.get('[data-testid="collections-row-edit-store-1"]')
+      .scrollIntoView()
+      .click({ force: true })
+    cy.get('[data-testid="collections-edit-panel"]')
+      .should('be.visible')
+      .should('have.attr', 'data-side', 'right')
+    cy.get('[data-testid="collections-edit-input"]')
+      .should('have.value', 'Store 1')
+      .clear()
+      .type('Store 2')
+
+    cy.get('[data-testid="collections-edit-submit"]').click()
+
+    cy.get('[data-testid="collections-edit-panel"]').should('be.visible')
+    cy.get('[data-testid="collections-edit-input"]').should(
+      'have.value',
+      'Store 2'
+    )
+    cy.get('@saveCollectionSettings.all').should('have.length', 0)
+    cy.get('[data-testid="collections-row-name-store-1"]').should(
+      'contain.text',
+      'Store 1'
+    )
+    cy.get('[data-testid="collections-row-name-store-2"]').should(
+      'contain.text',
+      'Store 2'
+    )
+    cy.get('[data-testid="collections-active-context"]').should(
+      'contain.text',
+      'Store 1'
+    )
+  })
 })
