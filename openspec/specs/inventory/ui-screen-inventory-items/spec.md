@@ -10,6 +10,12 @@ Inventory Items SHALL support row-details behavior, selection mode, and filter/s
 - **WHEN** user clicks non-interactive row area
 - **THEN** item details drawer SHALL open for selected row
 
+#### Scenario: Checkbox bulk selection mode
+- **GIVEN** an authenticated actor with the required role is operating an active local profile, required capability configuration is enabled, and scenario fixture data exists for execution
+- **WHEN** user selects one or more inventory rows using row checkboxes or the select-all checkbox
+- **THEN** the bulk actions toolbar SHALL appear without opening the item editor
+- **AND** clearing selection by keyboard or clear action SHALL remove the toolbar and selected row state
+
 ### Requirement UI-SCREEN-INVENTORY-ITEMS-002: Inventory Items SHALL support deterministic state handling
 Inventory Items SHALL support loading, empty, error, and ready states.
 
@@ -120,9 +126,9 @@ Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type,
 | UC-INV-02 | Empty filtered results | Empty state appears | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `renders empty inventory state without global 500 fallback` |
 | UC-INV-03 | API failure on load | Error state + retry, no 500 route | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-002 shows inline error state and recovers on retry` |
 | UC-INV-04 | Row click open details | Details drawer opens selected item | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-row-opens-details` |
-| UC-INV-05 | Checkbox bulk select | Selection mode appears, no row-open side effect | planned: `cypress/e2e/ui/inventory.cy.ts` `inventory-bulk-checkbox-mode` |
+| UC-INV-05 | Checkbox bulk select | Selection mode appears, no row-open side effect | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection` |
 | UC-INV-06 | Click Add Item | Create-item workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-item-opens-create-flow` |
 | UC-INV-07 | Click Add Folder | Folder creation workflow opens from toolbar | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-add-folder-opens-create-flow` |
-| UC-INV-08 | Toggle Rows/Cards view | View mode changes deterministically | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-view-mode-toggle` |
-| UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | planned: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `inventory-browser-controls-available` |
+| UC-INV-08 | Toggle Rows/Cards view | View mode changes deterministically | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `renders inventory workspace, supports view toggle and filtering, and avoids 500`; existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection` |
+| UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection`; existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-011 scopes condition choices by item type and restores compact filters` |
 | UC-INV-10 | Review dense inventory rows at desktop width | Right-side columns remain readable and actions are reachable via table scroll | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable` |
