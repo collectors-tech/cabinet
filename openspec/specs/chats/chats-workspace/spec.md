@@ -51,3 +51,15 @@ Chats workspace MUST let users start a new durable thread from both the empty wo
 - **AND** non-matching thread rows MUST be hidden
 - **AND** New Chat / Start a conversation affordances MUST keep the new-thread entry available without changing the active route
 - **AND** created threads MUST persist through the Cabinet chat thread API for the active profile
+
+### Requirement CHATS-WORKSPACE-006: `/chats` SHALL closely follow the assistant-ui example chat surface
+Chats workspace MUST render close to the provided assistant-ui examples: a dark, compact thread rail, a broad uninterrupted conversation canvas, and a bottom-docked centered composer instead of stacked framed panels.
+
+#### Scenario: Render assistant-ui example visual contract
+- **GIVEN** user opens `/chats` and selects a thread
+- **WHEN** the selected conversation workspace renders
+- **THEN** the layout MUST identify the assistant-ui example visual contract
+- **AND** the conversation rail MUST stay compact beside the main surface
+- **AND** the message canvas MUST occupy the dominant vertical workspace
+- **AND** the composer MUST be docked at the bottom center of the conversation surface
+- **AND** action-preview and attachment controls MUST remain visually secondary to the chat composer
