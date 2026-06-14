@@ -97,7 +97,7 @@ describe('chats/inbox-notification-cards', () => {
     cy.wait('@loadInbox')
   }
 
-  it('INBOX-NOTIFICATIONS-001 shows catch-up cards and supports read, unread, archive actions', () => {
+  it('UI-SCREEN-INBOX-NOTIFICATION-CARDS-001 shows catch-up cards and supports read, unread, archive actions', () => {
     openInboxWithStubbedNotifications()
 
     cy.get('[data-testid="shell-inbox-notification-card"]')
@@ -191,7 +191,7 @@ describe('chats/inbox-notification-cards', () => {
     ).should('exist')
   })
 
-  it('INBOX-NOTIFICATIONS-002 opens Telegram capture review URLs on the requested chat thread', () => {
+  it('UI-SCREEN-INBOX-NOTIFICATION-CARDS-003 opens Telegram capture review URLs on the requested chat thread', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
     cy.e2eBootstrap()
@@ -254,5 +254,71 @@ describe('chats/inbox-notification-cards', () => {
       '[data-testid="chat-message-list"]',
       'Telegram capture with photo and barcode 9312345678901'
     ).should('be.visible')
+  })
+
+  it('UI-SCREEN-INBOX-NOTIFICATION-CARDS-004 keeps shell cards retryable when triage updates fail', () => {
+    cy.viewport(1400, 900)
+    cy.clock(new Date('2026-04-29T12:00:00Z').getTime(), ['Date'])
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            id: 'inbox-price-move',
+            profile_id: 'e2e-profile-001',
+            thread_id: 'thread-price-move',
+            source: 'pricing_workflow',
+            status: 'unread',
+            title: 'Price moved on Showcase Seed One',
+            summary: 'Market price climbed 12% since the last check.',
+            metadata: {
+              item: {
+                id: 'shw-100',
+                part_number: 'SHW-100',
+                title: 'Showcase Seed One',
+                href: '/inventory/?item=shw-100',
+              },
+            },
+            created_at: '2026-04-27T09:00:00Z',
+            updated_at: '2026-04-27T09:00:00Z',
+          },
+        ],
+      },
+    }).as('loadInbox')
+    cy.intercept('PATCH', '/api/chat/inbox/inbox-price-move', {
+      statusCode: 500,
+      body: { error: 'failed' },
+    }).as('updateInboxStatusFailure')
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/inventory/',
+      shellWorkspace: 'inbox',
+    })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.wait('@loadInbox')
+
+    cy.contains(
+      '[data-testid="shell-inbox-notification-card"]',
+      'Price moved on Showcase Seed One'
+    )
+      .as('priceMoveCard')
+      .find('[data-testid="shell-inbox-mark-read"]')
+      .click()
+    cy.wait('@updateInboxStatusFailure').its('request.body').should('deep.include', {
+      profile_id: 'e2e-profile-001',
+      status: 'read',
+    })
+    cy.get('[data-testid="shell-inbox-error"]')
+      .should('be.visible')
+      .and('contain', 'failed_to_update_inbox_item')
+    cy.get('@priceMoveCard')
+      .should('be.visible')
+      .find('[data-testid="shell-inbox-item-status"]')
+      .should('contain', 'unread')
+    cy.get('@priceMoveCard')
+      .find('[data-testid="shell-inbox-mark-read"]')
+      .should('be.enabled')
   })
 })
