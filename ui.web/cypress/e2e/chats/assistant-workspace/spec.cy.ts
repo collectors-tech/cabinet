@@ -8,9 +8,21 @@ describe('chats/assistant-workspace', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
   }
 
+  function openAssistantWorkspace() {
+    cy.intercept('POST', '/api/chat/threads').as('assistantBootstrapThread')
+    cy.get('[data-testid="shell-chat-toggle"]').click()
+    cy.wait('@assistantBootstrapThread', { timeout: 20000 })
+    cy.get('[data-testid="shell-assistant-thread-id"]', {
+      timeout: 20000,
+    }).should(($threadId) => {
+      expect($threadId.text().trim()).not.to.eq('')
+      expect($threadId.text().trim()).not.to.eq('bootstrapping')
+    })
+  }
+
   it('ASSISTANT-WORKSPACE-001 preserves assistant thread continuity across route and workspace changes', () => {
     bootstrapInventory()
-    cy.get('[data-testid="shell-chat-toggle"]').click()
+    openAssistantWorkspace()
     cy.get('[data-testid="shell-assistant-compose-input"]').type('remember this route context')
     cy.get('[data-testid="shell-assistant-send-button"]').click()
     cy.contains('[data-testid="shell-assistant-message-list"]', 'remember this route context').should('exist')
@@ -28,7 +40,7 @@ describe('chats/assistant-workspace', () => {
   it('ASSISTANT-WORKSPACE-002 sends deterministic route/profile/selection context in assistant message envelopes', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
-    cy.get('[data-testid="shell-chat-toggle"]').click()
+    openAssistantWorkspace()
     cy.get('[data-testid="shell-assistant-selection-context"]').should('contain', 'All Items')
     cy.get('[data-testid="shell-assistant-compose-input"]').type('what should I do with this inventory route?')
     cy.get('[data-testid="shell-assistant-send-button"]').click()
@@ -47,11 +59,7 @@ describe('chats/assistant-workspace', () => {
   it('ASSISTANT-WORKSPACE-003 changes provider/model with deterministic forked-thread semantics', () => {
     bootstrapInventory()
     let originalThreadId = ''
-    cy.get('[data-testid="shell-chat-toggle"]').click()
-    cy.get('[data-testid="shell-assistant-thread-id"]').should(($threadId) => {
-      expect($threadId.text().trim()).not.to.eq('')
-      expect($threadId.text().trim()).not.to.eq('bootstrapping')
-    })
+    openAssistantWorkspace()
     cy.get('[data-testid="shell-assistant-thread-id"]')
       .invoke('text')
       .then((threadId) => {
@@ -99,7 +107,7 @@ describe('chats/assistant-workspace', () => {
         cy.contains('button', 'Sign in').click()
         cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
-        cy.get('[data-testid="shell-chat-toggle"]').click()
+        openAssistantWorkspace()
         cy.get('[data-testid="shell-assistant-compose-input"]').type('primary profile message')
         cy.get('[data-testid="shell-assistant-send-button"]').click()
         cy.contains('[data-testid="shell-assistant-message-list"]', 'primary profile message').should('exist')
@@ -134,7 +142,7 @@ describe('chats/assistant-workspace', () => {
 
   it('ASSISTANT-WORKSPACE-006 selects chats, creates a new chat, and exposes a layout navigation action', () => {
     bootstrapInventory()
-    cy.get('[data-testid="shell-chat-toggle"]').click()
+    openAssistantWorkspace()
     cy.get('[data-testid="shell-assistant-thread-select"]').should('be.visible')
     cy.get('[data-testid="shell-assistant-thread-id"]').should(($threadId) => {
       expect($threadId.text().trim()).not.to.eq('')
@@ -201,7 +209,7 @@ describe('chats/assistant-workspace', () => {
   it('ASSISTANT-WORKSPACE-005 renders Cabinet assistant-ui adapter primitives while preserving context envelopes and manual action confirmation', () => {
     bootstrapInventory()
     cy.intercept('POST', '/api/chat/messages').as('assistantMessage')
-    cy.get('[data-testid="shell-chat-toggle"]').click()
+    openAssistantWorkspace()
     cy.get('[data-testid="shell-assistant-modal-anchor"]').should('exist')
     cy.get('[data-testid="shell-assistant-modal-trigger"]').should('be.visible')
     cy.get('[data-testid="shell-assistant-modal-content"]').should('be.visible')
@@ -262,5 +270,84 @@ describe('chats/assistant-workspace', () => {
       'contain',
       'ADAPT-1133'
     )
+  })
+
+  it('ASSISTANT-WORKSPACE-007 exposes governed action results with persistence proof', () => {
+    bootstrapInventory()
+    cy.intercept('POST', '/api/chat/actions/preview').as('assistantPreview')
+    cy.intercept('POST', '/api/chat/actions/apply').as('assistantApply')
+
+    openAssistantWorkspace()
+    cy.get('[data-testid="shell-assistant-execution-panel"]').should('exist')
+    cy.get('[data-testid="shell-assistant-execution-state"]').should(
+      'contain',
+      'idle'
+    )
+    cy.get('[data-testid="shell-assistant-apply-action"]').should(
+      'be.disabled'
+    )
+
+    cy.get('[data-testid="shell-assistant-preview-part-number"]')
+      .clear()
+      .type('WS-1083')
+    cy.get('[data-testid="shell-assistant-preview-title"]')
+      .clear()
+      .type('Workspace Execution Proof')
+    cy.get('[data-testid="shell-assistant-preview-action"]').click()
+
+    cy.wait('@assistantPreview').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.action).to.eq('create_item_stub')
+      expect(request.body.payload.part_number).to.eq('WS-1083')
+      expect(request.body.payload.title).to.eq('Workspace Execution Proof')
+      expect(response?.statusCode).to.eq(200)
+    })
+    cy.get('[data-testid="shell-assistant-action-preview"]')
+      .should('contain', 'create_item_stub')
+      .and('contain', 'WS-1083')
+      .and('contain', 'Workspace Execution Proof')
+    cy.request('/api/items?profile_id=e2e-profile-001')
+      .its('body')
+      .should((items) => {
+        expect(JSON.stringify(items)).not.to.include('WS-1083')
+      })
+
+    cy.get('[data-testid="shell-assistant-apply-action"]').should(
+      'not.be.disabled'
+    )
+    cy.get('[data-testid="shell-assistant-apply-action"]').click()
+    cy.get('[data-testid="shell-assistant-apply-confirm-dialog"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="shell-assistant-apply-confirm-summary"]').should(
+      'contain',
+      'WS-1083'
+    )
+    cy.get('[data-testid="shell-assistant-apply-confirm"]').click()
+
+    cy.wait('@assistantApply').then(({ request, response }) => {
+      expect(request.body.profile_id).to.eq('e2e-profile-001')
+      expect(request.body.confirm).to.eq(true)
+      expect(response?.statusCode).to.eq(200)
+      expect(response?.body.applied).to.eq(true)
+      expect(String(response?.body.item_id).trim()).not.to.eq('')
+    })
+    cy.get('[data-testid="shell-assistant-execution-state"]').should(
+      'contain',
+      'success'
+    )
+    cy.get('[data-testid="shell-assistant-apply-result"]')
+      .should('contain', 'Applied create_item_stub')
+      .and('contain', 'to ')
+    cy.get('[data-testid="shell-assistant-result-link"]')
+      .should('contain', 'Open item')
+      .and('have.attr', 'href')
+      .and('include', '/inventory/?item=')
+    cy.request('/api/items?profile_id=e2e-profile-001')
+      .its('body')
+      .should((items) => {
+        expect(JSON.stringify(items)).to.include('WS-1083')
+        expect(JSON.stringify(items)).to.include('Workspace Execution Proof')
+      })
   })
 })
