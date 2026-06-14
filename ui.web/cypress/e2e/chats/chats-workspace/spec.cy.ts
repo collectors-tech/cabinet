@@ -19,11 +19,15 @@ describe('chats/chats-workspace', () => {
 
     cy.contains('h1', 'Chats').should('be.visible')
     cy.get('[data-testid="chat-workspace-description"]')
-      .should('be.visible')
-      .and('contain.text', 'Persistent profile-scoped conversation threads backed by Cabinet runtime.')
+      .should(
+        'contain.text',
+        'Persistent profile-scoped conversation threads backed by Cabinet runtime.'
+      )
     cy.get('[data-testid="chat-workspace-boundary-note"]')
-      .should('be.visible')
-      .and('contain.text', 'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.')
+      .should(
+        'contain.text',
+        'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.'
+      )
     cy.get('[data-testid="chat-thread-list"]').should('be.visible')
     cy.contains('No chat threads yet.').should('be.visible')
     cy.contains(/inbox template|stock inbox|placeholder/i).should('not.exist')
@@ -40,7 +44,7 @@ describe('chats/chats-workspace', () => {
     cy.get('[data-testid="chat-thread-title"]').should('contain', 'E2E Workspace Thread Preservation')
     cy.get('[data-testid="chat-message-list"]').should('contain', 'Hello persistent chats workspace')
     cy.contains('[data-testid="chat-thread-item"]', 'E2E Workspace Thread Preservation')
-      .should('have.class', 'border-primary')
+      .should('have.class', 'border-cyan-400/60')
   })
 
   it('CHATS-WORKSPACE-003 states the Assistant versus Chats boundary explicitly', () => {
@@ -63,7 +67,7 @@ describe('chats/chats-workspace', () => {
       .and('have.attr', 'placeholder', 'Search messages')
     cy.get('[data-testid="chat-empty-workspace-state"]')
       .should('be.visible')
-      .and('contain.text', 'Select a conversation')
+      .and('contain.text', 'How can I help you today?')
       .and('contain.text', 'Choose an existing thread or create a new one to continue a durable Cabinet conversation.')
     cy.get('[data-testid="chat-empty-workspace-action"]')
       .should('be.visible')
@@ -80,5 +84,39 @@ describe('chats/chats-workspace', () => {
           'No messages yet'
         )
       })
+  })
+
+  it('CHATS-WORKSPACE-005 filters thread rows and keeps new-thread actions route-stable', () => {
+    openChats()
+
+    cy.get('[data-testid="chat-empty-workspace-action"]').click()
+    cy.get('[data-testid="chat-new-thread-input"]').should('not.be.disabled')
+    cy.location('pathname').should('match', /^\/chats\/?$/)
+
+    createThread('E2E Alpha Search Thread')
+    cy.get('[data-testid="chat-new-chat-button"]').click()
+    cy.get('[data-testid="chat-new-thread-input"]').should('not.be.disabled')
+    createThread('E2E Beta Search Thread')
+
+    cy.get('[data-testid="chat-conversation-search"]').clear().type('Alpha')
+    cy.contains('[data-testid="chat-thread-item"]', 'E2E Alpha Search Thread')
+      .should('be.visible')
+    cy.contains('[data-testid="chat-thread-item"]', 'E2E Beta Search Thread')
+      .should('not.exist')
+
+    cy.get('[data-testid="chat-conversation-search"]').clear()
+    cy.contains('[data-testid="chat-thread-item"]', 'E2E Alpha Search Thread')
+      .should('be.visible')
+    cy.contains('[data-testid="chat-thread-item"]', 'E2E Beta Search Thread')
+      .should('be.visible')
+
+    cy.request('/api/chat/threads?profile_id=e2e-profile-001').then((response) => {
+      expect(response.status).to.eq(200)
+      const titles = (response.body.threads as Array<{ title?: string }>).map(
+        (thread) => thread.title
+      )
+      expect(titles).to.include('E2E Alpha Search Thread')
+      expect(titles).to.include('E2E Beta Search Thread')
+    })
   })
 })
