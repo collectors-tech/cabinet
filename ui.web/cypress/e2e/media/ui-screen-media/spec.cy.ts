@@ -121,9 +121,10 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-row-assign-media-slot-car-front"]').should(
       'be.enabled'
     )
+    cy.contains(/^Ready for review$/).should('not.exist')
     cy.get('[data-testid="media-upload-action"]')
       .should('be.enabled')
-      .and('have.attr', 'aria-label', 'Add media')
+      .and('have.attr', 'aria-label', 'Add new asset')
     cy.get('[data-testid="media-download-selected-action"]').should(
       'be.disabled'
     )
@@ -250,6 +251,8 @@ describe('ui-screen-media', () => {
     cy.get('[data-testid="media-table-search-input"]')
       .should('be.visible')
       .type('porsche')
+    cy.get('[data-testid="media-filter-all"]').should('be.visible')
+    cy.get('[data-testid="media-filter-unlinked"]').should('be.visible')
     cy.get('[data-testid="media-row-table"]')
       .find('tr[data-testid^="media-row-media-"]')
       .should('have.length', 1)

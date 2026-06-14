@@ -96,18 +96,8 @@ type MediaAsset = {
   download_filename: string
 }
 
-type MediaSummary = {
-  total: number
-  unlinked: number
-  linked_inventory: number
-  linked_wishlist: number
-  linked_both: number
-  ready_for_review: number
-}
-
 type MediaListResponse = {
   assets?: MediaAsset[]
-  summary?: MediaSummary
   filter?: string
 }
 
@@ -139,15 +129,6 @@ const ACCEPTED_IMAGE_TYPES = [
   'image/gif',
   'image/webp',
 ]
-
-const EMPTY_SUMMARY: MediaSummary = {
-  total: 0,
-  unlinked: 0,
-  linked_inventory: 0,
-  linked_wishlist: 0,
-  linked_both: 0,
-  ready_for_review: 0,
-}
 
 function linkageLabel(state: MediaAsset['linkage_state']) {
   switch (state) {
@@ -357,7 +338,6 @@ export function Media() {
   ])
   const [globalFilter, setGlobalFilter] = useState('')
   const [assets, setAssets] = useState<MediaAsset[]>([])
-  const [summary, setSummary] = useState<MediaSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
@@ -410,7 +390,6 @@ export function Media() {
       }
       const payload = (await response.json()) as MediaListResponse
       setAssets(payload.assets ?? [])
-      setSummary(payload.summary ?? EMPTY_SUMMARY)
       setSelectedAssetIds((current) =>
         current.filter((id) =>
           (payload.assets ?? []).some((asset) => asset.id === id)
@@ -418,7 +397,6 @@ export function Media() {
       )
     } catch (err) {
       setAssets([])
-      setSummary(EMPTY_SUMMARY)
       setSelectedAssetIds([])
       setError(err instanceof Error ? err.message : 'media_assets_failed')
     } finally {
@@ -796,15 +774,15 @@ export function Media() {
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Media</h1>
             <p className='text-muted-foreground'>
-              Card-first review for uploaded photos, unlinked evidence, and
-              assignment follow-up.
+              Table-first asset management for uploaded photos, unlinked
+              evidence, and assignment follow-up.
             </p>
           </div>
           <div className='flex flex-wrap gap-2'>
             <Button
               type='button'
               size='icon'
-              aria-label='Add media'
+              aria-label='Add new asset'
               data-testid='media-upload-action'
               onClick={() => {
                 setAddMediaOpen(true)
@@ -823,35 +801,6 @@ export function Media() {
               {downloadLoading ? 'Previewing...' : 'Download selected'}
             </Button>
           </div>
-        </div>
-
-        <div className='grid gap-4 sm:grid-cols-3'>
-          <Card>
-            <CardHeader className='pb-2'>
-              <CardTitle className='text-sm font-medium'>Assets</CardTitle>
-            </CardHeader>
-            <CardContent className='text-2xl font-bold'>
-              {loading ? '--' : summary.total}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className='pb-2'>
-              <CardTitle className='text-sm font-medium'>Unlinked</CardTitle>
-            </CardHeader>
-            <CardContent className='text-2xl font-bold'>
-              {loading ? '--' : summary.unlinked}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className='pb-2'>
-              <CardTitle className='text-sm font-medium'>
-                Ready for review
-              </CardTitle>
-            </CardHeader>
-            <CardContent className='text-2xl font-bold'>
-              {loading ? '--' : summary.ready_for_review}
-            </CardContent>
-          </Card>
         </div>
 
         <Tabs

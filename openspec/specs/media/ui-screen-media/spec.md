@@ -273,12 +273,14 @@ Cabinet SHALL expose explicit Cards and Rows view controls on the authenticated 
 - **THEN** Cabinet MUST restore the selected Media view mode from `cabinet.viewMode.media` without changing the active media filter or API query.
 
 ### Requirement UI-SCREEN-MEDIA-015: Media workspace table SHALL use Cabinet shared table affordances
-Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, and row actions.
+Cabinet SHALL render the Media page primary content with the shared table surface used by other Cabinet management pages, including toolbar search/filtering, sortable scan-friendly columns, stable row selection, row actions, and a header-level Add new asset action. The Media workspace SHALL reclaim working space by omitting the former top summary-card row above the table workflow.
 
 #### Scenario: Manage media from shared table surface
 - **GIVEN** the Media workspace has returned profile-scoped media assets
 - **WHEN** the user opens `/media`
 - **THEN** the primary content MUST render a `data-table-surface` table with thumbnail/title identity, analysis status, linkage state, upload timestamp, source/context, filename, row selection, and open/analyze/assign/archive actions.
+- **AND** the page header MUST expose an accessible `Add new asset` action.
+- **AND** the workspace MUST NOT render the former top summary cards for Assets, Unlinked, or Ready for review above the table workflow.
 - **AND** the table toolbar MUST provide search/filtering over media identity, status, linkage, source, and filename fields without switching away from the table.
 
 ### Requirement UI-SCREEN-MEDIA-014: Media workspace SHALL support page-wide image drop and add-media metadata dialog
