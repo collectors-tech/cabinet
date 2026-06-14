@@ -133,6 +133,25 @@ The Collections screen SHALL expose the Create collection workflow through a pag
 - **THEN** Cabinet MUST navigate to `/collections` and open the Create collection dialog
 - **AND** submitting a valid collection name MUST persist the new collection and active context
 
+### Requirement UI-SCREEN-COLLECTIONS-024: Collections filters SHALL expose deterministic empty states without mutation
+Collections table and collection-members table filters SHALL show deterministic zero-result summaries and empty-row messages while preserving the selected collection context and avoiding profile-settings writes.
+
+#### Scenario: Collections table filter has no matches
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the user enters a collection filter that matches no collection rows
+- **THEN** the collections table MUST show zero matching rows
+- **AND** the collections summary MUST show `Showing 0 of <total> collections.`
+- **AND** the selected collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent by filtering alone
+
+#### Scenario: Collection members filter has no matches
+- **GIVEN** an authenticated user opens `/collections` with collection members visible
+- **WHEN** the user enters a members filter that matches no member rows
+- **THEN** the members table MUST show zero matching rows
+- **AND** the members summary MUST show `Showing 0 of <selected total> items.`
+- **AND** the empty-row message MUST explain that no collection members match the current filter
+- **AND** no profile-settings save MUST be sent by filtering alone
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -157,3 +176,4 @@ The Collections screen SHALL expose the Create collection workflow through a pag
 | UC-COL-10 | View row in Inventory | Row View selects collection and navigates to Inventory | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions` |
 | UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
 | UC-COL-23 | Shortcut and command create | `Ctrl+N` and command palette entry open the same create dialog and persisted create flow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry` |
+| UC-COL-24 | Zero-result filters | Collections and members filters show deterministic empty states without profile-settings writes | `ui.web/cypress/e2e/collections/collections-filter-empty-states/spec.cy.ts` `UI-SCREEN-COLLECTIONS-024 shows deterministic zero-result filter states without saving settings` |
