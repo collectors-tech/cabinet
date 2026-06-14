@@ -45,6 +45,10 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchases-row-purchase-date",
 		"purchases-row-delivery",
 		"purchases-row-order-link",
+		"capturedReviewsOpen",
+		"sourceMatchesOpen",
+		"purchases-source-matches-toggle",
+		"purchase-review-tools",
 	}
 	for _, snippet := range requiredFeatureSnippets {
 		if !strings.Contains(feature, snippet) {
@@ -66,6 +70,8 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchase-inbox-empty-state",
 		"purchase-inbox-error-state",
 		"purchase-inbox-confirm-action",
+		"forwarder-package-inbox",
+		"should('not.exist')",
 	}
 	for _, snippet := range requiredCypressSnippets {
 		if !strings.Contains(cypressSpec, snippet) {
