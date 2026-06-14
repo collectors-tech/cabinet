@@ -86,6 +86,60 @@ describe('chats/chats-workspace', () => {
       })
   })
 
+  it('CHATS-WORKSPACE-006 renders the assistant-ui example visual contract', () => {
+    openChats()
+    createThread('E2E Assistant UI Visual Contract')
+
+    cy.get('[data-testid="chat-layout"]')
+      .should('have.attr', 'data-visual-contract', 'assistant-ui-example')
+      .then(($layout) => {
+        const layoutRect = $layout[0].getBoundingClientRect()
+        expect(layoutRect.height, 'layout height').to.be.greaterThan(560)
+      })
+
+    cy.get('[data-testid="chat-conversation-rail"]').then(($rail) => {
+      const railRect = $rail[0].getBoundingClientRect()
+      expect(railRect.width, 'compact rail width').to.be.within(260, 330)
+    })
+
+    cy.get('[data-testid="chat-main-surface"]').then(($surface) => {
+      const surfaceRect = $surface[0].getBoundingClientRect()
+      cy.get('[data-testid="chat-conversation-rail"]').then(($rail) => {
+        const railRect = $rail[0].getBoundingClientRect()
+        expect(surfaceRect.width, 'main surface wider than rail').to.be.greaterThan(
+          railRect.width
+        )
+      })
+    })
+
+    cy.get('[data-testid="chat-main-canvas"]').then(($canvas) => {
+      const canvasRect = $canvas[0].getBoundingClientRect()
+      expect(canvasRect.height, 'dominant message canvas height').to.be.greaterThan(330)
+    })
+
+    cy.get('[data-testid="chat-composer-shell"]')
+      .should('have.attr', 'data-position', 'bottom-center')
+      .then(($composer) => {
+        const composerRect = $composer[0].getBoundingClientRect()
+        cy.get('[data-testid="chat-main-surface"]').then(($surface) => {
+          const surfaceRect = $surface[0].getBoundingClientRect()
+          const composerCenter = composerRect.left + composerRect.width / 2
+          const surfaceCenter = surfaceRect.left + surfaceRect.width / 2
+          expect(Math.abs(composerCenter - surfaceCenter), 'composer centered').to.be.lessThan(24)
+          expect(
+            surfaceRect.bottom - composerRect.bottom,
+            'composer docked near bottom'
+          ).to.be.lessThan(40)
+        })
+      })
+
+    cy.get('[data-testid="chat-tool-card-container"]').should(
+      'have.attr',
+      'data-visual-priority',
+      'secondary'
+    )
+  })
+
   it('CHATS-WORKSPACE-005 filters thread rows and keeps new-thread actions route-stable', () => {
     openChats()
 
