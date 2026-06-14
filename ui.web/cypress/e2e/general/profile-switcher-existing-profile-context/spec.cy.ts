@@ -20,9 +20,12 @@ describe('general/profile-switcher-existing-profile-context', () => {
       'contain',
       expectedStatus
     )
+    cy.request('GET', '/api/profiles/active')
+      .its('body.name')
+      .should('eq', expectedName)
   }
 
-  it('PROFILES-005 selects an existing database profile across app sections', () => {
+  it('UI-FOUNDATION-SHELL-NAVIGATION-016 selects an existing database profile across app sections', () => {
     cy.request('POST', '/api/test/reset', {})
     cy.request('POST', '/api/profiles', { name: 'Primary DB' }).then((primaryResp) => {
       expect(primaryResp.status).to.eq(201)
