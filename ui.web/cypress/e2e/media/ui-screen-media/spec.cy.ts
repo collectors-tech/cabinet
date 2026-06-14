@@ -549,6 +549,96 @@ describe('ui-screen-media', () => {
     )
   })
 
+  it('UI-SCREEN-MEDIA-011 keeps linkage state unchanged when assignment preview or apply fails', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/media/assignments/preview', (req) => {
+      expect(req.body).to.deep.equal({
+        asset_id: 'media-slot-car-front',
+        target_type: 'wishlist',
+        target_id: 'missing-wishlist',
+      })
+      req.reply({
+        statusCode: 404,
+        body: { error: 'wishlist_target_not_found' },
+      })
+    }).as('assignmentPreviewFailed')
+    cy.intercept('POST', '/api/media/assignments', (req) => {
+      expect(req.body).to.deep.equal({
+        asset_id: 'media-slot-car-front',
+        target_type: 'wishlist',
+        target_id: 'wish-slot-car',
+      })
+      req.reply({
+        statusCode: 409,
+        body: { error: 'media_assignment_conflict' },
+      })
+    }).as('assignmentApplyFailed')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]').click()
+    cy.get('[data-testid="media-assignment-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-assignment-target-id"]').type(
+      'missing-wishlist'
+    )
+    cy.get('[data-testid="media-assignment-preview-action"]').click()
+    cy.wait('@assignmentPreviewFailed')
+    cy.get('[data-testid="media-assignment-error"]')
+      .should('be.visible')
+      .and('contain', 'media_assignment_preview_404')
+    cy.get('[data-testid="media-assignment-confirm-action"]').should(
+      'be.disabled'
+    )
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .should('contain', 'Unlinked')
+      .and('not.contain', 'Wishlist linked')
+
+    cy.intercept('POST', '/api/media/assignments/preview', (req) => {
+      expect(req.body).to.deep.equal({
+        asset_id: 'media-slot-car-front',
+        target_type: 'wishlist',
+        target_id: 'wish-slot-car',
+      })
+      req.reply({
+        statusCode: 200,
+        body: {
+          asset_id: 'media-slot-car-front',
+          target_type: 'wishlist',
+          target_id: 'wish-slot-car',
+          current_linkage_state: 'unlinked',
+          projected_linkage_state: 'linked_wishlist',
+          allowed: true,
+          requires_confirmation: true,
+          audit_summary:
+            'Preserved media asset media-slot-car-front provenance while linking to wishlist target wish-slot-car.',
+        },
+      })
+    }).as('assignmentPreviewAllowed')
+
+    cy.get('[data-testid="media-assignment-target-id"]')
+      .clear()
+      .type('wish-slot-car')
+    cy.get('[data-testid="media-assignment-preview-action"]').click()
+    cy.wait('@assignmentPreviewAllowed')
+    cy.get('[data-testid="media-assignment-confirm-action"]')
+      .should('be.enabled')
+      .click()
+    cy.wait('@assignmentApplyFailed')
+    cy.get('[data-testid="media-assignment-dialog"]').should('be.visible')
+    cy.get('[data-testid="media-assignment-error"]')
+      .should('be.visible')
+      .and('contain', 'media_assignment_409')
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .should('contain', 'Unlinked')
+      .and('not.contain', 'Wishlist linked')
+    cy.get('@mediaAssets.all').should('have.length', 1)
+  })
+
   it('UI-SCREEN-MEDIA-008 shows API empty, error, and retry states', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 500,
