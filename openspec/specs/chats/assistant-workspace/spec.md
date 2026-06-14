@@ -65,3 +65,16 @@ The 2026-06-13 Cabinet product direction further requires the side-panel Assista
 - **WHEN** the shell Assistant side-panel renders in compact form
 - **THEN** it MUST reuse the same Cabinet assistant visual language for header, thread controls, composer, prompt/action affordances, and governed tool/action cards without crowding the current page context
 - **AND** compact visual alignment MUST NOT weaken persisted thread/message ownership, provider/model readiness, route context, or explicit preview/confirm/apply boundaries
+
+### Requirement ASSISTANT-WORKSPACE-007: Assistant SHALL expose governed action execution results with persistence proof
+Assistant workspace capability/action cards MUST make preview, confirmation, execution state, and applied result links visible in the compact side-panel while preserving Cabinet's preview-before-apply mutation boundary.
+
+#### Scenario: Preview and apply a governed action from the Assistant workspace
+- **GIVEN** the shell Assistant workspace has an active profile-scoped Cabinet chat thread
+- **WHEN** the user previews a governed item-creation action from the action card
+- **THEN** the preview card MUST show the pending action payload
+- **AND** the target item MUST NOT exist in inventory before explicit confirmation
+- **WHEN** the user confirms the apply dialog
+- **THEN** the execution state MUST report success
+- **AND** the result card MUST expose an item result link
+- **AND** a refreshed inventory data query MUST include the applied item under the active profile
