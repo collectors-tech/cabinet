@@ -6170,17 +6170,17 @@ export function Collection({
                   >
                     <SheetContent
                       side='right'
-                      className='w-[min(30rem,92vw)] overflow-y-auto sm:max-w-[30rem]'
+                      className='h-svh w-[min(30rem,92vw)] gap-0 overflow-hidden sm:max-w-[30rem]'
                       data-testid='inventory-item-editor-panel'
                     >
-                      <SheetHeader className='text-start'>
+                      <SheetHeader className='shrink-0 border-b pe-12 text-start'>
                         <SheetTitle>Edit Item</SheetTitle>
                         <SheetDescription data-testid='inventory-item-editor-mode'>
                           Editing selected item: {selectedItemContext}
                         </SheetDescription>
                       </SheetHeader>
                       <div
-                        className='space-y-4 px-4'
+                        className='min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4'
                         data-testid='inventory-item-edit-panel'
                       >
                         <section
@@ -6899,7 +6899,7 @@ export function Collection({
                           </div>
                         ) : null}
                       </div>
-                      <SheetFooter className='gap-2 sm:flex-row sm:justify-between'>
+                      <SheetFooter className='shrink-0 gap-2 border-t bg-background sm:flex-row sm:justify-between'>
                         <div className='flex gap-2'>
                           <Button
                             type='button'

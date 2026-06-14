@@ -113,6 +113,15 @@ Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type,
 - **THEN** the Delete confirmation SHALL open for that same row
 - **AND** canceling the confirmation SHALL close the dialog without changing the selected inventory context
 
+### Requirement UI-SCREEN-INVENTORY-ITEMS-013: Inventory item editor sidepanel SHALL keep footer actions visible
+The responsive inventory item editor sidepanel SHALL keep its header and footer actions fixed within the panel while the form body scrolls independently.
+
+#### Scenario: Constrained-height editor keeps actions reachable
+- **GIVEN** user opens the inventory item editor sidepanel at a constrained viewport height
+- **WHEN** the item form body contains more fields, media, notes, pricing, and evidence content than can fit vertically
+- **THEN** the sidepanel body SHALL scroll independently
+- **AND** footer actions including Previous, Next, Cancel, and Save Changes SHALL remain visible and actionable before and after body scrolling
+
 ## Acceptance Criteria
 - UC IDs cover browse, edit, selection, and state transitions.
 - E2E mapping includes non-500 regression behavior.
@@ -139,3 +148,4 @@ Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type,
 | UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection`; existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-011 scopes condition choices by item type and restores compact filters` |
 | UC-INV-10 | Review dense inventory rows at desktop width | Right-side columns remain readable and actions are reachable via table scroll | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable` |
 | UC-INV-11 | Open Delete from a horizontally scrolled inventory row action menu | Delete confirmation opens for the same row; cancel preserves selected item context | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-009 persists create-edit save flow and keeps media attach usable` |
+| UC-INV-12 | Open responsive item editor sidepanel at constrained height | Body scrolls independently while footer actions stay visible/actionable | existing: `ui.web/cypress/e2e/inventory/inventory-editor-scroll-footer/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-013 keeps editor panel footer visible while the body scrolls` |
