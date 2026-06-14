@@ -5305,6 +5305,39 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(list)
 	})
+	mux.HandleFunc("/api/media/assets/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPatch {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !strings.HasSuffix(r.URL.Path, "/metadata") {
+			http.Error(w, `{"error":"media_asset_route_not_found"}`, http.StatusNotFound)
+			return
+		}
+		active, err := profiles.GetActiveProfile(r.Context())
+		if err != nil || strings.TrimSpace(active.ID) == "" {
+			http.Error(w, `{"error":"active_profile_required"}`, http.StatusBadRequest)
+			return
+		}
+		assetID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/media/assets/"), "/metadata")
+		assetID, err = url.PathUnescape(strings.Trim(assetID, "/"))
+		if err != nil || strings.TrimSpace(assetID) == "" {
+			http.Error(w, `{"error":"media_asset_id_required"}`, http.StatusBadRequest)
+			return
+		}
+		var req media.WorkspaceAssetMetadataUpdate
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_media_metadata_update"}`, http.StatusBadRequest)
+			return
+		}
+		asset, err := mediaService.UpdateWorkspaceAssetMetadata(r.Context(), active.ID, assetID, req)
+		if err != nil {
+			http.Error(w, `{"error":"media_metadata_update_failed"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(asset)
+	})
 	mux.HandleFunc("/api/media/assignments/preview", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {

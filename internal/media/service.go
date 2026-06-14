@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -41,18 +42,28 @@ func NewService(db *sql.DB, mediaDir string) *Service {
 }
 
 type WorkspaceAsset struct {
-	ID               string `json:"id"`
+	ID                  string   `json:"id"`
+	Title               string   `json:"title"`
+	Filename            string   `json:"filename"`
+	UploadedAt          string   `json:"uploaded_at"`
+	LinkageState        string   `json:"linkage_state"`
+	AnalysisStatus      string   `json:"analysis_status"`
+	Source              string   `json:"source"`
+	ItemID              string   `json:"item_id,omitempty"`
+	WishlistID          string   `json:"wishlist_id,omitempty"`
+	ThumbnailURL        string   `json:"thumbnail_url,omitempty"`
+	ThumbnailVariations []string `json:"thumbnail_variations,omitempty"`
+	Notes               string   `json:"notes,omitempty"`
+	DownloadFilename    string   `json:"download_filename"`
+	StoredPath          string   `json:"-"`
+}
+
+type WorkspaceAssetMetadataUpdate struct {
 	Title            string `json:"title"`
 	Filename         string `json:"filename"`
-	UploadedAt       string `json:"uploaded_at"`
-	LinkageState     string `json:"linkage_state"`
-	AnalysisStatus   string `json:"analysis_status"`
 	Source           string `json:"source"`
-	ItemID           string `json:"item_id,omitempty"`
-	WishlistID       string `json:"wishlist_id,omitempty"`
-	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
 	DownloadFilename string `json:"download_filename"`
-	StoredPath       string `json:"-"`
+	Notes            string `json:"notes"`
 }
 
 type WorkspaceSummary struct {
@@ -187,6 +198,10 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 	if err != nil {
 		return WorkspaceList{}, err
 	}
+	metadata, err := s.loadWorkspaceMetadata(ctx, profileID)
+	if err != nil {
+		return WorkspaceList{}, err
+	}
 
 	assets := make([]WorkspaceAsset, 0)
 	photoRows, err := s.db.QueryContext(ctx, `
@@ -211,20 +226,23 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		}
 		link := links[assetID]
 		linkageState := linkageStateForAsset(true, link)
-		assets = append(assets, WorkspaceAsset{
-			ID:               assetID,
-			Title:            displayTitle,
-			Filename:         filename,
-			UploadedAt:       createdAt,
-			LinkageState:     linkageState,
-			AnalysisStatus:   "not_analyzed",
-			Source:           "Inventory photo",
-			ItemID:           itemID,
-			WishlistID:       link.WishlistID,
-			ThumbnailURL:     "/api/items/" + itemID + "/photos/" + assetID + "/file?variant=thumbnail",
-			DownloadFilename: friendlyMediaFilename(partNumber, displayTitle, filename, assetID),
-			StoredPath:       originalPath,
-		})
+		asset := WorkspaceAsset{
+			ID:                  assetID,
+			Title:               displayTitle,
+			Filename:            filename,
+			UploadedAt:          createdAt,
+			LinkageState:        linkageState,
+			AnalysisStatus:      "not_analyzed",
+			Source:              "Inventory photo",
+			ItemID:              itemID,
+			WishlistID:          link.WishlistID,
+			ThumbnailURL:        "/api/items/" + itemID + "/photos/" + assetID + "/file?variant=thumbnail",
+			ThumbnailVariations: []string{"Original", "Preview", "Thumbnail"},
+			DownloadFilename:    friendlyMediaFilename(partNumber, displayTitle, filename, assetID),
+			StoredPath:          originalPath,
+		}
+		applyWorkspaceMetadata(&asset, metadata[assetID])
+		assets = append(assets, asset)
 	}
 	if err := photoRows.Err(); err != nil {
 		photoRows.Close()
@@ -248,19 +266,22 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 			return WorkspaceList{}, fmt.Errorf("scan unlinked media asset: %w", err)
 		}
 		link := links[assetID]
-		assets = append(assets, WorkspaceAsset{
-			ID:               assetID,
-			Title:            strings.TrimSpace(filename),
-			Filename:         filename,
-			UploadedAt:       createdAt,
-			LinkageState:     linkageStateForAsset(false, link),
-			AnalysisStatus:   "pending",
-			Source:           "Chat attachment",
-			ItemID:           link.ItemID,
-			WishlistID:       link.WishlistID,
-			DownloadFilename: friendlyMediaFilename("", filename, filename, assetID),
-			StoredPath:       storedPath,
-		})
+		asset := WorkspaceAsset{
+			ID:                  assetID,
+			Title:               strings.TrimSpace(filename),
+			Filename:            filename,
+			UploadedAt:          createdAt,
+			LinkageState:        linkageStateForAsset(false, link),
+			AnalysisStatus:      "pending",
+			Source:              "Chat attachment",
+			ItemID:              link.ItemID,
+			WishlistID:          link.WishlistID,
+			ThumbnailVariations: []string{"Original", "Thumbnail", "Review crop"},
+			DownloadFilename:    friendlyMediaFilename("", filename, filename, assetID),
+			StoredPath:          storedPath,
+		}
+		applyWorkspaceMetadata(&asset, metadata[assetID])
+		assets = append(assets, asset)
 	}
 	if err := attachmentRows.Err(); err != nil {
 		attachmentRows.Close()
@@ -278,6 +299,82 @@ func (s *Service) ListWorkspaceAssets(ctx context.Context, profileID, filter str
 		}
 	}
 	return WorkspaceList{Assets: assets, Summary: summarizeWorkspaceAssets(allAssets), Filter: filter}, nil
+}
+
+func (s *Service) UpdateWorkspaceAssetMetadata(ctx context.Context, profileID, assetID string, update WorkspaceAssetMetadataUpdate) (WorkspaceAsset, error) {
+	profileID = strings.TrimSpace(profileID)
+	assetID = strings.TrimSpace(assetID)
+	if profileID == "" || assetID == "" {
+		return WorkspaceAsset{}, fmt.Errorf("profile_id and asset_id are required")
+	}
+	update.Title = strings.TrimSpace(update.Title)
+	update.Filename = strings.TrimSpace(update.Filename)
+	update.Source = strings.TrimSpace(update.Source)
+	update.DownloadFilename = strings.TrimSpace(update.DownloadFilename)
+	update.Notes = strings.TrimSpace(update.Notes)
+	if update.Title == "" || update.Filename == "" || update.Source == "" || update.DownloadFilename == "" {
+		return WorkspaceAsset{}, fmt.Errorf("title, filename, source, and download_filename are required")
+	}
+
+	assetType, err := s.assetType(ctx, profileID, assetID)
+	if err != nil {
+		return WorkspaceAsset{}, err
+	}
+	switch assetType {
+	case "chat_attachment":
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE chat_attachments
+			SET filename = ?
+			WHERE id = ? AND profile_id = ?
+		`, update.Filename, assetID, profileID); err != nil {
+			return WorkspaceAsset{}, fmt.Errorf("update chat attachment filename: %w", err)
+		}
+	case "item_photo":
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE item_photos
+			SET filename = ?
+			WHERE id = ? AND item_id IN (SELECT id FROM canonical_items WHERE profile_id = ?)
+		`, update.Filename, assetID, profileID); err != nil {
+			return WorkspaceAsset{}, fmt.Errorf("update inventory photo filename: %w", err)
+		}
+	default:
+		return WorkspaceAsset{}, fmt.Errorf("unsupported media asset type")
+	}
+
+	threadID, err := s.ensureWorkspaceMetadataThread(ctx, profileID)
+	if err != nil {
+		return WorkspaceAsset{}, err
+	}
+	contextJSON, err := json.Marshal(map[string]any{
+		"source":            "media.workspace",
+		"metadata_flow":     "edit-media-dialog",
+		"asset_id":          assetID,
+		"title":             update.Title,
+		"origin":            update.Source,
+		"filename":          update.Filename,
+		"download_filename": update.DownloadFilename,
+		"notes":             update.Notes,
+	})
+	if err != nil {
+		return WorkspaceAsset{}, fmt.Errorf("marshal media metadata: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_messages(id, profile_id, thread_id, role, content, attachments_json, context_json)
+		VALUES (?, ?, ?, 'user', 'Media asset metadata updated from Media workspace.', '[]', ?)
+	`, uuid.NewString(), profileID, threadID, string(contextJSON)); err != nil {
+		return WorkspaceAsset{}, fmt.Errorf("persist media metadata update: %w", err)
+	}
+
+	list, err := s.ListWorkspaceAssets(ctx, profileID, "all")
+	if err != nil {
+		return WorkspaceAsset{}, err
+	}
+	for _, asset := range list.Assets {
+		if asset.ID == assetID {
+			return asset, nil
+		}
+	}
+	return WorkspaceAsset{}, fmt.Errorf("updated media asset not found")
 }
 
 func (s *Service) PreviewAssignment(ctx context.Context, profileID, assetID, targetType, targetID string) (AssignmentPreview, error) {
@@ -471,6 +568,106 @@ func (s *Service) assertTargetExists(ctx context.Context, profileID, targetType,
 type workspaceLinkState struct {
 	ItemID     string
 	WishlistID string
+}
+
+type workspaceMetadata struct {
+	Title            string `json:"title"`
+	Source           string `json:"origin"`
+	DownloadFilename string `json:"download_filename"`
+	Notes            string `json:"notes"`
+}
+
+func (s *Service) loadWorkspaceMetadata(ctx context.Context, profileID string) (map[string]workspaceMetadata, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT context_json
+		FROM chat_messages
+		WHERE profile_id = ?
+		  AND content IN (
+			'Media asset added from Media workspace.',
+			'Media asset metadata updated from Media workspace.'
+		  )
+		ORDER BY created_at ASC, id ASC
+	`, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("list media metadata messages: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]workspaceMetadata{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, fmt.Errorf("scan media metadata: %w", err)
+		}
+		var payload struct {
+			AssetID          string `json:"asset_id"`
+			Title            string `json:"title"`
+			Source           string `json:"origin"`
+			DownloadFilename string `json:"download_filename"`
+			Notes            string `json:"notes"`
+		}
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			continue
+		}
+		assetID := strings.TrimSpace(payload.AssetID)
+		if assetID == "" {
+			continue
+		}
+		out[assetID] = workspaceMetadata{
+			Title:            strings.TrimSpace(payload.Title),
+			Source:           strings.TrimSpace(payload.Source),
+			DownloadFilename: strings.TrimSpace(payload.DownloadFilename),
+			Notes:            strings.TrimSpace(payload.Notes),
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate media metadata: %w", err)
+	}
+	return out, nil
+}
+
+func applyWorkspaceMetadata(asset *WorkspaceAsset, metadata workspaceMetadata) {
+	if metadata.Title != "" {
+		asset.Title = metadata.Title
+	}
+	if metadata.Source != "" {
+		asset.Source = metadata.Source
+	}
+	if metadata.DownloadFilename != "" {
+		asset.DownloadFilename = metadata.DownloadFilename
+	}
+	if metadata.Notes != "" {
+		asset.Notes = metadata.Notes
+	}
+}
+
+func (s *Service) ensureWorkspaceMetadataThread(ctx context.Context, profileID string) (string, error) {
+	var threadID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM chat_threads
+		WHERE profile_id = ? AND title = 'Media Uploads'
+		ORDER BY created_at ASC, id ASC
+		LIMIT 1
+	`, profileID).Scan(&threadID)
+	if err == nil {
+		return threadID, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("find media metadata thread: %w", err)
+	}
+	threadID = uuid.NewString()
+	metadataJSON, err := json.Marshal(map[string]any{"source": "media.workspace"})
+	if err != nil {
+		return "", fmt.Errorf("marshal media thread metadata: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO chat_threads(id, profile_id, title, metadata_json)
+		VALUES (?, ?, 'Media Uploads', ?)
+	`, threadID, profileID, string(metadataJSON)); err != nil {
+		return "", fmt.Errorf("create media metadata thread: %w", err)
+	}
+	return threadID, nil
 }
 
 func (s *Service) loadWorkspaceLinks(ctx context.Context, profileID string) (map[string]workspaceLinkState, error) {

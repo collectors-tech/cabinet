@@ -18,6 +18,9 @@ describe('ui-screen-media', () => {
         linkage_state: 'unlinked',
         analysis_status: 'ready',
         source: 'Chat attachment',
+        thumbnail_url: '/api/media/assets/media-slot-car-front/file?variant=thumbnail',
+        thumbnail_variations: ['Original', 'Thumbnail', 'Review crop'],
+        notes: 'Initial intake note',
         download_filename: 'slot-car-front-media-sl.jpg',
       },
       {
@@ -287,6 +290,100 @@ describe('ui-screen-media', () => {
       .should('eq', 'rows')
     cy.get('[data-testid="media-shared-table"]').should('be.visible')
     cy.get('[data-testid="media-card-grid"]').should('not.exist')
+  })
+
+  it('UI-SCREEN-MEDIA-016 opens double-click metadata modal and saves edits', () => {
+    let saved = false
+    cy.intercept('GET', '/api/media/assets', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: saved
+          ? {
+              ...mediaResponse,
+              assets: mediaResponse.assets.map((asset) =>
+                asset.id === 'media-slot-car-front'
+                  ? {
+                      ...asset,
+                      title: 'AFX Mustang hero angle',
+                      filename: 'slot-car-hero.jpg',
+                      source: 'Bench edit',
+                      notes: 'Updated crop and metadata',
+                      download_filename: 'afx-mustang-hero-angle.jpg',
+                    }
+                  : asset
+              ),
+            }
+          : mediaResponse,
+      })
+    }).as('mediaAssets')
+    cy.intercept(
+      'PATCH',
+      '/api/media/assets/media-slot-car-front/metadata',
+      (req) => {
+        expect(req.body).to.deep.equal({
+          title: 'AFX Mustang hero angle',
+          filename: 'slot-car-hero.jpg',
+          source: 'Bench edit',
+          download_filename: 'afx-mustang-hero-angle.jpg',
+          notes: 'Updated crop and metadata',
+        })
+        saved = true
+        req.reply({
+          statusCode: 200,
+          body: {
+            asset_id: 'media-slot-car-front',
+            title: 'AFX Mustang hero angle',
+            filename: 'slot-car-hero.jpg',
+            source: 'Bench edit',
+            download_filename: 'afx-mustang-hero-angle.jpg',
+            notes: 'Updated crop and metadata',
+          },
+        })
+      }
+    ).as('updateMediaMetadata')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-row-media-slot-car-front"]').dblclick()
+    cy.get('[data-testid="media-edit-dialog"]')
+      .should('be.visible')
+      .and('contain', 'AFX Mustang front view')
+      .and('contain', 'Original')
+      .and('contain', 'Thumbnail')
+      .and('contain', 'Review crop')
+    cy.get('[data-testid="media-edit-thumbnail"]').should('be.visible')
+    cy.get('[data-testid="media-edit-title"]')
+      .should('have.value', 'AFX Mustang front view')
+      .clear()
+      .type('AFX Mustang hero angle')
+    cy.get('[data-testid="media-edit-filename"]')
+      .should('have.value', 'slot-car-front.jpg')
+      .clear()
+      .type('slot-car-hero.jpg')
+    cy.get('[data-testid="media-edit-source"]')
+      .should('have.value', 'Chat attachment')
+      .clear()
+      .type('Bench edit')
+    cy.get('[data-testid="media-edit-download-filename"]')
+      .should('have.value', 'slot-car-front-media-sl.jpg')
+      .clear()
+      .type('afx-mustang-hero-angle.jpg')
+    cy.get('[data-testid="media-edit-notes"]')
+      .should('have.value', 'Initial intake note')
+      .clear()
+      .type('Updated crop and metadata')
+    cy.get('[data-testid="media-edit-save-action"]').click()
+    cy.wait('@updateMediaMetadata')
+    cy.wait('@mediaAssets')
+    cy.get('[data-testid="media-edit-dialog"]').should('not.exist')
+    cy.get('[data-testid="media-assignment-success"]')
+      .should('be.visible')
+      .and('contain', 'Media metadata updated')
+    cy.get('[data-testid="media-row-media-slot-car-front"]')
+      .should('contain', 'AFX Mustang hero angle')
+      .and('contain', 'afx-mustang-hero-angle.jpg')
   })
 
   it('UI-SCREEN-MEDIA-014 supports page-wide image drop and metadata save', () => {

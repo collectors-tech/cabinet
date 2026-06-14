@@ -207,6 +207,80 @@ func TestMediaWorkspaceCreateAssetPersistsUnlinkedUploadMetadata(t *testing.T) {
 	}
 }
 
+func TestMediaWorkspaceUpdateAssetMetadataPersistsEditedFields(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profileResp := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Media Edit"}`), map[string]string{"Content-Type": "application/json"})
+	if profileResp.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profileResp.Code, profileResp.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profileResp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activeResp := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activeResp.Code != http.StatusOK {
+		t.Fatalf("set active profile status=%d body=%s", activeResp.Code, activeResp.Body.String())
+	}
+	if _, err := a.db.Exec(`
+		INSERT INTO chat_threads (id, profile_id, title) VALUES ('media-edit-thread', ?, 'Media Uploads');
+		INSERT INTO chat_attachments (id, profile_id, thread_id, filename, mime_type, size_bytes, stored_path)
+		VALUES ('media-edit-attachment', ?, 'media-edit-thread', 'slot-car-front.jpg', 'image/jpeg', 123, '/tmp/slot-car-front.jpg');
+	`, profile.ID, profile.ID); err != nil {
+		t.Fatalf("seed editable media asset: %v", err)
+	}
+
+	updateResp := doRequest(t, a, http.MethodPatch, "/api/media/assets/media-edit-attachment/metadata", strings.NewReader(`{
+		"title":"AFX Mustang hero angle",
+		"filename":"slot-car-hero.jpg",
+		"source":"Bench edit",
+		"download_filename":"afx-mustang-hero-angle.jpg",
+		"notes":"Updated crop and metadata"
+	}`), map[string]string{"Content-Type": "application/json"})
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update media metadata status=%d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var updated struct {
+		ID               string   `json:"id"`
+		Title            string   `json:"title"`
+		Filename         string   `json:"filename"`
+		Source           string   `json:"source"`
+		DownloadFilename string   `json:"download_filename"`
+		Notes            string   `json:"notes"`
+		Variations       []string `json:"thumbnail_variations"`
+	}
+	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode updated media metadata: %v", err)
+	}
+	if updated.ID != "media-edit-attachment" || updated.Title != "AFX Mustang hero angle" || updated.Filename != "slot-car-hero.jpg" || updated.Source != "Bench edit" || updated.DownloadFilename != "afx-mustang-hero-angle.jpg" || updated.Notes != "Updated crop and metadata" || len(updated.Variations) == 0 {
+		t.Fatalf("unexpected updated media metadata: %+v", updated)
+	}
+
+	assetsResp := doRequest(t, a, http.MethodGet, "/api/media/assets", nil, nil)
+	if assetsResp.Code != http.StatusOK {
+		t.Fatalf("media assets status=%d body=%s", assetsResp.Code, assetsResp.Body.String())
+	}
+	var listed struct {
+		Assets []struct {
+			ID               string `json:"id"`
+			Title            string `json:"title"`
+			Filename         string `json:"filename"`
+			Source           string `json:"source"`
+			DownloadFilename string `json:"download_filename"`
+			Notes            string `json:"notes"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(assetsResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode listed media assets: %v", err)
+	}
+	if len(listed.Assets) != 1 || listed.Assets[0].Title != "AFX Mustang hero angle" || listed.Assets[0].Filename != "slot-car-hero.jpg" || listed.Assets[0].Source != "Bench edit" || listed.Assets[0].DownloadFilename != "afx-mustang-hero-angle.jpg" || listed.Assets[0].Notes != "Updated crop and metadata" {
+		t.Fatalf("updated media metadata not reflected in list: %+v", listed)
+	}
+}
+
 func TestMediaWorkspaceAssignmentAPIPersistsConfirmedLinks(t *testing.T) {
 	t.Parallel()
 

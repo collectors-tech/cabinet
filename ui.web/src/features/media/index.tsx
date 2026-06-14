@@ -91,6 +91,8 @@ type MediaAsset = {
   item_id?: string
   wishlist_id?: string
   thumbnail_url?: string
+  thumbnail_variations?: string[]
+  notes?: string
   download_filename: string
 }
 
@@ -175,10 +177,12 @@ function buildMediaColumns({
   selectedAssetSet,
   onToggleAssetSelection,
   onAssign,
+  onEdit,
 }: {
   selectedAssetSet: Set<string>
   onToggleAssetSelection: (assetID: string, checked: boolean) => void
   onAssign: (asset: MediaAsset) => void
+  onEdit: (asset: MediaAsset) => void
 }): ColumnDef<MediaAsset>[] {
   return [
     {
@@ -299,6 +303,7 @@ function buildMediaColumns({
             className='h-7 w-7'
             aria-label={`Open ${row.original.title}`}
             data-testid={`media-row-open-${row.original.id}`}
+            onClick={() => onEdit(row.original)}
           >
             <Eye />
           </Button>
@@ -381,6 +386,14 @@ export function Media() {
   const [addMediaNotes, setAddMediaNotes] = useState('')
   const [addMediaError, setAddMediaError] = useState<string | null>(null)
   const [addMediaSaving, setAddMediaSaving] = useState(false)
+  const [editAsset, setEditAsset] = useState<MediaAsset | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editFilename, setEditFilename] = useState('')
+  const [editSource, setEditSource] = useState('')
+  const [editDownloadFilename, setEditDownloadFilename] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
   const [isPageDragOver, setIsPageDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -574,14 +587,38 @@ export function Media() {
     setAssignmentSuccess(null)
   }, [])
 
+  const openMetadataEditor = useCallback((asset: MediaAsset) => {
+    setEditAsset(asset)
+    setEditTitle(asset.title)
+    setEditFilename(asset.filename)
+    setEditSource(asset.source)
+    setEditDownloadFilename(asset.download_filename)
+    setEditNotes(asset.notes ?? '')
+    setEditError(null)
+    setEditSaving(false)
+    setAssignmentSuccess(null)
+  }, [])
+
+  const resetMetadataEditor = () => {
+    setEditAsset(null)
+    setEditTitle('')
+    setEditFilename('')
+    setEditSource('')
+    setEditDownloadFilename('')
+    setEditNotes('')
+    setEditError(null)
+    setEditSaving(false)
+  }
+
   const columns = useMemo(
     () =>
       buildMediaColumns({
         selectedAssetSet,
         onToggleAssetSelection: toggleAssetSelection,
         onAssign: openAssignment,
+        onEdit: openMetadataEditor,
       }),
-    [openAssignment, selectedAssetSet, toggleAssetSelection]
+    [openAssignment, openMetadataEditor, selectedAssetSet, toggleAssetSelection]
   )
 
   const table = useReactTable({
@@ -679,6 +716,41 @@ export function Media() {
       )
     } finally {
       setAssignmentLoading(false)
+    }
+  }
+
+  const saveMetadataEdit = async () => {
+    if (!editAsset) return
+    setEditSaving(true)
+    setEditError(null)
+    const payload = {
+      title: editTitle.trim(),
+      filename: editFilename.trim(),
+      source: editSource.trim(),
+      download_filename: editDownloadFilename.trim(),
+      notes: editNotes.trim(),
+    }
+    try {
+      const response = await fetch(
+        `/api/media/assets/${encodeURIComponent(editAsset.id)}/metadata`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(`media_metadata_update_${response.status}`)
+      }
+      resetMetadataEditor()
+      setAssignmentSuccess('Media metadata updated.')
+      await loadAssets()
+    } catch (err) {
+      setEditError(
+        err instanceof Error ? err.message : 'media_metadata_update_failed'
+      )
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -906,6 +978,7 @@ export function Media() {
                 key={asset.id}
                 className='overflow-hidden'
                 data-testid={`media-card-${asset.id}`}
+                onDoubleClick={() => openMetadataEditor(asset)}
               >
                 <CardHeader className='space-y-2 p-2.5'>
                   <div className='flex aspect-video items-center justify-center overflow-hidden rounded-md border bg-muted'>
@@ -976,6 +1049,7 @@ export function Media() {
                       className='h-7 w-7'
                       aria-label={`Open ${asset.title}`}
                       data-testid={`media-open-${asset.id}`}
+                      onClick={() => openMetadataEditor(asset)}
                     >
                       <Eye />
                     </Button>
@@ -1074,6 +1148,7 @@ export function Media() {
                       <TableRow
                         key={row.id}
                         data-testid={`media-row-${row.original.id}`}
+                        onDoubleClick={() => openMetadataEditor(row.original)}
                       >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell
@@ -1112,6 +1187,134 @@ export function Media() {
             </div>
           </div>
         ) : null}
+
+        <Dialog
+          open={editAsset !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              resetMetadataEditor()
+            }
+          }}
+        >
+          <DialogContent
+            className='max-w-3xl'
+            data-testid='media-edit-dialog'
+          >
+            <DialogHeader>
+              <DialogTitle>
+                Edit {editAsset?.title ?? 'media asset'}
+              </DialogTitle>
+            </DialogHeader>
+            {editAsset ? (
+              <div className='grid gap-5 md:grid-cols-[240px_1fr]'>
+                <div className='space-y-3'>
+                  <div
+                    className='flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-muted'
+                    data-testid='media-edit-thumbnail'
+                  >
+                    {editAsset.thumbnail_url ? (
+                      <img
+                        src={editAsset.thumbnail_url}
+                        alt=''
+                        className='h-full w-full object-cover'
+                      />
+                    ) : (
+                      <FileImage className='h-10 w-10 text-muted-foreground' />
+                    )}
+                  </div>
+                  <div
+                    className='flex flex-wrap gap-2'
+                    data-testid='media-edit-variations'
+                  >
+                    {(editAsset.thumbnail_variations?.length
+                      ? editAsset.thumbnail_variations
+                      : ['Original', 'Thumbnail', 'Download']
+                    ).map((variation) => (
+                      <Badge key={variation} variant='outline'>
+                        {variation}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className='space-y-4'>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='media-edit-title'>Title</Label>
+                    <Input
+                      id='media-edit-title'
+                      value={editTitle}
+                      data-testid='media-edit-title'
+                      onChange={(event) => setEditTitle(event.target.value)}
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='media-edit-filename'>Filename</Label>
+                    <Input
+                      id='media-edit-filename'
+                      value={editFilename}
+                      data-testid='media-edit-filename'
+                      onChange={(event) => setEditFilename(event.target.value)}
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='media-edit-source'>Source</Label>
+                    <Input
+                      id='media-edit-source'
+                      value={editSource}
+                      data-testid='media-edit-source'
+                      onChange={(event) => setEditSource(event.target.value)}
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='media-edit-download-filename'>
+                      Download filename
+                    </Label>
+                    <Input
+                      id='media-edit-download-filename'
+                      value={editDownloadFilename}
+                      data-testid='media-edit-download-filename'
+                      onChange={(event) =>
+                        setEditDownloadFilename(event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='media-edit-notes'>Notes</Label>
+                    <Textarea
+                      id='media-edit-notes'
+                      value={editNotes}
+                      data-testid='media-edit-notes'
+                      onChange={(event) => setEditNotes(event.target.value)}
+                    />
+                  </div>
+                  {editError ? (
+                    <div
+                      className='rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive'
+                      data-testid='media-edit-error'
+                    >
+                      {editError}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                variant='outline'
+                onClick={resetMetadataEditor}
+                disabled={editSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                data-testid='media-edit-save-action'
+                disabled={editSaving || !editAsset}
+                onClick={() => void saveMetadataEdit()}
+              >
+                {editSaving ? 'Saving...' : 'Save changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={addMediaOpen}
