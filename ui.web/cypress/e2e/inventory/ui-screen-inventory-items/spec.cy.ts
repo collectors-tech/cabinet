@@ -540,6 +540,28 @@ describe("inventory-management", () => {
     scrollInventoryTable("left");
     cy.contains("Created Inventory Item Updated").should("be.visible");
     cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+
+    scrollInventoryTable("right");
+    cy.get(
+      '[data-testid="inventory-item-row-item-created-1"] [data-testid="task-row-actions-trigger"][data-row-id="item-created-1"]'
+    ).click();
+    cy.get(
+      '[data-testid="task-row-actions-menu"][data-row-id="item-created-1"]'
+    )
+      .filter(":visible")
+      .should("have.length", 1)
+      .within(() => {
+        cy.get('[data-testid="task-row-action-delete"]')
+          .should("be.visible")
+          .click();
+      });
+    cy.get('[data-testid="task-delete-dialog"]')
+      .should("be.visible")
+      .and("contain", "Delete this task: PN-CREATE-1 ?");
+    cy.get('[data-testid="task-delete-cancel"]').click();
+    cy.get('[data-testid="task-delete-dialog"]').should("not.exist");
+    cy.get('[data-testid="collection-selected-item"]').should("contain", "PN-CREATE-1");
+
     scrollInventoryTable("right");
     cy.get(
       '[data-testid="inventory-item-row-item-created-1"] [data-testid="inventory-row-photos-action"]'

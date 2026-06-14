@@ -107,6 +107,12 @@ Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type,
 - **AND** action controls SHALL remain reachable without covering data columns
 - **AND** the table MAY expose horizontal scrolling instead of compressing columns into unreadable text
 
+#### Scenario: Horizontally scrolled row actions remain deterministic
+- **GIVEN** `/api/items` returns representative inventory records and the row table is horizontally scrolled to the right-side action column
+- **WHEN** user opens a specific row action menu and chooses `Delete`
+- **THEN** the Delete confirmation SHALL open for that same row
+- **AND** canceling the confirmation SHALL close the dialog without changing the selected inventory context
+
 ## Acceptance Criteria
 - UC IDs cover browse, edit, selection, and state transitions.
 - E2E mapping includes non-500 regression behavior.
@@ -132,3 +138,4 @@ Inventory rows view SHALL preserve readable Part #, Title, Condition, Item type,
 | UC-INV-08 | Toggle Rows/Cards view | View mode changes deterministically | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `renders inventory workspace, supports view toggle and filtering, and avoids 500`; existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection` |
 | UC-INV-09 | Open Status/Priority/View controls | Browser controls render and open without errors | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-001/008 covers search, filters, sort, reset, and bulk selection`; existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-011 scopes condition choices by item type and restores compact filters` |
 | UC-INV-10 | Review dense inventory rows at desktop width | Right-side columns remain readable and actions are reachable via table scroll | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-012 keeps dense row columns readable` |
+| UC-INV-11 | Open Delete from a horizontally scrolled inventory row action menu | Delete confirmation opens for the same row; cancel preserves selected item context | existing: `ui.web/cypress/e2e/inventory/ui-screen-inventory-items/spec.cy.ts` `UI-SCREEN-INVENTORY-ITEMS-009 persists create-edit save flow and keeps media attach usable` |
