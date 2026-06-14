@@ -168,4 +168,46 @@ describe('scanner/ui-screen-card-scanner', () => {
       .should('be.visible')
       .and('contain', 'Created wishlist item')
   })
+
+  it('UI-SCREEN-CARD-SCANNER-010 keeps failed reads in manual review without linking the scan', () => {
+    cy.intercept('POST', '/api/scanner/recognition-review/apply', {
+      statusCode: 422,
+      body: {
+        error: 'recognition_low_confidence_manual_review_required',
+      },
+    }).as('scannerApplyFailedRead')
+
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-quick-file-input"]').selectFile(
+      'cypress/fixtures/photo-1.jpg',
+      { force: true }
+    )
+    cy.get('[data-testid^="card-scanner-override-"]').click()
+    cy.get('[data-testid^="card-scanner-override-flag-"]')
+      .should('be.visible')
+      .and('contain', 'Manual override active')
+
+    cy.get('[data-testid^="card-scanner-review-apply-"]').click()
+    cy.wait('@scannerApplyFailedRead')
+      .its('request.body')
+      .should((body) => {
+        expect(body).to.include({ confirmed: false, target: 'inventory' })
+        expect(body.candidates).to.have.length(3)
+        expect(body.candidates.some((candidate: { override_id?: string }) => candidate.override_id)).to.eq(
+          true
+        )
+      })
+
+    cy.get('[data-testid="card-scanner-quick-scan-status"]')
+      .should('be.visible')
+      .and(
+        'contain',
+        'Review preview failed: recognition_low_confidence_manual_review_required'
+      )
+    cy.get('[data-testid="card-scanner-queue"]').should('contain', 'Queued')
+    cy.get('[data-testid="card-scanner-queue"]').should('not.contain', 'Linked')
+    cy.get('[data-testid^="card-scanner-apply-result-"]').should('not.exist')
+  })
 })
