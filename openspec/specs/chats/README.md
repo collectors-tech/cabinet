@@ -10,6 +10,7 @@ Contains chat/copilot, AI assist, and chat screen behavior.
 - `assistant-workspace` -> `openspec/specs/chats/assistant-workspace/spec.md`
 - `chat-copilot` -> `openspec/specs/chats/chat-copilot/spec.md`
 - `chats-workspace` -> `openspec/specs/chats/chats-workspace/spec.md`
+- `inbox-notification-cards` -> `openspec/specs/chats/inbox-notification-cards/spec.md`
 - `ui-screen-chat-copilot` -> `openspec/specs/chats/ui-screen-chat-copilot/spec.md`
 
 ## Requirement ID Namespaces
@@ -19,4 +20,5 @@ Contains chat/copilot, AI assist, and chat screen behavior.
 - `ASSISTANT-WORKSPACE-*`
 - `CHAT-COPILOT-*`
 - `CHATS-WORKSPACE-*`
+- `UI-SCREEN-INBOX-NOTIFICATION-CARDS-*`
 - `UI-SCREEN-CHAT-COPILOT-*`
