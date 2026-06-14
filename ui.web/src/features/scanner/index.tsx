@@ -277,6 +277,7 @@ export function Scanner() {
   const [editingScheduleCron, setEditingScheduleCron] = useState('')
   const [handoffStatus, setHandoffStatus] = useState<string | null>(null)
   const [quickScanStatus, setQuickScanStatus] = useState<string | null>(null)
+  const [manualEntryTitle, setManualEntryTitle] = useState('')
   const [quickScanQueue, setQuickScanQueue] = useState<QuickScanQueueItem[]>([])
   const [pendingApplyScanID, setPendingApplyScanID] = useState<string | null>(
     null
@@ -1002,13 +1003,9 @@ export function Scanner() {
     quickScanFileInputRef.current?.click()
   }
 
-  const queueQuickScanFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) {
-      return
-    }
+  const queueQuickScanEntry = (rawName: string, confidenceSeed: number) => {
     const normalized =
-      file.name
+      rawName
         .replace(/\.[^.]+$/, '')
         .trim()
         .toLowerCase() || 'scan'
@@ -1019,11 +1016,11 @@ export function Scanner() {
     ]
     const confidencePct = Math.max(
       52,
-      Math.min(96, 96 - (file.name.length % 32))
+      Math.min(96, 96 - (confidenceSeed % 32))
     )
     const entry: QuickScanQueueItem = {
-      id: `${Date.now()}-${file.name}`,
-      fileName: file.name,
+      id: `${Date.now()}-${rawName}`,
+      fileName: rawName,
       queuedAtISO: new Date().toISOString(),
       status: 'Queued',
       linkedToInventory: false,
@@ -1036,8 +1033,28 @@ export function Scanner() {
       overrideUsed: false,
     }
     setQuickScanQueue((current) => [entry, ...current].slice(0, 12))
+    return entry
+  }
+
+  const queueQuickScanFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    queueQuickScanEntry(file.name, file.name.length)
     setQuickScanStatus(`Quick Scan queued: ${file.name}`)
     event.target.value = ''
+  }
+
+  const queueManualEntry = () => {
+    const title = manualEntryTitle.trim()
+    if (!title) {
+      setQuickScanStatus('Manual entry needs a card title before queueing.')
+      return
+    }
+    queueQuickScanEntry(title, title.length)
+    setManualEntryTitle('')
+    setQuickScanStatus(`Manual entry queued for review: ${title}`)
   }
 
   const selectQuickScanAlternative = (itemID: string) => {
@@ -1387,6 +1404,22 @@ export function Scanner() {
             data-testid='card-scanner-quick-file-input'
             onChange={queueQuickScanFile}
           />
+          <Input
+            className='h-9 w-56 text-sm'
+            placeholder='Manual card title'
+            value={manualEntryTitle}
+            data-testid='card-scanner-manual-entry-title'
+            onChange={(event) => setManualEntryTitle(event.target.value)}
+          />
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            data-testid='card-scanner-manual-entry-queue'
+            onClick={queueManualEntry}
+          >
+            Queue Manual Entry
+          </Button>
           <Button
             type='button'
             size='sm'

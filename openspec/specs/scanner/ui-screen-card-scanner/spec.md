@@ -89,6 +89,17 @@ Card Scanner SHALL expose the scanner candidate review grading context before an
 - **THEN** Card Scanner MUST show the scan confidence, selected candidate, item type, condition estimate, and grading status
 - **AND** the scanner review preview request MUST include the same grading context on each candidate before any confirmed write is requested
 
+### Requirement UI-SCREEN-CARD-SCANNER-012: Card Scanner SHALL support manual-entry intake into scanner review
+Card Scanner SHALL allow a reviewer to queue a typed card title as a manual scanner review candidate without camera or upload input, and SHALL keep that manual-entry scan queued and unlinked until the same explicit review/apply confirmation path succeeds.
+
+#### Scenario: Queue manual-entry scan for review
+- **GIVEN** user is on `/scanner`
+- **WHEN** user queues a non-empty manual card title
+- **THEN** Card Scanner MUST add the title to the scanner review queue with candidate suggestions and queued status
+- **AND** MUST keep the item unlinked until confirmed apply succeeds
+- **WHEN** user attempts to queue an empty manual title
+- **THEN** Card Scanner MUST show actionable validation feedback and MUST NOT create a queued scan
+
 ### Requirement UI-SCREEN-CARD-SCANNER-007: Scanner recognition review SHALL normalize candidates before writes
 Scanner recognition review SHALL normalize candidate payloads into a non-mutating preview that preserves top match, alternates, confidence label, provenance, media evidence, manual override state, target record type, and a required confirm-before-create boundary.
 
@@ -129,3 +140,4 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 | UC-CS-09 | UI review and confirmed apply | Quick-scan UI previews scanner review apply, confirms explicit Wishlist/Inventory write, reloads persistence, and then marks scan linked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked` |
 | UC-CS-10 | Failed read manual review | Failed/low-confidence review preview preserves manual override evidence and keeps scan queued/unlinked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-010 keeps failed reads in manual review without linking the scan` |
 | UC-CS-11 | Grading review evidence | Candidate review shows and sends item type, condition estimate, and grading status before confirmed writes | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-011 preserves grading context in candidate review before writes` |
+| UC-CS-12 | Manual-entry intake | Typed card title queues a scanner review candidate without linking or mutating records until confirmed apply | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-012 queues manual-entry scans for review before writes` |
