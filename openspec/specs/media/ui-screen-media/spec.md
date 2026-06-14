@@ -303,3 +303,13 @@ Cabinet SHALL let authenticated users add unlinked media assets from the Media w
 - **GIVEN** the Add media dialog contains a supported image and metadata
 - **WHEN** `/api/media/assets` rejects the save
 - **THEN** Cabinet MUST keep the dialog open, preserve the selected file and metadata values, and show an actionable error.
+
+### Requirement UI-SCREEN-MEDIA-016: Media assets SHALL open a double-click metadata edit modal
+Cabinet SHALL let authenticated users double-click any Media workspace asset row or card to edit asset metadata and review thumbnail variants in one place.
+
+#### Scenario: Edit media asset metadata from double-click modal
+- **GIVEN** the Media workspace has returned profile-scoped media assets
+- **WHEN** the user double-clicks a media row or card
+- **THEN** Cabinet MUST open an edit modal for that asset with a thumbnail preview, visible thumbnail variation options, and editable metadata fields for title, filename, source, download filename, and notes.
+- **WHEN** the user saves the modal
+- **THEN** the UI MUST submit the edited metadata through the Media asset update API, refresh `/api/media/assets`, and show the updated asset metadata without requiring a page reload.
