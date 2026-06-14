@@ -1,4 +1,15 @@
 describe('purchases/purchase-inbox', () => {
+  const openSourceMatches = () => {
+    cy.get('[data-testid="purchases-source-matches-toggle"]').then(
+      ($button) => {
+        if ($button.attr('aria-expanded') !== 'true') {
+          cy.wrap($button).click()
+        }
+      }
+    )
+    cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
+  }
+
   it('COMMERCE-RECONCILIATION-006 renders first-class Purchases route and add entry point', () => {
     cy.viewport(1400, 900)
     cy.e2eReset()
@@ -28,6 +39,14 @@ describe('purchases/purchase-inbox', () => {
       .and('contain', 'Tracking')
       .and('contain', 'Order link')
       .and('contain', 'Actions')
+    cy.get('[data-testid="purchases-table-empty-row"]').should(
+      'contain',
+      'No purchases loaded'
+    )
+    cy.get('[data-testid="purchase-inbox-empty-state"]').should('not.exist')
+    cy.get('[data-testid="purchase-review-tools"]').should('not.exist')
+    cy.get('[data-testid="forwarder-package-inbox"]').should('not.exist')
+    cy.contains('Purchase Source Matches').should('not.exist')
     cy.get('[data-testid="purchases-add-button"]')
       .should('have.attr', 'aria-label', 'Add purchase')
       .click()
@@ -35,6 +54,14 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchases-add-tab-new"]').should('contain', 'New')
     cy.get('[data-testid="purchases-add-tab-csv"]').should('contain', 'CSV')
     cy.get('[data-testid="purchases-add-tab-email"]').should('contain', 'Email')
+    cy.contains('button', 'Cancel').click()
+    cy.get('[data-testid="purchases-source-matches-toggle"]')
+      .should('have.attr', 'aria-expanded', 'false')
+      .click()
+      .should('have.attr', 'aria-expanded', 'true')
+    cy.get('[data-testid="forwarder-package-inbox"]')
+      .should('be.visible')
+      .and('contain', 'Purchase Source Matches')
   })
 
   it('EBAY-PURCHASE-CAPTURE-006 reviews captured purchases before confirmed mutation actions', () => {
@@ -124,7 +151,7 @@ describe('purchases/purchase-inbox', () => {
     cy.get('[data-testid="purchases-add-tab-csv"]').should('contain', 'CSV')
     cy.get('[data-testid="purchases-add-tab-email"]').should('contain', 'Email')
     cy.contains('button', 'Cancel').click()
-    cy.get('[data-testid="purchase-inbox-empty-state"]').should('be.visible')
+    cy.get('[data-testid="purchase-inbox-empty-state"]').should('not.exist')
     cy.get('[data-testid="purchase-inbox-load-reviews"]').click()
     cy.wait('@preparePurchaseReviews')
     cy.get('[data-testid="purchases-table-row"]')
@@ -678,6 +705,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-inbox"]').should('be.visible')
     cy.get('[data-testid="forwarder-package-inbox"]')
       .should('contain', 'Purchase Source Matches')
@@ -721,6 +749,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-external-id"]').clear()
     cy.get('[data-testid="forwarder-package-import"]').click()
     cy.wait('@importForwarderPackage')
@@ -786,6 +815,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-csv"]').clear()
     cy.get('[data-testid="forwarder-package-csv"]').type(
       'Stackry Package ID,Status,Shipment ID,Tracking Number,Warehouse Location,Weight Grams\nSTK-CSV-2001,received,SHIP-2001,1ZCSV2001,Locker C-4,520\n,received,SHIP-2002,1ZCSV2002,Locker D-8,420',
@@ -880,6 +910,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-email"]').clear()
     cy.get('[data-testid="forwarder-package-email"]').type(
       'Package ID: STK-EMAIL-3001\nStatus: Received\nShipment ID: SHIP-3001\nTracking Number: 1ZEMAIL3001\nWarehouse Location: Locker E-5\nWeight Grams: 640\nSender: Stackry Intake',
@@ -990,6 +1021,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
     cy.get('[data-testid="forwarder-package-detail-toggle"]').click()
@@ -1232,6 +1264,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
     cy.get('[data-testid="forwarder-package-review-summary"]')
@@ -1540,6 +1573,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
     cy.get('[data-testid="forwarder-package-confidence-filter-high"]').click()
@@ -1694,6 +1728,7 @@ describe('purchases/purchase-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/purchases',
     })
+    openSourceMatches()
     cy.get('[data-testid="forwarder-package-refresh"]').click()
     cy.wait('@listForwarderPackages')
     cy.get('[data-testid="forwarder-package-row"]')
