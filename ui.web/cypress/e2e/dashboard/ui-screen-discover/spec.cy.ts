@@ -233,4 +233,124 @@ describe('dashboard/ui-screen-discover', () => {
       'Ignore / Archive'
     )
   })
+
+  it('UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-wishlist-promotion',
+            title: 'Discovery Wishlist Promotion Candidate',
+            price: 52.25,
+            currency: 'AUD',
+            url: 'https://example.test/promotion',
+            source_result_url: 'https://provider.test/result/promotion',
+            source_result_id: 'result-promotion-001',
+            provider: 'Provider Search',
+            source: 'provider-search',
+            first_seen: '2026-06-01T00:00:00Z',
+            last_seen: '2026-06-12T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+            triage_status: 'new',
+            confidence: 0.88,
+            seller_label: 'Provider listing',
+          },
+        ],
+      },
+    }).as('discoverListPromotion')
+
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body).to.deep.include({
+        candidate_id: 'cand-wishlist-promotion',
+        type: 'add_to_wishlist',
+      })
+      wishlistItems = [
+        {
+          id: 'item-promoted-1',
+          title: 'Discovery Wishlist Promotion Candidate',
+          part_number: 'PROMO-001',
+          status: 'wishlist',
+          category: 'Promotions',
+          priority: 'medium',
+        },
+      ]
+      wishlistEntries = [
+        {
+          id: 'wish-promoted-1',
+          item_id: 'item-promoted-1',
+          priority: 'medium',
+          target_price: 52.25,
+          notes: 'Promoted from Discoveries result-promotion-001',
+          owned: false,
+          delivered: false,
+          quantity: 0,
+          needed_quantity: 1,
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('promoteToWishlist')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-promoted-1', {
+      statusCode: 200,
+      body: { latest: 52.25 },
+    }).as('promotedPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-promoted-1', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('promotedPriceTrend')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListPromotion')
+
+    cy.get('[data-testid="discover-action-wishlist-cand-wishlist-promotion"]').click()
+    cy.wait('@promoteToWishlist')
+    cy.get('[data-testid="discover-action-status"]').should(
+      'contain',
+      'add_to_wishlist:cand-wishlist-promotion'
+    )
+
+    cy.visit('/wishlist/')
+    cy.wait('@wishlistEntries')
+    cy.wait('@wishlistItems')
+    cy.wait('@promotedPriceStats')
+    cy.wait('@promotedPriceTrend')
+
+    cy.get('button[aria-label="Switch to rows view"]').click()
+    cy.contains('tr', 'Discovery Wishlist Promotion Candidate').within(() => {
+      cy.get('[data-testid="wishlist-category-item-promoted-1"]').should(
+        'contain.text',
+        'Promotions'
+      )
+      cy.get('[data-testid="wishlist-purchase-open-item-promoted-1"]').should(
+        'be.visible'
+      )
+      cy.get('[data-testid="wishlist-delivered-checkbox-item-promoted-1"]').should(
+        'have.attr',
+        'aria-checked',
+        'false'
+      )
+      cy.contains('Promoted from Discoveries result-promotion-001').should('be.visible')
+    })
+
+    cy.contains('button', 'Cards').click()
+    cy.get('[data-testid="wishlist-card-purchased-item-promoted-1"]').should(
+      'contain.text',
+      'Purchased: No'
+    )
+    cy.get('[data-testid="wishlist-card-delivered-item-promoted-1"]').should(
+      'contain.text',
+      'Delivered: No'
+    )
+    cy.contains('Category: Promotions').should('be.visible')
+  })
 })

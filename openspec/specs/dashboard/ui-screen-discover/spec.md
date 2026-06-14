@@ -63,6 +63,18 @@ without presenting the surface as a generic search or query history page.
 - **THEN** row content MUST expose source/provider label, source result link when available, candidate title, price/currency when available, first-seen or last-seen recency, triage status, and confidence or review signal
 - **AND** row actions MUST provide clear paths for Wishlist promotion, Inventory/Purchase handoff where applicable, ignore/archive, and source-result review
 
+### Requirement UI-SCREEN-DISCOVER-006: Wishlist promotion SHALL preserve wanted-state boundaries in the UI
+Discoveries SHALL let a user promote a candidate into Wishlist without implying the item
+has already been purchased or delivered.
+
+#### Scenario: Promote candidate to Wishlist
+- **GIVEN** a discovery candidate is visible with source provenance and price context
+- **WHEN** user chooses `Promote to Wishlist`
+- **THEN** Discoveries MUST submit `add_to_wishlist` for the candidate
+- **AND** the resulting Wishlist row/card MUST show the promoted title, category, notes/provenance context, and target price
+- **AND** the resulting Wishlist row/card MUST show `Purchased: No` and `Delivered: No`
+- **AND** the row MUST keep purchase action controls available for the later purchase workflow
+
 ## Acceptance Criteria
 - UC IDs cover filtering and each primary action class.
 - E2E mappings include action outcomes.
@@ -88,3 +100,4 @@ without presenting the surface as a generic search or query history page.
 | UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 provides explicit handoff action to Market Watch with preserved context` |
 | UC-DIS-09 | Candidate inbox purpose | Discoveries purpose and empty/list states distinguish found-item triage from Inventory, Wishlist, and Market Watch query history | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 explains candidate inbox purpose` |
 | UC-DIS-10 | Candidate provenance row | Candidate row exposes source/provider, source-result link, title, price/currency, recency, status, confidence/review signal, and destination actions | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions` |
+| UC-DIS-11 | Promote candidate to Wishlist | Wishlist promotion creates wanted-state UI proof without purchased/delivered state | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state` |
