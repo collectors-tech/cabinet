@@ -1,6 +1,6 @@
 describe('integrations/ui-screen-market-watch', () => {
-  function signInToMarketWatch() {
-    cy.visit('/sign-in?redirect=%2Fscanner%2F')
+  function signInToMarketWatch(redirectPath = '/scanner/') {
+    cy.visit(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`)
     cy.get('input[name="email"]').clear().type('e2e-market-watch@example.com')
     cy.get('input[name="password"]').clear().type('password123')
     cy.contains('button', 'Sign in').click()
@@ -106,6 +106,53 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-toolbar-create-query"]').click()
     cy.wait('@createScopedQuery')
     cy.get('[data-testid="scanner-query-providers-qs-mw-1"]').should('contain', 'amazon')
+  })
+
+  it('UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as(
+      'querySets'
+    )
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/query-sets', (req) => {
+      expect(req.body.name).to.equal('Barcode 9312345678901')
+      expect(req.body.keywords).to.deep.equal(['9312345678901'])
+      expect(req.body.provider_scope).to.deep.equal(['ebay'])
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: 'qs-mw-barcode',
+          name: 'Barcode 9312345678901',
+          keywords: ['9312345678901'],
+          provider_scope: ['ebay'],
+        },
+      })
+    }).as('createBarcodeQuery')
+
+    signInToMarketWatch('/scanner/?barcode=9312345678901')
+    cy.location('search').should('contain', 'barcode=9312345678901')
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-new-query-name"]').should(
+      'have.value',
+      'Barcode 9312345678901'
+    )
+    cy.get('[data-testid="scanner-new-query-keywords"]').should('have.value', '9312345678901')
+    cy.get('[data-testid="scanner-action-status"]').should(
+      'contain',
+      'barcode_lookup_ready_9312345678901'
+    )
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Barcode lookup is ready for Market Watch.')
+      .and('contain', 'Review provider scope before creating the query set.')
+    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.wait('@createBarcodeQuery')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-barcode"]').should('contain', 'ebay')
   })
 
   it('UI-SCREEN-MARKET-WATCH-001 manages saved-query create edit and delete lifecycle', () => {

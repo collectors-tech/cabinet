@@ -156,6 +156,17 @@ Market Watch output-detail Inventory handoff SHALL persist the selected result t
 - **AND WHEN** user opens or reloads `/inventory`
 - **THEN** the Inventory route MUST render the handed-off result and its Market Watch/provider/query/source provenance
 
+### Requirement UI-SCREEN-MARKET-WATCH-011: Market Watch SHALL bootstrap saved-query creation from route handoff state
+Market Watch SHALL translate route handoff context into editable saved-query fields before persistence so handoffs from barcode/search surfaces remain deterministic.
+
+#### Scenario: Route barcode handoff creates saved query
+- **GIVEN** user opens `/scanner/?barcode=<barcode>`
+- **WHEN** Market Watch loads
+- **THEN** query name and keyword fields MUST be prefilled from the barcode
+- **AND** route handoff guidance MUST explain that provider scope should be reviewed before creation
+- **AND WHEN** user creates the query
+- **THEN** the saved query MUST persist the prefilled barcode keyword with the selected provider scope
+
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
@@ -172,3 +183,4 @@ Market Watch output-detail Inventory handoff SHALL persist the selected result t
 | UC-MW-11 | Inspect output result provenance | Output detail table shows provider, title, price/currency, source identifier, stock/status, and handoff state while preserving handoff actions | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-008 shows output result provenance and handoff state` |
 | UC-MW-12 | Wishlist handoff from output detail | Output detail Wishlist handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Wishlist route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-009 persists output-detail Wishlist handoff provenance` |
 | UC-MW-13 | Inventory handoff from output detail | Output detail Inventory handoff posts selected candidate, reports success, and persists Market Watch provenance to the reloaded Inventory route | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-010 persists output-detail Inventory handoff provenance` |
+| UC-MW-14 | Route handoff bootstrap | Barcode handoff route pre-fills saved-query fields and persists the selected provider scope when created | implemented: `ui.web/cypress/e2e/integrations/ui-screen-market-watch/spec.cy.ts` `UI-SCREEN-MARKET-WATCH-011 creates saved query from route barcode handoff state` |
