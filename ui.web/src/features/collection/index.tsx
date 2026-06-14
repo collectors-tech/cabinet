@@ -5445,6 +5445,10 @@ export function Collection({
                   const matchedItem = resolveInventoryItemFromTask(task)
                   openInventoryAssignCollectionForItem(matchedItem)
                 }}
+                onDeleteRow={(task) => {
+                  setTasksDialogRow(task)
+                  setTasksDialogOpen('delete')
+                }}
               />
               {isInventoryRoute ? (
                 <>

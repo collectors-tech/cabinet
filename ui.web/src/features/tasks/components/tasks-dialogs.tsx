@@ -180,6 +180,9 @@ export function TasksDialogs({
             }}
             isLoading={isWishlistMutating}
             className='max-w-md'
+            contentTestId='task-delete-dialog'
+            cancelTestId='task-delete-cancel'
+            confirmTestId='task-delete-confirm'
             title={
               isWishlistRoute
                 ? `Delete this wishlist entry: ${currentRow.title} ?`

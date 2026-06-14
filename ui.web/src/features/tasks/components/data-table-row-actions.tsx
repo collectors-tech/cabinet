@@ -29,6 +29,10 @@ export function DataTableRowActions<TData>({
   const task = taskSchema.parse(row.original)
   const isWishlistRoute = routePath === '/_authenticated/wishlist/'
   const [open, setOpen] = useState(false)
+  const rowActionId = task.itemID?.trim() || task.id
+  const handleDeleteRow = () => {
+    onDeleteRow?.(task)
+  }
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
@@ -38,6 +42,8 @@ export function DataTableRowActions<TData>({
           variant='ghost'
           className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
           data-testid='task-row-actions-trigger'
+          data-row-id={rowActionId}
+          aria-label={`Open actions for ${task.title}`}
           onPointerDown={(event) => {
             event.stopPropagation()
           }}
@@ -53,11 +59,18 @@ export function DataTableRowActions<TData>({
       <DropdownMenuContent
         align='end'
         className='w-[160px]'
+        data-testid='task-row-actions-menu'
+        data-row-id={rowActionId}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+        }}
         onClick={(event) => {
           event.stopPropagation()
         }}
       >
         <DropdownMenuItem
+          data-testid='task-row-action-edit'
+          data-row-id={rowActionId}
           onSelect={(event) => {
             event.stopPropagation()
             onEditRow?.(task)
@@ -73,9 +86,15 @@ export function DataTableRowActions<TData>({
           </>
         ) : null}
         <DropdownMenuItem
+          data-testid='task-row-action-delete'
+          data-row-id={rowActionId}
+          onClick={(event) => {
+            event.stopPropagation()
+            handleDeleteRow()
+          }}
           onSelect={(event) => {
             event.stopPropagation()
-            onDeleteRow?.(task)
+            handleDeleteRow()
           }}
         >
           Delete
