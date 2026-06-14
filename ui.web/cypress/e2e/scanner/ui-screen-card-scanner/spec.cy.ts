@@ -87,6 +87,32 @@ describe('scanner/ui-screen-card-scanner', () => {
     })
   })
 
+  it('UI-SCREEN-CARD-SCANNER-012 queues manual-entry scans for review before writes', () => {
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-manual-entry-queue"]').click()
+    cy.get('[data-testid="card-scanner-quick-scan-status"]')
+      .should('be.visible')
+      .and('contain', 'Manual entry needs a card title before queueing.')
+    cy.get('[data-testid="card-scanner-queue"]').should('contain', 'No quick-scan items queued.')
+
+    cy.get('[data-testid="card-scanner-manual-entry-title"]').type('Pikachu Promo 001')
+    cy.get('[data-testid="card-scanner-manual-entry-queue"]').click()
+
+    cy.get('[data-testid="card-scanner-quick-scan-status"]')
+      .should('be.visible')
+      .and('contain', 'Manual entry queued for review: Pikachu Promo 001')
+    cy.get('[data-testid="card-scanner-queue"]')
+      .should('contain', 'Pikachu Promo 001')
+      .and('contain', 'Queued')
+      .and('not.contain', 'Linked')
+    cy.get('[data-testid="card-scanner-manual-entry-title"]').should('have.value', '')
+    cy.get('[data-testid^="card-scanner-suggestion-"]')
+      .should('be.visible')
+      .and('contain', 'pikachu promo 001 (primary match)')
+  })
+
   it('UI-SCREEN-CARD-SCANNER-011 preserves grading context in candidate review before writes', () => {
     cy.intercept('POST', '/api/scanner/recognition-review/apply', (req) => {
       const candidates = req.body.candidates as Array<{
