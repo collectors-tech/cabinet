@@ -79,11 +79,79 @@ describe('scanner/ui-screen-card-scanner', () => {
     cy.get('[data-testid="card-scanner-quick-category-view-table"]').click()
     cy.get('[data-testid="card-scanner-unlinked-table"]').within(() => {
       cy.contains('th', 'File').should('be.visible')
+      cy.contains('th', 'Grading').should('be.visible')
       cy.contains('th', 'Queued At').should('be.visible')
       cy.contains('th', 'Status').should('be.visible')
       cy.contains('td', 'photo-1.jpg').should('be.visible')
       cy.contains('photo-2.jpg').should('not.exist')
     })
+  })
+
+  it('UI-SCREEN-CARD-SCANNER-011 preserves grading context in candidate review before writes', () => {
+    cy.intercept('POST', '/api/scanner/recognition-review/apply', (req) => {
+      const candidates = req.body.candidates as Array<{
+        item_type?: string
+        condition_estimate?: string
+        grading_status?: string
+      }>
+      expect(req.body).to.include({ confirmed: false, target: 'inventory' })
+      expect(candidates).to.have.length(3)
+      candidates.forEach((candidate) => {
+        expect(candidate).to.include({
+          item_type: 'Trading Card',
+          condition_estimate: 'Near Mint (NM)',
+          grading_status: 'ungraded',
+        })
+      })
+      req.reply({
+        statusCode: 409,
+        body: {
+          error: 'scanner_review_confirmation_required',
+          confirmation_state: 'required',
+          review: {
+            top_candidate: req.body.candidates[0],
+            alternates: req.body.candidates.slice(1),
+            selected_candidate: req.body.candidates[0],
+            confidence_label: 'high',
+            requires_manual_review: false,
+            confirm_before_create: true,
+            target: 'inventory',
+            media_evidence: { media_id: req.body.candidates[0].media_id },
+            provenance: ['quick-scan-upload|ui-upload-preview'],
+            manual_override_applied: false,
+          },
+        },
+      })
+    }).as('scannerApplyGradingReview')
+
+    signInToScanner()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="card-scanner-quick-file-input"]').selectFile(
+      'cypress/fixtures/photo-1.jpg',
+      { force: true }
+    )
+
+    cy.get('[data-testid^="card-scanner-confidence-"]')
+      .should('be.visible')
+      .and('contain', 'Confidence:')
+    cy.get('[data-testid^="card-scanner-grading-"]')
+      .should('be.visible')
+      .and('contain', 'Trading Card')
+      .and('contain', 'Near Mint (NM)')
+      .and('contain', 'ungraded')
+    cy.get('[data-testid^="card-scanner-suggestion-"]')
+      .should('be.visible')
+      .and('contain', 'photo-1 (primary match)')
+
+    cy.get('[data-testid^="card-scanner-review-apply-"]').click()
+    cy.wait('@scannerApplyGradingReview')
+    cy.get('[data-testid^="card-scanner-review-summary-"]')
+      .should('be.visible')
+      .and('contain', 'high confidence')
+      .and('contain', 'confirm-before-create required')
+    cy.get('[data-testid="card-scanner-queue"]').should('contain', 'Queued')
+    cy.get('[data-testid="card-scanner-queue"]').should('not.contain', 'Linked')
   })
 
   it('UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked', () => {

@@ -74,6 +74,9 @@ type QuickScanQueueItem = {
   status: 'Queued' | 'Linked'
   linkedToInventory: boolean
   confidencePct: number
+  itemType: string
+  conditionEstimate: string
+  gradingStatus: string
   suggestions: string[]
   selectedSuggestion: string
   overrideUsed: boolean
@@ -85,6 +88,9 @@ type RecognitionCandidateInput = {
   confidence: number
   source: string
   provenance: string
+  item_type?: string
+  condition_estimate?: string
+  grading_status?: string
   media_id?: string
   media_url?: string
   target?: 'inventory' | 'wishlist'
@@ -1022,6 +1028,9 @@ export function Scanner() {
       status: 'Queued',
       linkedToInventory: false,
       confidencePct,
+      itemType: 'Trading Card',
+      conditionEstimate: 'Near Mint (NM)',
+      gradingStatus: 'ungraded',
       suggestions,
       selectedSuggestion: suggestions[0],
       overrideUsed: false,
@@ -1073,6 +1082,9 @@ export function Scanner() {
       confidence: Math.max(0.1, (item.confidencePct - index * 12) / 100),
       source: index === 0 ? 'quick-scan-upload' : 'quick-scan-alternate',
       provenance: index === 0 ? 'ui-upload-preview' : 'ui-manual-review',
+      item_type: item.itemType,
+      condition_estimate: item.conditionEstimate,
+      grading_status: item.gradingStatus,
       media_id: `quick-scan:${item.id}`,
       media_url: `cabinet://quick-scan/${encodeURIComponent(item.fileName)}`,
       target,
@@ -1620,6 +1632,13 @@ export function Scanner() {
                       </p>
                       <p
                         className='text-[11px] text-muted-foreground'
+                        data-testid={`card-scanner-grading-${item.id}`}
+                      >
+                        Grading: {item.itemType} / {item.conditionEstimate} /{' '}
+                        {item.gradingStatus}
+                      </p>
+                      <p
+                        className='text-[11px] text-muted-foreground'
                         data-testid={`card-scanner-suggestion-${item.id}`}
                       >
                         Suggestion: {item.selectedSuggestion}
@@ -1750,6 +1769,7 @@ export function Scanner() {
                   <tr>
                     <th className='px-2 py-1'>File</th>
                     <th className='px-2 py-1'>Confidence</th>
+                    <th className='px-2 py-1'>Grading</th>
                     <th className='px-2 py-1'>Suggestion</th>
                     <th className='px-2 py-1'>Queued At</th>
                     <th className='px-2 py-1'>Status</th>
@@ -1760,6 +1780,9 @@ export function Scanner() {
                     <tr key={item.id} className='border-t'>
                       <td className='px-2 py-1'>{item.fileName}</td>
                       <td className='px-2 py-1'>{item.confidencePct}%</td>
+                      <td className='px-2 py-1'>
+                        {item.conditionEstimate} / {item.gradingStatus}
+                      </td>
                       <td className='px-2 py-1'>{item.selectedSuggestion}</td>
                       <td className='px-2 py-1'>
                         {new Date(item.queuedAtISO).toLocaleString()}
