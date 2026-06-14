@@ -48,4 +48,33 @@ describe('settings/storage export downloads', () => {
       .should('have.attr', 'href', '/api/data/export/csv/items')
       .and('have.attr', 'download', 'cabinet-items.csv')
   })
+
+  it('UI-SCREEN-SETTINGS-STORAGE-011 disables export downloads while storage context is degraded', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'default' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/profiles/*/storage', {
+      statusCode: 503,
+      body: { error: 'storage_unavailable' },
+    }).as('storageInfo')
+    cy.intercept('GET', '/api/backup/list', {
+      statusCode: 200,
+      body: { backups: [] },
+    }).as('backupList')
+
+    signInToStorage()
+    cy.wait('@activeProfile')
+    cy.wait('@storageInfo')
+    cy.wait('@backupList')
+
+    cy.contains('Storage information is unavailable right now.').should(
+      'be.visible'
+    )
+    cy.contains('Data exports').should('be.visible')
+    cy.contains('button', 'JSON Snapshot').should('be.disabled')
+    cy.contains('button', 'Item CSV').should('be.disabled')
+    cy.get('[data-testid="settings-storage-export-json"]').should('not.exist')
+    cy.get('[data-testid="settings-storage-export-csv"]').should('not.exist')
+  })
 })
