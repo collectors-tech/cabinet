@@ -70,6 +70,16 @@ Scanner review apply API SHALL accept normalized recognition candidates, build t
 ### Requirement UI-SCREEN-CARD-SCANNER-004: Card Scanner SHALL support deterministic error/retry behavior
 Scanner SHALL surface human-readable failure states with retry guidance.
 
+### Requirement UI-SCREEN-CARD-SCANNER-010: Card Scanner SHALL keep failed reads in manual review without linking scans
+Card Scanner SHALL keep low-confidence or failed recognition reads in the queued review surface, preserve manual override evidence, and avoid marking scans linked until a confirmed apply succeeds.
+
+#### Scenario: Failed read stays queued for manual review
+- **GIVEN** a quick-scan upload is queued and the reviewer selects a manual alternate
+- **WHEN** the scanner review preview API returns a failed-read or low-confidence manual-review response
+- **THEN** Card Scanner MUST show the failed-read guidance
+- **AND** MUST preserve the manual override state
+- **AND** MUST keep the scan queued instead of marking it linked or showing a created item result
+
 ### Requirement UI-SCREEN-CARD-SCANNER-007: Scanner recognition review SHALL normalize candidates before writes
 Scanner recognition review SHALL normalize candidate payloads into a non-mutating preview that preserves top match, alternates, confidence label, provenance, media evidence, manual override state, target record type, and a required confirm-before-create boundary.
 
@@ -108,3 +118,4 @@ Scanner SHALL provide a quick-category area showing most recently added scan res
 | UC-CS-06 | Quick Scan mobile/desktop capture | `Quick Scan` launches rapid capture flow on mobile and desktop with fallback path | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-006 provides quick-scan action for mobile and desktop with deterministic intake feedback` |
 | UC-CS-07 | Apply reviewed scan | API rejects unconfirmed writes and persists confirmed Inventory/Wishlist records with scanner evidence | implemented: `TestScannerRecognitionReviewApplyRequiresConfirmationAndDoesNotMutate`, `TestScannerRecognitionReviewApplyCreatesWishlistItemWithEvidence` (`internal/app/scanner_api_test.go`) |
 | UC-CS-09 | UI review and confirmed apply | Quick-scan UI previews scanner review apply, confirms explicit Wishlist/Inventory write, reloads persistence, and then marks scan linked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-009 reviews and confirms scanner apply through the API before marking linked` |
+| UC-CS-10 | Failed read manual review | Failed/low-confidence review preview preserves manual override evidence and keeps scan queued/unlinked | implemented: `ui.web/cypress/e2e/scanner/ui-screen-card-scanner/spec.cy.ts` `UI-SCREEN-CARD-SCANNER-010 keeps failed reads in manual review without linking the scan` |
