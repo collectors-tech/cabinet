@@ -10,6 +10,13 @@ Cabinet SHALL default discovery/search runs to enabled core providers unless use
 - **WHEN** user runs scanner/discovery search without selecting explicit providers
 - **THEN** runtime MUST execute search against all enabled default providers and return `provider_id` in each candidate row
 
+#### Scenario: Market Watch runs a saved search without explicit provider scope
+- **GIVEN** Market Watch loads a saved query set that does not include `provider_scope`
+- **WHEN** user runs the query from the saved-query list
+- **THEN** UI MUST call the shared scanner run route without switching to a provider-specific route
+- **AND** the run payload MUST preserve the default-provider contract by sending an empty provider scope override
+- **AND** returned candidates MUST keep provider/source attribution visible for post-run inspection
+
 ### Requirement INTEGRATION-017: Default provider scope MUST remain user-configurable per query set
 Cabinet SHALL allow users to override default provider scope and persist that selection per query set.
 

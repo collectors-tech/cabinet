@@ -12,6 +12,69 @@ describe('integrations/default-site-search', () => {
     cy.clearLocalStorage()
   })
 
+  it('INTEGRATION-016 runs default-scoped saved searches through the shared scanner route', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-dss-default',
+            name: 'Default Provider Search',
+            keywords: ['slot car'],
+            enabled: true,
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', {
+      statusCode: 500,
+      body: { error: 'unexpected_provider_specific_run_for_default_scope' },
+    }).as('ebayProviderRun')
+    cy.intercept('POST', '/api/scanner/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-dss-default')
+      expect(req.body.provider_scope).to.deep.equal([])
+      req.reply({ statusCode: 200, body: { run_id: 'run-dss-default', status: 'ok' } })
+    }).as('defaultScannerRun')
+    cy.intercept('GET', '/api/scanner/candidates?query_set_id=qs-dss-default', {
+      statusCode: 200,
+      body: {
+        candidates: [
+          {
+            id: 'cand-dss-default-ebay',
+            query_set_id: 'qs-dss-default',
+            listing_id: 'ebay-default-1',
+            title: 'Default eBay Slot Car',
+            source: 'ebay',
+          },
+          {
+            id: 'cand-dss-default-amazon',
+            query_set_id: 'qs-dss-default',
+            listing_id: 'amazon-default-1',
+            title: 'Default Amazon Slot Car',
+            source: 'amazon',
+          },
+        ],
+      },
+    }).as('defaultCandidates')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-query-providers-qs-dss-default"]').should('contain', 'ebay')
+    cy.get('[data-testid="scanner-run-qs-dss-default"]').click()
+    cy.wait('@defaultScannerRun')
+    cy.wait('@defaultCandidates')
+    cy.get('@ebayProviderRun.all').should('have.length', 0)
+    cy.get('[data-testid="scanner-action-status"]').should('contain', 'run_started_qs-dss-default')
+    cy.get('[data-testid="scanner-candidates-qs-dss-default"]')
+      .should('contain', 'Default eBay Slot Car')
+      .and('contain', 'ebay')
+      .and('contain', 'Default Amazon Slot Car')
+      .and('contain', 'amazon')
+  })
+
   it('DEFAULT-SITE-SEARCH-004 manages provider-bound saved searches with persisted filters', () => {
     cy.intercept('GET', '/api/scanner/query-sets', { statusCode: 200, body: { query_sets: [] } }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
@@ -149,13 +212,17 @@ describe('integrations/default-site-search', () => {
       .and('contain', 'succeeded')
       .and('contain', 'Candidates: 1')
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
-    cy.get('[data-testid="market-watch-query-table"]').should('contain', 'Candidates: 1')
+    cy.get('[data-testid="market-watch-query-table"]').within(() => {
+      cy.contains('td', 'Amazon Watch').should('be.visible')
+      cy.contains('td', 'succeeded').should('be.visible')
+      cy.contains('td', '1').should('be.visible')
+    })
   })
 
   it('DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries wishlist and inventory flows', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []
-    let discoveryActionTypes: string[] = []
+    const discoveryActionTypes: string[] = []
 
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
@@ -173,9 +240,23 @@ describe('integrations/default-site-search', () => {
     }).as('querySets')
     cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', { statusCode: 200, body: { status: 'ok' } }).as('providerHealth')
-    cy.intercept('POST', '/api/scanner/run', {
-      statusCode: 200,
-      body: { run_id: 'run-dss-3', status: 'ok' },
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-dss-3')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          candidates: [
+            {
+              id: 'cand-dss-3',
+              query_set_id: 'qs-dss-3',
+              listing_id: 'ebay-1',
+              title: 'eBay Handoff Car',
+              source: 'ebay',
+            },
+          ],
+        },
+      })
     }).as('runNow')
     cy.intercept('GET', '/api/scanner/candidates?query_set_id=qs-dss-3', {
       statusCode: 200,
@@ -259,7 +340,7 @@ describe('integrations/default-site-search', () => {
 
     cy.get('[data-testid="scanner-run-qs-dss-3"]').click()
     cy.wait('@runNow')
-    cy.wait('@candidates')
+    cy.get('@candidates.all').should('have.length', 0)
 
     cy.get('[data-testid="scanner-handoff-discoveries-qs-dss-3"]').click()
     cy.wait('@discoveriesHandoff')
