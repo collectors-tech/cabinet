@@ -171,6 +171,97 @@ func TestCommerceLifecycleNonPurchasePersistsWithoutExpectedArrival(t *testing.T
 	}
 }
 
+func TestCommerceArrivalLifecycleStatesPersistAndFilter(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name                 string
+		itemID               string
+		status               string
+		deliveredOn          string
+		reconciledInstanceID string
+		notes                string
+	}{
+		{
+			name:                 "delivered",
+			itemID:               "arrival-state-delivered-item",
+			status:               "delivered",
+			deliveredOn:          "2026-06-14",
+			reconciledInstanceID: "instance-delivered-001",
+			notes:                "package arrived at cabinet review",
+		},
+		{
+			name:   "cancelled",
+			itemID: "arrival-state-cancelled-item",
+			status: "cancelled",
+			notes:  "seller cancelled before forwarding",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, profileID := newCommerceProfileApp(t)
+			if _, err := a.db.Exec(`INSERT INTO canonical_items(id, profile_id, brand, category, part_number, title) VALUES (?, ?, 'AFX','Slot', ?, ?)`, tc.itemID, profileID, strings.ToUpper(tc.status)+"-1", "Purchase "+tc.status); err != nil {
+				t.Fatalf("seed item: %v", err)
+			}
+
+			create := doRequest(t, a, http.MethodPost, "/api/commerce/lifecycle", strings.NewReader(`{"item_id":"`+tc.itemID+`","state":"purchase","source":"ebay","external_ref":"order-`+tc.status+`","quantity":1,"amount":12.5,"currency":"aud","notes":"state transition coverage"}`), map[string]string{"Content-Type": "application/json"})
+			if create.Code != http.StatusCreated {
+				t.Fatalf("create lifecycle status=%d body=%s", create.Code, create.Body.String())
+			}
+			var created struct {
+				Entry struct {
+					ID string `json:"id"`
+				} `json:"entry"`
+				ExpectedArrival struct {
+					ID               string `json:"id"`
+					LifecycleEntryID string `json:"lifecycle_entry_id"`
+					Status           string `json:"status"`
+				} `json:"expected_arrival"`
+			}
+			if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+				t.Fatalf("decode create lifecycle: %v", err)
+			}
+			if created.ExpectedArrival.ID == "" || created.ExpectedArrival.Status != "expected" || created.ExpectedArrival.LifecycleEntryID != created.Entry.ID {
+				t.Fatalf("expected purchase to create expected arrival, got %+v", created)
+			}
+
+			updateBody := `{"id":"` + created.ExpectedArrival.ID + `","status":"` + tc.status + `","delivered_on":"` + tc.deliveredOn + `","reconciled_instance_id":"` + tc.reconciledInstanceID + `","notes":"` + tc.notes + `"}`
+			update := doRequest(t, a, http.MethodPut, "/api/commerce/arrivals", strings.NewReader(updateBody), map[string]string{"Content-Type": "application/json"})
+			if update.Code != http.StatusOK {
+				t.Fatalf("update arrival status=%d body=%s", update.Code, update.Body.String())
+			}
+
+			list := doRequest(t, a, http.MethodGet, "/api/commerce/arrivals?item_id="+tc.itemID+"&status="+tc.status, nil, nil)
+			if list.Code != http.StatusOK {
+				t.Fatalf("list %s arrivals status=%d body=%s", tc.status, list.Code, list.Body.String())
+			}
+			var payload struct {
+				Items []struct {
+					ID                   string `json:"id"`
+					Status               string `json:"status"`
+					DeliveredOn          string `json:"delivered_on"`
+					ReconciledInstanceID string `json:"reconciled_instance_id"`
+					Notes                string `json:"notes"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(list.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode %s arrivals list: %v", tc.status, err)
+			}
+			if len(payload.Items) != 1 {
+				t.Fatalf("expected one %s arrival, got %+v", tc.status, payload.Items)
+			}
+			got := payload.Items[0]
+			if got.ID != created.ExpectedArrival.ID || got.Status != tc.status || got.DeliveredOn != tc.deliveredOn || got.ReconciledInstanceID != tc.reconciledInstanceID || got.Notes != tc.notes {
+				t.Fatalf("unexpected %s arrival payload %+v", tc.status, got)
+			}
+		})
+	}
+}
+
 func newCommerceProfileApp(t *testing.T) (*App, string) {
 	t.Helper()
 

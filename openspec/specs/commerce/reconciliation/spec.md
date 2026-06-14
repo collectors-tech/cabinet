@@ -26,6 +26,11 @@ Cabinet SHALL support `expected`, `delivered`, `reconciled`, and `cancelled` exp
 - **WHEN** the user updates the arrival status to `reconciled` with a delivered date and optional instance reference
 - **THEN** Cabinet MUST persist the updated reconciliation state and expose it through `GET /api/commerce/arrivals`.
 
+#### Scenario: Track delivered and cancelled purchase arrival states
+- **GIVEN** a purchase lifecycle entry has created an expected arrival for the active profile
+- **WHEN** the user updates the arrival status to `delivered` or `cancelled` with the available delivery, instance, or cancellation notes
+- **THEN** Cabinet MUST persist the selected state, keep the purchase-linked arrival queryable by item and status, and return the recorded delivery or cancellation evidence through `GET /api/commerce/arrivals`.
+
 ### Requirement COMMERCE-RECONCILIATION-004: Purchases SHALL preserve source-backed forwarder provenance
 Cabinet SHALL treat forwarder imports as source/provenance evidence for purchase reconciliation rather than as a disconnected primary package workflow.
 
