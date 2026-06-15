@@ -25,6 +25,12 @@ Discover SHALL support ignore, wishlist, track, and create-item actions.
 - **WHEN** user chooses action on candidate
 - **THEN** candidate state and downstream linkage SHALL update
 
+#### Scenario: Candidate action failure
+- **GIVEN** authenticated Discoveries list includes one candidate row
+- **WHEN** a candidate action request fails
+- **THEN** Discoveries SHALL surface deterministic failure feedback
+- **AND** the current route and candidate list SHALL remain stable without a success reload
+
 ### Requirement UI-SCREEN-DISCOVER-003: Discover SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
@@ -108,3 +114,4 @@ has already been purchased or delivered.
 | UC-DIS-10 | Candidate provenance row | Candidate row exposes source/provider, source-result link, title, price/currency, recency, status, confidence/review signal, and destination actions | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions` |
 | UC-DIS-11 | Promote candidate to Wishlist | Wishlist promotion creates wanted-state UI proof without purchased/delivered state | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state` |
 | UC-DIS-12 | Discover loading state | Pending candidate-list request shows loading feedback and resolves to loaded candidates without route transition | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-003 shows loading state before candidate list resolves` |
+| UC-DIS-13 | Candidate action failure | Failed candidate action surfaces deterministic feedback without losing route or reloading the candidate list as success | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-13 keeps candidate list stable when an action fails` |
