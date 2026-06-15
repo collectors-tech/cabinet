@@ -59,10 +59,10 @@ Reports SHALL support loading, empty, error, and ready states.
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-REP-01 | Load reports | Summary panels render | planned: `cypress/e2e/ui/reports.cy.ts` `reports-ready` |
-| UC-REP-02 | Export data | Export output generated | planned: `cypress/e2e/ui/reports.cy.ts` `reports-export` |
-| UC-REP-03 | No report data | Empty state guidance appears | planned: `cypress/e2e/ui/reports.cy.ts` `reports-empty-state` |
-| UC-REP-04 | Reports API failure | Error + retry appears | planned: `cypress/e2e/ui/reports.cy.ts` `reports-error-state` |
+| UC-REP-01 | Load reports | Summary panels render | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-001 renders wishlist and pricing summary metrics` |
+| UC-REP-02 | Export data | Export output generated | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-002 exports report output deterministically` |
+| UC-REP-03 | No report data | Empty state guidance appears | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-003 handles loading/empty/error states deterministically` |
+| UC-REP-04 | Reports API failure | Error + retry appears | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-003 handles loading/empty/error states deterministically` |
 | UC-REP-05 | Refresh reports toolbar action | `Refresh Reports` re-fetches analytics without route change | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-004 refreshes reports without route transition` |
 | UC-REP-06 | Export CSV toolbar action | `Export CSV` triggers export with deterministic feedback | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-002 exports report output deterministically`, `UI-SCREEN-REPORTS-004 reports export failures deterministically` |
 | UC-REP-07 | Unavailable reports state | `Export CSV` stays disabled while report context is unavailable | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-reports/spec.cy.ts` `UI-SCREEN-REPORTS-004 disables export while reports are unavailable` |
