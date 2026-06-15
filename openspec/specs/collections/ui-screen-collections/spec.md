@@ -269,6 +269,20 @@ The `All Items` default collection SHALL remain a protected management context t
 - **AND** the delete confirmation MUST remain blocked from destructive completion
 - **AND** the active collection context MUST remain `All Items`
 
+### Requirement UI-SCREEN-COLLECTIONS-031: Collections tables SHALL sort deterministically without passive mutation
+Collections and collection-members tables SHALL expose deterministic column sorting while preserving the current selected collection context and avoiding profile-settings writes.
+
+#### Scenario: Sort collections and members tables
+- **GIVEN** an authenticated user opens `/collections` with multiple collections and collection members visible
+- **WHEN** the user sorts the collections table by collection name descending
+- **THEN** the collection rows MUST render in deterministic descending name order
+- **AND** the active collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent by sorting alone
+- **WHEN** the user sorts the collection-members table by item name descending
+- **THEN** the member rows MUST render in deterministic descending item order for the active collection
+- **AND** the active collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent by member sorting alone
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -300,3 +314,4 @@ The `All Items` default collection SHALL remain a protected management context t
 | UC-COL-28 | Paginate collections table | Later-page rows render without passive settings writes; selected later-page context persists across refresh and remains selected after filtering | `ui.web/cypress/e2e/collections/collections-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes` |
 | UC-COL-29 | Paginate collection members | Later-page member rows render for the selected collection without passive settings writes; selected context survives refresh and member filtering remains non-mutating | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 preserves paginated collection members without passive settings writes` |
 | UC-COL-30 | Protect All Items | Rename and delete attempts do not write profile settings, create replacement rows, or leave the active `All Items` context | `ui.web/cypress/e2e/collections/collections-protected-all-items/spec.cy.ts` `UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions` |
+| UC-COL-31 | Sort collections and members | Collection and member rows sort deterministically without saving settings or changing the active collection context | `ui.web/cypress/e2e/collections/collections-sorting-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-031 sorts collections and members without passive settings writes` |
