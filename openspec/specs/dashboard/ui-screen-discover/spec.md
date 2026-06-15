@@ -69,6 +69,13 @@ without presenting the surface as a generic search or query history page.
 - **THEN** the screen MUST describe Discoveries as pending found-item triage
 - **AND** it MUST distinguish candidate findings from owned Inventory, wanted Wishlist records, and Market Watch query history
 
+#### Scenario: Empty candidate inbox remains actionable without mutation controls
+- **GIVEN** authenticated Discoveries route receives an empty candidate list
+- **WHEN** the empty state renders
+- **THEN** the screen MUST explain that no pending found-item candidates are available
+- **AND** candidate-specific mutation controls MUST NOT render
+- **AND** the Market Watch handoff MUST remain reachable without leaving `/discoveries/` until selected
+
 #### Scenario: Candidate row provenance and actions
 - **GIVEN** a discovery candidate has source metadata
 - **WHEN** the candidate row renders
@@ -115,3 +122,4 @@ has already been purchased or delivered.
 | UC-DIS-11 | Promote candidate to Wishlist | Wishlist promotion creates wanted-state UI proof without purchased/delivered state | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state` |
 | UC-DIS-12 | Discover loading state | Pending candidate-list request shows loading feedback and resolves to loaded candidates without route transition | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-003 shows loading state before candidate list resolves` |
 | UC-DIS-13 | Candidate action failure | Failed candidate action surfaces deterministic feedback without losing route or reloading the candidate list as success | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-13 keeps candidate list stable when an action fails` |
+| UC-DIS-14 | Empty candidate inbox | Empty Discoveries state explains no pending found-item candidates, suppresses candidate mutation controls, and keeps Market Watch handoff reachable | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 + UC-DIS-14 renders empty candidate inbox without mutation controls` |

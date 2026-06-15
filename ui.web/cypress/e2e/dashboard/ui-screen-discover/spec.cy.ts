@@ -301,6 +301,29 @@ describe('dashboard/ui-screen-discover', () => {
       .and('contain', 'separate from Inventory, Wishlist, and Market Watch query history')
   })
 
+  it('UI-SCREEN-DISCOVER-005 + UC-DIS-14 renders empty candidate inbox without mutation controls', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('discoverListEmpty')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListEmpty')
+
+    cy.location('pathname').should('match', /^\/discoveries\/?$/)
+    cy.get('[data-testid="discover-list"]')
+      .should('be.visible')
+      .and('contain', 'No pending found-item candidates')
+      .and('contain', 'provider runs or imports')
+    cy.get('[data-testid^="discover-candidate-row-"]').should('not.exist')
+    cy.get('[data-testid^="discover-action-ignore-"]').should('not.exist')
+    cy.get('[data-testid^="discover-action-wishlist-"]').should('not.exist')
+    cy.get('[data-testid^="discover-action-track-"]').should('not.exist')
+    cy.get('[data-testid^="discover-action-create-"]').should('not.exist')
+    cy.get('[data-testid="discover-open-market-watch"]').should('be.visible')
+    cy.location('pathname').should('match', /^\/discoveries\/?$/)
+  })
+
   it('UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 200,
