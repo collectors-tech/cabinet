@@ -173,6 +173,52 @@ describe('dashboard/ui-screen-discover', () => {
     cy.wrap(expectedActions).should('be.empty')
   })
 
+  it('UI-SCREEN-DISCOVER-002 + UC-DIS-13 keeps candidate list stable when an action fails', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-action-failure',
+            title: 'Action Failure Candidate',
+            price: 33.75,
+            currency: 'AUD',
+            url: 'https://example.test/action-failure',
+            last_seen: '2026-06-12T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+          },
+        ],
+      },
+    }).as('discoverListFailureAction')
+
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body).to.deep.equal({
+        candidate_id: 'cand-action-failure',
+        type: 'ignore',
+        payload: {},
+      })
+      req.reply({ statusCode: 500, body: { error: 'action_failed' } })
+    }).as('discoverActionFailure')
+
+    signInToDiscoveries()
+    cy.wait('@discoverListFailureAction')
+
+    cy.get('[data-testid="discover-action-ignore-cand-action-failure"]').click()
+    cy.wait('@discoverActionFailure')
+
+    cy.location('pathname').should('match', /^\/discoveries\/?$/)
+    cy.get('[data-testid="discover-action-status"]').should(
+      'contain',
+      'discover_action_500'
+    )
+    cy.get('[data-testid="discover-list"]').should(
+      'contain',
+      'Action Failure Candidate'
+    )
+    cy.get('@discoverListFailureAction.all').should('have.length', 1)
+  })
+
   it('UI-SCREEN-DISCOVER-003 shows retryable error state when discover API fails', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 500,
