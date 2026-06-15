@@ -90,6 +90,39 @@ describe('dashboard/ui-screen-discover', () => {
       .and('contain', 'A$88.50')
   })
 
+  it('UI-SCREEN-DISCOVER-003 shows loading state before candidate list resolves', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', {
+      statusCode: 200,
+      delay: 750,
+      body: {
+        items: [
+          {
+            candidate_id: 'cand-loading-state',
+            title: 'Loading State Candidate',
+            price: 24.5,
+            currency: 'AUD',
+            url: 'https://example.test/loading-state',
+            last_seen: '2026-06-12T00:00:00Z',
+            stock_state: 'in_stock',
+            stock_count: 1,
+          },
+        ],
+      },
+    }).as('discoverListLoading')
+
+    signInToDiscoveries()
+    cy.get('[data-testid="discover-list"]').should(
+      'contain',
+      'Loading discoveries...'
+    )
+    cy.wait('@discoverListLoading')
+
+    cy.location('pathname').should('match', /^\/discoveries\/?$/)
+    cy.get('[data-testid="discover-list"]')
+      .should('not.contain', 'Loading discoveries...')
+      .and('contain', 'Loading State Candidate')
+  })
+
   it('UI-SCREEN-DISCOVER-002 + UC-DIS-02..04 submits ignore wishlist track and create action payloads', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 200,
