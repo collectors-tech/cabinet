@@ -261,6 +261,93 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-row-offline-webshop"]').should('be.visible')
   })
 
+  it('UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-09: toggles rows and cards while preserving active filter context', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'connected-api',
+            display_name: 'Connected API',
+            base_domain: 'connected-api.example.test',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure connected API token.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+          {
+            provider_id: 'offline-webshop',
+            display_name: 'Offline Webshop',
+            base_domain: 'offline-webshop.example.test',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure offline webshop API credentials.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('input[placeholder="Filter providers..."]').clear().type('api')
+    cy.contains('button', 'All Integrations').click()
+    cy.get('[role="option"]').contains('Connected').click()
+    cy.location('search').should('contain', 'filter=api')
+    cy.location('search').should('contain', 'type=connected')
+    cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
+    cy.get('[data-testid="integrations-table-surface"]').should('be.visible')
+    cy.get('[data-testid="provider-row-connected-api"]').should('be.visible')
+    cy.get('[data-testid="provider-row-offline-webshop"]').should('not.exist')
+
+    cy.contains('button', 'Cards').click()
+    cy.location('search').should('contain', 'filter=api')
+    cy.location('search').should('contain', 'type=connected')
+    cy.location('search').should('contain', 'view=cards')
+    cy.contains('button', 'Cards').should('have.attr', 'aria-pressed', 'true')
+    cy.get('[data-testid="integrations-table-surface"]').should('not.exist')
+    cy.get('[data-testid="provider-card-connected-api"]').should('be.visible')
+    cy.get('[data-testid="provider-card-offline-webshop"]').should('not.exist')
+
+    cy.contains('button', 'Rows').click()
+    cy.location('search').should('contain', 'filter=api')
+    cy.location('search').should('contain', 'type=connected')
+    cy.location('search').should('not.contain', 'view=')
+    cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
+    cy.get('[data-testid="integrations-table-surface"]').should('be.visible')
+    cy.get('[data-testid="provider-row-connected-api"]').should('be.visible')
+    cy.get('[data-testid="provider-row-offline-webshop"]').should('not.exist')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-010: applies direct route query state on first render', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
