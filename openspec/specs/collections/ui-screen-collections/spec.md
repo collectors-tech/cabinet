@@ -255,6 +255,20 @@ The Collection members table SHALL let users reach selected-collection members b
 - **AND** the members summary MUST reflect the filtered result count
 - **AND** filtering MUST NOT send a profile-settings save
 
+### Requirement UI-SCREEN-COLLECTIONS-030: Protected default collection SHALL reject rename and delete mutation
+The `All Items` default collection SHALL remain a protected management context that cannot be renamed or deleted from row workflows.
+
+#### Scenario: Attempt to rename or delete All Items
+- **GIVEN** an authenticated user opens `/collections` with `All Items` selected
+- **WHEN** the user attempts to rename `All Items` from the row edit panel
+- **THEN** no profile-settings save MUST be sent
+- **AND** the `All Items` row MUST remain visible
+- **AND** no replacement collection row MUST be created
+- **WHEN** the user attempts to delete `All Items`
+- **THEN** no profile-settings save MUST be sent
+- **AND** the delete confirmation MUST remain blocked from destructive completion
+- **AND** the active collection context MUST remain `All Items`
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -285,3 +299,4 @@ The Collection members table SHALL let users reach selected-collection members b
 | UC-COL-27 | Members panel contents | Selected collection drives member rows, live All Items count, assignment labels, and empty selected-collection states | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 reflects selected collection members and empty states` |
 | UC-COL-28 | Paginate collections table | Later-page rows render without passive settings writes; selected later-page context persists across refresh and remains selected after filtering | `ui.web/cypress/e2e/collections/collections-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes` |
 | UC-COL-29 | Paginate collection members | Later-page member rows render for the selected collection without passive settings writes; selected context survives refresh and member filtering remains non-mutating | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 preserves paginated collection members without passive settings writes` |
+| UC-COL-30 | Protect All Items | Rename and delete attempts do not write profile settings, create replacement rows, or leave the active `All Items` context | `ui.web/cypress/e2e/collections/collections-protected-all-items/spec.cy.ts` `UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions` |
