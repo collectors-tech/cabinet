@@ -28,6 +28,12 @@ Discover SHALL support ignore, wishlist, track, and create-item actions.
 ### Requirement UI-SCREEN-DISCOVER-003: Discover SHALL support deterministic state handling
 The screen SHALL support loading, empty, error, and ready states.
 
+#### Scenario: Discover loading state
+- **GIVEN** an authenticated user opens `/discoveries`
+- **WHEN** the candidate list request is still pending
+- **THEN** the screen SHALL show an explicit loading state in the triage list
+- **AND** the loading state SHALL resolve to the loaded candidate list without route transition
+
 ### Requirement UI-SCREEN-DISCOVER-004: Discoveries SHALL remain a triage workspace and MUST NOT expose provider query-run controls
 Discoveries MUST focus on triage actions for already discovered candidates and must not duplicate Market Watch query-set creation/run capabilities.
 
@@ -101,3 +107,4 @@ has already been purchased or delivered.
 | UC-DIS-09 | Candidate inbox purpose | Discoveries purpose and empty/list states distinguish found-item triage from Inventory, Wishlist, and Market Watch query history | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 explains candidate inbox purpose` |
 | UC-DIS-10 | Candidate provenance row | Candidate row exposes source/provider, source-result link, title, price/currency, recency, status, confidence/review signal, and destination actions | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-005 renders candidate provenance and destination actions` |
 | UC-DIS-11 | Promote candidate to Wishlist | Wishlist promotion creates wanted-state UI proof without purchased/delivered state | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state` |
+| UC-DIS-12 | Discover loading state | Pending candidate-list request shows loading feedback and resolves to loaded candidates without route transition | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-003 shows loading state before candidate list resolves` |
