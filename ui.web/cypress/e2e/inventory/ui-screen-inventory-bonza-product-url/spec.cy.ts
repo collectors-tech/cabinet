@@ -139,6 +139,40 @@ describe("inventory Bonza product URL ingest", () => {
     );
   });
 
+  it("UI-SCREEN-INVENTORY-BONZA-004 preserves failed Bonza ingest input and manual source URL context", () => {
+    const bonzaURL = "https://bonzaslotcars.com.au/product/bonza-mug-white/";
+    cy.intercept("GET", "/api/items", {
+      statusCode: 200,
+      body: { items: [] },
+    }).as("itemsFailedBonzaPaste");
+    cy.intercept("POST", "/api/providers/product-url/ingest", {
+      statusCode: 502,
+      body: {
+        mode: "provider_product_url_ingest",
+        error: "failed_to_ingest_bonza_product_url",
+      },
+    }).as("failedBonzaProductIngest");
+
+    signIn();
+    cy.wait("@itemsFailedBonzaPaste");
+    cy.get('[data-testid="inventory-new-action"]').click();
+    cy.get('[data-testid="inventory-create-paste-input"]').type(bonzaURL);
+    cy.get('[data-testid="inventory-create-paste-process"]').click();
+    cy.wait("@failedBonzaProductIngest");
+    cy.get('[data-testid="inventory-create-paste-error"]')
+      .should("have.attr", "role", "alert")
+      .and("contain", "Bonza product data could not be loaded");
+    cy.get('[data-testid="inventory-create-paste-input"]').should(
+      "have.value",
+      bonzaURL
+    );
+    cy.get('[data-testid="inventory-item-description"]').should(
+      "contain.value",
+      bonzaURL
+    );
+    cy.get('[data-testid="inventory-item-create-dialog"]').should("be.visible");
+  });
+
   it("UI-SCREEN-INVENTORY-BONZA-003 shows duplicate candidates and can open the existing item", () => {
     const bonzaURL = "https://bonzaslotcars.com.au/product/bonza-mug-white/";
     const existingItem = {
