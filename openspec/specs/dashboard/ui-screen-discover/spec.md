@@ -90,11 +90,11 @@ has already been purchased or delivered.
 ## Use-Case IDs and E2E Mapping
 | UC ID | Flow | Expected Result | E2E Mapping |
 | --- | --- | --- | --- |
-| UC-DIS-01 | Filter discover list | Filtered candidates displayed | planned: `cypress/e2e/ui/discover.cy.ts` `discover-filtering` |
-| UC-DIS-02 | Ignore action | Candidate state updates to ignored | planned: `cypress/e2e/ui/discover.cy.ts` `discover-ignore` |
-| UC-DIS-03 | Add to wishlist action | Wishlist linkage created | planned: `cypress/e2e/ui/discover.cy.ts` `discover-wishlist` |
-| UC-DIS-04 | Track/create action | Pricing track or item create executes | planned: `cypress/e2e/ui/discover.cy.ts` `discover-track-create` |
-| UC-DIS-05 | Discover API failure | Error + retry appears | planned: `cypress/e2e/ui/discover.cy.ts` `discover-error-state` |
+| UC-DIS-01 | Filter discover list | Filtered candidates displayed | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-001 renders filterable candidate triage list` |
+| UC-DIS-02 | Ignore action | Candidate state updates to ignored | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-02..04 submits ignore wishlist track and create action payloads` |
+| UC-DIS-03 | Add to wishlist action | Wishlist linkage created | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-02..04 submits ignore wishlist track and create action payloads`; `UI-SCREEN-DISCOVER-006 promotes a candidate to Wishlist without purchased state` |
+| UC-DIS-04 | Track/create action | Pricing track or item create executes | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-002 + UC-DIS-02..04 submits ignore wishlist track and create action payloads` |
+| UC-DIS-05 | Discover API failure | Error + retry appears | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-003 shows retryable error state when discover API fails` |
 | UC-DIS-06 | Apply Filters action | `Apply Filters` triggers deterministic filtered-query refresh | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-001 + UC-DIS-06 applies query price and date filters without route transition` |
 | UC-DIS-07 | Boundary enforcement | Discoveries shows triage actions only; no provider query/run controls | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 keeps Discoveries as triage-only and excludes Market Watch query/run controls` |
 | UC-DIS-08 | Market Watch handoff | Discoveries can route to Market Watch handoff without losing context | implemented: `ui.web/cypress/e2e/dashboard/ui-screen-discover/spec.cy.ts` `UI-SCREEN-DISCOVER-004 provides explicit handoff action to Market Watch with preserved context` |
