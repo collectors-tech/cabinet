@@ -7,6 +7,10 @@ describe("UI-SCREEN-REPORTS", () => {
     cy.location("pathname", { timeout: 15000 }).should("match", /^\/reports\/?$/)
   }
 
+  function reportMetric(label: string) {
+    return cy.contains(".grid [data-slot='card-title']", label).parents("[data-slot='card']")
+  }
+
   it("UI-SCREEN-REPORTS-001 renders wishlist and pricing summary metrics", () => {
     cy.intercept("GET", "/api/profiles/active", {
       statusCode: 200,
@@ -36,7 +40,7 @@ describe("UI-SCREEN-REPORTS", () => {
     cy.wait("@pricingTrend")
     cy.wait("@pricingSource")
 
-    cy.contains("Reports").should("be.visible")
+    cy.get("main").find("h1").contains("Reports").should("be.visible")
     cy.contains("Wishlist Hits").should("be.visible")
     cy.contains("Price Median").should("be.visible")
     cy.contains("$24.00").should("be.visible")
@@ -75,6 +79,64 @@ describe("UI-SCREEN-REPORTS", () => {
     cy.get('[data-testid="reports-export-message"]')
       .should("be.visible")
       .and("contain", "Export generated")
+  })
+
+  it("UI-SCREEN-REPORTS-004 refreshes reports without route transition", () => {
+    let wishlistRequestCount = 0
+    cy.intercept("GET", "/api/profiles/active", {
+      statusCode: 200,
+      body: { id: "profile-reports-refresh" },
+    }).as("activeProfile")
+    cy.intercept(
+      "GET",
+      "/api/wishlist/hits?profile_id=profile-reports-refresh",
+      (req) => {
+        wishlistRequestCount += 1
+        req.reply({
+          statusCode: 200,
+          body: {
+            hits:
+              wishlistRequestCount === 1
+                ? [{ id: "initial-hit" }]
+                : [{ id: "refreshed-hit-1" }, { id: "refreshed-hit-2" }],
+          },
+        })
+      }
+    ).as("wishlistHitsRefresh")
+    cy.intercept("GET", "/api/pricing/stats?profile_id=profile-reports-refresh", {
+      statusCode: 200,
+      body: { min: 8, median: 16, latest: 32 },
+    }).as("pricingStats")
+    cy.intercept("GET", "/api/pricing/trend?profile_id=profile-reports-refresh", {
+      statusCode: 200,
+      body: { points: [{ t: "2026-01-01", v: 16 }] },
+    }).as("pricingTrend")
+    cy.intercept(
+      "GET",
+      "/api/pricing/by-source?profile_id=profile-reports-refresh",
+      {
+        statusCode: 200,
+        body: { sources: { ebay: { latest: 32 } } },
+      }
+    ).as("pricingSource")
+
+    signInToReports()
+    cy.wait("@activeProfile")
+    cy.wait("@wishlistHitsRefresh")
+    cy.wait("@pricingStats")
+    cy.wait("@pricingTrend")
+    cy.wait("@pricingSource")
+    reportMetric("Wishlist Hits").should("contain", "1")
+
+    cy.contains("button", "Refresh Reports").click()
+    cy.wait("@wishlistHitsRefresh")
+    cy.wait("@pricingStats")
+    cy.wait("@pricingTrend")
+    cy.wait("@pricingSource")
+
+    cy.location("pathname").should("match", /^\/reports\/?$/)
+    reportMetric("Wishlist Hits").should("contain", "2")
+    cy.contains("button", "Refresh Reports").should("be.enabled")
   })
 
   it("UI-SCREEN-REPORTS-004 disables export while reports are unavailable", () => {
@@ -129,7 +191,7 @@ describe("UI-SCREEN-REPORTS", () => {
     cy.contains("Loading...").should("be.visible")
     cy.wait("@wishlistRetry")
     cy.get('[data-testid="reports-error"]').should("be.visible")
-    cy.contains("button", "Retry").click()
+    cy.get('[data-testid="reports-error"]').contains("button", "Retry").click()
     cy.wait("@wishlistRetry")
     cy.get('[data-testid="reports-error"]').should("not.exist")
     cy.get('[data-testid="reports-empty-state"]').should("be.visible")
