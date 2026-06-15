@@ -110,6 +110,13 @@ Integrations screen SHALL show explicit loading and actionable error states for 
 - **WHEN** active profile bootstrap fails with `active_profile_*`
 - **THEN** screen MUST expose an in-route recovery path to either select an existing profile or create a new profile and continue bootstrap in place
 
+#### Scenario: Create active profile inline during recovery
+- **GIVEN** integrations route loads without an active profile context and no selectable profiles are returned
+- **WHEN** the user enters a new profile name and submits the recovery create action
+- **THEN** the UI MUST create the profile through the profiles API
+- **AND** the UI MUST activate the created profile before reloading provider registry and profile settings
+- **AND** the route MUST stay on `/integrations/`, clear the bootstrap error, and render the provider list for the created profile context
+
 ### Requirement UI-SCREEN-INTEGRATIONS-006: Integrations screen SHALL use provider-registry endpoint as list source-of-truth
 Integrations screen SHALL derive provider cards exclusively from `GET /api/providers/registry` response.
 
@@ -195,6 +202,6 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-13 | Validate provider health | Validation shows progress, reconciles health/last-run/last-checked, and reports resulting status | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-003 + UI-SCREEN-INTEGRATIONS-004 + UI-SCREEN-INTEGRATIONS-008: persists settings and reconciles validation health state` |
 | UC-INT-UI-14 | Primary integrations table | Default list renders full-page table columns with provider identity, type, connection, actions, health/last-run, and row actions | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-001 + UI-SCREEN-INTEGRATIONS-006 + INTEGRATION-022: defaults to table and supports filter/sort/view using registry data` |
 | UC-INT-UI-15 | Integrations table pagination | Larger provider lists page through stable table rows and reset to page 1 when filters change | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page integrations table` |
-| UC-INT-UI-16 | Recover missing active profile inline | Active-profile bootstrap error exposes selectable profile recovery, activates chosen profile, reloads registry/settings, and clears the route error | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context` |
+| UC-INT-UI-16 | Recover missing active profile inline | Active-profile bootstrap error exposes selectable profile recovery or inline profile creation, activates the resulting profile, reloads registry/settings, stays on `/integrations/`, and clears the route error | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context`, `UI-SCREEN-INTEGRATIONS-005 + UC-INT-UI-16: creates a missing active profile inline and reloads integrations` |
 | UC-INT-UI-17 | Hydrate direct route query state | Shared `/integrations/` URL applies `filter`, `type`, `sort`, and `view` on first render with matching provider results | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-17: applies direct route query state on first render` |
 | UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |

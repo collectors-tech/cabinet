@@ -1294,6 +1294,95 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="integrations-bootstrap-error"]').should('not.exist')
   })
 
+  it('UI-SCREEN-INTEGRATIONS-005 + UC-INT-UI-16: creates a missing active profile inline and reloads integrations', () => {
+    let activeProfileRecovered = false
+
+    cy.intercept('GET', '/api/profiles/active', (req) => {
+      if (!activeProfileRecovered) {
+        req.reply({ statusCode: 404, body: { error: 'active_profile_not_set' } })
+        return
+      }
+      req.reply({ statusCode: 200, body: { id: 'profile-e2e-created', name: 'Created Profile' } })
+    }).as('activeProfile')
+
+    cy.intercept('GET', '/api/profiles', {
+      statusCode: 200,
+      body: { profiles: [] },
+    }).as('profilesList')
+
+    cy.intercept('POST', '/api/profiles', (req) => {
+      expect(req.body.name).to.eq('Created Profile')
+      req.reply({
+        statusCode: 200,
+        body: { id: 'profile-e2e-created', name: 'Created Profile' },
+      })
+    }).as('createProfile')
+
+    cy.intercept('PUT', '/api/profiles/active', (req) => {
+      expect(req.body.profile_id).to.eq('profile-e2e-created')
+      activeProfileRecovered = true
+      req.reply({
+        statusCode: 200,
+        body: { id: 'profile-e2e-created', name: 'Created Profile' },
+      })
+    }).as('setActiveProfile')
+
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'created-profile-provider',
+            display_name: 'Created Profile Provider',
+            base_domain: 'created-profile.example.test',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure created profile provider credentials.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+        ],
+      },
+    }).as('registryRecovered')
+
+    cy.intercept('GET', '/api/profiles/profile-e2e-created/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    }).as('settingsRecovered')
+
+    signIn()
+
+    cy.wait('@profilesList')
+    cy.location('pathname').should('match', /^\/integrations\/?$/)
+    cy.get('[data-testid="integrations-profile-recovery"]').should('be.visible')
+    cy.get('[data-testid="integrations-recovery-no-profiles"]').should(
+      'contain',
+      'No selectable profiles were found'
+    )
+    cy.get('[data-testid="integrations-recovery-create-input"]').type(
+      'Created Profile'
+    )
+    cy.get('[data-testid="integrations-recovery-create-submit"]').click()
+    cy.wait('@createProfile')
+    cy.wait('@setActiveProfile')
+    cy.wait('@registryRecovered')
+    cy.wait('@settingsRecovered')
+    cy.location('pathname').should('match', /^\/integrations\/?$/)
+    cy.get('[data-testid="provider-row-created-profile-provider"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="integrations-bootstrap-error"]').should('not.exist')
+    cy.get('[data-testid="integrations-profile-recovery"]').should('not.exist')
+  })
+
   it('INTEGRATION-018 + INTEGRATION-019: runtime provider registry includes configured shop domains and capability classification fields', () => {
     cy.request('/api/providers/registry').then((response) => {
       expect(response.status).to.eq(200)
