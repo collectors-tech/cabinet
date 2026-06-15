@@ -1379,6 +1379,82 @@ describe('ui-screen-integrations', () => {
     cy.contains('Provider configuration saved.').scrollIntoView().should('be.visible')
   })
 
+  it('UI-SCREEN-INTEGRATIONS-010 + UC-INT-UI-12: labels provider config fields programmatically', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: {
+        settings: {
+          ebay_base_url: 'https://api.ebay.com',
+          ebay_marketplace: 'EBAY-AU',
+          'integration.ebay.items_per_page': '48',
+        },
+      },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[role="dialog"]').within(() => {
+      cy.contains('label', 'Base URL')
+        .should('have.attr', 'for', 'provider-base-url')
+        .then(($label) => {
+          cy.get(`#${$label.attr('for')}`).should(
+            'have.value',
+            'https://api.ebay.com'
+          )
+        })
+      cy.contains('label', 'Marketplace / Region')
+        .should('have.attr', 'for', 'provider-marketplace')
+        .then(($label) => {
+          cy.get(`#${$label.attr('for')}`).should('have.value', 'EBAY-AU')
+        })
+      cy.contains('label', 'Items per page')
+        .should('have.attr', 'for', 'provider-items-per-page')
+        .then(($label) => {
+          cy.get(`#${$label.attr('for')}`).should('have.value', '48')
+        })
+      cy.contains('label', 'New token / API key')
+        .should('have.attr', 'for', 'provider-token')
+        .then(($label) => {
+          cy.get(`#${$label.attr('for')}`)
+            .should('have.attr', 'type', 'password')
+            .and('have.value', '')
+        })
+    })
+  })
+
   it('UI-SCREEN-INTEGRATIONS-005: renders deterministic bootstrap error with retry control', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
