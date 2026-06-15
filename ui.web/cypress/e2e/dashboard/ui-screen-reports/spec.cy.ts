@@ -81,6 +81,58 @@ describe("UI-SCREEN-REPORTS", () => {
       .and("contain", "Export generated")
   })
 
+  it("UI-SCREEN-REPORTS-004 reports export failures deterministically", () => {
+    cy.intercept("GET", "/api/profiles/active", {
+      statusCode: 200,
+      body: { id: "profile-reports-export-failure" },
+    })
+    cy.intercept(
+      "GET",
+      "/api/wishlist/hits?profile_id=profile-reports-export-failure",
+      {
+        statusCode: 200,
+        body: { hits: [{ id: "h1" }] },
+      }
+    )
+    cy.intercept(
+      "GET",
+      "/api/pricing/stats?profile_id=profile-reports-export-failure",
+      {
+        statusCode: 200,
+        body: { min: 10, median: 20, latest: 30 },
+      }
+    )
+    cy.intercept(
+      "GET",
+      "/api/pricing/trend?profile_id=profile-reports-export-failure",
+      {
+        statusCode: 200,
+        body: { points: [{ t: "2026-01-01", v: 20 }] },
+      }
+    )
+    cy.intercept(
+      "GET",
+      "/api/pricing/by-source?profile_id=profile-reports-export-failure",
+      {
+        statusCode: 200,
+        body: { sources: { ebay: { latest: 30 } } },
+      }
+    )
+    cy.intercept("GET", "/api/data/export/csv/items", {
+      statusCode: 500,
+      body: { error: "csv_export_failed" },
+    }).as("exportCSVFailure")
+
+    signInToReports()
+    cy.get('[data-testid="reports-export-button"]').click()
+    cy.wait("@exportCSVFailure")
+
+    cy.location("pathname").should("match", /^\/reports\/?$/)
+    cy.get('[data-testid="reports-export-message"]')
+      .should("be.visible")
+      .and("contain", "reports_export_500")
+  })
+
   it("UI-SCREEN-REPORTS-004 refreshes reports without route transition", () => {
     let wishlistRequestCount = 0
     cy.intercept("GET", "/api/profiles/active", {
