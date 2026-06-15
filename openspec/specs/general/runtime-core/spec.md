@@ -197,3 +197,11 @@ Cabinet Cypress execution scripts MUST perform required local preparation before
 - **AND** it MUST log each preparation, runtime, and Cypress execution step to a timestamped run log
 - **AND** it MUST write a machine-readable run summary containing the spec, browser, base URL, runtime path, exit code, and ordered step list
 - **AND** it MUST retain existing runtime health, E2E hook, stale-port recycling, and project-local runtime path protections
+
+#### Scenario: Cypress runner fails on stale runtime app version
+- **GIVEN** the Cypress runner has resolved the current Git `source_commit`
+- **AND** the managed or reused runtime returns `/api/runtime.app_version`
+- **WHEN** the app version does not equal `rev-<source_commit first 12 chars>`
+- **THEN** the runner MUST fail before executing the browser spec with a diagnostic stale-runtime mismatch error
+- **AND** the run summary MUST record whether stale runtime app versions were explicitly allowed
+- **AND** the runner MAY proceed only when an explicit stale-runtime baseline override is passed

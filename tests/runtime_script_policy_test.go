@@ -54,3 +54,27 @@ func TestCypressScriptDisablesBrowserAutoOpenForManagedRuns(t *testing.T) {
 		t.Fatalf("expected managed cypress runtime startup to pass --no-open-browser")
 	}
 }
+
+func TestCypressScriptFailsOnStaleRuntimeAppVersion(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join("..", "cypress.ps1")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read cypress script: %v", err)
+	}
+	content := string(raw)
+	for _, snippet := range []string{
+		"[switch]$AllowStaleRuntimeVersion",
+		"Assert-RuntimeAppVersionMatchesSourceCommit",
+		"Runtime app version mismatch",
+		"/api/runtime app_version=",
+		"rev-$shortCommit",
+		"allow_stale_runtime_version",
+		"-AllowStaleRuntimeVersion",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected cypress script to include stale runtime guard snippet %q", snippet)
+		}
+	}
+}

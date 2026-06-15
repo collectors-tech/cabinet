@@ -7,6 +7,7 @@ param(
   [switch]$RequireE2EHooks,
   [switch]$ApiContractSmoke,
   [int[]]$ApiContractSmokeAllowedRuntimePorts = @(),
+  [switch]$AllowStaleRuntimeVersion,
   [string]$RuntimeExecutablePath = "",
   [switch]$AllowTempRuntimePath,
   [switch]$SkipDependencyPrep,
@@ -89,6 +90,55 @@ function Assert-AppPreflight([string]$url) {
     }
     Write-Step "Server preflight passed: $($check.Name) at $($check.Path)."
   }
+}
+
+function Get-AppRuntimeMetadata([string]$url) {
+  try {
+    $res = Invoke-WebRequest -Uri "$url/api/runtime" -UseBasicParsing -TimeoutSec 5
+    if ($res.StatusCode -lt 200 -or $res.StatusCode -ge 300) {
+      throw "status $($res.StatusCode)"
+    }
+    return ([string]$res.Content | ConvertFrom-Json)
+  }
+  catch {
+    throw "Unable to read runtime metadata at $url/api/runtime: $($_.Exception.Message)"
+  }
+}
+
+function Test-AppVersionMatchesSourceCommit([string]$appVersion, [string]$sourceCommit) {
+  if ([string]::IsNullOrWhiteSpace($sourceCommit)) {
+    return $true
+  }
+  if ([string]::IsNullOrWhiteSpace($appVersion)) {
+    return $false
+  }
+  $shortCommit = $sourceCommit.Trim()
+  if ($shortCommit.Length -gt 12) {
+    $shortCommit = $shortCommit.Substring(0, 12)
+  }
+  return $appVersion -eq "rev-$shortCommit"
+}
+
+function Assert-RuntimeAppVersionMatchesSourceCommit([string]$url, [string]$sourceCommit, [bool]$allowStaleRuntimeVersion) {
+  if ([string]::IsNullOrWhiteSpace($sourceCommit)) {
+    Write-Step "Runtime app version preflight skipped; source commit is unavailable."
+    return
+  }
+
+  $runtimeMetadata = Get-AppRuntimeMetadata $url
+  $appVersion = [string]$runtimeMetadata.app_version
+  $expectedVersion = "rev-$($sourceCommit.Substring(0, [Math]::Min(12, $sourceCommit.Length)))"
+  if (Test-AppVersionMatchesSourceCommit $appVersion $sourceCommit) {
+    Write-Step "Runtime app version preflight passed: app_version=$appVersion matches source_commit=$sourceCommit"
+    return
+  }
+
+  $message = "Runtime app version mismatch: /api/runtime app_version=$appVersion did not match expected $expectedVersion for source_commit=$sourceCommit. Rebuild the runtime or pass -AllowStaleRuntimeVersion for explicit stale-runtime baseline testing."
+  if ($allowStaleRuntimeVersion) {
+    Write-Step "Runtime app version preflight allowed stale runtime: $message"
+    return
+  }
+  throw $message
 }
 
 function Get-SourceCommit([string]$repoRoot) {
@@ -311,6 +361,7 @@ function Write-RunSummary(
   [string]$sourceCommit,
   [string]$logPath,
   [string]$apiContractSmokeSummaryPath,
+  [bool]$allowStaleRuntimeVersion,
   [bool]$startedServer
 ) {
   $runFinishedAt = Get-Date
@@ -362,6 +413,7 @@ function Write-RunSummary(
     runtime_instance_name = $runtimeInstanceName
     runtime_executable_path = $runtimeExecutablePath
     source_commit = $sourceCommit
+    allow_stale_runtime_version = $allowStaleRuntimeVersion
     started_server = $startedServer
     log_path = $logPath
     api_contract_smoke_summary_path = $apiContractSmokeSummaryPath
@@ -430,6 +482,9 @@ if ($RequireE2EHooks) {
 }
 if ($ApiContractSmoke) {
   $runnerCommand += "-ApiContractSmoke"
+}
+if ($AllowStaleRuntimeVersion) {
+  $runnerCommand += "-AllowStaleRuntimeVersion"
 }
 if (-not [string]::IsNullOrWhiteSpace($RuntimeExecutablePath)) {
   $runnerCommand += @("-RuntimeExecutablePath", $RuntimeExecutablePath)
@@ -517,6 +572,7 @@ try {
     if ($canReuse) {
       Write-Step "Reusing existing server at $BaseUrl"
       Assert-AppPreflight $BaseUrl
+      Assert-RuntimeAppVersionMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
     }
     else {
       Write-Step "Starting Cabinet server..."
@@ -560,6 +616,7 @@ try {
       }
       Write-Step "Server is healthy."
       Assert-AppPreflight $BaseUrl
+      Assert-RuntimeAppVersionMatchesSourceCommit $BaseUrl $sourceCommit $AllowStaleRuntimeVersion.IsPresent
     }
   }
 
@@ -633,6 +690,7 @@ finally {
     -sourceCommit $sourceCommit `
     -logPath $logPath `
     -apiContractSmokeSummaryPath $apiContractSmokeSummaryPath `
+    -allowStaleRuntimeVersion $AllowStaleRuntimeVersion.IsPresent `
     -startedServer $startedServer
   Write-Step "Run summary written: $summaryPath"
   if ($transcriptStarted) {
