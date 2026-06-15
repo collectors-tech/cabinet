@@ -27,6 +27,12 @@ Integrations screen SHALL apply supported query parameters on first render so sh
 - **THEN** the screen MUST apply the query-backed filter text, integration type, sort order, and rows/cards view before rendering provider results
 - **AND** visible provider results MUST match the query-backed connected/not-connected filter and text filter without requiring a second user action
 
+#### Scenario: Direct route query zero-result state
+- **GIVEN** an authenticated user opens `/integrations/` with query parameters that match no providers
+- **WHEN** profile, provider registry, and profile settings bootstrap resolves
+- **THEN** the screen MUST render a deterministic no-match state in the requested view
+- **AND** pagination and route query state MUST remain stable without opening provider dialogs
+
 ### Requirement UI-SCREEN-INTEGRATIONS-014: Integrations table rows SHALL expose deterministic row interaction surfaces
 Integrations table rows SHALL provide distinct single-click, double-click, and row-action behaviors without ambiguous dialog overlap.
 
@@ -198,3 +204,4 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-16 | Recover missing active profile inline | Active-profile bootstrap error exposes selectable profile recovery, activates chosen profile, reloads registry/settings, and clears the route error | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-005: recovers active-profile bootstrap inline by selecting or creating profile context` |
 | UC-INT-UI-17 | Hydrate direct route query state | Shared `/integrations/` URL applies `filter`, `type`, `sort`, and `view` on first render with matching provider results | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-17: applies direct route query state on first render` |
 | UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |
+| UC-INT-UI-19 | Hydrate direct route empty filter state | Shared `/integrations/` URL with no matching providers shows deterministic no-match table state, stable zero-result pagination, and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters` |
