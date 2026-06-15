@@ -19,7 +19,7 @@ describe('collections-protected-all-items', () => {
     cy.wait('@collectionsInventoryItems')
   }
 
-  it('keeps All Items protected from row rename and delete actions', () => {
+  it('UI-SCREEN-COLLECTIONS-030 keeps All Items protected from row rename and delete actions', () => {
     signInToCollections()
     cy.intercept('PUT', '/api/profiles/e2e-profile-001/settings').as(
       'saveCollectionSettings'
