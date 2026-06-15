@@ -46,6 +46,50 @@ describe('dashboard/ui-screen-discover', () => {
     cy.get('[data-testid="discover-list"]').contains('AFX Camaro Wildfire').should('be.visible')
   })
 
+  it('UI-SCREEN-DISCOVER-001 + UC-DIS-06 applies query price and date filters without route transition', () => {
+    cy.intercept('GET', '/api/discovery/not-in-collection*', (req) => {
+      const hasFullFilterSet =
+        req.query.q === 'mini-z' &&
+        req.query.price_max === '90' &&
+        req.query.date_from === '2026-06-01'
+      if (hasFullFilterSet) {
+        req.reply({
+          statusCode: 200,
+          body: {
+            items: [
+              {
+                candidate_id: 'cand-filter-full',
+                title: 'Kyosho Mini-Z Filter Candidate',
+                price: 88.5,
+                currency: 'AUD',
+                url: 'https://example.test/mini-z-filter',
+                last_seen: '2026-06-12T00:00:00Z',
+                stock_state: 'in_stock',
+                stock_count: 1,
+              },
+            ],
+          },
+        })
+        return
+      }
+      req.reply({ statusCode: 200, body: { items: [] } })
+    }).as('discoverFilteredList')
+
+    signInToDiscoveries()
+    cy.wait('@discoverFilteredList')
+
+    cy.get('[data-testid="discover-filter-query"]').type('mini-z')
+    cy.get('[data-testid="discover-filter-price"]').type('90')
+    cy.get('[data-testid="discover-filter-date"]').type('2026-06-01')
+    cy.get('[data-testid="discover-apply-filters"]').click()
+    cy.wait('@discoverFilteredList')
+
+    cy.location('pathname').should('match', /^\/discoveries\/?$/)
+    cy.get('[data-testid="discover-list"]')
+      .should('contain', 'Kyosho Mini-Z Filter Candidate')
+      .and('contain', 'A$88.50')
+  })
+
   it('UI-SCREEN-DISCOVER-002 executes ignore/wishlist/track/create actions deterministically', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 200,
