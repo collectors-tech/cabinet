@@ -540,6 +540,96 @@ describe('ui-screen-integrations', () => {
     )
   })
 
+  it('UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-empty-filter', name: 'E2E Empty Filter' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'connected-api',
+            display_name: 'Connected API',
+            base_domain: 'connected-api.example.test',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure connected API token.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+          {
+            provider_id: 'offline-webshop',
+            display_name: 'Offline Webshop',
+            base_domain: 'offline-webshop.example.test',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Webshop ingestion requires no token.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+    }).as('settings')
+
+    cy.visit(
+      '/sign-in?redirect=%2Fintegrations%2F%3Ffilter%3Darcade%26type%3Dconnected%26sort%3Dasc%26view%3Drows'
+    )
+    cy.get('input[name="email"]').clear().type('e2e-inventory@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should(
+      'match',
+      /^\/integrations\/?$/
+    )
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.location('search').should('contain', 'filter=arcade')
+    cy.location('search').should('contain', 'type=connected')
+    cy.location('search').should('contain', 'sort=asc')
+    cy.location('search').should('contain', 'view=rows')
+    cy.get('input[placeholder="Filter providers..."]').should('have.value', 'arcade')
+    cy.contains('button', 'Connected').should('be.visible')
+    cy.contains('button', 'Rows').should('have.attr', 'aria-pressed', 'true')
+    cy.get('[data-testid="integrations-table-surface"]')
+      .should('be.visible')
+      .and('contain', 'No integrations match current filters.')
+    cy.get('[data-testid="integrations-table-pagination"]').should(
+      'contain',
+      'Showing 0-0 of 0 integrations'
+    )
+    cy.get('[data-testid="integrations-table-page-status"]').should(
+      'contain',
+      'Page 1 of 1'
+    )
+    cy.get('[data-testid^="provider-row-"]').should('not.exist')
+    cy.get('[data-testid^="provider-card-"]').should('not.exist')
+    cy.get('[role="dialog"]').should('not.exist')
+  })
+
   it('TELEGRAM-CATALOG-CAPTURE-025: exposes Telegram assistant capture channel status from profile authorization settings', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
