@@ -235,6 +235,26 @@ Collections table pagination SHALL let users reach collections beyond the first 
 - **THEN** the selected row MUST remain reachable and selected
 - **AND** filtering MUST NOT send an additional profile-settings save
 
+### Requirement UI-SCREEN-COLLECTIONS-029: Collection members pagination SHALL preserve selected context without passive mutation
+The Collection members table SHALL let users reach selected-collection members beyond the first page while preserving the active collection context and keeping profile writes limited to explicit collection selection or item assignment actions.
+
+#### Scenario: Page selected collection members
+- **GIVEN** an authenticated user opens `/collections` with a selected collection containing enough assigned inventory members to require multiple members-table pages
+- **WHEN** the user navigates to a later members page
+- **THEN** later-page member rows MUST render for the selected collection
+- **AND** the active collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent by members pagination alone
+- **WHEN** the user refreshes the route
+- **THEN** the same selected collection context MUST be restored from profile settings
+- **AND** the later-page members MUST remain reachable
+
+#### Scenario: Filter after members pagination
+- **GIVEN** a selected collection has paginated member rows
+- **WHEN** the user filters the members table to a later-page member
+- **THEN** the matching member MUST remain visible for the selected collection
+- **AND** the members summary MUST reflect the filtered result count
+- **AND** filtering MUST NOT send a profile-settings save
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -264,3 +284,4 @@ Collections table pagination SHALL let users reach collections beyond the first 
 | UC-COL-26 | Row edit side panel | Double-click opens the right-side edit panel, record navigation changes draft context, valid rename persists, and duplicate rename does not save | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows` |
 | UC-COL-27 | Members panel contents | Selected collection drives member rows, live All Items count, assignment labels, and empty selected-collection states | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 reflects selected collection members and empty states` |
 | UC-COL-28 | Paginate collections table | Later-page rows render without passive settings writes; selected later-page context persists across refresh and remains selected after filtering | `ui.web/cypress/e2e/collections/collections-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes` |
+| UC-COL-29 | Paginate collection members | Later-page member rows render for the selected collection without passive settings writes; selected context survives refresh and member filtering remains non-mutating | `ui.web/cypress/e2e/collections/collections-members-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-029 preserves paginated collection members without passive settings writes` |
