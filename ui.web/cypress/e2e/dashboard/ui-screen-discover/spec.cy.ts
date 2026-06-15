@@ -90,7 +90,7 @@ describe('dashboard/ui-screen-discover', () => {
       .and('contain', 'A$88.50')
   })
 
-  it('UI-SCREEN-DISCOVER-002 executes ignore/wishlist/track/create actions deterministically', () => {
+  it('UI-SCREEN-DISCOVER-002 + UC-DIS-02..04 submits ignore wishlist track and create action payloads', () => {
     cy.intercept('GET', '/api/discovery/not-in-collection*', {
       statusCode: 200,
       body: {
@@ -108,9 +108,16 @@ describe('dashboard/ui-screen-discover', () => {
       },
     }).as('discoverList')
 
-    cy.intercept('POST', '/api/discovery/action', { statusCode: 200, body: { ok: true } }).as(
-      'discoverAction'
-    )
+    const expectedActions = ['ignore', 'add_to_wishlist', 'track_price', 'create_item']
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      const expectedAction = expectedActions.shift()
+      expect(req.body).to.deep.equal({
+        candidate_id: 'cand-002',
+        type: expectedAction,
+        payload: {},
+      })
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('discoverAction')
 
     signInToDiscoveries()
     cy.wait('@discoverList')
@@ -130,6 +137,7 @@ describe('dashboard/ui-screen-discover', () => {
     cy.get('[data-testid="discover-action-create-cand-002"]').click()
     cy.wait('@discoverAction')
     cy.get('[data-testid="discover-action-status"]').should('contain', 'create_item:cand-002')
+    cy.wrap(expectedActions).should('be.empty')
   })
 
   it('UI-SCREEN-DISCOVER-003 shows retryable error state when discover API fails', () => {
