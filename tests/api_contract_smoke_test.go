@@ -1200,6 +1200,85 @@ func TestCypressHarnessCanRunApiContractSmokeBeforeBrowserSpec(t *testing.T) {
 	}
 }
 
+func TestCypressHarnessFailsOnStaleRuntimeAppVersion(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/api/runtime":
+			mockRuntimeURL, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatalf("parse mock runtime URL: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"app_version":"rev-000000000000","runtime_host":"127.0.0.1","runtime_port":%s}`, mockRuntimeURL.Port())))
+		case "/sign-in":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html><body>Sign in</body></html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoRoot := filepath.Dir(currentFileDir(t))
+	logRoot := t.TempDir()
+	cmd := exec.Command(
+		"pwsh",
+		"-NoLogo",
+		"-NoProfile",
+		"-File", filepath.Join(repoRoot, "cypress.ps1"),
+		"-Spec", "cypress/e2e/general/api-docs/spec.cy.ts",
+		"-ReuseServer",
+		"-SkipDependencyPrep",
+		"-RuntimeExecutablePath", filepath.Join(repoRoot, "cypress.ps1"),
+		"-BaseUrl", srv.URL,
+		"-LogDir", logRoot,
+		"-LogName", "stale-runtime-version",
+	)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("cypress harness unexpectedly passed against stale runtime\n%s", string(output))
+	}
+
+	cypressSummaries, err := filepath.Glob(filepath.Join(logRoot, "*-stale-runtime-version.summary.json"))
+	if err != nil {
+		t.Fatalf("glob Cypress summaries: %v", err)
+	}
+	if len(cypressSummaries) != 1 {
+		t.Fatalf("expected one Cypress summary, got %d: %v\n%s", len(cypressSummaries), cypressSummaries, string(output))
+	}
+
+	raw, err := os.ReadFile(cypressSummaries[0])
+	if err != nil {
+		t.Fatalf("read Cypress summary: %v", err)
+	}
+	var cypressSummary struct {
+		ExitCode                 int    `json:"exit_code"`
+		Error                    string `json:"error"`
+		AllowStaleRuntimeVersion bool   `json:"allow_stale_runtime_version"`
+	}
+	if err := json.Unmarshal(raw, &cypressSummary); err != nil {
+		t.Fatalf("decode Cypress summary: %v\n%s", err, string(raw))
+	}
+	if cypressSummary.ExitCode != 1 {
+		t.Fatalf("Cypress summary exit_code = %d, want 1: %+v", cypressSummary.ExitCode, cypressSummary)
+	}
+	if cypressSummary.AllowStaleRuntimeVersion {
+		t.Fatalf("Cypress summary unexpectedly allowed stale runtime: %+v", cypressSummary)
+	}
+	if !strings.Contains(cypressSummary.Error, "Runtime app version mismatch") || !strings.Contains(cypressSummary.Error, "rev-000000000000") {
+		t.Fatalf("Cypress summary did not capture stale runtime mismatch: %+v\n%s", cypressSummary, string(output))
+	}
+}
+
 func TestCypressHarnessPreservesApiContractSmokeSummaryArtifactOnFailure(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell harness validation is exercised on the Windows QA lane")
