@@ -100,6 +100,117 @@ The Collections management summary SHALL NOT expose a standalone Browse action. 
 - **AND** the Inventory screen MUST show that collection as the active context
 - **AND** existing row edit and delete actions MUST remain available
 
+### Requirement UI-SCREEN-COLLECTIONS-011: Collections SHALL isolate persisted state by active profile
+Collections SHALL load collection rows, active collection context, and collection members from the active profile only.
+
+#### Scenario: Switch active profile
+- **GIVEN** two profiles have different persisted collection settings
+- **WHEN** the active profile changes and the user opens `/collections`
+- **THEN** the collections table MUST show the new active profile's collections
+- **AND** the active collection context MUST reflect the new active profile's persisted setting
+- **AND** members from the previous active profile MUST NOT leak into the new profile context
+
+### Requirement UI-SCREEN-COLLECTIONS-012: Inventory collection create SHALL stay synchronized with Collections
+Collections created from the Inventory folder tree SHALL persist through profile settings and remain available to the Collections management route.
+
+#### Scenario: Create collection from Inventory
+- **GIVEN** an authenticated user opens Inventory
+- **WHEN** the user creates a root collection from the folder tree
+- **THEN** the collection MUST become the active Inventory collection context
+- **AND** the created collection MUST persist across refresh
+- **AND** the same persisted collection state MUST be available to `/collections`
+
+### Requirement UI-SCREEN-COLLECTIONS-013: Wishlist collection create SHALL synchronize into Collections
+Collections created from the Wishlist table collection workflow SHALL persist into the shared profile collection state used by Collections.
+
+#### Scenario: Create collection from Wishlist
+- **GIVEN** an authenticated user opens Wishlist
+- **WHEN** the user creates a collection from the wishlist table collection workflow
+- **THEN** the collection MUST be saved through profile settings
+- **AND** opening `/collections` MUST show the created collection row
+- **AND** the active collection context MUST reflect the created collection
+
+### Requirement UI-SCREEN-COLLECTIONS-014: Collection renames SHALL propagate into compact filters
+Renaming a collection from Collections SHALL update downstream compact collection filters that use the shared profile collection state.
+
+#### Scenario: Rename collection and inspect Wishlist filter
+- **GIVEN** an authenticated user renames a collection from `/collections`
+- **WHEN** the user opens Wishlist and inspects the collection filter
+- **THEN** the renamed collection MUST appear in the filter
+- **AND** the old collection name MUST NOT remain as a selectable filter option
+- **AND** selecting the renamed collection MUST show the renamed filter state
+
+### Requirement UI-SCREEN-COLLECTIONS-015: Collection deletes SHALL propagate into compact filters
+Deleting a collection from Collections SHALL remove it from downstream compact collection filters and leave the active context deterministic.
+
+#### Scenario: Delete collection and inspect Wishlist filter
+- **GIVEN** an authenticated user deletes a non-protected collection from `/collections`
+- **WHEN** the delete is saved through profile settings
+- **THEN** the deleted collection MUST be absent from persisted collection settings
+- **AND** the active collection context MUST fall back deterministically
+- **AND** downstream compact filters MUST NOT show the deleted collection option
+
+### Requirement UI-SCREEN-COLLECTIONS-016: Collections SHALL render selected collection members in a lower table
+Collections SHALL show collection rows and selected collection inventory members as separate shared table surfaces on the same route.
+
+#### Scenario: Select collections and inspect members table
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** `All Items` is selected
+- **THEN** the lower members table MUST show live inventory members
+- **WHEN** the user selects a populated collection
+- **THEN** the members table MUST show only that collection's members
+- **WHEN** the user selects an empty collection
+- **THEN** the members table MUST show the selected collection empty state
+
+### Requirement UI-SCREEN-COLLECTIONS-017: Collection members table SHALL support deterministic filtering
+The selected collection members table SHALL expose a filter that limits visible member rows without changing the active collection context.
+
+#### Scenario: Filter collection members
+- **GIVEN** an authenticated user opens `/collections` with members visible
+- **WHEN** the user filters the members table
+- **THEN** only matching member rows MUST remain visible
+- **AND** nonmatching member rows MUST be hidden
+- **AND** the members summary MUST update deterministically
+
+### Requirement UI-SCREEN-COLLECTIONS-018: All Items count SHALL match live inventory
+The protected `All Items` collection row SHALL derive its count from the live inventory catalogue.
+
+#### Scenario: Render All Items count
+- **GIVEN** live inventory records are available
+- **WHEN** an authenticated user opens `/collections`
+- **THEN** the `All Items` row count MUST equal the live inventory item count
+- **AND** the members table summary MUST show the same live member total
+- **AND** representative live inventory members MUST be visible in the members table
+
+### Requirement UI-SCREEN-COLLECTIONS-019: Collections legacy assignment controls are retired from this route
+The pre-table in-route assignment control contract for Collections SHALL be retired and replaced by table/member-surface contracts so closure evidence does not imply active `UI-SCREEN-COLLECTIONS-019` Cypress coverage.
+
+#### Scenario: Retired assignment control slot
+- **GIVEN** the Collections table workflow is active
+- **WHEN** traceability is reviewed
+- **THEN** `UI-SCREEN-COLLECTIONS-019` MUST be documented as retired/replaced
+- **AND** active member-surface behavior MUST be covered by `UI-SCREEN-COLLECTIONS-016`, `017`, `018`, `020`, `021`, and later focused #1078 requirements
+
+### Requirement UI-SCREEN-COLLECTIONS-020: Collections tables SHALL stretch to available viewport height
+The Collections and members table surfaces SHALL use the available viewport height without causing page-level overflow in normal desktop review dimensions.
+
+#### Scenario: Render table surfaces at desktop height
+- **GIVEN** an authenticated user opens `/collections` at a desktop viewport
+- **WHEN** the Collections workspace renders
+- **THEN** both table cards MUST have usable vertical height
+- **AND** both shared table surfaces MUST have usable vertical height
+- **AND** the document MUST NOT introduce avoidable page-level vertical overflow
+
+### Requirement UI-SCREEN-COLLECTIONS-021: Collection member cells SHALL truncate long values safely
+The collection members table SHALL prevent long member values from overflowing columns while preserving readable clipped text.
+
+#### Scenario: Render long member values
+- **GIVEN** a live inventory member has unusually long text values
+- **WHEN** the user opens `/collections`
+- **THEN** the members table MUST NOT create horizontal table overflow
+- **AND** each visible member cell MUST keep its content inside the cell bounds
+- **AND** long member names MUST use ellipsis truncation
+
 ### Requirement UI-SCREEN-COLLECTIONS-022: Create collection dialog SHALL submit from Enter
 The Create collection dialog SHALL treat Enter in its single-line collection name input as the same create action as the primary save button while preserving the same validation and persistence contract.
 
@@ -305,6 +416,17 @@ Collections and collection-members tables SHALL expose deterministic column sort
 | UC-COL-08 | Move item | Item leaves source and appears in destination after refresh | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-008 moves an assigned item between collections and persists after refresh` |
 | UC-COL-09 | Route iconography | Tag icon remains visible for collections route | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-009 retains tag iconography for collections route identity` |
 | UC-COL-10 | View row in Inventory | Row View selects collection and navigates to Inventory | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-010 moves Browse into row-level View actions` |
+| UC-COL-11 | Switch active profile | Collections state and members switch to the active profile's persisted settings | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-011 switches collection state with the active profile` |
+| UC-COL-12 | Inventory creates collection | Inventory folder-tree collection create persists and stays available to Collections | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-012 keeps inventory collection create in the folder tree` |
+| UC-COL-13 | Wishlist creates collection | Wishlist table collection create persists into Collections manager state | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-013 reflects wishlist table collection create inside the collections manager` |
+| UC-COL-14 | Rename propagates to Wishlist | Collection rename updates Wishlist compact collection filter options | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-014 propagates rename into the wishlist table collection filter` |
+| UC-COL-15 | Delete propagates to filters | Collection delete removes the option from compact filters and falls back active context | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-015 removes deleted collections from compact filters` |
+| UC-COL-16 | Selected collection members | Lower members table reflects All Items, populated, and empty selected collection states | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-016 renders selected collection items in a lower table` |
+| UC-COL-17 | Filter collection members | Members table filter hides nonmatching rows and updates its summary | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-017 filters collection members within the members table surface` |
+| UC-COL-18 | All Items live count | All Items row count and members summary match live inventory records | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-018 keeps All Items count aligned with inventory members` |
+| UC-COL-19 | Retired assignment controls | Legacy in-route assignment controls are documented as retired/replaced by member-surface contracts | retired/replaced by `UI-SCREEN-COLLECTIONS-016`, `017`, `018`, `020`, `021`, and focused #1078 member/table specs |
+| UC-COL-20 | Viewport-height tables | Collections and members tables stretch to available viewport height without page overflow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-020 stretches both tables to the available viewport height` |
+| UC-COL-21 | Long member truncation | Members table clips long values inside cells with ellipsis | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-021 truncates long member table values instead of overflowing columns` |
 | UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
 | UC-COL-23 | Shortcut and command create | `Ctrl+N` and command palette entry open the same create dialog and persisted create flow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry` |
 | UC-COL-24 | Zero-result filters | Collections and members filters show deterministic empty states without profile-settings writes | `ui.web/cypress/e2e/collections/collections-filter-empty-states/spec.cy.ts` `UI-SCREEN-COLLECTIONS-024 shows deterministic zero-result filter states without saving settings` |
