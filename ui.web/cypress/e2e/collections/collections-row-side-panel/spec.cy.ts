@@ -16,7 +16,7 @@ describe('collections-row-side-panel', () => {
     cy.wait('@loadCollectionSettings')
   }
 
-  it('opens a right-side edit panel on double click and navigates visible records', () => {
+  it('UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows', () => {
     signInToCollections()
 
     cy.get('[data-testid="collections-row-store-1"]').click()
@@ -57,6 +57,16 @@ describe('collections-row-side-panel', () => {
       'contain.text',
       'Store 2 Panel'
     )
+    cy.request('/api/profiles/e2e-profile-001/settings').then((response) => {
+      const settings = (response.body.settings ?? {}) as Record<string, string>
+      const persisted = JSON.parse(
+        settings['collections.workspace.v1'] ?? '{}'
+      ) as {
+        collections?: string[]
+      }
+      expect(persisted.collections).to.include('Store 2 Panel')
+      expect(persisted.collections).not.to.include('Store 2')
+    })
     cy.reload()
     cy.wait('@loadCollectionSettings')
     cy.get('[data-testid="collections-row-store-2-panel"]').scrollIntoView()
