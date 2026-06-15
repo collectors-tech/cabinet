@@ -217,6 +217,24 @@ The Collections members panel SHALL render the selected collection's current inv
 - **THEN** the members panel MUST show the empty state for that selected collection
 - **AND** it MUST NOT display members from the previously selected collection
 
+### Requirement UI-SCREEN-COLLECTIONS-028: Collections table pagination SHALL preserve selection and avoid passive mutation
+Collections table pagination SHALL let users reach collections beyond the first page while keeping profile writes limited to explicit collection selection.
+
+#### Scenario: Select collection from a paginated page
+- **GIVEN** an authenticated user opens `/collections` with enough collections to require multiple table pages
+- **WHEN** the user navigates to a later collections page
+- **THEN** later-page collection rows MUST render without saving profile settings
+- **WHEN** the user selects a later-page collection row
+- **THEN** the selected collection context MUST update visibly
+- **AND** profile settings MUST persist the selected collection
+- **AND** the selected context MUST survive refresh
+
+#### Scenario: Filter after paginated selection
+- **GIVEN** a later-page collection is selected
+- **WHEN** the user filters the collections table to that row
+- **THEN** the selected row MUST remain reachable and selected
+- **AND** filtering MUST NOT send an additional profile-settings save
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -245,3 +263,4 @@ The Collections members panel SHALL render the selected collection's current inv
 | UC-COL-25 | Cancel transient workflows | Create/edit/delete cancellation closes transient surfaces without adding, renaming, deleting, changing active context, or saving settings | `ui.web/cypress/e2e/collections/collections-cancel-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-025 cancels create edit and delete workflows without saving settings` |
 | UC-COL-26 | Row edit side panel | Double-click opens the right-side edit panel, record navigation changes draft context, valid rename persists, and duplicate rename does not save | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows` |
 | UC-COL-27 | Members panel contents | Selected collection drives member rows, live All Items count, assignment labels, and empty selected-collection states | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 reflects selected collection members and empty states` |
+| UC-COL-28 | Paginate collections table | Later-page rows render without passive settings writes; selected later-page context persists across refresh and remains selected after filtering | `ui.web/cypress/e2e/collections/collections-pagination/spec.cy.ts` `UI-SCREEN-COLLECTIONS-028 preserves paginated collection selection without passive settings writes` |
