@@ -198,6 +198,25 @@ Collections row edit side panel SHALL provide deterministic record navigation an
 - **AND** the original and duplicate source rows MUST remain unchanged
 - **AND** the active collection context MUST remain on the row being edited
 
+### Requirement UI-SCREEN-COLLECTIONS-027: Collections members panel SHALL reflect selected collection contents
+The Collections members panel SHALL render the selected collection's current inventory members using the same live inventory catalogue and persisted workspace assignment state that drives collection row counts.
+
+#### Scenario: All Items reflects live inventory members
+- **GIVEN** an authenticated user opens `/collections` and live inventory records are available
+- **WHEN** the Collections screen loads with `All Items` selected
+- **THEN** the `All Items` row count MUST equal the live inventory member count
+- **AND** the members table summary MUST show all live inventory members
+- **AND** each visible member row MUST show its assigned or unassigned collection label
+
+#### Scenario: Selecting a collection updates the members panel
+- **GIVEN** an authenticated user opens `/collections` with assigned and empty collections available
+- **WHEN** the user selects a collection that has assigned members
+- **THEN** the members panel MUST show only the selected collection's assigned members
+- **AND** the persisted active collection setting MUST match the selected collection
+- **WHEN** the user selects a collection with no assigned members
+- **THEN** the members panel MUST show the empty state for that selected collection
+- **AND** it MUST NOT display members from the previously selected collection
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -225,3 +244,4 @@ Collections row edit side panel SHALL provide deterministic record navigation an
 | UC-COL-24 | Zero-result filters | Collections and members filters show deterministic empty states without profile-settings writes | `ui.web/cypress/e2e/collections/collections-filter-empty-states/spec.cy.ts` `UI-SCREEN-COLLECTIONS-024 shows deterministic zero-result filter states without saving settings` |
 | UC-COL-25 | Cancel transient workflows | Create/edit/delete cancellation closes transient surfaces without adding, renaming, deleting, changing active context, or saving settings | `ui.web/cypress/e2e/collections/collections-cancel-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-025 cancels create edit and delete workflows without saving settings` |
 | UC-COL-26 | Row edit side panel | Double-click opens the right-side edit panel, record navigation changes draft context, valid rename persists, and duplicate rename does not save | `ui.web/cypress/e2e/collections/collections-row-side-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-026 opens and validates collection row side-panel workflows` |
+| UC-COL-27 | Members panel contents | Selected collection drives member rows, live All Items count, assignment labels, and empty selected-collection states | `ui.web/cypress/e2e/collections/collections-members-panel/spec.cy.ts` `UI-SCREEN-COLLECTIONS-027 reflects selected collection members and empty states` |
