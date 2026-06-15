@@ -152,6 +152,34 @@ Collections table and collection-members table filters SHALL show deterministic 
 - **AND** the empty-row message MUST explain that no collection members match the current filter
 - **AND** no profile-settings save MUST be sent by filtering alone
 
+### Requirement UI-SCREEN-COLLECTIONS-025: Collections transient workflows SHALL cancel without mutation
+Collections create, edit, and delete transient surfaces SHALL close cleanly on explicit cancellation while preserving the current table rows, selected collection context, and persisted profile settings.
+
+#### Scenario: Cancel create collection
+- **GIVEN** an authenticated user opens `/collections`
+- **WHEN** the user opens Create collection, enters a draft name, and cancels
+- **THEN** the create dialog MUST close
+- **AND** no draft collection row MUST be added
+- **AND** the selected collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent
+
+#### Scenario: Cancel edit collection
+- **GIVEN** an authenticated user opens `/collections` with an editable collection selected
+- **WHEN** the user opens the row edit panel, changes the draft name, and cancels
+- **THEN** the edit panel MUST close
+- **AND** the original collection name MUST remain visible
+- **AND** no draft renamed row MUST be added
+- **AND** the selected collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent
+
+#### Scenario: Cancel delete collection
+- **GIVEN** an authenticated user opens `/collections` with a deletable collection row selected
+- **WHEN** the user opens the delete confirmation and cancels
+- **THEN** the delete dialog MUST close
+- **AND** the collection row MUST remain visible
+- **AND** the selected collection context MUST remain unchanged
+- **AND** no profile-settings save MUST be sent
+
 ## Acceptance Criteria
 - Collections uses one practical table-driven management surface.
 - Create, rename, delete, assign, and move workflows all happen from the collections route.
@@ -177,3 +205,4 @@ Collections table and collection-members table filters SHALL show deterministic 
 | UC-COL-22 | Press Enter in create dialog | Valid Enter submit persists; invalid Enter shows inline validation | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-022 submits Create collection with Enter and validates invalid Enter` |
 | UC-COL-23 | Shortcut and command create | `Ctrl+N` and command palette entry open the same create dialog and persisted create flow | `ui.web/cypress/e2e/collections/ui-screen-collections/spec.cy.ts` `UI-SCREEN-COLLECTIONS-023 opens Create collection from Ctrl+N and command entry` |
 | UC-COL-24 | Zero-result filters | Collections and members filters show deterministic empty states without profile-settings writes | `ui.web/cypress/e2e/collections/collections-filter-empty-states/spec.cy.ts` `UI-SCREEN-COLLECTIONS-024 shows deterministic zero-result filter states without saving settings` |
+| UC-COL-25 | Cancel transient workflows | Create/edit/delete cancellation closes transient surfaces without adding, renaming, deleting, changing active context, or saving settings | `ui.web/cypress/e2e/collections/collections-cancel-no-mutation/spec.cy.ts` `UI-SCREEN-COLLECTIONS-025 cancels create edit and delete workflows without saving settings` |
