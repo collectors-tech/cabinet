@@ -179,6 +179,97 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-row-provider-12"]').should('be.visible')
   })
 
+  it('UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'connected-api',
+            display_name: 'Connected API',
+            base_domain: 'connected-api.example.test',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure connected API token.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+          {
+            provider_id: 'offline-webshop',
+            display_name: 'Offline Webshop',
+            base_domain: 'offline-webshop.example.test',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure offline webshop API credentials.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.connected-api.enabled': 'true' } },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="provider-open-connected-api"]').click()
+    cy.get('[role="dialog"]').should('contain', 'Connected API')
+    cy.get('[data-testid="integrations-row-details-modal"]').should('not.exist')
+    cy.get('[data-testid="integrations-row-edit-modal"]').should('not.exist')
+    cy.location('search').should('not.contain', 'selected=connected-api')
+    cy.get('body').type('{esc}')
+    cy.get('[role="dialog"]').should('not.exist')
+
+    cy.get('[data-testid="provider-row-connected-api"]').click()
+    cy.get('[data-testid="integrations-row-details-modal"]', {
+      timeout: 1000,
+    })
+      .should('be.visible')
+      .and('contain', 'Connected API')
+      .and('contain', 'State:')
+      .and('contain', 'ready')
+      .and('contain', 'Health:')
+      .and('contain', 'ok')
+    cy.location('search').should('contain', 'selected=connected-api')
+    cy.get('[data-testid="integrations-row-edit-modal"]').should('not.exist')
+    cy.get('body').type('{esc}')
+    cy.get('[data-testid="integrations-row-details-modal"]').should('not.exist')
+
+    cy.get('[data-testid="provider-row-offline-webshop"]').dblclick()
+    cy.get('[data-testid="integrations-row-edit-modal"]')
+      .should('be.visible')
+      .and('contain', 'Offline Webshop')
+      .and('contain', 'Mode:')
+      .and('contain', 'web_ingestion')
+    cy.location('search').should('contain', 'selected=offline-webshop')
+    cy.get('[data-testid="integrations-row-details-modal"]').should('not.exist')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-012 + UC-INT-UI-08: filters rows by integration type selector', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
