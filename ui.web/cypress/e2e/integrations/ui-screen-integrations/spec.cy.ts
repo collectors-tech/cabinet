@@ -348,7 +348,7 @@ describe('ui-screen-integrations', () => {
     cy.get('[data-testid="provider-row-offline-webshop"]').should('not.exist')
   })
 
-  it('UI-SCREEN-INTEGRATIONS-010: applies direct route query state on first render', () => {
+  it('UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-17: applies direct route query state on first render', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
       body: { id: 'profile-e2e-001', name: 'E2E Local' },
