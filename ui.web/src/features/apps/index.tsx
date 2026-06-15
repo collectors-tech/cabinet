@@ -1893,74 +1893,87 @@ export function Apps({
 
         {!loading && viewMode === 'cards' ? (
           <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto pb-16 md:grid-cols-2 lg:grid-cols-3'>
-            {filteredProviders.map((provider) => (
-              <li
-                key={provider.provider_id}
-                className='rounded-lg border p-4 hover:shadow-md'
-                data-testid={`provider-card-${provider.provider_id}`}
-              >
-                <div className='mb-6 flex items-start justify-between gap-3'>
-                  <div className='space-y-1'>
-                    <h2 className='font-semibold'>{provider.display_name}</h2>
-                    <p className='text-xs text-muted-foreground'>
-                      {provider.base_domain}
-                    </p>
-                    <p
-                      className='text-xs text-muted-foreground'
-                      data-testid={`provider-api-family-${provider.provider_id}`}
+            {filteredProviders.length > 0 ? (
+              filteredProviders.map((provider) => (
+                <li
+                  key={provider.provider_id}
+                  className='rounded-lg border p-4 hover:shadow-md'
+                  data-testid={`provider-card-${provider.provider_id}`}
+                >
+                  <div className='mb-6 flex items-start justify-between gap-3'>
+                    <div className='space-y-1'>
+                      <h2 className='font-semibold'>{provider.display_name}</h2>
+                      <p className='text-xs text-muted-foreground'>
+                        {provider.base_domain}
+                      </p>
+                      <p
+                        className='text-xs text-muted-foreground'
+                        data-testid={`provider-api-family-${provider.provider_id}`}
+                      >
+                        API Family: {provider.api_family ?? 'custom'}
+                      </p>
+                    </div>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      data-testid={`provider-open-${provider.provider_id}`}
+                      onClick={() => openIntegration(provider)}
                     >
-                      API Family: {provider.api_family ?? 'custom'}
-                    </p>
+                      {isConnected(provider, settings) ? 'Edit' : 'Connect'}
+                    </Button>
                   </div>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    data-testid={`provider-open-${provider.provider_id}`}
-                    onClick={() => openIntegration(provider)}
-                  >
-                    {isConnected(provider, settings) ? 'Edit' : 'Connect'}
-                  </Button>
-                </div>
-                <div className='space-y-1 text-xs text-muted-foreground'>
-                  <p>Status: {provider.state}</p>
-                  <p>Health: {provider.health?.status ?? 'unknown'}</p>
-                  <p>Last run: {provider.last_run?.status ?? 'never'}</p>
-                </div>
-                <div className='mt-3 flex flex-wrap gap-1 text-[11px] text-muted-foreground'>
-                  {provider.capabilities.search ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>Search</span>
-                  ) : null}
-                  {provider.capabilities.stock_observation ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>Stock</span>
-                  ) : null}
-                  {provider.capabilities.pricing ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>
-                      Pricing
-                    </span>
-                  ) : null}
-                  {provider.capabilities.assistant ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>
-                      Assistant
-                    </span>
-                  ) : null}
-                  {provider.capabilities.image_help ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>
-                      Image help
-                    </span>
-                  ) : null}
-                  {provider.capabilities.media_capture ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>
-                      Media capture
-                    </span>
-                  ) : null}
-                  {provider.capabilities.text_capture ? (
-                    <span className='rounded bg-muted px-2 py-0.5'>
-                      Text capture
-                    </span>
-                  ) : null}
-                </div>
+                  <div className='space-y-1 text-xs text-muted-foreground'>
+                    <p>Status: {provider.state}</p>
+                    <p>Health: {provider.health?.status ?? 'unknown'}</p>
+                    <p>Last run: {provider.last_run?.status ?? 'never'}</p>
+                  </div>
+                  <div className='mt-3 flex flex-wrap gap-1 text-[11px] text-muted-foreground'>
+                    {provider.capabilities.search ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Search
+                      </span>
+                    ) : null}
+                    {provider.capabilities.stock_observation ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Stock
+                      </span>
+                    ) : null}
+                    {provider.capabilities.pricing ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Pricing
+                      </span>
+                    ) : null}
+                    {provider.capabilities.assistant ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Assistant
+                      </span>
+                    ) : null}
+                    {provider.capabilities.image_help ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Image help
+                      </span>
+                    ) : null}
+                    {provider.capabilities.media_capture ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Media capture
+                      </span>
+                    ) : null}
+                    {provider.capabilities.text_capture ? (
+                      <span className='rounded bg-muted px-2 py-0.5'>
+                        Text capture
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              ))
+            ) : (
+              <li
+                className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground md:col-span-2 lg:col-span-3'
+                data-testid='integrations-cards-empty-state'
+              >
+                No integrations match current filters.
               </li>
-            ))}
+            )}
           </ul>
         ) : null}
       </Main>
