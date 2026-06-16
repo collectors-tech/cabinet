@@ -51,6 +51,7 @@ type Candidate = {
   price?: number | string
   shipping?: number | string
   currency?: string
+  observed_currency?: string
   url?: string
   source_url?: string
   stock_status?: string
@@ -902,8 +903,9 @@ export function Scanner() {
     if (!price) {
       return 'Not provided'
     }
-    return candidate.currency?.trim()
-      ? `${price} ${candidate.currency.trim()}`
+    const currency = candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency
+      ? `${price} ${currency}`
       : price
   }
 
@@ -924,8 +926,9 @@ export function Scanner() {
     if (!shipping) {
       return 'Not provided'
     }
-    return candidate.currency?.trim()
-      ? `${shipping} ${candidate.currency.trim()}`
+    const currency = candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency
+      ? `${shipping} ${currency}`
       : shipping
   }
 
