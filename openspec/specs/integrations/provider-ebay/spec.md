@@ -38,6 +38,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the contract MUST document provider auth failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, `query_set_id`, and `next_action="review_provider_credentials_and_health"`.
 - **AND** the scanner query-set OpenAPI contract MUST document eBay-scoped saved-search inputs including `provider_scope=["ebay"]`, requested `items_per_page`, scheduling/enabled state, rate limits, and latest-run hydration metadata returned by list reloads.
 - **AND** the scanner candidates and discovery action OpenAPI contracts MUST document eBay saved-search handoff provenance fields, including `source="ebay"`, `query_set_id`, listing URL, `source_provider`, `query_name`, and `provider_scope`.
+- **AND** the discovery action response MUST return the applied `action`, `candidate_id`, and enriched audit metadata so clients can verify eBay source provider, query id, query name, provider scope, listing URL, source result URL, observed price/currency, and seller immediately after a Market Watch handoff.
 
 #### Scenario: Scanner run documents eBay auth error envelope
 - **GIVEN** an active profile runs an eBay-scoped scanner query without a usable bearer token, or with a token rejected by eBay
@@ -68,6 +69,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **WHEN** the operator inspects the output details and sends the first result to Wishlist or Inventory
 - **THEN** the output detail MUST display normalized price, shipping, stock, source URL, and handoff state fields for the eBay candidate
 - **THEN** the UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
+- **AND** the discovery action response MUST include the enriched eBay handoff audit metadata returned by the persisted action.
 - **AND** the downstream Wishlist and Inventory reloads MUST show eBay source provider, query id, query name, provider scope, and source URL provenance.
 
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state

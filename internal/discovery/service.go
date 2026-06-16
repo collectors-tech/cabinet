@@ -57,6 +57,13 @@ type Action struct {
 	Payload     map[string]any `json:"payload"`
 }
 
+type ActionResult struct {
+	OK          bool           `json:"ok"`
+	Action      ActionType     `json:"action"`
+	CandidateID string         `json:"candidate_id"`
+	Audit       map[string]any `json:"audit"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -119,13 +126,24 @@ func (s *Service) ListNotInCollection(ctx context.Context, f Filter) ([]Item, er
 }
 
 func (s *Service) ApplyAction(ctx context.Context, a Action) error {
+	_, err := s.ApplyActionWithResult(ctx, a)
+	return err
+}
+
+func (s *Service) ApplyActionWithResult(ctx context.Context, a Action) (ActionResult, error) {
 	if strings.TrimSpace(a.CandidateID) == "" {
-		return fmt.Errorf("candidate_id is required")
+		return ActionResult{}, fmt.Errorf("candidate_id is required")
 	}
 	if a.Payload == nil {
 		a.Payload = map[string]any{}
 	}
 	a.Payload = s.enrichDiscoveryActionPayload(ctx, a.CandidateID, a.Payload)
+	result := ActionResult{
+		OK:          true,
+		Action:      a.Type,
+		CandidateID: strings.TrimSpace(a.CandidateID),
+		Audit:       a.Payload,
+	}
 	reviewerNotes := payloadString(a.Payload, "reviewer_notes")
 	if reviewerNotes == "" {
 		reviewerNotes = payloadString(a.Payload, "notes")
@@ -136,17 +154,17 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 		VALUES (?, ?, ?, ?)
 	`, uuid.NewString(), a.CandidateID, string(a.Type), string(raw))
 	if err != nil {
-		return fmt.Errorf("insert discovery action: %w", err)
+		return ActionResult{}, fmt.Errorf("insert discovery action: %w", err)
 	}
 
 	switch a.Type {
 	case ActionReview:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "reviewing", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 	case ActionIgnore:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "ignored", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO ignored_candidates(candidate_id, ignored_at)
@@ -154,11 +172,11 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 			ON CONFLICT(candidate_id) DO UPDATE SET ignored_at = CURRENT_TIMESTAMP
 		`, a.CandidateID)
 		if err != nil {
-			return fmt.Errorf("ignore candidate: %w", err)
+			return ActionResult{}, fmt.Errorf("ignore candidate: %w", err)
 		}
 	case ActionArchive:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "archived", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO ignored_candidates(candidate_id, ignored_at)
@@ -166,11 +184,11 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 			ON CONFLICT(candidate_id) DO UPDATE SET ignored_at = CURRENT_TIMESTAMP
 		`, a.CandidateID)
 		if err != nil {
-			return fmt.Errorf("archive candidate: %w", err)
+			return ActionResult{}, fmt.Errorf("archive candidate: %w", err)
 		}
 	case ActionTrackPrice:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "purchase_candidate", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 		var itemID string
 		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
@@ -178,7 +196,7 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 		}
 	case ActionAddWishlist:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "wishlisted", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 		var itemID string
 		if err := s.db.QueryRowContext(ctx, `SELECT item_id FROM scanner_matches WHERE candidate_id = ?`, a.CandidateID).Scan(&itemID); err == nil && strings.TrimSpace(itemID) != "" {
@@ -231,7 +249,7 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 		}
 	case ActionCreateItem:
 		if err := s.updateCandidateTriage(ctx, a.CandidateID, "inventory_candidate", reviewerNotes); err != nil {
-			return err
+			return ActionResult{}, err
 		}
 		if !payloadConfirmsOwnedOrPurchased(a.Payload) {
 			break
@@ -256,7 +274,7 @@ func (s *Service) ApplyAction(ctx context.Context, a Action) error {
 			`, uuid.NewString(), strings.TrimSpace(profileID), "Unknown", "Unknown", partNumber, title, metadata, string(sourceURLs))
 		}
 	}
-	return nil
+	return result, nil
 }
 
 func (s *Service) enrichDiscoveryActionPayload(ctx context.Context, candidateID string, payload map[string]any) map[string]any {
