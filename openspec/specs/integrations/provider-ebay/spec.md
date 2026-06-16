@@ -54,6 +54,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - `next_action="review_provider_credentials_and_health"`
 - **AND** clients MUST be able to route the error to eBay credential setup and provider health review without treating it as a generic scanner failure.
 - **AND** Market Watch run feedback MUST preserve `PROVIDER_AUTH_MISSING` / `PROVIDER_AUTH_INVALID` diagnostic codes from the envelope and direct the operator to provider credential and health review.
+- **AND** the OpenAPI contract MUST expose a `429` scanner-run provider search failure response containing `PROVIDER_SEARCH_FAILED`, `provider="ebay"`, `query_set_id`, `next_action="check_provider_health_and_credentials"`, the preserved structured upstream Browse message, and optional `retry_after_seconds`.
 
 #### Scenario: Setup UI exposes credential and marketplace readiness
 - **GIVEN** the eBay integration dialog is opened for the active profile
