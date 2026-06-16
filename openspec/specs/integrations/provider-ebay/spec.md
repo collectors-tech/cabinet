@@ -21,6 +21,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 - **AND** the adapter MUST send the Browse request with bearer authorization, `Accept: application/json`, the configured eBay marketplace header, joined search keywords, max-price filter, exclusions, and the effective `items_per_page` limit from the saved query criteria.
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
+- **AND** non-auth Browse failures MUST preserve structured eBay error payload details, including upstream error id, domain, category, message, and long message when provided, while retaining the local `PROVIDER_SEARCH_FAILED` classification.
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
 
