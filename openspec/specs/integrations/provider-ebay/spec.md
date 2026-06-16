@@ -28,6 +28,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** Market Watch MUST display persisted scanner candidate prices and shipping with the `observed_currency` value returned by the candidate read API.
 - **AND** rejected eBay credentials MUST retain the local `PROVIDER_AUTH_INVALID` classification while preserving structured upstream auth error payload details, including error id, domain, category, message, and long message when provided.
 - **AND** non-auth Browse failures MUST preserve structured eBay error payload details, including upstream error id, domain, category, message, and long message when provided, while retaining the local `PROVIDER_SEARCH_FAILED` classification.
+- **AND** provider run APIs MUST route `PROVIDER_SEARCH_FAILED` responses to `next_action="check_provider_health_and_credentials"` instead of credential-only review while preserving the structured upstream Browse message.
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
 
@@ -36,6 +37,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **WHEN** the client reads the OpenAPI contract
 - **THEN** the contract MUST document the required `query_set_id` request field, `provider="ebay"`, persisted `candidates`, and `run` snapshot response fields.
 - **AND** the contract MUST document provider auth failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, `query_set_id`, and `next_action="review_provider_credentials_and_health"`.
+- **AND** the contract MUST document non-auth Browse failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_SEARCH_FAILED`, `query_set_id`, preserved upstream failure `message`, and `next_action="check_provider_health_and_credentials"`.
 - **AND** the scanner query-set OpenAPI contract MUST document eBay-scoped saved-search inputs including `provider_scope=["ebay"]`, requested `items_per_page`, scheduling/enabled state, rate limits, and latest-run hydration metadata returned by list reloads.
 - **AND** the scanner candidates and discovery action OpenAPI contracts MUST document eBay saved-search handoff provenance fields, including `source="ebay"`, `query_set_id`, listing URL, `source_provider`, `query_name`, and `provider_scope`.
 - **AND** the discovery action response MUST return the applied `action`, `candidate_id`, and enriched audit metadata so clients can verify eBay source provider, query id, query name, provider scope, listing URL, source result URL, observed price/currency, and seller immediately after a Market Watch handoff.

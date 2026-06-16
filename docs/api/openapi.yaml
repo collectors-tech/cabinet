@@ -620,6 +620,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EbayProviderRunAuthErrorResponse"
+        "429":
+          description: eBay Browse rejected the saved-search run for a non-auth provider condition such as rate limiting.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayProviderRunSearchErrorResponse"
   /api/matching/run:
     post:
       tags: [Matching]
@@ -3089,6 +3095,16 @@ components:
         provider: { type: string, enum: [ebay] }
         message: { type: string }
         next_action: { type: string, enum: [review_provider_credentials_and_health] }
+        query_set_id: { type: string }
+    EbayProviderRunSearchErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, query_set_id]
+      properties:
+        error: { type: string, enum: [failed_to_run_ebay_provider] }
+        error_code: { type: string, enum: [PROVIDER_SEARCH_FAILED] }
+        provider: { type: string, enum: [ebay] }
+        message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }
+        next_action: { type: string, enum: [check_provider_health_and_credentials] }
         query_set_id: { type: string }
     EbayProviderRunResponse:
       type: object

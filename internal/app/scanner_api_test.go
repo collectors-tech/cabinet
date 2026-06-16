@@ -355,6 +355,103 @@ func TestScannerRunMapsEbayAuthFailureToProviderErrorCode(t *testing.T) {
 	}
 }
 
+func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	profile := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/profiles",
+		strings.NewReader(`{"name":"ebay-search-failure-profile"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if profile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", profile.Code, profile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(profile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile payload: %v", err)
+	}
+	activate := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/active",
+		strings.NewReader(`{"profile_id":"`+p.ID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":12001,"domain":"API_BROWSE","category":"REQUEST","message":"rate limit reached","longMessage":"Retry after the provider window resets"}]}`))
+	}))
+	defer ebayStub.Close()
+
+	saveSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"valid-token","ebay_marketplace":"EBAY_AU"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save ebay settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	create := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/scanner/query-sets",
+		strings.NewReader(`{"name":"eBay Browse Failure","keywords":["afx"],"provider_scope":["ebay"],"enabled":true}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", create.Code, create.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create payload: %v", err)
+	}
+	querySetID, _ := created["id"].(string)
+
+	run := doRequest(
+		t,
+		a,
+		http.MethodPost,
+		"/api/providers/ebay/run",
+		strings.NewReader(`{"query_set_id":"`+querySetID+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if run.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 search failure, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode ebay run error payload: %v", err)
+	}
+	if payload["error_code"] != "PROVIDER_SEARCH_FAILED" || payload["provider"] != "ebay" {
+		t.Fatalf("unexpected provider search payload: %+v", payload)
+	}
+	if payload["next_action"] != "check_provider_health_and_credentials" {
+		t.Fatalf("expected provider-health next action, got %+v", payload)
+	}
+	message, _ := payload["message"].(string)
+	for _, want := range []string{"12001", "API_BROWSE", "REQUEST", "rate limit reached", "Retry after the provider window resets"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("expected message to preserve %q, got %q", want, message)
+		}
+	}
+}
+
 func TestScannerRecognitionReviewApplyRequiresConfirmationAndDoesNotMutate(t *testing.T) {
 	t.Parallel()
 

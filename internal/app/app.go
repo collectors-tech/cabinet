@@ -1969,7 +1969,7 @@ func New(cfg config.Config) (*App, error) {
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
-					"next_action":  "review_provider_credentials_and_health",
+					"next_action":  ebayProviderErrorNextAction(providerErr),
 					"query_set_id": req.QuerySetID,
 				})
 				return
@@ -2563,7 +2563,7 @@ func New(cfg config.Config) (*App, error) {
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
-					"next_action":  "review_provider_credentials_and_health",
+					"next_action":  ebayProviderErrorNextAction(providerErr),
 					"query_set_id": qs.ID,
 				})
 				return
@@ -7731,6 +7731,18 @@ func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
 		return mode
 	}
 	return "disabled"
+}
+
+func ebayProviderErrorNextAction(providerErr *ebay.ProviderError) string {
+	if providerErr == nil {
+		return "check_provider_health_and_credentials"
+	}
+	switch providerErr.ErrorCode {
+	case "PROVIDER_AUTH_MISSING", "PROVIDER_AUTH_INVALID":
+		return "review_provider_credentials_and_health"
+	default:
+		return "check_provider_health_and_credentials"
+	}
 }
 
 func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
