@@ -102,7 +102,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_INVALID", Message: fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)}
 	}
 	if resp.StatusCode >= 300 {
-		return nil, &ProviderError{StatusCode: resp.StatusCode, ErrorCode: "PROVIDER_SEARCH_FAILED", Message: fmt.Sprintf("ebay search status: %d", resp.StatusCode)}
+		return nil, &ProviderError{StatusCode: resp.StatusCode, ErrorCode: "PROVIDER_SEARCH_FAILED", Message: browseErrorMessage(resp)}
 	}
 
 	var payload struct {
@@ -148,6 +148,48 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func browseErrorMessage(resp *http.Response) string {
+	statusMessage := fmt.Sprintf("ebay search status: %d", resp.StatusCode)
+	var payload struct {
+		Errors []struct {
+			ErrorID     int    `json:"errorId"`
+			Domain      string `json:"domain"`
+			Category    string `json:"category"`
+			Message     string `json:"message"`
+			LongMessage string `json:"longMessage"`
+		} `json:"errors"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil || len(payload.Errors) == 0 {
+		return statusMessage
+	}
+	parts := make([]string, 0, len(payload.Errors))
+	for _, ebayErr := range payload.Errors {
+		details := []string{}
+		if ebayErr.ErrorID != 0 {
+			details = append(details, strconv.Itoa(ebayErr.ErrorID))
+		}
+		if domain := strings.TrimSpace(ebayErr.Domain); domain != "" {
+			details = append(details, domain)
+		}
+		if category := strings.TrimSpace(ebayErr.Category); category != "" {
+			details = append(details, category)
+		}
+		if message := strings.TrimSpace(ebayErr.Message); message != "" {
+			details = append(details, message)
+		}
+		if longMessage := strings.TrimSpace(ebayErr.LongMessage); longMessage != "" {
+			details = append(details, longMessage)
+		}
+		if len(details) > 0 {
+			parts = append(parts, strings.Join(details, " | "))
+		}
+	}
+	if len(parts) == 0 {
+		return statusMessage
+	}
+	return statusMessage + ": " + strings.Join(parts, "; ")
 }
 
 func compactSearchTerms(values []string) []string {
