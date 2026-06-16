@@ -91,6 +91,55 @@ func TestQuerySetAndRunNowLifecycle(t *testing.T) {
 	}
 }
 
+func TestRunNowPersistsObservedCurrency(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	qs, err := svc.CreateQuerySet(context.Background(), QuerySet{
+		Name:     "eBay currency",
+		Keywords: []string{"afx"},
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySet() error = %v", err)
+	}
+	provider := &testProvider{items: []CandidateInput{{
+		ListingID: "EBAY-CURRENCY-1",
+		Title:     "AFX currency candidate",
+		Price:     42.5,
+		Currency:  " aud ",
+		URL:       "https://example.test/ebay/currency",
+		Source:    "ebay",
+	}}}
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() error = %v", err)
+	}
+
+	var observedCurrency string
+	if err := conn.QueryRow(`SELECT observed_currency FROM scanner_candidates WHERE listing_id = ?`, "EBAY-CURRENCY-1").Scan(&observedCurrency); err != nil {
+		t.Fatalf("query observed currency: %v", err)
+	}
+	if observedCurrency != "AUD" {
+		t.Fatalf("expected observed currency AUD, got %q", observedCurrency)
+	}
+
+	provider.items[0].Currency = " usd "
+	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
+		t.Fatalf("RunNow() second pass error = %v", err)
+	}
+	if err := conn.QueryRow(`SELECT observed_currency FROM scanner_candidates WHERE listing_id = ?`, "EBAY-CURRENCY-1").Scan(&observedCurrency); err != nil {
+		t.Fatalf("query updated observed currency: %v", err)
+	}
+	if observedCurrency != "USD" {
+		t.Fatalf("expected updated observed currency USD, got %q", observedCurrency)
+	}
+}
+
 func TestRunScheduled(t *testing.T) {
 	t.Parallel()
 
