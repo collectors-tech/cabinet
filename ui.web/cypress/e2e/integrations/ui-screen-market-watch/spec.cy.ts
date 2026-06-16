@@ -1213,10 +1213,22 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
   })
 
-  it('INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff provenance', () => {
+  it('INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff response provenance', () => {
     let wishlistEntries: Array<Record<string, unknown>> = []
     let wishlistItems: Array<Record<string, unknown>> = []
     let inventoryItems: Array<Record<string, unknown>> = []
+    const ebayHandoffAudit = {
+      source: 'market_watch',
+      source_provider: 'ebay',
+      query_set_id: 'qs-mw-ebay-handoff',
+      query_name: 'eBay AFX Handoff',
+      provider_scope: ['ebay'],
+      listing_id: 'ebay-afx-camaro-1',
+      source_result_url: 'https://www.ebay.com/itm/ebay-afx-camaro-1',
+      observed_price: 112.5,
+      observed_currency: 'AUD',
+      seller: 'ebay-seller-1',
+    }
 
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
@@ -1256,6 +1268,7 @@ describe('integrations/ui-screen-market-watch', () => {
               shipping: 8.75,
               currency: 'AUD',
               url: 'https://www.ebay.com/itm/ebay-afx-camaro-1',
+              seller: 'ebay-seller-1',
               stock_status: 'available',
               handoff_state: 'wishlist_inventory_ready',
             },
@@ -1297,7 +1310,15 @@ describe('integrations/ui-screen-market-watch', () => {
             priority: 'medium',
           },
         ]
-        req.reply({ statusCode: 200, body: { ok: true } })
+        req.reply({
+          statusCode: 200,
+          body: {
+            ok: true,
+            action: 'add_to_wishlist',
+            candidate_id: 'cand-mw-ebay-handoff-1',
+            audit: ebayHandoffAudit,
+          },
+        })
         return
       }
       expect(req.body.type).to.equal('create_item')
@@ -1315,7 +1336,15 @@ describe('integrations/ui-screen-market-watch', () => {
             '{"source_provider":"ebay","query_set_id":"qs-mw-ebay-handoff","query_name":"eBay AFX Handoff","provider_scope":"ebay","source_result_url":"https://www.ebay.com/itm/ebay-afx-camaro-1"}',
         },
       ]
-      req.reply({ statusCode: 200, body: { ok: true } })
+      req.reply({
+        statusCode: 200,
+        body: {
+          ok: true,
+          action: 'create_item',
+          candidate_id: 'cand-mw-ebay-handoff-1',
+          audit: ebayHandoffAudit,
+        },
+      })
     }).as('discoveryHandoff')
     cy.intercept('GET', '/api/wishlist', (req) => {
       req.reply({ statusCode: 200, body: { items: wishlistEntries } })
@@ -1365,13 +1394,27 @@ describe('integrations/ui-screen-market-watch', () => {
     })
 
     cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-ebay-handoff"]').click()
-    cy.wait('@discoveryHandoff')
+    cy.wait('@discoveryHandoff').then((interception) => {
+      expect(interception.response?.body).to.deep.include({
+        ok: true,
+        action: 'add_to_wishlist',
+        candidate_id: 'cand-mw-ebay-handoff-1',
+      })
+      expect(interception.response?.body.audit).to.deep.equal(ebayHandoffAudit)
+    })
     cy.get('[data-testid="scanner-handoff-status"]').should(
       'contain',
       'wishlist_handoff_ok_cand-mw-ebay-handoff-1'
     )
     cy.get('[data-testid="scanner-handoff-inventory-qs-mw-ebay-handoff"]').click()
-    cy.wait('@discoveryHandoff')
+    cy.wait('@discoveryHandoff').then((interception) => {
+      expect(interception.response?.body).to.deep.include({
+        ok: true,
+        action: 'create_item',
+        candidate_id: 'cand-mw-ebay-handoff-1',
+      })
+      expect(interception.response?.body.audit).to.deep.equal(ebayHandoffAudit)
+    })
     cy.get('[data-testid="scanner-handoff-status"]').should(
       'contain',
       'inventory_handoff_ok_cand-mw-ebay-handoff-1'
