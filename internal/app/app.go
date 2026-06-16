@@ -1964,14 +1964,18 @@ func New(cfg config.Config) (*App, error) {
 					status = http.StatusBadRequest
 				}
 				w.WriteHeader(status)
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				payload := map[string]any{
 					"error":        "failed_to_run_scanner",
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
 					"next_action":  ebayProviderErrorNextAction(providerErr),
 					"query_set_id": req.QuerySetID,
-				})
+				}
+				if providerErr.RetryAfterSeconds > 0 {
+					payload["retry_after_seconds"] = providerErr.RetryAfterSeconds
+				}
+				_ = json.NewEncoder(w).Encode(payload)
 				return
 			}
 			http.Error(w, `{"error":"failed_to_run_scanner"}`, http.StatusBadRequest)
@@ -2558,14 +2562,18 @@ func New(cfg config.Config) (*App, error) {
 					status = http.StatusBadRequest
 				}
 				w.WriteHeader(status)
-				_ = json.NewEncoder(w).Encode(map[string]any{
+				payload := map[string]any{
 					"error":        "failed_to_run_ebay_provider",
 					"error_code":   providerErr.ErrorCode,
 					"provider":     "ebay",
 					"message":      providerErr.Error(),
 					"next_action":  ebayProviderErrorNextAction(providerErr),
 					"query_set_id": qs.ID,
-				})
+				}
+				if providerErr.RetryAfterSeconds > 0 {
+					payload["retry_after_seconds"] = providerErr.RetryAfterSeconds
+				}
+				_ = json.NewEncoder(w).Encode(payload)
 				return
 			}
 			http.Error(w, `{"error":"failed_to_run_ebay_provider"}`, http.StatusBadRequest)
