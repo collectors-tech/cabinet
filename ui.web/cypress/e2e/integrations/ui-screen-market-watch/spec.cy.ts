@@ -1197,6 +1197,190 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'https://bonzaslotcars.example/products/afx-mustang')
   })
 
+  it('INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff provenance', () => {
+    let wishlistEntries: Array<Record<string, unknown>> = []
+    let wishlistItems: Array<Record<string, unknown>> = []
+    let inventoryItems: Array<Record<string, unknown>> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-handoff',
+            name: 'eBay AFX Handoff',
+            keywords: ['AFX Camaro'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok', state: 'ready', provider: 'ebay' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-handoff')
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          query_set_id: 'qs-mw-ebay-handoff',
+          candidates: [
+            {
+              id: 'cand-mw-ebay-handoff-1',
+              query_set_id: 'qs-mw-ebay-handoff',
+              listing_id: 'ebay-afx-camaro-1',
+              title: 'eBay AFX Camaro Collector Lot',
+              source: 'ebay',
+              price: 112.5,
+              currency: 'AUD',
+              url: 'https://www.ebay.com/itm/ebay-afx-camaro-1',
+              stock_status: 'available',
+              handoff_state: 'wishlist_inventory_ready',
+            },
+          ],
+          run_summary: {
+            page_count: 1,
+            observed_page_size: 1,
+            candidates_total: 1,
+          },
+        },
+      })
+    }).as('runEbayQuery')
+    cy.intercept('POST', '/api/discovery/action', (req) => {
+      expect(req.body.candidate_id).to.equal('cand-mw-ebay-handoff-1')
+      expect(req.body.payload).to.deep.equal({
+        source: 'market_watch',
+        query_set_id: 'qs-mw-ebay-handoff',
+      })
+      if (req.body.type === 'add_to_wishlist') {
+        wishlistEntries = [
+          {
+            id: 'wish-mw-ebay-handoff-1',
+            item_id: 'item-mw-ebay-handoff-wishlist-1',
+            priority: 'medium',
+            target_price: 112.5,
+            notes:
+              'source_provider=ebay; query_set_id=qs-mw-ebay-handoff; query_name=eBay AFX Handoff; provider_scope=ebay',
+            created_at: '2026-06-16T08:24:00Z',
+            updated_at: '2026-06-16T08:24:00Z',
+          },
+        ]
+        wishlistItems = [
+          {
+            id: 'item-mw-ebay-handoff-wishlist-1',
+            title: 'eBay AFX Camaro Collector Lot',
+            part_number: 'ebay-afx-camaro-1',
+            status: 'wishlist',
+            category: 'Slot Cars',
+            priority: 'medium',
+          },
+        ]
+        req.reply({ statusCode: 200, body: { ok: true } })
+        return
+      }
+      expect(req.body.type).to.equal('create_item')
+      inventoryItems = [
+        {
+          id: 'item-mw-ebay-handoff-inventory-1',
+          title: 'eBay AFX Camaro Collector Lot',
+          part_number: 'ebay-afx-camaro-1',
+          status: 'owned',
+          category: 'Slot Cars',
+          priority: 'medium',
+          notes:
+            '{"source_provider":"ebay","query_set_id":"qs-mw-ebay-handoff","query_name":"eBay AFX Handoff","provider_scope":"ebay","source_result_url":"https://www.ebay.com/itm/ebay-afx-camaro-1"}',
+          description:
+            '{"source_provider":"ebay","query_set_id":"qs-mw-ebay-handoff","query_name":"eBay AFX Handoff","provider_scope":"ebay","source_result_url":"https://www.ebay.com/itm/ebay-afx-camaro-1"}',
+        },
+      ]
+      req.reply({ statusCode: 200, body: { ok: true } })
+    }).as('discoveryHandoff')
+    cy.intercept('GET', '/api/wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistEntries } })
+    }).as('wishlistEntries')
+    cy.intercept('GET', '/api/items?status=wishlist', (req) => {
+      req.reply({ statusCode: 200, body: { items: wishlistItems } })
+    }).as('wishlistItems')
+    cy.intercept('GET', '/api/items', (req) => {
+      req.reply({ statusCode: 200, body: { items: inventoryItems } })
+    }).as('inventoryItems')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: {} },
+    })
+    cy.intercept('GET', '/api/pricing/stats?item_id=item-mw-ebay-handoff-wishlist-1', {
+      statusCode: 200,
+      body: { min: 112.5, median: 112.5, latest: 112.5 },
+    }).as('wishlistPriceStats')
+    cy.intercept('GET', '/api/pricing/trend?item_id=item-mw-ebay-handoff-wishlist-1', {
+      statusCode: 200,
+      body: { points: [] },
+    }).as('wishlistPriceTrend')
+    cy.intercept('GET', '/api/pricing/history?item_id=item-mw-ebay-handoff-wishlist-1', {
+      statusCode: 200,
+      body: { history: [] },
+    }).as('wishlistPriceHistory')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-handoff"]').click()
+    cy.wait('@runEbayQuery')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-ebay-handoff"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'ebay').should('be.visible')
+      cy.contains('td', 'eBay AFX Camaro Collector Lot').should('be.visible')
+      cy.contains('td', '112.50 AUD').should('be.visible')
+      cy.contains('td', 'https://www.ebay.com/itm/ebay-afx-camaro-1').should(
+        'be.visible'
+      )
+      cy.contains('td', 'available').should('be.visible')
+      cy.contains('td', 'wishlist_inventory_ready').should('be.visible')
+    })
+
+    cy.get('[data-testid="scanner-handoff-wishlist-qs-mw-ebay-handoff"]').click()
+    cy.wait('@discoveryHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'wishlist_handoff_ok_cand-mw-ebay-handoff-1'
+    )
+    cy.get('[data-testid="scanner-handoff-inventory-qs-mw-ebay-handoff"]').click()
+    cy.wait('@discoveryHandoff')
+    cy.get('[data-testid="scanner-handoff-status"]').should(
+      'contain',
+      'inventory_handoff_ok_cand-mw-ebay-handoff-1'
+    )
+
+    cy.visit('/wishlist/')
+    cy.wait(['@wishlistEntries', '@wishlistItems'])
+    cy.contains('eBay AFX Camaro Collector Lot').should('be.visible')
+    cy.contains('source_provider=ebay').should('be.visible')
+    cy.contains('query_set_id=qs-mw-ebay-handoff').should('be.visible')
+    cy.contains('query_name=eBay AFX Handoff').should('be.visible')
+    cy.contains('provider_scope=ebay').should('be.visible')
+
+    cy.visit('/inventory/')
+    cy.wait('@inventoryItems')
+    cy.contains('button', 'Cards').click()
+    cy.get('[data-testid="inventory-item-row-item-mw-ebay-handoff-inventory-1"]')
+      .should('contain', 'eBay AFX Camaro Collector Lot')
+    cy.get('[data-testid="inventory-card-notes-item-mw-ebay-handoff-inventory-1"]')
+      .should('be.visible')
+      .and('contain', 'source_provider')
+      .and('contain', 'ebay')
+      .and('contain', 'query_set_id')
+      .and('contain', 'qs-mw-ebay-handoff')
+      .and('contain', 'source_result_url')
+      .and('contain', 'https://www.ebay.com/itm/ebay-afx-camaro-1')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-004 keeps no-output detail state explicit', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
