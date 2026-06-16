@@ -396,6 +396,9 @@ describe('integrations/ui-screen-market-watch', () => {
             listing_id: 'L-1',
             title: 'AFX Camaro',
             source: 'amazon',
+            price: 42.5,
+            shipping: 6.25,
+            observed_currency: 'USD',
           },
         ],
       },
@@ -407,6 +410,13 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.wait('@runScopedQuery')
     cy.wait('@listCandidates')
     cy.get('[data-testid="scanner-candidates-qs-mw-2"]').should('contain', 'amazon')
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-2"]').click()
+    cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('td', 'AFX Camaro').should('be.visible')
+      cy.contains('td', '42.50 USD').should('be.visible')
+      cy.contains('td', '6.25 USD').should('be.visible')
+    })
   })
 
   it('UI-SCREEN-MARKET-WATCH-002 runs eBay-only saved searches through the provider route', () => {
