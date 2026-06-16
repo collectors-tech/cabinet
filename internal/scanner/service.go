@@ -724,15 +724,35 @@ func (s *Service) ListFailuresByProfile(ctx context.Context, profileID string) (
 			return nil, fmt.Errorf("scan failure: %w", err)
 		}
 		out = append(out, map[string]string{
-			"query_set_id":  q,
-			"provider":      p,
-			"message":       m,
-			"created_at":    c,
-			"reason":        m,
-			"last_error_at": c,
+			"query_set_id":   q,
+			"provider":       p,
+			"message":        m,
+			"created_at":     c,
+			"reason":         m,
+			"last_error_at":  c,
+			"retry_guidance": retryGuidanceForProviderFailure(p),
+			"next_action":    nextActionForProviderFailure(p),
 		})
 	}
 	return out, rows.Err()
+}
+
+func retryGuidanceForProviderFailure(provider string) string {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "ebay":
+		return "Check provider health, credentials, and retry the operation."
+	default:
+		return "Review provider status and retry the operation."
+	}
+}
+
+func nextActionForProviderFailure(provider string) string {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "ebay":
+		return "check_provider_health_and_credentials"
+	default:
+		return "review_provider_status"
+	}
 }
 
 func (s *Service) ProviderHealth(ctx context.Context, provider string) (map[string]string, error) {

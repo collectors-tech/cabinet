@@ -159,6 +159,16 @@ func TestFailureSnapshotsAreProfileScoped(t *testing.T) {
 	if len(profileAFailures) != 1 || profileAFailures[0]["query_set_id"] != failingQuery.ID {
 		t.Fatalf("expected profile-a failure for its query set, got %+v", profileAFailures)
 	}
+	for key, expected := range map[string]string{
+		"provider":       "ebay",
+		"reason":         "temporary failure",
+		"retry_guidance": "Check provider health, credentials, and retry the operation.",
+		"next_action":    "check_provider_health_and_credentials",
+	} {
+		if got := profileAFailures[0][key]; got != expected {
+			t.Fatalf("expected profile-a failure %s=%q, got %q in %+v", key, expected, got, profileAFailures[0])
+		}
+	}
 	profileBFailures, err := svc.ListFailuresByProfile(context.Background(), "profile-b")
 	if err != nil {
 		t.Fatalf("ListFailuresByProfile(profile-b) error = %v", err)
