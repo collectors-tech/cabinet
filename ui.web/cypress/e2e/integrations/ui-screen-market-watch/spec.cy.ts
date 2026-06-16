@@ -533,6 +533,8 @@ describe('integrations/ui-screen-market-watch', () => {
                   query_set_id: 'qs-mw-failure',
                   provider: 'ebay',
                   message: 'eBay credentials need attention',
+                  retry_guidance: 'Check provider health, credentials, and retry the operation.',
+                  next_action: 'check_provider_health_and_credentials',
                   created_at: '2026-05-28T03:51:00Z',
                 },
               ],
@@ -585,6 +587,10 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-failures"]').within(() => {
       cy.contains('ebay').should('be.visible')
       cy.contains('eBay credentials need attention').should('be.visible')
+      cy.contains('Retry guidance: Check provider health, credentials, and retry the operation.').should(
+        'be.visible'
+      )
+      cy.contains('Next action: check_provider_health_and_credentials').should('be.visible')
       cy.get('[data-testid="scanner-retry-qs-mw-failure"]').click()
     })
     cy.wait('@retryFailure')
