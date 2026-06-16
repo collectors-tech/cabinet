@@ -178,6 +178,35 @@ func TestProviderSearchReturnsActionableAuthError(t *testing.T) {
 	}
 }
 
+func TestProviderSearchPreservesStructuredAuthErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":1100,"domain":"ACCESS","category":"REQUEST","message":"Access token invalid","longMessage":"Token scope is missing Browse access"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{BaseURL: srv.URL, BearerToken: "expired-token", Marketplace: "EBAY_AU"})
+	_, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"pokemon"}})
+	if err == nil {
+		t.Fatal("expected structured auth error")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T %v", err, err)
+	}
+	if providerErr.StatusCode != http.StatusUnauthorized || providerErr.ErrorCode != "PROVIDER_AUTH_INVALID" {
+		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	for _, want := range []string{"1100", "ACCESS", "REQUEST", "Access token invalid", "Token scope is missing Browse access"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("expected provider auth error message to preserve %q, got %q", want, providerErr.Message)
+		}
+	}
+}
+
 func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 	t.Parallel()
 

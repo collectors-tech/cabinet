@@ -99,7 +99,11 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_INVALID", Message: fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)}
+		return nil, &ProviderError{
+			StatusCode: http.StatusUnauthorized,
+			ErrorCode:  "PROVIDER_AUTH_INVALID",
+			Message:    ebayErrorMessage(resp, fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)),
+		}
 	}
 	if resp.StatusCode >= 300 {
 		return nil, &ProviderError{StatusCode: resp.StatusCode, ErrorCode: "PROVIDER_SEARCH_FAILED", Message: browseErrorMessage(resp)}
@@ -151,7 +155,10 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 }
 
 func browseErrorMessage(resp *http.Response) string {
-	statusMessage := fmt.Sprintf("ebay search status: %d", resp.StatusCode)
+	return ebayErrorMessage(resp, fmt.Sprintf("ebay search status: %d", resp.StatusCode))
+}
+
+func ebayErrorMessage(resp *http.Response, statusMessage string) string {
 	var payload struct {
 		Errors []struct {
 			ErrorID     int    `json:"errorId"`
