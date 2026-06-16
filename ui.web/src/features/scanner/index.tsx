@@ -32,6 +32,8 @@ type Failure = {
   query_set_id: string
   provider: string
   message: string
+  retry_guidance?: string
+  next_action?: string
 }
 
 type ActionFeedback = {
@@ -2350,6 +2352,16 @@ export function Scanner() {
                     <p className='text-xs text-muted-foreground'>
                       {failure.message}
                     </p>
+                    {failure.retry_guidance ? (
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        Retry guidance: {failure.retry_guidance}
+                      </p>
+                    ) : null}
+                    {failure.next_action ? (
+                      <p className='text-xs text-muted-foreground'>
+                        Next action: {failure.next_action}
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     size='sm'
