@@ -82,7 +82,16 @@ describe('integrations/ui-screen-scanner', () => {
     cy.intercept('GET', '/api/scanner/failures', {
       statusCode: 200,
       body: {
-        failures: [{ id: 'failure-1', query_set_id: 'qs-9', provider: 'ebay', message: 'timeout' }],
+        failures: [
+          {
+            id: 'failure-1',
+            query_set_id: 'qs-9',
+            provider: 'ebay',
+            message: 'PROVIDER_AUTH_INVALID: eBay credentials were rejected',
+            retry_guidance: 'Review eBay credentials and provider health before retrying.',
+            next_action: 'check_provider_health_and_credentials',
+          },
+        ],
       },
     }).as('failures')
     cy.intercept('GET', '/api/provider/health?provider=ebay', {
@@ -98,6 +107,14 @@ describe('integrations/ui-screen-scanner', () => {
     cy.wait(['@querySets', '@failures', '@providerHealth'])
 
     cy.get('[data-testid="scanner-provider-health"]').should('contain', 'degraded')
+    cy.get('[data-testid="scanner-failures"]').within(() => {
+      cy.contains('ebay').should('be.visible')
+      cy.contains('PROVIDER_AUTH_INVALID: eBay credentials were rejected').should('be.visible')
+      cy.contains('Retry guidance: Review eBay credentials and provider health before retrying.').should(
+        'be.visible'
+      )
+      cy.contains('Next action: check_provider_health_and_credentials').should('be.visible')
+    })
     cy.get('[data-testid="scanner-retry-qs-9"]').click()
     cy.wait('@retryFailure')
     cy.get('[data-testid="scanner-action-status"]').should('contain', 'retry_requested_qs-9')
