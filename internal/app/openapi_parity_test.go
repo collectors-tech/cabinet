@@ -322,7 +322,7 @@ func TestOpenAPIDocumentsEbayScannerRunAuthErrorEnvelope(t *testing.T) {
 		t.Fatalf("openapi missing /api/scanner/run path in %s", specPath)
 	}
 	for _, token := range []string{
-		"Runs the saved search and maps eBay provider auth failures to actionable provider error envelopes.",
+		"Runs the saved search and maps eBay provider auth and search failures to actionable provider error envelopes.",
 		`"401":`,
 		"$ref: \"#/components/schemas/ProviderAuthErrorResponse\"",
 	} {
@@ -345,6 +345,44 @@ func TestOpenAPIDocumentsEbayScannerRunAuthErrorEnvelope(t *testing.T) {
 	} {
 		if !strings.Contains(authErrorSchema, token) {
 			t.Fatalf("openapi ProviderAuthErrorResponse schema missing %q:\n%s", token, authErrorSchema)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsEbayScannerRunSearchErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/scanner/run")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/run path in %s", specPath)
+	}
+	for _, token := range []string{
+		"maps eBay provider auth and search failures to actionable provider error envelopes",
+		`"429":`,
+		"$ref: \"#/components/schemas/ProviderSearchErrorResponse\"",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/scanner/run section missing %q:\n%s", token, section)
+		}
+	}
+
+	searchErrorSchema, ok := openAPIComponentSection(raw, "ProviderSearchErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing ProviderSearchErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error: { type: string, enum: [failed_to_run_scanner] }",
+		"error_code: { type: string, enum: [PROVIDER_SEARCH_FAILED] }",
+		"provider: { type: string, enum: [ebay] }",
+		"message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }",
+		"next_action: { type: string, enum: [check_provider_health_and_credentials] }",
+		"retry_after_seconds:",
+		"Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(searchErrorSchema, token) {
+			t.Fatalf("openapi ProviderSearchErrorResponse schema missing %q:\n%s", token, searchErrorSchema)
 		}
 	}
 }

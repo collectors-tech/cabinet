@@ -528,7 +528,7 @@ paths:
     post:
       tags: [Scanner]
       summary: Run scanner now
-      description: Runs the saved search and maps eBay provider auth failures to actionable provider error envelopes.
+      description: Runs the saved search and maps eBay provider auth and search failures to actionable provider error envelopes.
       requestBody:
         required: true
         content:
@@ -559,6 +559,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProviderAuthErrorResponse"
+        "429":
+          description: eBay provider search failed due to upstream rate limiting or another recoverable Browse failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderSearchErrorResponse"
   /api/scanner/candidates:
     get:
       tags: [Scanner]
@@ -3062,6 +3068,20 @@ components:
         provider: { type: string, enum: [ebay] }
         message: { type: string }
         next_action: { type: string, enum: [review_provider_credentials_and_health] }
+        query_set_id: { type: string }
+    ProviderSearchErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, query_set_id]
+      properties:
+        error: { type: string, enum: [failed_to_run_scanner] }
+        error_code: { type: string, enum: [PROVIDER_SEARCH_FAILED] }
+        provider: { type: string, enum: [ebay] }
+        message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }
+        next_action: { type: string, enum: [check_provider_health_and_credentials] }
+        retry_after_seconds:
+          type: integer
+          nullable: true
+          description: Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.
         query_set_id: { type: string }
     ProviderHealthResponse:
       type: object
