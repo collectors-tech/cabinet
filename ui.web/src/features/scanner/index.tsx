@@ -179,6 +179,19 @@ function mapScannerActionError(
   status: number,
   errorCode: string
 ): ActionFeedback {
+  if (
+    operation === 'run' &&
+    (status === 429 || errorCode === 'PROVIDER_SEARCH_FAILED')
+  ) {
+    return {
+      summary: 'Provider search failed.',
+      actions: [
+        'Check provider health and retry guidance before running this query again.',
+        'Review credentials only if provider health reports an auth problem.',
+      ],
+      diagnosticCode: errorCode,
+    }
+  }
   if (operation === 'run' && status === 400) {
     return {
       summary: 'Run failed due to query validation.',
@@ -903,10 +916,9 @@ export function Scanner() {
     if (!price) {
       return 'Not provided'
     }
-    const currency = candidate.currency?.trim() || candidate.observed_currency?.trim()
-    return currency
-      ? `${price} ${currency}`
-      : price
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${price} ${currency}` : price
   }
 
   const formatCandidateSource = (candidate: Candidate) =>
@@ -926,10 +938,9 @@ export function Scanner() {
     if (!shipping) {
       return 'Not provided'
     }
-    const currency = candidate.currency?.trim() || candidate.observed_currency?.trim()
-    return currency
-      ? `${shipping} ${currency}`
-      : shipping
+    const currency =
+      candidate.currency?.trim() || candidate.observed_currency?.trim()
+    return currency ? `${shipping} ${currency}` : shipping
   }
 
   const formatCandidateStock = (candidate: Candidate) =>
