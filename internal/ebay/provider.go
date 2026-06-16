@@ -67,7 +67,8 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if p.bearerToken == "" {
 		return nil, &ProviderError{StatusCode: http.StatusUnauthorized, ErrorCode: "PROVIDER_AUTH_MISSING", Message: "missing ebay bearer token"}
 	}
-	terms := strings.Join(q.Keywords, " ")
+	keywords := compactSearchTerms(q.Keywords)
+	terms := strings.Join(keywords, " ")
 	if terms == "" {
 		return nil, fmt.Errorf("keywords are required")
 	}
@@ -76,8 +77,9 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	if q.MaxPrice > 0 {
 		v.Set("filter", fmt.Sprintf("price:[..%s]", strconv.FormatFloat(q.MaxPrice, 'f', 2, 64)))
 	}
-	if len(q.Exclusions) > 0 {
-		v.Set("exclude", strings.Join(q.Exclusions, ","))
+	exclusions := compactSearchTerms(q.Exclusions)
+	if len(exclusions) > 0 {
+		v.Set("exclude", strings.Join(exclusions, ","))
 	}
 	if q.ItemsPerPage > 0 {
 		v.Set("limit", strconv.Itoa(q.ItemsPerPage))
@@ -146,6 +148,18 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func compactSearchTerms(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		term := strings.TrimSpace(value)
+		if term == "" {
+			continue
+		}
+		out = append(out, term)
+	}
+	return out
 }
 
 func normalizeAvailability(items []struct {
