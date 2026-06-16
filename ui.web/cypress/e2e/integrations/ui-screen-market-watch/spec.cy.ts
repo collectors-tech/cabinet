@@ -253,6 +253,113 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
   })
 
+  it('INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle', () => {
+    let querySets: Array<{
+      id: string
+      name: string
+      keywords: string[]
+      provider_scope: string[]
+      schedule_cron?: string
+      enabled?: boolean
+    }> = []
+
+    cy.intercept('GET', '/api/scanner/query-sets', () => ({
+      statusCode: 200,
+      body: { query_sets: querySets },
+    })).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok', state: 'ready', provider: 'ebay' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/scanner/query-sets', (req) => {
+      expect(req.body.name).to.equal('eBay Slot Cars')
+      expect(req.body.keywords).to.deep.equal(['AFX', 'Mega G+'])
+      expect(req.body.provider_scope).to.deep.equal(['ebay'])
+      expect(req.body.schedule_cron).to.equal('0 */6 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-ebay-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 201, body: querySets[0] })
+    }).as('createEbayQuerySet')
+    cy.intercept('PUT', '/api/scanner/query-sets/qs-mw-ebay-lifecycle', (req) => {
+      expect(req.body.name).to.equal('eBay Slot Cars Edited')
+      expect(req.body.keywords).to.deep.equal(['AFX', 'Mega G+', 'Tomy'])
+      expect(req.body.provider_scope).to.deep.equal(['ebay'])
+      expect(req.body.schedule_cron).to.equal('30 */8 * * *')
+      querySets = [
+        {
+          id: 'qs-mw-ebay-lifecycle',
+          name: req.body.name,
+          keywords: req.body.keywords,
+          provider_scope: req.body.provider_scope,
+          schedule_cron: req.body.schedule_cron,
+          enabled: req.body.enabled,
+        },
+      ]
+      req.reply({ statusCode: 200, body: querySets[0] })
+    }).as('updateEbayQuerySet')
+    cy.intercept('DELETE', '/api/scanner/query-sets/qs-mw-ebay-lifecycle', (req) => {
+      querySets = []
+      req.reply({ statusCode: 204, body: '' })
+    }).as('deleteEbayQuerySet')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="market-watch-provider-single"]').select('ebay')
+    cy.get('[data-testid="scanner-new-query-name"]').type('eBay Slot Cars')
+    cy.get('[data-testid="scanner-new-query-keywords"]').type('AFX, Mega G+')
+    cy.get('[data-testid="scanner-new-query-schedule"]').clear().type('0 */6 * * *')
+    cy.get('[data-testid="scanner-create-query"]').click()
+    cy.wait('@createEbayQuerySet')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-ebay-lifecycle"]').should(
+      'contain',
+      'ebay'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-ebay-lifecycle"]').should(
+      'contain',
+      '0 */6 * * *'
+    )
+
+    cy.get('[data-testid="scanner-edit-qs-mw-ebay-lifecycle"]').click()
+    cy.get('[data-testid="scanner-edit-name-qs-mw-ebay-lifecycle"]')
+      .clear()
+      .type('eBay Slot Cars Edited')
+    cy.get('[data-testid="scanner-edit-keywords-qs-mw-ebay-lifecycle"]')
+      .clear()
+      .type('AFX, Mega G+, Tomy')
+    cy.get('[data-testid="scanner-edit-schedule-qs-mw-ebay-lifecycle"]')
+      .clear()
+      .type('30 */8 * * *')
+    cy.get('[data-testid="scanner-save-qs-mw-ebay-lifecycle"]').click()
+    cy.wait('@updateEbayQuerySet')
+    cy.contains('eBay Slot Cars Edited').should('be.visible')
+    cy.contains('AFX, Mega G+, Tomy').should('be.visible')
+    cy.get('[data-testid="scanner-query-providers-qs-mw-ebay-lifecycle"]').should(
+      'contain',
+      'ebay'
+    )
+    cy.get('[data-testid="scanner-query-schedule-qs-mw-ebay-lifecycle"]').should(
+      'contain',
+      '30 */8 * * *'
+    )
+
+    cy.get('[data-testid="scanner-delete-qs-mw-ebay-lifecycle"]').click()
+    cy.wait('@deleteEbayQuerySet')
+    cy.contains('eBay Slot Cars Edited').should('not.exist')
+    cy.get('[data-testid="scanner-empty-state"]').should('be.visible')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-002 sends provider scope in run payload and shows provider-attributed results', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
