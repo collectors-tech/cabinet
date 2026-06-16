@@ -53,6 +53,7 @@ type Candidate struct {
 	ListingID  string  `json:"listing_id"`
 	Title      string  `json:"title"`
 	Price      float64 `json:"price"`
+	Currency   string  `json:"observed_currency"`
 	Shipping   float64 `json:"shipping"`
 	URL        string  `json:"url"`
 	Image      string  `json:"image"`
@@ -679,7 +680,7 @@ func (s *Service) ListCandidates(ctx context.Context, querySetID string) ([]Cand
 
 func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, querySetID string) ([]Candidate, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
+		SELECT id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count
 		FROM scanner_candidates
 		WHERE query_set_id = ? AND (? = '' OR profile_id = ?)
 		ORDER BY last_seen DESC
@@ -691,7 +692,7 @@ func (s *Service) ListCandidatesByProfile(ctx context.Context, profileID, queryS
 	var out []Candidate
 	for rows.Next() {
 		var c Candidate
-		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
+		if err := rows.Scan(&c.ID, &c.QuerySetID, &c.ListingID, &c.Title, &c.Price, &c.Currency, &c.Shipping, &c.URL, &c.Image, &c.Seller, &c.FirstSeen, &c.LastSeen, &c.Status, &c.Source, &c.StockState, &c.StockCount); err != nil {
 			return nil, fmt.Errorf("scan candidate: %w", err)
 		}
 		out = append(out, c)

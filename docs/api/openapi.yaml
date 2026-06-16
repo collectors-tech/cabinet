@@ -3256,6 +3256,7 @@ components:
         listing_id: { type: string }
         title: { type: string }
         price: { type: number }
+        observed_currency: { type: string, description: Normalized listing price currency captured from provider payloads such as eBay Browse. }
         shipping: { type: number }
         url: { type: string }
         image: { type: string }

@@ -24,6 +24,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
 - **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve that amount in the shared scanner candidate `shipping` field.
 - **AND** scanner candidate persistence MUST store normalized eBay price currency in `scanner_candidates.observed_currency` for both newly inserted and refreshed candidates.
+- **AND** shared scanner candidate read APIs MUST expose the persisted normalized currency as `observed_currency` in eBay provider run and candidate-list responses.
 - **AND** rejected eBay credentials MUST retain the local `PROVIDER_AUTH_INVALID` classification while preserving structured upstream auth error payload details, including error id, domain, category, message, and long message when provided.
 - **AND** non-auth Browse failures MUST preserve structured eBay error payload details, including upstream error id, domain, category, message, and long message when provided, while retaining the local `PROVIDER_SEARCH_FAILED` classification.
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.

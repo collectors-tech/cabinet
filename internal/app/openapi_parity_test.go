@@ -120,6 +120,24 @@ func TestOpenAPIDocumentsScannerFailureRetryGuidance(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsScannerCandidateObservedCurrency(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	candidateSchema, ok := openAPIComponentSection(raw, "Candidate")
+	if !ok {
+		t.Fatalf("openapi missing Candidate schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"observed_currency: { type: string",
+		"Normalized listing price currency",
+	} {
+		if !strings.Contains(candidateSchema, token) {
+			t.Fatalf("openapi Candidate schema missing %q:\n%s", token, candidateSchema)
+		}
+	}
+}
+
 func TestOpenAPIOperationsDeclareClientErrorResponses(t *testing.T) {
 	t.Parallel()
 
