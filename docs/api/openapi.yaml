@@ -819,11 +819,11 @@ paths:
                         type: string
       responses:
         "200":
-          description: Action applied
+          description: Action applied with durable handoff provenance audit metadata.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                $ref: "#/components/schemas/DiscoveryActionResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/wishlist:
@@ -3285,6 +3285,34 @@ components:
         price: { type: number }
         url: { type: string }
         last_seen: { type: string }
+    DiscoveryActionResponse:
+      type: object
+      required: [ok, action, candidate_id, audit]
+      properties:
+        ok: { type: boolean }
+        action:
+          type: string
+          enum: [ignore, add_to_wishlist, track_price, create_item]
+        candidate_id: { type: string }
+        audit:
+          type: object
+          additionalProperties: true
+          properties:
+            source: { type: string, enum: [market_watch] }
+            source_provider: { type: string, enum: [ebay] }
+            query_set_id: { type: string }
+            query_name: { type: string }
+            provider_scope:
+              type: array
+              items:
+                type: string
+            listing_id: { type: string }
+            listing_url: { type: string }
+            source_result_url: { type: string }
+            observed_price: { type: number }
+            observed_currency: { type: string }
+            seller: { type: string }
+            triage_status: { type: string }
     WishlistEntryInput:
       type: object
       required: [item_id]

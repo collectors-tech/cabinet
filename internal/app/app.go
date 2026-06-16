@@ -3427,11 +3427,12 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
 			return
 		}
-		if err := discoverySvc.ApplyAction(r.Context(), req); err != nil {
+		result, err := discoverySvc.ApplyActionWithResult(r.Context(), req)
+		if err != nil {
 			http.Error(w, `{"error":"failed_to_apply_discovery_action"}`, http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/api/settings/reset-ignore-rules", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

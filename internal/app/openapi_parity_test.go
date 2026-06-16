@@ -536,9 +536,28 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		"source: { type: string, enum: [market_watch] }",
 		"source_provider: { type: string, enum: [ebay] }",
 		"provider_scope:",
+		"$ref: \"#/components/schemas/DiscoveryActionResponse\"",
 	} {
 		if !strings.Contains(actionSection, token) {
 			t.Fatalf("openapi /api/discovery/action section missing %q:\n%s", token, actionSection)
+		}
+	}
+
+	actionResponseSchema, ok := openAPIComponentSection(raw, "DiscoveryActionResponse")
+	if !ok {
+		t.Fatalf("openapi missing DiscoveryActionResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [ok, action, candidate_id, audit]",
+		"source_provider: { type: string, enum: [ebay] }",
+		"query_set_id: { type: string }",
+		"query_name: { type: string }",
+		"provider_scope:",
+		"source_result_url: { type: string }",
+		"observed_currency: { type: string }",
+	} {
+		if !strings.Contains(actionResponseSchema, token) {
+			t.Fatalf("openapi DiscoveryActionResponse schema missing %q:\n%s", token, actionResponseSchema)
 		}
 	}
 
