@@ -101,8 +101,12 @@ type ProviderRecord = {
   model_options?: string[]
   health?: {
     status: 'ok' | 'degraded' | 'down' | 'unknown' | string
+    state?: 'ready' | 'degraded' | 'disabled' | string
     last_checked_at?: string | null
     message?: string
+    last_error?: string | null
+    retry_after_seconds?: number | null
+    next_action?: string | null
   }
   last_run?: {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
@@ -1148,16 +1152,26 @@ export function Apps({
       }
       const payload = (await response.json()) as {
         status?: string
+        state?: string
         message?: string
+        last_error?: string | null
+        retry_after_seconds?: number | null
+        next_action?: string | null
         updated_at?: string
       }
       const checkedAt = payload.updated_at ?? new Date().toISOString()
       const healthStatus = payload.status ?? 'unknown'
+      const readinessState = payload.state ?? healthStatus
       const nextProvider: ProviderRecord = {
         ...editingProvider,
+        state: readinessState,
         health: {
           status: healthStatus,
+          state: readinessState,
           message: payload.message,
+          last_error: payload.last_error,
+          retry_after_seconds: payload.retry_after_seconds,
+          next_action: payload.next_action,
           last_checked_at: checkedAt,
         },
         last_run: {
@@ -1175,6 +1189,7 @@ export function Apps({
           provider.provider_id === editingProvider.provider_id
             ? {
                 ...provider,
+                state: nextProvider.state,
                 health: nextProvider.health,
                 last_run: nextProvider.last_run,
               }
@@ -2006,7 +2021,24 @@ export function Apps({
                   Support Profile:{' '}
                   {editingProvider.api_support_profile ?? 'unknown'}
                 </p>
+                <p>Readiness: {editingProvider.health?.state ?? editingProvider.state}</p>
                 <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
+                {editingProvider.health?.message ? (
+                  <p>Message: {editingProvider.health.message}</p>
+                ) : null}
+                {editingProvider.health?.last_error ? (
+                  <p>Last error: {editingProvider.health.last_error}</p>
+                ) : null}
+                {typeof editingProvider.health?.retry_after_seconds ===
+                'number' ? (
+                  <p>
+                    Retry after:{' '}
+                    {editingProvider.health.retry_after_seconds} seconds
+                  </p>
+                ) : null}
+                {editingProvider.health?.next_action ? (
+                  <p>Next action: {editingProvider.health.next_action}</p>
+                ) : null}
                 <p>Last run: {editingProvider.last_run?.status ?? 'never'}</p>
                 <p>
                   Last checked:{' '}
