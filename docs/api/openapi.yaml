@@ -771,6 +771,60 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /api/providers/ebay/listing-lifecycle/preview:
+    post:
+      tags: [Integrations]
+      summary: Preview an eBay seller listing lifecycle command without marketplace writes
+      description: Evaluates draft, publish, revise, end, and relist commands with capability and confirmation gates before any external eBay write can be treated as allowed.
+      operationId: previewEbayListingLifecycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EbayListingLifecycleRequest"
+      responses:
+        "200":
+          description: Listing lifecycle command preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string, enum: [ebay] }
+                  mode: { type: string, enum: [listing_lifecycle_preview] }
+                  preview:
+                    $ref: "#/components/schemas/EbayListingLifecyclePreview"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/ebay/listing-lifecycle/execute:
+    post:
+      tags: [Integrations]
+      summary: Execute local eBay listing draft commands or return remote-write blockers
+      description: Completes local draft-only lifecycle commands and keeps publish, revise, end, and relist operations blocked unless confirmed API capability and adapter wiring are present.
+      operationId: executeEbayListingLifecycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EbayListingLifecycleRequest"
+      responses:
+        "200":
+          description: Listing lifecycle execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string, enum: [ebay] }
+                  mode: { type: string, enum: [listing_lifecycle_execute] }
+                  execution:
+                    $ref: "#/components/schemas/EbayListingLifecycleExecution"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/discovery/not-in-collection:
     get:
       tags: [Discovery]
@@ -3618,6 +3672,53 @@ components:
           type: object
           additionalProperties:
             type: integer
+    EbayListingLifecycleRequest:
+      type: object
+      required: [command]
+      properties:
+        command:
+          type: string
+          enum: [draft, publish, revise, end, relist]
+        capability:
+          type: string
+          enum: [unsupported, draft_only, confirmed_api]
+        confirmed: { type: boolean }
+        item_id: { type: string }
+        draft_id: { type: string }
+        listing_id: { type: string }
+        title: { type: string }
+    EbayListingLifecyclePreview:
+      type: object
+      properties:
+        command: { type: string }
+        capability: { type: string }
+        confirmed: { type: boolean }
+        item_id: { type: string }
+        draft_id: { type: string }
+        listing_id: { type: string }
+        allowed: { type: boolean }
+        local_only: { type: boolean }
+        remote_write: { type: boolean }
+        confirmation_required: { type: boolean }
+        blocker: { type: string }
+    EbayListingLifecycleExecution:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/EbayListingLifecyclePreview"
+        - type: object
+          properties:
+            executed: { type: boolean }
+            status: { type: string }
+            response:
+              $ref: "#/components/schemas/EbayListingLifecycleResponse"
+    EbayListingLifecycleResponse:
+      type: object
+      properties:
+        provider: { type: string }
+        command: { type: string }
+        draft_id: { type: string }
+        listing_id: { type: string }
+        status: { type: string }
     LogEntry:
       type: object
       properties:

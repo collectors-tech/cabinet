@@ -44,6 +44,8 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/forwarding/package-match-suggestions",
 		"/api/providers/ebay/seller-operations/preview",
 		"/api/providers/ebay/seller-operations/execute",
+		"/api/providers/ebay/listing-lifecycle/preview",
+		"/api/providers/ebay/listing-lifecycle/execute",
 		"/api/providers/ebay/run",
 		"/api/chat/threads",
 		"/api/chat/messages",
@@ -94,6 +96,96 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		pathPattern := regexp.MustCompile(fmt.Sprintf(`(?m)^  %s:\r?$`, regexp.QuoteMeta(endpoint)))
 		if !pathPattern.Match(raw) {
 			t.Fatalf("openapi missing %s path in %s", endpoint, specPath)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsEbayListingLifecycleContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	for path, operationID := range map[string]string{
+		"/api/providers/ebay/listing-lifecycle/preview": "previewEbayListingLifecycle",
+		"/api/providers/ebay/listing-lifecycle/execute": "executeEbayListingLifecycle",
+	} {
+		section, ok := openAPIPathSection(raw, path)
+		if !ok {
+			t.Fatalf("openapi missing %s path in %s", path, specPath)
+		}
+		for _, token := range []string{
+			"operationId: " + operationID,
+			"$ref: \"#/components/schemas/EbayListingLifecycleRequest\"",
+		} {
+			if !strings.Contains(section, token) {
+				t.Fatalf("openapi %s section missing %q:\n%s", path, token, section)
+			}
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "EbayListingLifecycleRequest")
+	if !ok {
+		t.Fatalf("openapi missing EbayListingLifecycleRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"command:",
+		"enum: [draft, publish, revise, end, relist]",
+		"capability:",
+		"enum: [unsupported, draft_only, confirmed_api]",
+		"confirmed: { type: boolean }",
+		"item_id: { type: string }",
+		"draft_id: { type: string }",
+		"listing_id: { type: string }",
+		"title: { type: string }",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi EbayListingLifecycleRequest schema missing %q:\n%s", token, requestSchema)
+		}
+	}
+
+	previewSchema, ok := openAPIComponentSection(raw, "EbayListingLifecyclePreview")
+	if !ok {
+		t.Fatalf("openapi missing EbayListingLifecyclePreview schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"allowed: { type: boolean }",
+		"local_only: { type: boolean }",
+		"remote_write: { type: boolean }",
+		"confirmation_required: { type: boolean }",
+		"blocker: { type: string }",
+	} {
+		if !strings.Contains(previewSchema, token) {
+			t.Fatalf("openapi EbayListingLifecyclePreview schema missing %q:\n%s", token, previewSchema)
+		}
+	}
+
+	executionSchema, ok := openAPIComponentSection(raw, "EbayListingLifecycleExecution")
+	if !ok {
+		t.Fatalf("openapi missing EbayListingLifecycleExecution schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"executed: { type: boolean }",
+		"status: { type: string }",
+		"response:",
+		"$ref: \"#/components/schemas/EbayListingLifecycleResponse\"",
+	} {
+		if !strings.Contains(executionSchema, token) {
+			t.Fatalf("openapi EbayListingLifecycleExecution schema missing %q:\n%s", token, executionSchema)
+		}
+	}
+
+	responseSchema, ok := openAPIComponentSection(raw, "EbayListingLifecycleResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayListingLifecycleResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"provider: { type: string }",
+		"command: { type: string }",
+		"draft_id: { type: string }",
+		"listing_id: { type: string }",
+		"status: { type: string }",
+	} {
+		if !strings.Contains(responseSchema, token) {
+			t.Fatalf("openapi EbayListingLifecycleResponse schema missing %q:\n%s", token, responseSchema)
 		}
 	}
 }
