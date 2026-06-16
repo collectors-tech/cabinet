@@ -622,6 +622,7 @@ func (s *Service) persistCandidatesForProfile(
 		if source == "" {
 			source = "ebay"
 		}
+		observedCurrency := strings.ToUpper(strings.TrimSpace(it.Currency))
 		stockCount := it.StockCount
 		if stockCount < -1 {
 			stockCount = -1
@@ -629,18 +630,18 @@ func (s *Service) persistCandidatesForProfile(
 		stockState := normalizeStockState(it.StockState, stockCount)
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE scanner_candidates
-			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?, stock_state = ?, stock_count = ?
+			SET title = ?, price = ?, shipping = ?, url = ?, image = ?, seller = ?, last_seen = CURRENT_TIMESTAMP, status = 'seen', source = ?, stock_state = ?, stock_count = ?, observed_currency = ?
 			WHERE listing_id = ? AND (? = '' OR profile_id = ?)
-		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
+		`, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency, it.ListingID, strings.TrimSpace(profileID), strings.TrimSpace(profileID))
 		if err != nil {
 			return RunResult{}, fmt.Errorf("update candidate: %w", err)
 		}
 		affected, _ := res.RowsAffected()
 		if affected == 0 {
 			_, err := s.db.ExecContext(ctx, `
-				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?)
-			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount)
+				INSERT INTO scanner_candidates(id, profile_id, query_set_id, listing_id, title, price, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count, observed_currency)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'new', ?, ?, ?, ?)
+			`, uuid.NewString(), strings.TrimSpace(profileID), querySetID, it.ListingID, it.Title, it.Price, it.Shipping, it.URL, it.Image, it.Seller, source, stockState, stockCount, observedCurrency)
 			if err != nil {
 				return RunResult{}, fmt.Errorf("insert candidate: %w", err)
 			}
