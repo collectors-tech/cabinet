@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/collectors-tech/cabinet/internal/scanner"
@@ -14,6 +15,30 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected Browse search GET, got %s", r.Method)
+		}
+		if r.URL.Path != "/buy/browse/v1/item_summary/search" {
+			t.Errorf("expected Browse search path, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token" {
+			t.Errorf("expected bearer auth header, got %q", got)
+		}
+		if got := r.Header.Get("X-EBAY-C-MARKETPLACE-ID"); got != "EBAY_US" {
+			t.Errorf("expected marketplace header EBAY_US, got %q", got)
+		}
+		if got := r.Header.Get("Accept"); got != "application/json" {
+			t.Errorf("expected Accept application/json, got %q", got)
+		}
+		if got := r.URL.Query().Get("q"); got != "AFX P-1" {
+			t.Errorf("expected joined search keywords, got %q", got)
+		}
+		if got := r.URL.Query().Get("filter"); got != "price:[..100.00]" {
+			t.Errorf("expected max-price filter, got %q", got)
+		}
+		if got := r.URL.Query().Get("exclude"); got != "broken" {
+			t.Errorf("expected exclusion query, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX P-1","price":{"value":"45.00","currency":"USD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"seller1"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))
@@ -41,8 +66,50 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 	if items[0].Currency != "USD" {
 		t.Fatalf("expected currency USD, got %q", items[0].Currency)
 	}
+	if items[0].Image != "https://img/123.jpg" {
+		t.Fatalf("expected image URL from Browse payload, got %q", items[0].Image)
+	}
+	if items[0].Seller != "seller1" {
+		t.Fatalf("expected seller username seller1, got %q", items[0].Seller)
+	}
+	if items[0].Source != "ebay" {
+		t.Fatalf("expected source ebay, got %q", items[0].Source)
+	}
 	if items[0].StockState != "low_stock" || items[0].StockCount != 2 {
 		t.Fatalf("expected low_stock/2, got %+v", items[0])
+	}
+}
+
+func TestProviderSearchNormalizesSparseCandidateMetadata(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|456|0","title":"No Currency Slot Car","price":{"value":"12.50","currency":" aud "},"itemWebUrl":"https://ebay/item/456","seller":{"username":"seller2"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"OUT_OF_STOCK","estimatedAvailableQuantity":5}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	got := items[0]
+	if got.Currency != "AUD" {
+		t.Fatalf("expected currency trim/uppercase to AUD, got %q", got.Currency)
+	}
+	if strings.TrimSpace(got.Image) != "" {
+		t.Fatalf("expected missing Browse image to remain empty, got %q", got.Image)
+	}
+	if got.StockState != "out_of_stock" || got.StockCount != 0 {
+		t.Fatalf("expected out_of_stock/0, got %+v", got)
 	}
 }
 
