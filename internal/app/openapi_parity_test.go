@@ -98,6 +98,28 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsScannerFailureRetryGuidance(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/scanner/failures")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/failures path in %s", specPath)
+	}
+
+	requiredTokens := []string{
+		"failures:",
+		"retry_guidance:",
+		"next_action:",
+		"check_provider_health_and_credentials",
+	}
+	for _, token := range requiredTokens {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi scanner failures contract missing %q:\n%s", token, section)
+		}
+	}
+}
+
 func TestOpenAPIOperationsDeclareClientErrorResponses(t *testing.T) {
 	t.Parallel()
 

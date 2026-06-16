@@ -1173,6 +1173,22 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [failures]
+                properties:
+                  failures:
+                    type: array
+                    items:
+                      type: object
+                      required: [query_set_id, provider, message, reason, last_error_at, retry_guidance, next_action]
+                      properties:
+                        query_set_id: { type: string }
+                        provider: { type: string, example: ebay }
+                        message: { type: string }
+                        reason: { type: string }
+                        created_at: { type: string }
+                        last_error_at: { type: string }
+                        retry_guidance: { type: string, example: "Check provider health, credentials, and retry the operation." }
+                        next_action: { type: string, example: check_provider_health_and_credentials }
         "400":
           $ref: "#/components/responses/Error"
   /api/scanner/failures/retry:
