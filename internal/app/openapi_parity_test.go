@@ -309,6 +309,47 @@ func TestOpenAPIDocumentsEbayScannerRunAuthErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/provider/health")
+	if !ok {
+		t.Fatalf("openapi missing /api/provider/health path in %s", specPath)
+	}
+	for _, token := range []string{
+		"summary: Provider health status",
+		"ProviderHealthResponse",
+		"name: provider",
+		"description: Provider id such as ebay.",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/provider/health section missing %q:\n%s", token, section)
+		}
+	}
+
+	schema, ok := openAPIComponentSection(raw, "ProviderHealthResponse")
+	if !ok {
+		t.Fatalf("openapi missing ProviderHealthResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [provider, status, state]",
+		"provider: { type: string, example: ebay }",
+		"status:",
+		"enum: [ok, error, unknown]",
+		"state:",
+		"enum: [ready, degraded, disabled]",
+		"message: { type: string }",
+		"last_error:",
+		"retry_after_seconds:",
+		"updated_at:",
+	} {
+		if !strings.Contains(schema, token) {
+			t.Fatalf("openapi ProviderHealthResponse schema missing %q:\n%s", token, schema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	t.Parallel()
 

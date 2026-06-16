@@ -33,6 +33,25 @@ func TestScannerQuerySetsAndProviderHealthEndpoints(t *testing.T) {
 	if health.Code != http.StatusOK {
 		t.Fatalf("provider health status=%d body=%s", health.Code, health.Body.String())
 	}
+	var healthPayload map[string]any
+	if err := json.NewDecoder(health.Body).Decode(&healthPayload); err != nil {
+		t.Fatalf("decode provider health payload: %v", err)
+	}
+	for key, expected := range map[string]any{
+		"provider": "ebay",
+		"status":   "unknown",
+		"state":    "disabled",
+	} {
+		if got := healthPayload[key]; got != expected {
+			t.Fatalf("provider health %s=%v, want %v in %+v", key, got, expected, healthPayload)
+		}
+	}
+	if _, ok := healthPayload["last_error"]; !ok {
+		t.Fatalf("provider health missing last_error alias: %+v", healthPayload)
+	}
+	if _, ok := healthPayload["retry_after_seconds"]; !ok {
+		t.Fatalf("provider health missing retry_after_seconds: %+v", healthPayload)
+	}
 }
 
 func TestScannerRetryFailuresEndpoint(t *testing.T) {

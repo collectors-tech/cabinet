@@ -1202,9 +1202,11 @@ paths:
     get:
       tags: [Scanner]
       summary: Provider health status
+      description: Returns the latest provider health state. eBay responses preserve the existing scanner status/message fields and include readiness aliases for setup and retry routing.
       parameters:
         - in: query
           name: provider
+          description: Provider id such as ebay.
           schema: { type: string }
       responses:
         "200":
@@ -1212,7 +1214,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/ProviderHealthResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/settings/reset-ignore-rules:
@@ -3039,6 +3041,27 @@ components:
         message: { type: string }
         next_action: { type: string, enum: [review_provider_credentials_and_health] }
         query_set_id: { type: string }
+    ProviderHealthResponse:
+      type: object
+      required: [provider, status, state]
+      properties:
+        provider: { type: string, example: ebay }
+        status:
+          type: string
+          enum: [ok, error, unknown]
+        state:
+          type: string
+          enum: [ready, degraded, disabled]
+        message: { type: string }
+        last_error:
+          type: string
+          nullable: true
+        retry_after_seconds:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          nullable: true
     EbayProviderRunAuthErrorResponse:
       type: object
       required: [error, error_code, provider, message, next_action, query_set_id]
