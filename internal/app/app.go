@@ -2189,6 +2189,11 @@ func New(cfg config.Config) (*App, error) {
 		if provider == "" {
 			provider = "ebay"
 		}
+		if strings.EqualFold(provider, "openai") {
+			health := openAIProviderHealth(r.Context(), profiles)
+			_ = json.NewEncoder(w).Encode(health)
+			return
+		}
 		health, err := scannerSvc.ProviderHealth(r.Context(), provider)
 		if err != nil {
 			http.Error(w, `{"error":"failed_to_get_provider_health"}`, http.StatusInternalServerError)
@@ -7725,6 +7730,79 @@ func amazonIntegrationMode(ctx context.Context, conn *sql.DB) string {
 		return mode
 	}
 	return "disabled"
+}
+
+func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map[string]any {
+	base := map[string]any{
+		"provider": "openai",
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating OpenAI."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	active, err := profiles.GetActiveProfile(ctx)
+	if err != nil || strings.TrimSpace(active.ID) == "" {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before validating OpenAI."
+		base["next_action"] = "select_profile"
+		return base
+	}
+	settings, err := profiles.GetSettings(ctx, strings.TrimSpace(active.ID))
+	if err != nil {
+		settings = map[string]string{}
+	}
+	activeMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	if activeMethod == "" {
+		activeMethod = strings.TrimSpace(settings["openai_active_auth_method"])
+	}
+	base["auth_method"] = activeMethod
+
+	switch activeMethod {
+	case "api_key":
+		key, err := profiles.GetSecret(ctx, strings.TrimSpace(active.ID), "openai_api_key")
+		if err != nil || strings.TrimSpace(key) == "" {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_API_KEY_MISSING"
+			base["credential_present"] = false
+			base["message"] = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+			base["next_action"] = "connect_openai_api_key"
+			return base
+		}
+		base["status"] = "ready"
+		base["code"] = "OPENAI_API_KEY_PRESENT"
+		base["credential_present"] = true
+		base["message"] = "OpenAI API-key credentials are stored for the active profile."
+		base["next_action"] = "run_openai_test"
+		return base
+	case "browser_auth":
+		state := strings.TrimSpace(settings["openai.browser_auth_state"])
+		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
+		base["credential_present"] = artifactPresent
+		if strings.EqualFold(state, "connected") && artifactPresent {
+			base["status"] = "ready"
+			base["code"] = "OPENAI_BROWSER_AUTH_VERIFIED"
+			base["message"] = "OpenAI Browser Auth has verified profile proof."
+			base["next_action"] = "run_openai_test"
+			return base
+		}
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_BROWSER_AUTH_PROOF_REQUIRED"
+		base["message"] = "Browser Auth requires a verifiable callback or artifact before Cabinet marks OpenAI ready."
+		base["next_action"] = "complete_browser_auth_verification"
+		return base
+	default:
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_AUTH_METHOD_REQUIRED"
+		base["credential_present"] = false
+		base["message"] = "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI workflows."
+		base["next_action"] = "connect_openai_api_key_or_browser_auth"
+		return base
+	}
 }
 
 func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scanner.Service, amazonMode string, settings map[string]string) []map[string]any {
