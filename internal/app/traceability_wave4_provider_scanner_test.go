@@ -345,6 +345,9 @@ func TestWave4EbayRunPersistsSavedSearchCandidates(t *testing.T) {
 	if got, _ := runPayload.Candidates[0]["stock_state"].(string); got != "low_stock" {
 		t.Fatalf("expected low_stock persistence, got %+v", runPayload.Candidates[0])
 	}
+	if got, _ := runPayload.Candidates[0]["observed_currency"].(string); got != "AUD" {
+		t.Fatalf("expected observed_currency AUD in ebay run payload, got %+v", runPayload.Candidates[0])
+	}
 	if got, ok := runPayload.Run["saved"].(float64); !ok || int(got) != 1 {
 		t.Fatalf("expected run saved=1, got %+v", runPayload.Run)
 	}
@@ -471,7 +474,7 @@ func TestWave4ScannerScheduledSummaryAndCandidateDedup(t *testing.T) {
 		t.Fatalf("expected deduplicated candidate count=1, got %d payload=%+v", len(cPayload.Candidates), cPayload.Candidates)
 	}
 	first := cPayload.Candidates[0]
-	for _, field := range []string{"listing_id", "title", "url", "seller", "first_seen", "last_seen", "stock_state"} {
+	for _, field := range []string{"listing_id", "title", "url", "seller", "first_seen", "last_seen", "stock_state", "observed_currency"} {
 		if _, ok := first[field]; !ok {
 			t.Fatalf("candidate missing %q: %+v", field, first)
 		}

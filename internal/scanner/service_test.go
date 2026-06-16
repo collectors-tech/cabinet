@@ -127,6 +127,13 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	if observedCurrency != "AUD" {
 		t.Fatalf("expected observed currency AUD, got %q", observedCurrency)
 	}
+	candidates, err := svc.ListCandidates(context.Background(), qs.ID)
+	if err != nil {
+		t.Fatalf("ListCandidates() error = %v", err)
+	}
+	if len(candidates) != 1 || candidates[0].Currency != "AUD" {
+		t.Fatalf("expected candidate read model to expose observed currency AUD, got %+v", candidates)
+	}
 
 	provider.items[0].Currency = " usd "
 	if _, err := svc.RunNow(context.Background(), qs.ID, provider); err != nil {
@@ -137,6 +144,13 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	}
 	if observedCurrency != "USD" {
 		t.Fatalf("expected updated observed currency USD, got %q", observedCurrency)
+	}
+	candidates, err = svc.ListCandidates(context.Background(), qs.ID)
+	if err != nil {
+		t.Fatalf("ListCandidates() after update error = %v", err)
+	}
+	if len(candidates) != 1 || candidates[0].Currency != "USD" {
+		t.Fatalf("expected candidate read model to expose refreshed observed currency USD, got %+v", candidates)
 	}
 }
 
