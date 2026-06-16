@@ -39,6 +39,9 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 		if got := r.URL.Query().Get("exclude"); got != "broken" {
 			t.Errorf("expected exclusion query, got %q", got)
 		}
+		if got := r.URL.Query().Get("limit"); got != "12" {
+			t.Errorf("expected Browse limit from effective items_per_page, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|123|0","title":"AFX P-1","price":{"value":"45.00","currency":"USD"},"itemWebUrl":"https://ebay/item/123","image":{"imageUrl":"https://img/123.jpg"},"seller":{"username":"seller1"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))
@@ -51,11 +54,12 @@ func TestProviderSearchNormalizesCandidates(t *testing.T) {
 		HealthWindow: 10,
 	})
 	items, err := p.Search(context.Background(), scanner.QuerySet{
-		Keywords:   []string{"AFX", "P-1"},
-		Exclusions: []string{"broken"},
-		MaxPrice:   100,
-		Region:     "US",
-		Condition:  "used",
+		Keywords:     []string{"AFX", "P-1"},
+		Exclusions:   []string{"broken"},
+		MaxPrice:     100,
+		Region:       "US",
+		Condition:    "used",
+		ItemsPerPage: 12,
 	})
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
