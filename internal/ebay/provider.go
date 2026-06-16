@@ -28,9 +28,10 @@ type Provider struct {
 }
 
 type ProviderError struct {
-	StatusCode int
-	ErrorCode  string
-	Message    string
+	StatusCode        int
+	ErrorCode         string
+	Message           string
+	RetryAfterSeconds int
 }
 
 func (e *ProviderError) Error() string {
@@ -100,13 +101,19 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, &ProviderError{
-			StatusCode: http.StatusUnauthorized,
-			ErrorCode:  "PROVIDER_AUTH_INVALID",
-			Message:    ebayErrorMessage(resp, fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)),
+			StatusCode:        http.StatusUnauthorized,
+			ErrorCode:         "PROVIDER_AUTH_INVALID",
+			Message:           ebayErrorMessage(resp, fmt.Sprintf("ebay credentials rejected with status %d", resp.StatusCode)),
+			RetryAfterSeconds: retryAfterSeconds(resp),
 		}
 	}
 	if resp.StatusCode >= 300 {
-		return nil, &ProviderError{StatusCode: resp.StatusCode, ErrorCode: "PROVIDER_SEARCH_FAILED", Message: browseErrorMessage(resp)}
+		return nil, &ProviderError{
+			StatusCode:        resp.StatusCode,
+			ErrorCode:         "PROVIDER_SEARCH_FAILED",
+			Message:           browseErrorMessage(resp),
+			RetryAfterSeconds: retryAfterSeconds(resp),
+		}
 	}
 
 	var payload struct {
@@ -230,6 +237,21 @@ func compactSearchTerms(values []string) []string {
 		out = append(out, term)
 	}
 	return out
+}
+
+func retryAfterSeconds(resp *http.Response) int {
+	if resp == nil {
+		return 0
+	}
+	raw := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if raw == "" {
+		return 0
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return seconds
 }
 
 func normalizeAvailability(items []struct {

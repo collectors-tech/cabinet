@@ -456,6 +456,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"provider: { type: string, enum: [ebay] }",
 		"message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }",
 		"next_action: { type: string, enum: [check_provider_health_and_credentials] }",
+		"retry_after_seconds:",
+		"Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.",
 		"query_set_id: { type: string }",
 	} {
 		if !strings.Contains(searchErrorSchema, token) {

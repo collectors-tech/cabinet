@@ -238,6 +238,7 @@ func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "90")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"errors":[{"errorId":12001,"domain":"API_BROWSE","category":"REQUEST","message":"Rate limit exceeded","longMessage":"Try again later"}]}`))
 	}))
@@ -254,6 +255,9 @@ func TestProviderSearchPreservesStructuredBrowseErrorPayload(t *testing.T) {
 	}
 	if providerErr.StatusCode != http.StatusTooManyRequests || providerErr.ErrorCode != "PROVIDER_SEARCH_FAILED" {
 		t.Fatalf("unexpected provider error: %+v", providerErr)
+	}
+	if providerErr.RetryAfterSeconds != 90 {
+		t.Fatalf("expected retry-after seconds to be preserved, got %+v", providerErr)
 	}
 	for _, want := range []string{"12001", "API_BROWSE", "REQUEST", "Rate limit exceeded", "Try again later"} {
 		if !strings.Contains(providerErr.Message, want) {
