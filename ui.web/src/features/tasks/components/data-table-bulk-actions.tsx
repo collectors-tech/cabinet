@@ -1,15 +1,9 @@
 import { type ComponentType, useState } from 'react'
 import { type Table } from '@tanstack/react-table'
-import {
-  ArrowUpDown,
-  CircleArrowUp,
-  Download,
-  Trash2,
-} from 'lucide-react'
+import { ArrowUpDown, CircleArrowUp, Download, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { sleep } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { TasksMultiDeleteDialog } from './tasks-multi-delete-dialog'
@@ -29,7 +24,10 @@ interface DataTableBulkActionsProps<TData> {
   table: Table<TData>
   routePath: '/_authenticated/inventory/' | '/_authenticated/wishlist/'
   onWishlistBulkStatusChange?: (tasks: Task[], status: string) => Promise<void>
-  onWishlistBulkPriorityChange?: (tasks: Task[], priority: string) => Promise<void>
+  onWishlistBulkPriorityChange?: (
+    tasks: Task[],
+    priority: string
+  ) => Promise<void>
   onWishlistBulkDelete?: (tasks: Task[]) => Promise<void>
   onWishlistExport?: (tasks: Task[]) => void
   isWishlistMutating?: boolean
@@ -133,23 +131,27 @@ export function DataTableBulkActions<TData>({
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent sideOffset={14}>
-            {(isWishlistRoute ? wishlistStatusOptions : statuses).map((status) => {
-              const StatusIcon =
-                'icon' in status ? (status.icon as ComponentType<{ className?: string }>) : null
+            {(isWishlistRoute ? wishlistStatusOptions : statuses).map(
+              (status) => {
+                const StatusIcon =
+                  'icon' in status
+                    ? (status.icon as ComponentType<{ className?: string }>)
+                    : null
 
-              return (
-                <DropdownMenuItem
-                  key={status.value}
-                  defaultValue={status.value}
-                  onClick={() => handleBulkStatusChange(status.value)}
-                >
-                  {StatusIcon ? (
-                    <StatusIcon className='size-4 text-muted-foreground' />
-                  ) : null}
-                  {status.label}
-                </DropdownMenuItem>
-              )
-            })}
+                return (
+                  <DropdownMenuItem
+                    key={status.value}
+                    defaultValue={status.value}
+                    onClick={() => handleBulkStatusChange(status.value)}
+                  >
+                    {StatusIcon ? (
+                      <StatusIcon className='size-4 text-muted-foreground' />
+                    ) : null}
+                    {status.label}
+                  </DropdownMenuItem>
+                )
+              }
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -200,7 +202,9 @@ export function DataTableBulkActions<TData>({
               aria-label={
                 isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'
               }
-              title={isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}
+              title={
+                isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'
+              }
               disabled={isWishlistMutating}
             >
               <Download />
@@ -210,7 +214,9 @@ export function DataTableBulkActions<TData>({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>{isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}</p>
+            <p>
+              {isWishlistRoute ? 'Export wishlist entries' : 'Export tasks'}
+            </p>
           </TooltipContent>
         </Tooltip>
 

@@ -1014,10 +1014,7 @@ export function Scanner() {
       `${normalized} (alt: foil variant)`,
       `${normalized} (alt: promo variant)`,
     ]
-    const confidencePct = Math.max(
-      52,
-      Math.min(96, 96 - (confidenceSeed % 32))
-    )
+    const confidencePct = Math.max(52, Math.min(96, 96 - (confidenceSeed % 32)))
     const entry: QuickScanQueueItem = {
       id: `${Date.now()}-${rawName}`,
       fileName: rawName,
@@ -1877,7 +1874,9 @@ export function Scanner() {
             </p>
             <ul className='mt-2 list-disc ps-4'>
               <li>Review provider credentials and API access.</li>
-              <li>Retry failed Market Watch runs after provider health recovers.</li>
+              <li>
+                Retry failed Market Watch runs after provider health recovers.
+              </li>
             </ul>
           </div>
         ) : null}

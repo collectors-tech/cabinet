@@ -1,6 +1,6 @@
+import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,7 +30,8 @@ const formSchema = z.object({
       message: 'Please upload a file',
     })
     .refine(
-      (files) => ['text/csv', 'application/vnd.ms-excel', ''].includes(files?.[0]?.type),
+      (files) =>
+        ['text/csv', 'application/vnd.ms-excel', ''].includes(files?.[0]?.type),
       'Please upload csv format.'
     ),
 })
@@ -76,7 +77,9 @@ function parseWishlistImportCsv(text: string): WishlistEntryDraft[] {
     .filter(Boolean)
 
   if (lines.length < 2) {
-    throw new Error('Import file must include a header row and at least one entry.')
+    throw new Error(
+      'Import file must include a header row and at least one entry.'
+    )
   }
 
   const headers = parseCsvLine(lines[0]).map((header) =>

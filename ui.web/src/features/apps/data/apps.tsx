@@ -1,10 +1,10 @@
+import { Store } from 'lucide-react'
 import {
   IconTelegram,
   IconGmail,
   IconGithub,
   IconWhatsapp,
 } from '@/assets/brand-icons'
-import { Store } from 'lucide-react'
 
 const StoreLogo = () => <Store className='size-4' />
 

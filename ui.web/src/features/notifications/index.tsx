@@ -13,12 +13,12 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
-import { Header, HeaderTitle } from '@/components/layout/header'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Header, HeaderTitle } from '@/components/layout/header'
 
 type NotificationInboxItem = {
   id: string
@@ -137,7 +137,11 @@ function targetLink(item: NotificationInboxItem) {
   }
   return {
     href: href ?? `/inventory/?item=${encodeURIComponent(id ?? '')}`,
-    label: [partNumber, title].filter(Boolean).join(' - ') || title || id || 'Open target',
+    label:
+      [partNumber, title].filter(Boolean).join(' - ') ||
+      title ||
+      id ||
+      'Open target',
   }
 }
 
@@ -191,7 +195,10 @@ export function NotificationInbox() {
     }
   }, [activeProfileId])
 
-  async function updateItems(ids: string[], status: 'read' | 'unread' | 'archived') {
+  async function updateItems(
+    ids: string[],
+    status: 'read' | 'unread' | 'archived'
+  ) {
     if (!activeProfileId || ids.length === 0) {
       return
     }
@@ -200,14 +207,17 @@ export function NotificationInbox() {
     try {
       const updatedItems = await Promise.all(
         ids.map(async (id) => {
-          const response = await fetch(`/api/chat/inbox/${encodeURIComponent(id)}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              profile_id: activeProfileId,
-              status,
-            }),
-          })
+          const response = await fetch(
+            `/api/chat/inbox/${encodeURIComponent(id)}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                profile_id: activeProfileId,
+                status,
+              }),
+            }
+          )
           if (!response.ok) {
             throw new Error('notification_inbox_update_failed')
           }
@@ -220,7 +230,9 @@ export function NotificationInbox() {
         }
         return sortNotifications(
           current.map((item) => {
-            const updated = updatedItems.find((candidate) => candidate.id === item.id)
+            const updated = updatedItems.find(
+              (candidate) => candidate.id === item.id
+            )
             return updated ? { ...item, ...updated } : item
           })
         )
@@ -263,17 +275,23 @@ export function NotificationInbox() {
   }, [filter, items])
 
   const counts = useMemo(() => {
-    const active = items.filter((item) => normalizeStatus(item.status) !== 'archived')
+    const active = items.filter(
+      (item) => normalizeStatus(item.status) !== 'archived'
+    )
     return {
       all: active.length,
-      unread: active.filter((item) => normalizeStatus(item.status) === 'unread').length,
-      assistant: active.filter((item) => categoryForItem(item) === 'assistant').length,
-      system: active.filter((item) => categoryForItem(item) === 'system').length,
+      unread: active.filter((item) => normalizeStatus(item.status) === 'unread')
+        .length,
+      assistant: active.filter((item) => categoryForItem(item) === 'assistant')
+        .length,
+      system: active.filter((item) => categoryForItem(item) === 'system')
+        .length,
     }
   }, [items])
 
   const allVisibleSelected =
-    visibleItems.length > 0 && visibleItems.every((item) => selectedIds.includes(item.id))
+    visibleItems.length > 0 &&
+    visibleItems.every((item) => selectedIds.includes(item.id))
 
   function toggleSelection(id: string) {
     setSelectedIds((current) =>
@@ -305,7 +323,10 @@ export function NotificationInbox() {
           testId='notification-inbox-header-title'
           iconTestId='notification-inbox-page-icon'
         />
-        <div className='ms-auto flex items-center gap-2' data-header-title-avoid='true'>
+        <div
+          className='ms-auto flex items-center gap-2'
+          data-header-title-avoid='true'
+        >
           <Button
             type='button'
             variant='outline'
@@ -335,28 +356,38 @@ export function NotificationInbox() {
           <div>
             <h2 className='text-lg font-semibold'>Notification Inbox</h2>
             <p className='max-w-3xl text-sm text-muted-foreground'>
-              Triage assistant outcomes, mentions, import events, and runtime notices from one operational queue.
+              Triage assistant outcomes, mentions, import events, and runtime
+              notices from one operational queue.
             </p>
           </div>
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            {(['all', 'unread', 'assistant', 'system'] as InboxFilter[]).map((key) => (
-              <div
-                key={key}
-                className='rounded-md border bg-card px-3 py-2'
-                data-testid={`notification-inbox-count-${key}`}
-              >
-                <p className='text-xs font-medium text-muted-foreground'>{filterLabels[key]}</p>
-                <p className='text-2xl font-semibold'>{counts[key]}</p>
-              </div>
-            ))}
+            {(['all', 'unread', 'assistant', 'system'] as InboxFilter[]).map(
+              (key) => (
+                <div
+                  key={key}
+                  className='rounded-md border bg-card px-3 py-2'
+                  data-testid={`notification-inbox-count-${key}`}
+                >
+                  <p className='text-xs font-medium text-muted-foreground'>
+                    {filterLabels[key]}
+                  </p>
+                  <p className='text-2xl font-semibold'>{counts[key]}</p>
+                </div>
+              )
+            )}
           </div>
         </section>
 
         <section className='space-y-3'>
           <div className='flex flex-col gap-3 rounded-md border bg-card p-3 md:flex-row md:items-center md:justify-between'>
-            <Tabs value={filter} onValueChange={(value) => setFilter(value as InboxFilter)}>
+            <Tabs
+              value={filter}
+              onValueChange={(value) => setFilter(value as InboxFilter)}
+            >
               <TabsList data-testid='notification-inbox-filters'>
-                {(['all', 'unread', 'assistant', 'system'] as InboxFilter[]).map((key) => (
+                {(
+                  ['all', 'unread', 'assistant', 'system'] as InboxFilter[]
+                ).map((key) => (
                   <TabsTrigger
                     key={key}
                     value={key}
@@ -368,12 +399,17 @@ export function NotificationInbox() {
               </TabsList>
             </Tabs>
             <div className='flex flex-wrap items-center gap-2'>
-              <label className='flex items-center gap-2 text-sm' data-testid='notification-inbox-select-all'>
+              <label
+                className='flex items-center gap-2 text-sm'
+                data-testid='notification-inbox-select-all'
+              >
                 <Checkbox
                   checked={allVisibleSelected}
                   disabled={visibleItems.length === 0}
                   onCheckedChange={(checked) => {
-                    setSelectedIds(checked ? visibleItems.map((item) => item.id) : [])
+                    setSelectedIds(
+                      checked ? visibleItems.map((item) => item.id) : []
+                    )
                   }}
                 />
                 Select visible
@@ -402,7 +438,10 @@ export function NotificationInbox() {
           </div>
 
           {error ? (
-            <Alert variant='destructive' data-testid='notification-inbox-error-state'>
+            <Alert
+              variant='destructive'
+              data-testid='notification-inbox-error-state'
+            >
               <AlertTitle>Notification Inbox could not update.</AlertTitle>
               <AlertDescription>
                 {error}
@@ -434,7 +473,9 @@ export function NotificationInbox() {
               className='rounded-md border bg-card p-6 text-sm text-muted-foreground'
               data-testid='notification-inbox-empty-state'
             >
-              <p className='font-medium text-foreground'>{filterLabels[filter]} is clear.</p>
+              <p className='font-medium text-foreground'>
+                {filterLabels[filter]} is clear.
+              </p>
               <p>{emptyStateByFilter[filter]}</p>
             </div>
           ) : null}
@@ -472,20 +513,32 @@ export function NotificationInbox() {
                           ) : (
                             <Mail className='h-4 w-4 text-primary' />
                           )}
-                          <h3 className='font-semibold' data-testid='notification-inbox-row-title'>
+                          <h3
+                            className='font-semibold'
+                            data-testid='notification-inbox-row-title'
+                          >
                             {item.title}
                           </h3>
-                          <Badge variant={read ? 'outline' : 'secondary'} data-testid='notification-inbox-row-status'>
+                          <Badge
+                            variant={read ? 'outline' : 'secondary'}
+                            data-testid='notification-inbox-row-status'
+                          >
                             {status}
                           </Badge>
-                          <Badge variant='outline' data-testid='notification-inbox-row-category'>
+                          <Badge
+                            variant='outline'
+                            data-testid='notification-inbox-row-category'
+                          >
                             {categoryForItem(item)}
                           </Badge>
                         </div>
-                        <p className='text-sm text-muted-foreground'>{item.summary}</p>
+                        <p className='text-sm text-muted-foreground'>
+                          {item.summary}
+                        </p>
                         <div className='flex flex-wrap gap-3 text-xs text-muted-foreground'>
                           <span data-testid='notification-inbox-row-source'>
-                            {item.metadata?.source_label ?? sourceLabel(item.source)}
+                            {item.metadata?.source_label ??
+                              sourceLabel(item.source)}
                           </span>
                           <span>{formatTimestamp(item.created_at)}</span>
                           {link ? (
@@ -505,18 +558,33 @@ export function NotificationInbox() {
                           type='button'
                           variant='outline'
                           size='sm'
-                          onClick={() => void updateItems([item.id], read ? 'unread' : 'read')}
+                          onClick={() =>
+                            void updateItems(
+                              [item.id],
+                              read ? 'unread' : 'read'
+                            )
+                          }
                           disabled={updating}
-                          data-testid={read ? 'notification-inbox-row-unread' : 'notification-inbox-row-read'}
+                          data-testid={
+                            read
+                              ? 'notification-inbox-row-unread'
+                              : 'notification-inbox-row-read'
+                          }
                         >
-                          {read ? <Mail className='h-4 w-4' /> : <MailOpen className='h-4 w-4' />}
+                          {read ? (
+                            <Mail className='h-4 w-4' />
+                          ) : (
+                            <MailOpen className='h-4 w-4' />
+                          )}
                           {read ? 'Unread' : 'Read'}
                         </Button>
                         <Button
                           type='button'
                           variant='outline'
                           size='sm'
-                          onClick={() => void updateItems([item.id], 'archived')}
+                          onClick={() =>
+                            void updateItems([item.id], 'archived')
+                          }
                           disabled={updating}
                           data-testid='notification-inbox-row-archive'
                         >
@@ -551,7 +619,9 @@ export function NotificationInbox() {
                             item.summary}
                         </p>
                         <p className='mt-2 text-xs text-muted-foreground'>
-                          Source: {item.metadata?.source_label ?? sourceLabel(item.source)}
+                          Source:{' '}
+                          {item.metadata?.source_label ??
+                            sourceLabel(item.source)}
                         </p>
                       </div>
                     ) : null}

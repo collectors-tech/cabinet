@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { type Task } from '../data/schema'
 import { TasksImportDialog } from './tasks-import-dialog'
 import {
   TasksMutateDrawer,
   type WishlistEntryDraft,
 } from './tasks-mutate-drawer'
-import { type Task } from '../data/schema'
 
 export type TasksDialogType = 'create' | 'update' | 'delete' | 'import'
 

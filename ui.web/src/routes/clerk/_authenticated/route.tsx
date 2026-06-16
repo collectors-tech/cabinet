@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { useAuth, useUser } from '@clerk/clerk-react'
 import { Navigate, createFileRoute } from '@tanstack/react-router'
-import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useAuth, useUser } from '@clerk/clerk-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
 
 export const Route = createFileRoute('/clerk/_authenticated')({
   component: ClerkAuthenticatedRoute,
@@ -51,7 +51,7 @@ function ClerkAuthenticatedRoute() {
             user?.primaryEmailAddress?.emailAddress ||
             'unknown@example.com',
           role: [payload.plan || 'free'],
-          exp: Math.floor(Date.now() / 1000) + 60*60,
+          exp: Math.floor(Date.now() / 1000) + 60 * 60,
         })
         auth.setAccessToken(token)
         setError(null)
@@ -67,7 +67,11 @@ function ClerkAuthenticatedRoute() {
   }, [auth, getToken, isLoaded, isSignedIn, user])
 
   if (!isLoaded) {
-    return <div className='p-6 text-sm text-muted-foreground'>Loading identity...</div>
+    return (
+      <div className='p-6 text-sm text-muted-foreground'>
+        Loading identity...
+      </div>
+    )
   }
 
   if (!isSignedIn) {
@@ -75,7 +79,11 @@ function ClerkAuthenticatedRoute() {
   }
 
   if (bootstrapping) {
-    return <div className='p-6 text-sm text-muted-foreground'>Bootstrapping session...</div>
+    return (
+      <div className='p-6 text-sm text-muted-foreground'>
+        Bootstrapping session...
+      </div>
+    )
   }
 
   if (error) {

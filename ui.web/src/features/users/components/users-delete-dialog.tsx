@@ -90,7 +90,9 @@ export function UsersDeleteDialog({
               Please be careful, this operation can not be rolled back.
             </AlertDescription>
           </Alert>
-          {error ? <p className='text-sm font-medium text-destructive'>{error}</p> : null}
+          {error ? (
+            <p className='text-sm font-medium text-destructive'>{error}</p>
+          ) : null}
         </div>
       }
       confirmText='Delete'

@@ -1,15 +1,15 @@
-import i18next from 'i18next'
-import LanguageDetector from 'i18next-browser-languagedetector'
-import { initReactI18next } from 'react-i18next'
 import commonEn from '@/locales/en/common.json'
-import commonJa from '@/locales/ja/common.json'
 import navEn from '@/locales/en/nav.json'
-import navJa from '@/locales/ja/nav.json'
 import pagesEn from '@/locales/en/pages.json'
+import commonJa from '@/locales/ja/common.json'
+import navJa from '@/locales/ja/nav.json'
 import pagesJa from '@/locales/ja/pages.json'
 import commonZh from '@/locales/zh/common.json'
 import navZh from '@/locales/zh/nav.json'
 import pagesZh from '@/locales/zh/pages.json'
+import i18next from 'i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
+import { initReactI18next } from 'react-i18next'
 
 function applyDocumentLocale(language: string) {
   if (typeof document === 'undefined') {

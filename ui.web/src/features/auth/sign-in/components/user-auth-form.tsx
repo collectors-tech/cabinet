@@ -178,8 +178,7 @@ export function UserAuthForm({
         if (cancelled) {
           return
         }
-        const nextMode =
-          payload.identity_mode === 'clerk' ? 'clerk' : 'local'
+        const nextMode = payload.identity_mode === 'clerk' ? 'clerk' : 'local'
         setIdentityMode(nextMode)
         if (Array.isArray(payload.providers) && payload.providers.length > 0) {
           setProviderOptions(
@@ -227,7 +226,11 @@ export function UserAuthForm({
             <FormItem className='relative'>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' toggleTestId='sign-in-password-toggle' {...field} />
+                <PasswordInput
+                  placeholder='********'
+                  toggleTestId='sign-in-password-toggle'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
               <Link

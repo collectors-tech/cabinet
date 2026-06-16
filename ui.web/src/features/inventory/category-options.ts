@@ -18,22 +18,22 @@ export function normalizeCategoryName(value: string): string {
 
 export function normalizeCategoryOptions(values: string[]): string[] {
   const seen = new Set<string>()
-  return values
-    .map(normalizeCategoryName)
-    .filter((value) => {
-      if (value === '') {
-        return false
-      }
-      const key = value.toLowerCase()
-      if (seen.has(key)) {
-        return false
-      }
-      seen.add(key)
-      return true
-    })
+  return values.map(normalizeCategoryName).filter((value) => {
+    if (value === '') {
+      return false
+    }
+    const key = value.toLowerCase()
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
-export function parseCategoryOptions(value: string | null | undefined): string[] {
+export function parseCategoryOptions(
+  value: string | null | undefined
+): string[] {
   if (!value) {
     return defaultInventoryCategoryOptions
   }

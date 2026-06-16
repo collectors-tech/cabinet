@@ -25,7 +25,9 @@ export function parsePackagingGradeOptions(
       const normalized = normalizeDisplayOptions(
         parsed.filter((entry): entry is string => typeof entry === 'string')
       )
-      return normalized.length > 0 ? normalized : defaultInventoryPackagingGrades
+      return normalized.length > 0
+        ? normalized
+        : defaultInventoryPackagingGrades
     }
   } catch {
     return defaultInventoryPackagingGrades

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, Download } from 'lucide-react'
-import { ContentSection } from '../components/content-section'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ContentSection } from '../components/content-section'
 
 type ActiveProfileResponse = {
   id?: string
@@ -50,19 +50,26 @@ export function SettingsStorage() {
   const [rebuildPending, setRebuildPending] = useState(false)
   const [repairPending, setRepairPending] = useState(false)
   const [repairResult, setRepairResult] = useState<string | null>(null)
-  const [repairTone, setRepairTone] = useState<'default' | 'destructive'>('default')
+  const [repairTone, setRepairTone] = useState<'default' | 'destructive'>(
+    'default'
+  )
   const [backupList, setBackupList] = useState<BackupInfo[]>([])
   const [backupsLoading, setBackupsLoading] = useState(true)
   const [backupPending, setBackupPending] = useState(false)
   const [restorePending, setRestorePending] = useState(false)
   const [backupError, setBackupError] = useState<string | null>(null)
-  const [backupSortKey, setBackupSortKey] = useState<BackupSortKey>('created_at')
+  const [backupSortKey, setBackupSortKey] =
+    useState<BackupSortKey>('created_at')
   const [backupSortDirection, setBackupSortDirection] =
     useState<BackupSortDirection>('desc')
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
-  const [selectedBackupPath, setSelectedBackupPath] = useState<string | null>(null)
+  const [selectedBackupPath, setSelectedBackupPath] = useState<string | null>(
+    null
+  )
   const [actionStatus, setActionStatus] = useState<string | null>(null)
-  const [actionTone, setActionTone] = useState<'default' | 'destructive'>('default')
+  const [actionTone, setActionTone] = useState<'default' | 'destructive'>(
+    'default'
+  )
   const [lastKnown, setLastKnown] = useState<StorageResponse | null>(() => {
     if (typeof window === 'undefined') {
       return null
@@ -91,7 +98,8 @@ export function SettingsStorage() {
       if (!activeProfileResp.ok) {
         throw new Error('active_profile_unavailable')
       }
-      const activeProfile = (await activeProfileResp.json()) as ActiveProfileResponse
+      const activeProfile =
+        (await activeProfileResp.json()) as ActiveProfileResponse
       const profileID = activeProfile.id?.trim()
       if (!profileID) {
         throw new Error('active_profile_unavailable')
@@ -109,7 +117,10 @@ export function SettingsStorage() {
       setLastKnown(next)
       lastKnownRef.current = next
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(LAST_KNOWN_STORAGE_KEY, JSON.stringify(next))
+        window.localStorage.setItem(
+          LAST_KNOWN_STORAGE_KEY,
+          JSON.stringify(next)
+        )
       }
       setDbPath(next.db_path)
       setMediaDir(next.media_dir)
@@ -137,7 +148,8 @@ export function SettingsStorage() {
       const payload = (await response.json()) as BackupListResponse
       setBackupList(
         (payload.backups ?? []).filter(
-          (backup) => typeof backup.path === 'string' && backup.path.trim() !== ''
+          (backup) =>
+            typeof backup.path === 'string' && backup.path.trim() !== ''
         )
       )
     } catch {
@@ -164,7 +176,9 @@ export function SettingsStorage() {
       setActionStatus('Search reindex completed successfully.')
     } catch {
       setActionTone('destructive')
-      setActionStatus('Search reindex failed. Try again when runtime diagnostics are healthy.')
+      setActionStatus(
+        'Search reindex failed. Try again when runtime diagnostics are healthy.'
+      )
     } finally {
       setReindexPending(false)
     }
@@ -175,7 +189,9 @@ export function SettingsStorage() {
     setActionStatus(null)
     setActionTone('default')
     try {
-      const response = await fetch('/api/data/rebuild-thumbnails', { method: 'POST' })
+      const response = await fetch('/api/data/rebuild-thumbnails', {
+        method: 'POST',
+      })
       if (!response.ok) {
         throw new Error('failed_to_rebuild_thumbnails')
       }
@@ -212,13 +228,19 @@ export function SettingsStorage() {
       }
       const integrityCheck = payload.integrity_check?.trim() || 'unknown'
       if (integrityCheck.toLowerCase() === 'ok') {
-        setRepairResult(`Database integrity check passed. Result: ${integrityCheck}`)
+        setRepairResult(
+          `Database integrity check passed. Result: ${integrityCheck}`
+        )
       } else {
-        setRepairResult(`Database integrity check reported issues. Result: ${integrityCheck}`)
+        setRepairResult(
+          `Database integrity check reported issues. Result: ${integrityCheck}`
+        )
       }
     } catch {
       setRepairTone('destructive')
-      setRepairResult('Database integrity check failed. Check diagnostics and try again.')
+      setRepairResult(
+        'Database integrity check failed. Check diagnostics and try again.'
+      )
     } finally {
       setRepairPending(false)
     }
@@ -235,13 +257,19 @@ export function SettingsStorage() {
       }
       const payload = (await response.json()) as { backup?: BackupInfo }
       const fileName = payload.backup?.file_name?.trim() || 'backup snapshot'
-      const integrityCheck = payload.backup?.integrity_check?.trim() || 'unknown'
-      const archiveFormat = payload.backup?.archive_format?.trim().toUpperCase() || 'archive'
-      setActionStatus(`Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`)
+      const integrityCheck =
+        payload.backup?.integrity_check?.trim() || 'unknown'
+      const archiveFormat =
+        payload.backup?.archive_format?.trim().toUpperCase() || 'archive'
+      setActionStatus(
+        `Backup created successfully: ${fileName}. ${archiveFormat} ready for download. Integrity check: ${integrityCheck}.`
+      )
       await loadBackups()
     } catch {
       setActionTone('destructive')
-      setActionStatus('Backup creation failed. Try again when runtime storage is healthy.')
+      setActionStatus(
+        'Backup creation failed. Try again when runtime storage is healthy.'
+      )
     } finally {
       setBackupPending(false)
     }
@@ -258,7 +286,10 @@ export function SettingsStorage() {
       const response = await fetch('/api/backup/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ backup_path: selectedBackupPath, confirm_restore: true }),
+        body: JSON.stringify({
+          backup_path: selectedBackupPath,
+          confirm_restore: true,
+        }),
       })
       if (!response.ok) {
         throw new Error('failed_to_restore_backup')
@@ -268,8 +299,11 @@ export function SettingsStorage() {
       const payload = (await response.json()) as {
         restore?: { restored_at?: string; integrity_check?: string }
       }
-      const integrityCheck = payload.restore?.integrity_check?.trim() || 'unknown'
-      setActionStatus(`Backup restored successfully. Integrity check: ${integrityCheck}.`)
+      const integrityCheck =
+        payload.restore?.integrity_check?.trim() || 'unknown'
+      setActionStatus(
+        `Backup restored successfully. Integrity check: ${integrityCheck}.`
+      )
       await Promise.all([loadStorage(), loadBackups()])
     } catch {
       setRestoreConfirmOpen(false)
@@ -293,11 +327,16 @@ export function SettingsStorage() {
           return (leftValue - rightValue) * direction
         }
       }
-      return backupDisplayName(left)
-        .localeCompare(backupDisplayName(right), undefined, {
-          numeric: true,
-          sensitivity: 'base',
-        }) * direction
+      return (
+        backupDisplayName(left).localeCompare(
+          backupDisplayName(right),
+          undefined,
+          {
+            numeric: true,
+            sensitivity: 'base',
+          }
+        ) * direction
+      )
     })
   }, [backupList, backupSortDirection, backupSortKey])
 
@@ -334,7 +373,8 @@ export function SettingsStorage() {
             <div className='rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive'>
               <p className='font-medium'>{error}</p>
               <p className='mt-1 text-xs text-muted-foreground'>
-                Check active profile selection and runtime connectivity, then retry.
+                Check active profile selection and runtime connectivity, then
+                retry.
               </p>
               <Button
                 variant='outline'
@@ -368,16 +408,18 @@ export function SettingsStorage() {
             <div className='flex items-start gap-2'>
               <AlertTriangle className='mt-0.5 h-4 w-4' />
               <p>
-                Storage repair and migration actions are restricted to diagnostics workflows.
+                Storage repair and migration actions are restricted to
+                diagnostics workflows.
               </p>
             </div>
           </div>
-          <div className='rounded-md border p-3 space-y-3'>
+          <div className='space-y-3 rounded-md border p-3'>
             <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='font-medium'>Database integrity</p>
                 <p className='text-xs text-muted-foreground'>
-                  Run an integrity check before deeper diagnostics or restore workflows.
+                  Run an integrity check before deeper diagnostics or restore
+                  workflows.
                 </p>
               </div>
               <Button
@@ -389,12 +431,18 @@ export function SettingsStorage() {
                   void runRepair()
                 }}
               >
-                {repairPending ? 'Running Integrity Check…' : 'Run Integrity Check'}
+                {repairPending
+                  ? 'Running Integrity Check…'
+                  : 'Run Integrity Check'}
               </Button>
             </div>
             <p
               data-testid='settings-storage-repair-result'
-              className={repairTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+              className={
+                repairTone === 'destructive'
+                  ? 'text-sm text-destructive'
+                  : 'text-sm text-muted-foreground'
+              }
             >
               {repairResult ?? 'No integrity check has been run yet.'}
             </p>
@@ -424,12 +472,16 @@ export function SettingsStorage() {
           {actionStatus ? (
             <p
               data-testid='settings-storage-action-status'
-              className={actionTone === 'destructive' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+              className={
+                actionTone === 'destructive'
+                  ? 'text-sm text-destructive'
+                  : 'text-sm text-muted-foreground'
+              }
             >
               {actionStatus}
             </p>
           ) : null}
-          <div className='rounded-md border p-3 space-y-3'>
+          <div className='space-y-3 rounded-md border p-3'>
             <div>
               <p className='font-medium'>Data exports</p>
               <p className='text-xs text-muted-foreground'>
@@ -474,12 +526,13 @@ export function SettingsStorage() {
               )}
             </div>
           </div>
-          <div className='rounded-md border p-3 space-y-3'>
+          <div className='space-y-3 rounded-md border p-3'>
             <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='font-medium'>Backups</p>
                 <p className='text-xs text-muted-foreground'>
-                  Create a backup snapshot and restore an existing backup when needed.
+                  Create a backup snapshot and restore an existing backup when
+                  needed.
                 </p>
               </div>
               <Button
@@ -495,14 +548,17 @@ export function SettingsStorage() {
               </Button>
             </div>
             {backupsLoading ? (
-              <p className='text-sm text-muted-foreground'>Loading backups...</p>
+              <p className='text-sm text-muted-foreground'>
+                Loading backups...
+              </p>
             ) : null}
             {backupError ? (
               <p className='text-sm text-destructive'>{backupError}</p>
             ) : null}
             {!backupsLoading && !backupError && backupList.length === 0 ? (
               <p className='text-sm text-muted-foreground'>
-                No backups available yet. Create one to capture the current workspace.
+                No backups available yet. Create one to capture the current
+                workspace.
               </p>
             ) : null}
             {!backupsLoading && backupList.length > 0 ? (
@@ -511,7 +567,7 @@ export function SettingsStorage() {
                   className='w-full min-w-[760px] table-fixed text-left text-sm'
                   data-testid='settings-storage-backup-table'
                 >
-                  <thead className='bg-muted/40 text-xs uppercase text-muted-foreground'>
+                  <thead className='bg-muted/40 text-xs text-muted-foreground uppercase'>
                     <tr>
                       <th className='w-[28%] px-3 py-2 font-medium'>
                         <button
@@ -522,7 +578,10 @@ export function SettingsStorage() {
                             toggleBackupSort('file_name')
                           }}
                         >
-                          Filename {backupSortKey === 'file_name' ? sortIndicator(backupSortDirection) : ''}
+                          Filename{' '}
+                          {backupSortKey === 'file_name'
+                            ? sortIndicator(backupSortDirection)
+                            : ''}
                         </button>
                       </th>
                       <th className='w-[18%] px-3 py-2 font-medium'>
@@ -534,13 +593,22 @@ export function SettingsStorage() {
                             toggleBackupSort('created_at')
                           }}
                         >
-                          Created {backupSortKey === 'created_at' ? sortIndicator(backupSortDirection) : ''}
+                          Created{' '}
+                          {backupSortKey === 'created_at'
+                            ? sortIndicator(backupSortDirection)
+                            : ''}
                         </button>
                       </th>
-                      <th className='w-[17%] px-3 py-2 font-medium'>Backup source</th>
-                      <th className='w-[12%] px-3 py-2 font-medium'>Archive size</th>
+                      <th className='w-[17%] px-3 py-2 font-medium'>
+                        Backup source
+                      </th>
+                      <th className='w-[12%] px-3 py-2 font-medium'>
+                        Archive size
+                      </th>
                       <th className='w-[12%] px-3 py-2 font-medium'>Status</th>
-                      <th className='w-[13%] px-3 py-2 text-right font-medium'>Actions</th>
+                      <th className='w-[13%] px-3 py-2 text-right font-medium'>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -551,10 +619,10 @@ export function SettingsStorage() {
                         data-testid='settings-storage-backup-row'
                       >
                         <td className='px-3 py-2'>
-                          <p className='break-all font-medium text-foreground'>
+                          <p className='font-medium break-all text-foreground'>
                             {backupDisplayName(backup)}
                           </p>
-                          <p className='mt-1 break-all text-xs text-muted-foreground'>
+                          <p className='mt-1 text-xs break-all text-muted-foreground'>
                             {backup.path}
                           </p>
                         </td>
@@ -607,7 +675,8 @@ export function SettingsStorage() {
           </div>
           {error ? (
             <p className='text-xs text-muted-foreground'>
-              Diagnostics actions are unavailable while storage info is degraded.
+              Diagnostics actions are unavailable while storage info is
+              degraded.
             </p>
           ) : null}
         </div>
@@ -618,9 +687,10 @@ export function SettingsStorage() {
                 <DialogTitle>Restore Backup</DialogTitle>
               </DialogHeader>
               <p className='text-sm text-muted-foreground'>
-                Restore the selected backup snapshot? This replaces the current runtime database with the selected backup.
+                Restore the selected backup snapshot? This replaces the current
+                runtime database with the selected backup.
               </p>
-              <p className='rounded-md border p-2 text-xs text-muted-foreground break-all'>
+              <p className='rounded-md border p-2 text-xs break-all text-muted-foreground'>
                 {selectedBackupPath ?? 'No backup selected'}
               </p>
               <DialogFooter>

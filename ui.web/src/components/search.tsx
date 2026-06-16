@@ -10,10 +10,7 @@ type SearchProps = {
   placeholder?: string
 }
 
-export function Search({
-  className = '',
-  placeholder,
-}: SearchProps) {
+export function Search({ className = '', placeholder }: SearchProps) {
   const { t } = useTranslation('common')
   const { setOpen } = useSearch()
   const resolvedPlaceholder = placeholder ?? t('common:search.placeholder')
