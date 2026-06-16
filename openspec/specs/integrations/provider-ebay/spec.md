@@ -226,6 +226,8 @@ Cabinet SHALL model eBay seller listing draft, publish, revise, end, and relist 
 - **THEN** the HTTP response MUST expose the normalized command, capability, confirmation, local-only, remote-write, allowed, status, blocker, and response fields.
 - **AND** local draft execution MAY return a Cabinet-local draft response.
 - **AND** confirmed remote lifecycle writes MUST remain blocked with an adapter-required blocker until a real eBay lifecycle adapter is configured.
+- **AND** the OpenAPI contract MUST document `/api/providers/ebay/listing-lifecycle/preview` and `/api/providers/ebay/listing-lifecycle/execute`.
+- **AND** the documented request and response schemas MUST include command, capability, confirmation, item, draft, listing, local-only, remote-write, allowed, blocker, status, and response fields so clients can preserve the same safety boundaries as the implemented API.
 
 #### Scenario: Listing lifecycle commands are available from the integration UI
 - **GIVEN** the eBay integration dialog is open for a configured profile
