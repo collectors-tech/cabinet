@@ -405,6 +405,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"$ref: \"#/components/schemas/EbayProviderRunResponse\"",
 		`"401":`,
 		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
+		`"429":`,
+		"$ref: \"#/components/schemas/EbayProviderRunSearchErrorResponse\"",
 	} {
 		if !strings.Contains(section, token) {
 			t.Fatalf("openapi /api/providers/ebay/run section missing %q:\n%s", token, section)
@@ -441,6 +443,23 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	} {
 		if !strings.Contains(authErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunAuthErrorResponse schema missing %q:\n%s", token, authErrorSchema)
+		}
+	}
+
+	searchErrorSchema, ok := openAPIComponentSection(raw, "EbayProviderRunSearchErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunSearchErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error: { type: string, enum: [failed_to_run_ebay_provider] }",
+		"error_code: { type: string, enum: [PROVIDER_SEARCH_FAILED] }",
+		"provider: { type: string, enum: [ebay] }",
+		"message: { type: string, description: Structured upstream Browse failure details preserved for diagnostics. }",
+		"next_action: { type: string, enum: [check_provider_health_and_credentials] }",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(searchErrorSchema, token) {
+			t.Fatalf("openapi EbayProviderRunSearchErrorResponse schema missing %q:\n%s", token, searchErrorSchema)
 		}
 	}
 }
