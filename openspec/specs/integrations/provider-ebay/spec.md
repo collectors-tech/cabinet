@@ -53,6 +53,12 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **THEN** each create/update request MUST preserve `provider_scope=["ebay"]`
 - **AND** schedule edits MUST persist with the saved eBay query instead of clearing provider scope or falling back to another provider.
 
+#### Scenario: Market Watch preserves eBay output handoff provenance
+- **GIVEN** an eBay-scoped Market Watch run returns normalized saved-search output candidates with `source="ebay"`
+- **WHEN** the operator inspects the output details and sends the first result to Wishlist or Inventory
+- **THEN** the UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
+- **AND** the downstream Wishlist and Inventory reloads MUST show eBay source provider, query id, query name, provider scope, and source URL provenance.
+
 ### Requirement INTEGRATION-006: eBay provider MUST expose health state
 Cabinet SHALL report eBay provider health and recent failure telemetry via provider health endpoints.
 
