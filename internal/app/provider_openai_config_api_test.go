@@ -104,6 +104,77 @@ func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t 
 	}
 }
 
+func TestOpenAIProviderHealthReflectsProfileReadiness(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIHealthProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	missing := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=openai", nil, nil)
+	if missing.Code != http.StatusOK {
+		t.Fatalf("missing health status=%d body=%s", missing.Code, missing.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.NewDecoder(missing.Body).Decode(&missingPayload); err != nil {
+		t.Fatalf("decode missing health: %v", err)
+	}
+	if missingPayload["status"] != "needs_config" || missingPayload["next_action"] != "connect_openai_api_key_or_browser_auth" {
+		t.Fatalf("expected setup-needed OpenAI health, got %+v", missingPayload)
+	}
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"api_key"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	apiKeyMissing := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=openai", nil, nil)
+	var apiKeyMissingPayload map[string]any
+	if err := json.NewDecoder(apiKeyMissing.Body).Decode(&apiKeyMissingPayload); err != nil {
+		t.Fatalf("decode api key missing health: %v", err)
+	}
+	if apiKeyMissingPayload["status"] != "needs_config" || apiKeyMissingPayload["code"] != "OPENAI_API_KEY_MISSING" {
+		t.Fatalf("expected missing api-key health, got %+v", apiKeyMissingPayload)
+	}
+
+	secret := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/secrets", strings.NewReader(`{"key":"openai_api_key","value":"sk-test-openai"}`), map[string]string{"Content-Type": "application/json"})
+	if secret.Code != http.StatusOK {
+		t.Fatalf("secret status=%d body=%s", secret.Code, secret.Body.String())
+	}
+	ready := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=openai", nil, nil)
+	var readyPayload map[string]any
+	if err := json.NewDecoder(ready.Body).Decode(&readyPayload); err != nil {
+		t.Fatalf("decode ready health: %v", err)
+	}
+	if readyPayload["status"] != "ready" || readyPayload["auth_method"] != "api_key" || readyPayload["credential_present"] != true {
+		t.Fatalf("expected API-key ready health without secret value, got %+v", readyPayload)
+	}
+	if _, leaked := readyPayload["secret"]; leaked {
+		t.Fatalf("OpenAI health payload must not expose secret material: %+v", readyPayload)
+	}
+
+	browserSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"browser_auth","openai.browser_auth_state":"pending","openai.browser_auth_artifact_present":"false"}}`), map[string]string{"Content-Type": "application/json"})
+	if browserSettings.Code != http.StatusOK {
+		t.Fatalf("browser settings status=%d body=%s", browserSettings.Code, browserSettings.Body.String())
+	}
+	browser := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=openai", nil, nil)
+	var browserPayload map[string]any
+	if err := json.NewDecoder(browser.Body).Decode(&browserPayload); err != nil {
+		t.Fatalf("decode browser health: %v", err)
+	}
+	if browserPayload["status"] != "needs_config" || browserPayload["code"] != "OPENAI_BROWSER_AUTH_PROOF_REQUIRED" {
+		t.Fatalf("expected browser proof-required health, got %+v", browserPayload)
+	}
+}
+
 func TestEbayRegistryExposesSellerOperationCapabilityStatuses(t *testing.T) {
 	t.Parallel()
 

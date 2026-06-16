@@ -95,3 +95,19 @@ Cabinet MUST let a user explicitly disconnect the OpenAI API-key method by delet
 - **AND** Cabinet MUST clear API-key active method and integration enabled readiness when no other connected method is active
 - **AND** Browser Auth state MUST remain present for a future verified Browser Auth proof
 - **AND** Test OpenAI MUST return to setup-needed/disabled until a verified active method exists
+
+### Requirement PROVIDER-OPENAI-UX-010: Provider health SHALL report profile-scoped OpenAI readiness without exposing secrets
+Cabinet MUST return deterministic OpenAI health/readiness feedback for the active profile so operators can distinguish missing auth, missing API-key secret, Browser Auth proof gaps, and ready-to-test states without exposing credential material.
+
+#### Scenario: Validate API-key readiness
+- **GIVEN** OpenAI API-key mode is selected for the active profile
+- **WHEN** provider health is requested for OpenAI
+- **THEN** Cabinet MUST report setup-needed health when the profile has no `openai_api_key` secret
+- **AND** Cabinet MUST report ready health when the profile has an API-key secret
+- **AND** the health payload MUST NOT include the secret value
+
+#### Scenario: Validate Browser Auth proof readiness
+- **GIVEN** OpenAI Browser Auth mode is selected for the active profile
+- **WHEN** provider health is requested for OpenAI
+- **THEN** Cabinet MUST report setup-needed health until verified Browser Auth proof is present
+- **AND** Cabinet MUST report ready health only when Browser Auth state is connected and the verified artifact/proof flag is present
