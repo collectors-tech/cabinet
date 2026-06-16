@@ -616,6 +616,64 @@ describe('integrations/ui-screen-market-watch', () => {
     })
   })
 
+  it('INTEGRATION-005 + #827 distinguishes eBay provider search failures from credential denials', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-search-failure',
+            name: 'eBay Browse Recovery',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: { failures: [] },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'degraded', message: 'Browse API throttled' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-search-failure')
+      req.reply({
+        statusCode: 429,
+        body: {
+          error: 'failed_to_run_ebay_provider',
+          error_code: 'PROVIDER_SEARCH_FAILED',
+          provider: 'ebay',
+          query_set_id: 'qs-mw-ebay-search-failure',
+          message:
+            'eBay Browse API request failed: 12000 API rate limit reached',
+          next_action: 'check_provider_health_and_credentials',
+        },
+      })
+    }).as('runEbaySearchFailure')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-search-failure"]').click()
+    cy.wait('@runEbaySearchFailure')
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Provider search failed.')
+      .and(
+        'contain',
+        'Check provider health and retry guidance before running this query again.'
+      )
+      .and(
+        'contain',
+        'Review credentials only if provider health reports an auth problem.'
+      )
+      .and('contain', 'PROVIDER_SEARCH_FAILED')
+      .and('not.contain', 'Market Watch action was denied.')
+      .and('not.contain', 'Sign in again')
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
