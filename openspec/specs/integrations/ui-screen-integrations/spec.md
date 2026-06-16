@@ -157,6 +157,12 @@ Integrations screen SHALL keep validation completion feedback and visible provid
 - **AND** the provider detail panel MUST update health, last-run, and last-checked metadata from the validation result
 - **AND** the provider card MUST use the same reconciled health state after the result is applied
 
+#### Scenario: eBay validation displays readiness aliases and recovery guidance
+- **GIVEN** the eBay provider detail panel is open
+- **WHEN** `/api/provider/health?provider=ebay` returns ready, missing-credential, invalid-credential, or backoff readiness payloads
+- **THEN** the panel MUST display the returned readiness `state`, message, `last_error` when present, `retry_after_seconds` when present, and `next_action` when present
+- **AND** missing or invalid credential states MUST direct the operator to credential and health recovery instead of implying a Market Watch run succeeded
+
 ### Requirement UI-SCREEN-INTEGRATIONS-009: Integrations UI SHALL display provider API family support mapping
 Integrations screen SHALL show API support mapping per provider (Woo/Boost/Algolia/custom) in cards and detail panel.
 

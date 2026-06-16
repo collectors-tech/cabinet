@@ -1379,6 +1379,155 @@ describe('ui-screen-integrations', () => {
     cy.contains('Provider configuration saved.').scrollIntoView().should('be.visible')
   })
 
+  it('INTEGRATION-006 + #1289: displays eBay provider-health readiness aliases and recovery guidance', () => {
+    const healthResponses = [
+      {
+        provider: 'ebay',
+        status: 'ok',
+        state: 'ready',
+        message: 'eBay credentials are ready for Market Watch runs.',
+        last_error: null,
+        retry_after_seconds: null,
+        next_action: 'run_market_watch_query_sets',
+        updated_at: '2026-06-16T06:31:00Z',
+      },
+      {
+        provider: 'ebay',
+        status: 'error',
+        state: 'disabled',
+        message: 'eBay bearer token is missing.',
+        last_error: 'PROVIDER_AUTH_MISSING',
+        retry_after_seconds: null,
+        next_action: 'review_provider_credentials_and_health',
+        updated_at: '2026-06-16T06:32:00Z',
+      },
+      {
+        provider: 'ebay',
+        status: 'error',
+        state: 'degraded',
+        message: 'eBay rejected the configured token.',
+        last_error: 'PROVIDER_AUTH_INVALID',
+        retry_after_seconds: null,
+        next_action: 'review_provider_credentials_and_health',
+        updated_at: '2026-06-16T06:33:00Z',
+      },
+      {
+        provider: 'ebay',
+        status: 'error',
+        state: 'degraded',
+        message: 'eBay rate limit backoff is active.',
+        last_error: 'PROVIDER_RATE_LIMITED',
+        retry_after_seconds: 120,
+        next_action: 'retry_after_backoff',
+        updated_at: '2026-06-16T06:34:00Z',
+      },
+    ]
+    let healthIndex = 0
+
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'disabled',
+            has_token: false,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: {
+              status: 'unknown',
+              state: 'disabled',
+              last_checked_at: null,
+            },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { ebay_marketplace: 'EBAY-AU' } },
+    })
+    cy.intercept('GET', '/api/provider/health?provider=ebay', (req) => {
+      req.reply({
+        statusCode: 200,
+        body: healthResponses[Math.min(healthIndex, healthResponses.length - 1)],
+      })
+      healthIndex += 1
+    }).as('providerHealth')
+
+    signIn()
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.contains('Readiness: disabled').scrollIntoView().should('be.visible')
+
+    cy.contains('button', 'Validate').click()
+    cy.wait('@providerHealth')
+    cy.contains('Validated eBay health: ok.').scrollIntoView().should('be.visible')
+    cy.contains('Readiness: ready').scrollIntoView().should('be.visible')
+    cy.contains('Message: eBay credentials are ready for Market Watch runs.')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Next action: run_market_watch_query_sets')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last checked: 2026-06-16T06:31:00Z')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last error:').should('not.exist')
+
+    cy.contains('button', 'Validate').click()
+    cy.wait('@providerHealth')
+    cy.contains('Readiness: disabled').scrollIntoView().should('be.visible')
+    cy.contains('Health: error').scrollIntoView().should('be.visible')
+    cy.contains('Message: eBay bearer token is missing.')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last error: PROVIDER_AUTH_MISSING')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Next action: review_provider_credentials_and_health')
+      .scrollIntoView()
+      .should('be.visible')
+
+    cy.contains('button', 'Validate').click()
+    cy.wait('@providerHealth')
+    cy.contains('Readiness: degraded').scrollIntoView().should('be.visible')
+    cy.contains('Message: eBay rejected the configured token.')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last error: PROVIDER_AUTH_INVALID')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last run: failed').scrollIntoView().should('be.visible')
+
+    cy.contains('button', 'Validate').click()
+    cy.wait('@providerHealth')
+    cy.contains('Message: eBay rate limit backoff is active.')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Last error: PROVIDER_RATE_LIMITED')
+      .scrollIntoView()
+      .should('be.visible')
+    cy.contains('Retry after: 120 seconds').scrollIntoView().should('be.visible')
+    cy.contains('Next action: retry_after_backoff')
+      .scrollIntoView()
+      .should('be.visible')
+  })
+
   it('UI-SCREEN-INTEGRATIONS-010 + UC-INT-UI-12: labels provider config fields programmatically', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
