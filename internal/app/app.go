@@ -2199,7 +2199,7 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"failed_to_get_provider_health"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(health)
+		_ = json.NewEncoder(w).Encode(providerHealthResponse(health))
 	})
 	mux.HandleFunc("/api/providers/registry", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -7802,6 +7802,44 @@ func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map
 		base["message"] = "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI workflows."
 		base["next_action"] = "connect_openai_api_key_or_browser_auth"
 		return base
+	}
+}
+
+func providerHealthResponse(health map[string]string) map[string]any {
+	provider := strings.TrimSpace(health["provider"])
+	status := strings.TrimSpace(health["status"])
+	message := strings.TrimSpace(health["message"])
+	updatedAt := strings.TrimSpace(health["updated_at"])
+	if status == "" {
+		status = "unknown"
+	}
+
+	state := "disabled"
+	switch strings.ToLower(status) {
+	case "ok", "ready":
+		state = "ready"
+	case "error", "degraded":
+		state = "degraded"
+	}
+
+	var lastError any
+	if message != "" && state != "ready" {
+		lastError = message
+	}
+
+	var updated any
+	if updatedAt != "" {
+		updated = updatedAt
+	}
+
+	return map[string]any{
+		"provider":            provider,
+		"status":              status,
+		"state":               state,
+		"message":             message,
+		"last_error":          lastError,
+		"retry_after_seconds": nil,
+		"updated_at":          updated,
 	}
 }
 

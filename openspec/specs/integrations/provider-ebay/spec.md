@@ -55,9 +55,12 @@ Cabinet SHALL report eBay provider health and recent failure telemetry via provi
 - **WHEN** `GET /api/provider/health?provider=ebay` is requested
 - **THEN** response MUST be `200` with:
   - `provider: "ebay"`
-  - `state: ready|degraded|disabled`
-  - `last_error` (nullable)
+  - existing scanner `status: ok|error|unknown`
+  - readiness alias `state: ready|degraded|disabled`
+  - `message` (string)
+  - `last_error` (nullable, populated from provider failure message when degraded)
   - `retry_after_seconds` (nullable integer)
+- **AND** OpenAPI MUST document the provider-health response so clients can route eBay setup, degraded health, and retry guidance without treating it as an untyped object.
 
 ### Requirement INTEGRATION-007: eBay provider MUST capture stock observations when available
 Cabinet SHALL persist stock/availability observations from eBay listing payloads when present.
