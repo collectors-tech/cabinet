@@ -121,6 +121,12 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 			Image      struct {
 				ImageURL string `json:"imageUrl"`
 			} `json:"image"`
+			ShippingOptions []struct {
+				ShippingCost struct {
+					Value    string `json:"value"`
+					Currency string `json:"currency"`
+				} `json:"shippingCost"`
+			} `json:"shippingOptions"`
 			Seller struct {
 				Username string `json:"username"`
 			} `json:"seller"`
@@ -137,12 +143,14 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	for _, it := range payload.ItemSummaries {
 		price, _ := strconv.ParseFloat(it.Price.Value, 64)
+		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
 			ListingID:  it.ItemID,
 			Title:      it.Title,
 			Price:      price,
 			Currency:   strings.ToUpper(strings.TrimSpace(it.Price.Currency)),
+			Shipping:   shipping,
 			URL:        it.ItemWebURL,
 			Image:      it.Image.ImageURL,
 			Seller:     it.Seller.Username,
@@ -152,6 +160,19 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		})
 	}
 	return out, nil
+}
+
+func normalizeShippingCost(options []struct {
+	ShippingCost struct {
+		Value    string `json:"value"`
+		Currency string `json:"currency"`
+	} `json:"shippingCost"`
+}) float64 {
+	if len(options) == 0 {
+		return 0
+	}
+	value, _ := strconv.ParseFloat(strings.TrimSpace(options[0].ShippingCost.Value), 64)
+	return value
 }
 
 func browseErrorMessage(resp *http.Response) string {
