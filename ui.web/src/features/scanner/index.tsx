@@ -49,6 +49,7 @@ type Candidate = {
   title: string
   source?: string
   price?: number | string
+  shipping?: number | string
   currency?: string
   url?: string
   source_url?: string
@@ -911,6 +912,22 @@ export function Scanner() {
     candidate.source_url?.trim() ||
     candidate.listing_id?.trim() ||
     'Not provided'
+
+  const formatCandidateShipping = (candidate: Candidate) => {
+    if (candidate.shipping === undefined || candidate.shipping === null) {
+      return 'Not provided'
+    }
+    const shipping =
+      typeof candidate.shipping === 'number'
+        ? candidate.shipping.toFixed(2)
+        : candidate.shipping.trim()
+    if (!shipping) {
+      return 'Not provided'
+    }
+    return candidate.currency?.trim()
+      ? `${shipping} ${candidate.currency.trim()}`
+      : shipping
+  }
 
   const formatCandidateStock = (candidate: Candidate) =>
     candidate.stock_status?.trim() || candidate.status?.trim() || 'Not provided'
@@ -2221,6 +2238,7 @@ export function Scanner() {
                         <th className='px-2 py-1 font-medium'>Provider</th>
                         <th className='px-2 py-1 font-medium'>Result</th>
                         <th className='px-2 py-1 font-medium'>Price</th>
+                        <th className='px-2 py-1 font-medium'>Shipping</th>
                         <th className='px-2 py-1 font-medium'>Source</th>
                         <th className='px-2 py-1 font-medium'>Stock</th>
                         <th className='px-2 py-1 font-medium'>Handoff</th>
@@ -2240,6 +2258,9 @@ export function Scanner() {
                           <td className='px-2 py-1'>{candidate.title}</td>
                           <td className='px-2 py-1'>
                             {formatCandidatePrice(candidate)}
+                          </td>
+                          <td className='px-2 py-1'>
+                            {formatCandidateShipping(candidate)}
                           </td>
                           <td className='px-2 py-1'>
                             {formatCandidateSource(candidate)}

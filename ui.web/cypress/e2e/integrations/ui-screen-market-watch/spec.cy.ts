@@ -1243,6 +1243,7 @@ describe('integrations/ui-screen-market-watch', () => {
               title: 'eBay AFX Camaro Collector Lot',
               source: 'ebay',
               price: 112.5,
+              shipping: 8.75,
               currency: 'AUD',
               url: 'https://www.ebay.com/itm/ebay-afx-camaro-1',
               stock_status: 'available',
@@ -1341,9 +1342,11 @@ describe('integrations/ui-screen-market-watch', () => {
     cy.get('[data-testid="market-watch-view-mode-table"]').click()
     cy.get('[data-testid="market-watch-open-output-qs-mw-ebay-handoff"]').click()
     cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+      cy.contains('th', 'Shipping').should('be.visible')
       cy.contains('td', 'ebay').should('be.visible')
       cy.contains('td', 'eBay AFX Camaro Collector Lot').should('be.visible')
       cy.contains('td', '112.50 AUD').should('be.visible')
+      cy.contains('td', '8.75 AUD').should('be.visible')
       cy.contains('td', 'https://www.ebay.com/itm/ebay-afx-camaro-1').should(
         'be.visible'
       )
