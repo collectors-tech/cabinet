@@ -26,7 +26,8 @@ function ClerkAuthLayout() {
         <div className='relative z-20 mt-auto'>
           <blockquote className='space-y-2'>
             <p className='text-lg'>
-              &ldquo; Cabinet keeps your collection, watchlists, and pricing context in one secure workspace. &rdquo;
+              &ldquo; Cabinet keeps your collection, watchlists, and pricing
+              context in one secure workspace. &rdquo;
             </p>
             <footer className='text-sm'>Cabinet Team</footer>
           </blockquote>
@@ -41,7 +42,8 @@ function ClerkAuthLayout() {
             }}
             contentProps={{ side: 'top', align: 'end', className: 'w-auto' }}
           >
-            Use cloud sign-in to access Cabinet account and billing controls. <br />
+            Use cloud sign-in to access Cabinet account and billing controls.{' '}
+            <br />
             Back to{' '}
             <Link
               to='/'
@@ -57,4 +59,3 @@ function ClerkAuthLayout() {
     </div>
   )
 }
-

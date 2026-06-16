@@ -1,5 +1,5 @@
-import { Button } from '@/components/ui/button'
 import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
 import { ContentSection } from '../components/content-section'
 
 export function SettingsBilling() {
@@ -14,7 +14,8 @@ export function SettingsBilling() {
         <div className='rounded-md border p-3'>
           <p className='font-medium'>Plan</p>
           <p className='text-muted-foreground'>
-            Billing controls are visible here and sync with cloud entitlement state.
+            Billing controls are visible here and sync with cloud entitlement
+            state.
           </p>
         </div>
         <div className='rounded-md border p-3'>

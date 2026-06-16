@@ -1,7 +1,7 @@
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -64,8 +64,7 @@ export function DisplayForm() {
     saving,
     saveSettings,
     reload,
-  } =
-    useProfileSettings()
+  } = useProfileSettings()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const form = useForm<DisplayFormValues>({
@@ -100,7 +99,9 @@ export function DisplayForm() {
       })
       setSaveMessage('Display settings saved.')
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'failed_to_save_display')
+      setSaveError(
+        err instanceof Error ? err.message : 'failed_to_save_display'
+      )
     }
   }
 
@@ -123,7 +124,10 @@ export function DisplayForm() {
       >
         {error ? (
           profileContextMissing ? (
-            <ProfileContextBlocked error={error} onRetry={() => void reload()} />
+            <ProfileContextBlocked
+              error={error}
+              onRetry={() => void reload()}
+            />
           ) : (
             <div className='rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm'>
               <p className='font-medium'>Failed to load display settings.</p>

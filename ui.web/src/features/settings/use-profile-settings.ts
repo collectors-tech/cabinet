@@ -39,9 +39,7 @@ export function useProfileSettings() {
       setSettings(payload.settings ?? {})
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to load profile settings.'
+        err instanceof Error ? err.message : 'Failed to load profile settings.'
       )
     } finally {
       setLoading(false)
@@ -61,11 +59,14 @@ export function useProfileSettings() {
       const runSave = async () => {
         setSaving(true)
         try {
-          const response = await fetch(`/api/profiles/${activeProfileId}/settings`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: next }),
-          })
+          const response = await fetch(
+            `/api/profiles/${activeProfileId}/settings`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ settings: next }),
+            }
+          )
           if (!response.ok) {
             throw new Error(`profile_settings_save_${response.status}`)
           }
@@ -93,7 +94,8 @@ export function useProfileSettings() {
     loading,
     error,
     profileContextMissing:
-      error === 'active_profile_missing' || error?.startsWith('active_profile_'),
+      error === 'active_profile_missing' ||
+      error?.startsWith('active_profile_'),
     saving,
     reload: load,
     saveSettings,

@@ -22,4 +22,3 @@ export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
-

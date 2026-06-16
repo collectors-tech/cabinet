@@ -1145,10 +1145,7 @@ export function Media() {
             }
           }}
         >
-          <DialogContent
-            className='max-w-3xl'
-            data-testid='media-edit-dialog'
-          >
+          <DialogContent className='max-w-3xl' data-testid='media-edit-dialog'>
             <DialogHeader>
               <DialogTitle>
                 Edit {editAsset?.title ?? 'media asset'}

@@ -59,6 +59,16 @@ Each remediation wave SHALL include before/after references, gap mapping, and un
 - **AND** support surface copy SHALL reference diagnostics workflows
 - **AND** migration wave summary SHALL record commands, test results, and follow-up status
 
+### Requirement UI-GOVERNANCE-GATES-007: UI lint and format gates SHALL pass before baseline blocker closure
+UI baseline blocker issues SHALL only be closed when the UI package lint and format gates run cleanly against the current tree.
+
+#### Scenario: Lint and format baseline closure
+- **GIVEN** a UI lint or format baseline blocker is being closed
+- **WHEN** closure evidence is captured
+- **THEN** `npm run lint` from `ui.web` SHALL exit successfully
+- **AND** `npm run format:check` from `ui.web` SHALL exit successfully
+- **AND** any remaining lint output SHALL be warnings only, with no errors
+
 ## Acceptance Criteria
 1. All gate requirements are normative (`SHALL`) and scenario-testable.
 2. PR and issue closure criteria include mandatory gate evidence and in-session test results.

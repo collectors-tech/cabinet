@@ -63,7 +63,13 @@ export function NavGroup({ title, testIdKey, items }: NavGroupProps) {
   )
 }
 
-function NavBadge({ children, itemKey }: { children: ReactNode; itemKey: string }) {
+function NavBadge({
+  children,
+  itemKey,
+}: {
+  children: ReactNode
+  itemKey: string
+}) {
   return (
     <SidebarMenuBadge
       data-testid={`sidebar-nav-badge-${itemKey}`}
@@ -113,9 +119,14 @@ function SidebarMenuCollapsible({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} className={item.badge ? 'pe-9' : undefined}>
+          <SidebarMenuButton
+            tooltip={item.title}
+            className={item.badge ? 'pe-9' : undefined}
+          >
             {item.icon && <item.icon />}
-            <span data-testid={`sidebar-nav-label-${itemKey}`}>{item.title}</span>
+            <span data-testid={`sidebar-nav-label-${itemKey}`}>
+              {item.title}
+            </span>
             {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
             <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 rtl:rotate-180' />
           </SidebarMenuButton>
@@ -133,7 +144,11 @@ function SidebarMenuCollapsible({
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                       {subItem.icon && <subItem.icon />}
                       <span>{subItem.title}</span>
-                      {subItem.badge && <NavBadge itemKey={subItemKey}>{subItem.badge}</NavBadge>}
+                      {subItem.badge && (
+                        <NavBadge itemKey={subItemKey}>
+                          {subItem.badge}
+                        </NavBadge>
+                      )}
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -164,7 +179,9 @@ function SidebarMenuCollapsedDropdown({
             className={item.badge ? 'pe-9' : undefined}
           >
             {item.icon && <item.icon />}
-            <span data-testid={`sidebar-nav-label-${itemKey}`}>{item.title}</span>
+            <span data-testid={`sidebar-nav-label-${itemKey}`}>
+              {item.title}
+            </span>
             {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
             <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>

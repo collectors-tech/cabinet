@@ -1,11 +1,11 @@
 import { TriangleAlert } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Button } from '@/components/ui/button'
 
 type RouteErrorState = {
   status: string

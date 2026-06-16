@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Tags, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { ContentSection } from '../components/content-section'
-import { ProfileContextBlocked } from '../components/profile-context-blocked'
-import { useProfileSettings } from '../use-profile-settings'
 import {
   defaultInventoryCategoryOptions,
   inventoryCategoryOptionsSettingsKey,
@@ -32,6 +29,9 @@ import {
   parsePackagingGradeOptions,
   serializePackagingGradeOptions,
 } from '@/features/inventory/packaging-grade-options'
+import { ContentSection } from '../components/content-section'
+import { ProfileContextBlocked } from '../components/profile-context-blocked'
+import { useProfileSettings } from '../use-profile-settings'
 
 export function SettingsCategories() {
   const {
@@ -101,9 +101,8 @@ export function SettingsCategories() {
     setSaveError(null)
     const nextSettings = {
       ...settings,
-      [inventoryCategoryOptionsSettingsKey]: serializeCategoryOptions(
-        categories
-      ),
+      [inventoryCategoryOptionsSettingsKey]:
+        serializeCategoryOptions(categories),
       [inventoryItemTypeConditionScalesSettingsKey]:
         serializeItemTypeConditionScales(itemTypeScales),
       [inventoryPackagingGradesSettingsKey]:
@@ -116,9 +115,7 @@ export function SettingsCategories() {
       )
     } catch (err) {
       setSaveError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to save taxonomy settings.'
+        err instanceof Error ? err.message : 'Failed to save taxonomy settings.'
       )
     }
   }
@@ -271,8 +268,8 @@ export function SettingsCategories() {
             <div>
               <h4 className='font-medium'>Packaging grades</h4>
               <p className='text-sm text-muted-foreground'>
-                Packaging grades are reusable grading values for boxed,
-                opened, complete, and loose item states.
+                Packaging grades are reusable grading values for boxed, opened,
+                complete, and loose item states.
               </p>
             </div>
           </div>

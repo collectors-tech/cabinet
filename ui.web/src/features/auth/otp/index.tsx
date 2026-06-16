@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -7,7 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { AuthLayout } from '../auth-layout'
 import { OtpForm } from './components/otp-form'
 
@@ -23,7 +23,9 @@ export function Otp() {
 
     window.setTimeout(() => {
       setResendState('sent')
-      setResendMessage('A new verification code was sent. Stay on this screen and enter the latest code.')
+      setResendMessage(
+        'A new verification code was sent. Stay on this screen and enter the latest code.'
+      )
     }, 700)
   }
 

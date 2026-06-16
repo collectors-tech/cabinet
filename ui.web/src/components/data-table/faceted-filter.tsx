@@ -64,8 +64,7 @@ export function DataTableFacetedFilter<TData, TValue>({
     column?.setFilterValue(filterValues.length ? filterValues : undefined)
   }
 
-  const guardDuplicateSelection = () => {
-    const now = performance.now()
+  const guardDuplicateSelection = (now: number) => {
     if (now - lastSelectionAtRef.current < 50) {
       return false
     }
@@ -131,8 +130,10 @@ export function DataTableFacetedFilter<TData, TValue>({
             <CommandGroup>
               {options.map((option) => {
                 const isSelected = selectedValues.has(option.value)
-                const selectOption = () => {
-                  if (!guardDuplicateSelection()) {
+                const selectOption = (
+                  event: React.MouseEvent<HTMLButtonElement>
+                ) => {
+                  if (!guardDuplicateSelection(event.timeStamp)) {
                     return
                   }
                   const nextSelectedValues = new Set(selectedValues)

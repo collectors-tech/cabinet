@@ -26,7 +26,9 @@ type TeamSwitcherProps = {
 }
 
 function profilePlanLabel(name: string) {
-  return /showcase|sample|demo/i.test(name) ? 'Showcase sample data' : 'Database'
+  return /showcase|sample|demo/i.test(name)
+    ? 'Showcase sample data'
+    : 'Database'
 }
 
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
@@ -74,7 +76,16 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               plan: profilePlanLabel(name),
             }
           })
-          .filter((workspace): workspace is { id: string; name: string; logo: React.ElementType; plan: string } => Boolean(workspace))
+          .filter(
+            (
+              workspace
+            ): workspace is {
+              id: string
+              name: string
+              logo: React.ElementType
+              plan: string
+            } => Boolean(workspace)
+          )
 
         if (!profileWorkspaces.length || cancelled) {
           throw new Error('profile-empty')
@@ -89,8 +100,9 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
         )
 
         const selected =
-          profileWorkspaces.find((workspace) => workspace.id === activePayload.id) ??
-          profileWorkspaces[0]
+          profileWorkspaces.find(
+            (workspace) => workspace.id === activePayload.id
+          ) ?? profileWorkspaces[0]
 
         setActiveTeam({
           name: selected.name,
@@ -137,7 +149,9 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
     if (!setActiveResp.ok) {
       return
     }
-    const selectedWorkspace = availableWorkspaces.find((workspace) => workspace.name === targetName)
+    const selectedWorkspace = availableWorkspaces.find(
+      (workspace) => workspace.name === targetName
+    )
     if (selectedWorkspace) {
       setActiveTeam(selectedWorkspace)
     }
@@ -208,12 +222,16 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <activeTeam.logo className='size-4' />
               </div>
               <div className='grid flex-1 text-start text-sm leading-tight'>
-                <span className='truncate font-semibold' data-testid='active-profile-name'>
+                <span
+                  className='truncate font-semibold'
+                  data-testid='active-profile-name'
+                >
                   {activeTeam.name}
                 </span>
                 <span className='truncate text-xs'>
                   <span data-testid='active-profile-status'>
-                    {loadError ?? (loading ? 'Loading profiles...' : activeTeam.plan)}
+                    {loadError ??
+                      (loading ? 'Loading profiles...' : activeTeam.plan)}
                   </span>
                 </span>
               </div>

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
+import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetClose,
@@ -23,6 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { priorities } from '../data/data'
 import { type Task } from '../data/schema'
@@ -85,11 +85,11 @@ const wishlistFormSchema = z.object({
   owned: z.boolean(),
   delivered: z.boolean(),
   targetPrice: z.string().refine((value) => {
-      if (value.trim() === '') {
-        return true
-      }
-      return !Number.isNaN(Number(value)) && Number(value) >= 0
-    }, 'Target price must be a positive number.'),
+    if (value.trim() === '') {
+      return true
+    }
+    return !Number.isNaN(Number(value)) && Number(value) >= 0
+  }, 'Target price must be a positive number.'),
   pricePaid: z.string().refine((value) => {
     if (value.trim() === '') {
       return true

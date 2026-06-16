@@ -44,10 +44,7 @@
       property="og:description"
       content="Cabinet local-first collector workspace for inventory, discovery, and pricing."
     />
-    <meta
-      property="og:image"
-      content="/images/cabinet-ui.png"
-    />
+    <meta property="og:image" content="/images/cabinet-ui.png" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
@@ -57,10 +54,7 @@
       property="twitter:description"
       content="Cabinet local-first collector workspace for inventory, discovery, and pricing."
     />
-    <meta
-      property="twitter:image"
-      content="/images/cabinet-ui.png"
-    />
+    <meta property="twitter:image" content="/images/cabinet-ui.png" />
 
     <!-- font family -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -72,38 +66,38 @@
 
     <meta name="theme-color" content="#020817" />
     <script>
-      (function () {
-        var cookieName = 'vite-ui-theme=';
-        var raw = document.cookie || '';
-        var value = '';
-        var parts = raw.split(';');
+      ;(function () {
+        var cookieName = 'vite-ui-theme='
+        var raw = document.cookie || ''
+        var value = ''
+        var parts = raw.split(';')
         for (var i = 0; i < parts.length; i += 1) {
-          var part = parts[i].trim();
+          var part = parts[i].trim()
           if (part.indexOf(cookieName) === 0) {
-            value = decodeURIComponent(part.substring(cookieName.length));
-            break;
+            value = decodeURIComponent(part.substring(cookieName.length))
+            break
           }
         }
 
-        var resolved = 'dark';
+        var resolved = 'dark'
         if (value === 'light' || value === 'dark') {
-          resolved = value;
+          resolved = value
         } else if (value === 'system') {
-          var prefersDark = false;
+          var prefersDark = false
           try {
             prefersDark =
               typeof window.matchMedia === 'function' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches;
+              window.matchMedia('(prefers-color-scheme: dark)').matches
           } catch (e) {
-            prefersDark = false;
+            prefersDark = false
           }
-          resolved = prefersDark ? 'dark' : 'light';
+          resolved = prefersDark ? 'dark' : 'light'
         }
 
-        var root = document.documentElement;
-        root.classList.remove('light', 'dark');
-        root.classList.add(resolved);
-      })();
+        var root = document.documentElement
+        root.classList.remove('light', 'dark')
+        root.classList.add(resolved)
+      })()
     </script>
   </head>
 
@@ -112,4 +106,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

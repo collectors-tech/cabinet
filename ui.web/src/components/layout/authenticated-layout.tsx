@@ -1,5 +1,5 @@
-import { Outlet, useLocation } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { Outlet, useLocation } from '@tanstack/react-router'
 import { getCookie } from '@/lib/cookies'
 import { getDocumentTitle } from '@/lib/document-title'
 import { cn } from '@/lib/utils'

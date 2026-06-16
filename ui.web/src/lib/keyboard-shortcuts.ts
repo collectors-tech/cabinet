@@ -14,14 +14,7 @@ const DEFAULT_SHORTCUTS: Record<ShortcutID, string> = {
 
 const REGISTRATION_ORDER: ShortcutID[] = ['command-palette', 'sidebar-toggle']
 
-const RESERVED_SHORTCUT_KEYS = new Set([
-  'r',
-  'w',
-  't',
-  'l',
-  ',',
-  'f',
-])
+const RESERVED_SHORTCUT_KEYS = new Set(['r', 'w', 't', 'l', ',', 'f'])
 
 const OVERRIDES_STORAGE_KEY = 'cabinet.shortcuts.overrides'
 
@@ -38,10 +31,7 @@ function isValidShortcutKey(value: string): boolean {
   return /^[a-z]$/.test(value)
 }
 
-function pickFallbackShortcut(
-  id: ShortcutID,
-  usedKeys: Set<string>
-): string {
+function pickFallbackShortcut(id: ShortcutID, usedKeys: Set<string>): string {
   const candidates = [
     DEFAULT_SHORTCUTS[id],
     ...Object.values(DEFAULT_SHORTCUTS),
@@ -87,10 +77,14 @@ function applyDiagnosticsToWindow(
   if (typeof window === 'undefined') {
     return
   }
-  ;(window as Window & { __cabinetShortcutDiagnostics?: ShortcutDiagnosticsEntry[] }).__cabinetShortcutDiagnostics =
-    diagnostics
-  ;(window as Window & { __cabinetShortcuts?: Record<ShortcutID, string> }).__cabinetShortcuts =
-    resolvedShortcuts
+  ;(
+    window as Window & {
+      __cabinetShortcutDiagnostics?: ShortcutDiagnosticsEntry[]
+    }
+  ).__cabinetShortcutDiagnostics = diagnostics
+  ;(
+    window as Window & { __cabinetShortcuts?: Record<ShortcutID, string> }
+  ).__cabinetShortcuts = resolvedShortcuts
 }
 
 function resolveShortcuts(): Record<ShortcutID, string> {
@@ -103,7 +97,9 @@ function resolveShortcuts(): Record<ShortcutID, string> {
   const diagnostics: ShortcutDiagnosticsEntry[] = []
 
   for (const id of REGISTRATION_ORDER) {
-    const requested = normalizeShortcutKey(overrides[id] ?? DEFAULT_SHORTCUTS[id])
+    const requested = normalizeShortcutKey(
+      overrides[id] ?? DEFAULT_SHORTCUTS[id]
+    )
     const isInvalid = !isValidShortcutKey(requested)
     const isReserved = RESERVED_SHORTCUT_KEYS.has(requested)
     const isDuplicate = usedKeys.has(requested)
