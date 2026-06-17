@@ -66,6 +66,12 @@ type RunSummary = {
   candidates_total: number
 }
 
+type ProviderRunSnapshot = {
+  saved?: number
+  observed_page_size?: number
+  page_count?: number
+}
+
 type RunMeta = {
   status: 'never' | 'running' | 'succeeded' | 'failed'
   ranAtISO?: string
@@ -720,15 +726,26 @@ export function Scanner() {
       const payload = (await providerResponse.json()) as {
         candidates?: Candidate[]
         run_summary?: RunSummary
+        run?: ProviderRunSnapshot
       }
+      const candidates = payload.candidates ?? []
       setCandidatesByQuerySet((current) => ({
         ...current,
-        [querySet.id]: payload.candidates ?? [],
+        [querySet.id]: candidates,
       }))
       if (payload.run_summary) {
         setRunSummaryByQuerySet((current) => ({
           ...current,
           [querySet.id]: payload.run_summary as RunSummary,
+        }))
+      } else if (payload.run) {
+        setRunSummaryByQuerySet((current) => ({
+          ...current,
+          [querySet.id]: {
+            page_count: payload.run?.page_count ?? 0,
+            observed_page_size: payload.run?.observed_page_size ?? 0,
+            candidates_total: payload.run?.saved ?? candidates.length,
+          },
         }))
       }
       setActionStatus(`${providerRunRoute.provider}_run_started_${querySet.id}`)

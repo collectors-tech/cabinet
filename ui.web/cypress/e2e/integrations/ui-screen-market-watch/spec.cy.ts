@@ -674,6 +674,98 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
+  it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-pagination',
+            name: 'eBay Paginated HO Run',
+            keywords: ['ho slot car'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', { statusCode: 200, body: { failures: [] } }).as(
+      'failures'
+    )
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-pagination')
+      req.reply({
+        statusCode: 200,
+        body: {
+          query_set_id: 'qs-mw-ebay-pagination',
+          provider: 'ebay',
+          candidates: [
+            {
+              id: 'cand-ebay-pagination-1',
+              query_set_id: 'qs-mw-ebay-pagination',
+              listing_id: 'ebay-ho-1',
+              title: 'Aurora HO slot car lot',
+              source: 'ebay',
+              price: 42,
+              observed_currency: 'AUD',
+              url: 'https://www.ebay.example/itm/ebay-ho-1',
+              stock_state: 'in_stock',
+              stock_count: 2,
+            },
+            {
+              id: 'cand-ebay-pagination-2',
+              query_set_id: 'qs-mw-ebay-pagination',
+              listing_id: 'ebay-ho-2',
+              title: 'Tyco HO track bundle',
+              source: 'ebay',
+              price: 64,
+              observed_currency: 'AUD',
+              url: 'https://www.ebay.example/itm/ebay-ho-2',
+              stock_state: 'low_stock',
+              stock_count: 1,
+            },
+          ],
+          run: {
+            saved: 2,
+            attempts: 2,
+            items_per_page_requested: 60,
+            items_per_page_effective: 48,
+            observed_page_size: 24,
+            page_count: 3,
+            items_per_page_warning: 'requested page size capped at 48',
+          },
+        },
+      })
+    }).as('runEbayPagination')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-pagination"]').click()
+    cy.wait('@runEbayPagination')
+
+    cy.get('[data-testid="scanner-run-summary-qs-mw-ebay-pagination"]')
+      .should('contain', 'Pages: 3')
+      .and('contain', 'Candidates: 2')
+      .and('contain', 'Observed page size: 24')
+
+    cy.get('[data-testid="market-watch-view-mode-table"]').click()
+    cy.get('[data-testid="market-watch-open-output-qs-mw-ebay-pagination"]').click()
+    cy.get('[data-testid="market-watch-output-detail"]').within(() => {
+      cy.contains('eBay Paginated HO Run').should('be.visible')
+      cy.contains('Pages scanned').should('be.visible')
+      cy.contains('3').should('be.visible')
+      cy.contains('Candidates').should('be.visible')
+      cy.contains('2').should('be.visible')
+      cy.contains('Observed page size').should('be.visible')
+      cy.contains('24').should('be.visible')
+      cy.contains('Aurora HO slot car lot').should('be.visible')
+      cy.contains('ebay').should('be.visible')
+    })
+  })
+
   it('UI-SCREEN-MARKET-WATCH-006 runs Bonza AFX query and surfaces aggregated run summary', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,

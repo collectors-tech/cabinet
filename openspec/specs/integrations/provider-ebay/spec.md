@@ -76,6 +76,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **GIVEN** an eBay-scoped Market Watch run returns normalized saved-search output candidates with `source="ebay"`
 - **WHEN** the operator inspects the output details and sends the first result to Wishlist or Inventory
 - **THEN** the output detail MUST display normalized price, shipping, stock, source URL, and handoff state fields for the eBay candidate
+- **AND** the Market Watch output detail and inline run summary MUST surface the eBay provider run pagination snapshot, including pages scanned, candidate count, and observed page size.
 - **THEN** the UI MUST post the selected candidate through the durable discovery action with Market Watch query provenance
 - **AND** the discovery action response MUST include the enriched eBay handoff audit metadata returned by the persisted action.
 - **AND** the downstream Wishlist and Inventory reloads MUST show eBay source provider, query id, query name, provider scope, and source URL provenance.
