@@ -159,6 +159,7 @@ paths:
     get:
       tags: [Profiles]
       summary: Get profile settings
+      description: eBay setup clients use this settings surface to read provider credentials and marketplace routing for active-profile runs.
       responses:
         "200":
           description: Settings map
@@ -169,6 +170,17 @@ paths:
                 properties:
                   settings:
                     type: object
+                    description: Profile settings map. eBay setup keys include `ebay_bearer_token`, `ebay_marketplace`, and `ebay_base_url`.
+                    properties:
+                      ebay_bearer_token:
+                        type: string
+                        description: eBay Browse bearer token used by provider-backed Market Watch runs.
+                      ebay_marketplace:
+                        type: string
+                        description: Marketplace / region code such as EBAY_AU.
+                      ebay_base_url:
+                        type: string
+                        description: Optional eBay Browse API base URL override for tests and controlled provider stubs.
                     additionalProperties:
                       type: string
         "400":
@@ -176,6 +188,7 @@ paths:
     put:
       tags: [Profiles]
       summary: Update profile settings
+      description: eBay setup clients use this settings surface to store provider credentials and marketplace routing for active-profile runs.
       requestBody:
         required: true
         content:
@@ -186,6 +199,17 @@ paths:
               properties:
                 settings:
                   type: object
+                  description: Profile settings map. eBay setup keys include `ebay_bearer_token`, `ebay_marketplace`, and `ebay_base_url`.
+                  properties:
+                    ebay_bearer_token:
+                      type: string
+                      description: eBay Browse bearer token used by provider-backed Market Watch runs.
+                    ebay_marketplace:
+                      type: string
+                      description: Marketplace / region code such as EBAY_AU.
+                    ebay_base_url:
+                      type: string
+                      description: Optional eBay Browse API base URL override for tests and controlled provider stubs.
                   additionalProperties:
                     type: string
       responses:
@@ -198,6 +222,17 @@ paths:
                 properties:
                   settings:
                     type: object
+                    description: Profile settings map. eBay setup keys include `ebay_bearer_token`, `ebay_marketplace`, and `ebay_base_url`.
+                    properties:
+                      ebay_bearer_token:
+                        type: string
+                        description: eBay Browse bearer token used by provider-backed Market Watch runs.
+                      ebay_marketplace:
+                        type: string
+                        description: Marketplace / region code such as EBAY_AU.
+                      ebay_base_url:
+                        type: string
+                        description: Optional eBay Browse API base URL override for tests and controlled provider stubs.
                     additionalProperties:
                       type: string
         "400":

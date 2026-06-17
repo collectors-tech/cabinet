@@ -520,6 +520,29 @@ func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbaySetupSettingsKeys(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/profiles/{profileID}/settings")
+	if !ok {
+		t.Fatalf("openapi missing /api/profiles/{profileID}/settings path in %s", specPath)
+	}
+	for _, token := range []string{
+		"eBay setup clients use this settings surface to store provider credentials and marketplace routing for active-profile runs.",
+		"ebay_bearer_token",
+		"eBay Browse bearer token used by provider-backed Market Watch runs.",
+		"ebay_marketplace",
+		"Marketplace / region code such as EBAY_AU.",
+		"ebay_base_url",
+		"Optional eBay Browse API base URL override for tests and controlled provider stubs.",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi profile settings section missing %q:\n%s", token, section)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	t.Parallel()
 
