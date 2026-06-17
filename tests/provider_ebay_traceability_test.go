@@ -164,3 +164,46 @@ func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 		}
 	}
 }
+
+func TestEbayListingLifecycleTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-028` ") || strings.HasPrefix(line, "| INTEGRATION-028 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-028")
+	}
+
+	requiredFragments := []string{
+		"seller listing lifecycle draft/publish/revise/end/relist safety-gated command contract",
+		"API preview/execute wiring",
+		"OpenAPI parity",
+		"integration UI confirm-before-write workflow",
+		"TestPreviewSellerListingLifecycleCommandsGateRemoteWrites",
+		"TestExecuteSellerListingLifecycleCommandUsesMockedEbayResponses",
+		"TestExecuteSellerListingLifecycleCommandBlocksUnconfirmedWrites",
+		"TestEbayListingLifecyclePreviewExposesLocalDraftOnly",
+		"TestEbayListingLifecycleExecuteAllowsLocalDraftAndBlocksRemoteAdapter",
+		"TestOpenAPIDocumentsEbayListingLifecycleContract",
+		"INTEGRATION-028: previews listing lifecycle commands and executes local drafts without remote write claims",
+		"TestEbayListingLifecycleTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-028 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
