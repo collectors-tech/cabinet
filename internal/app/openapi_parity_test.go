@@ -556,6 +556,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"Runs an eBay-scoped saved search with active-profile credentials, persists normalized candidates, and returns the hydrated run snapshot.",
 		"$ref: \"#/components/schemas/EbayProviderRunRequest\"",
 		"$ref: \"#/components/schemas/EbayProviderRunResponse\"",
+		`"400":`,
+		"$ref: \"#/components/schemas/EbayProviderRunClientErrorResponse\"",
 		`"401":`,
 		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
 		`"429":`,
@@ -632,6 +634,21 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	} {
 		if !strings.Contains(snapshotSchema, token) {
 			t.Fatalf("openapi EbayProviderRunSnapshot schema missing %q:\n%s", token, snapshotSchema)
+		}
+	}
+
+	clientErrorSchema, ok := openAPIComponentSection(raw, "EbayProviderRunClientErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunClientErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"error:",
+		"enum: [invalid_json, missing_query_set_id, active_profile_not_set, failed_to_get_settings, invalid_query_set_id, failed_to_list_ebay_candidates]",
+		"query_set_id:",
+		"description: Active-profile scanner query set id when the request was parsed and resolved before the failure.",
+	} {
+		if !strings.Contains(clientErrorSchema, token) {
+			t.Fatalf("openapi EbayProviderRunClientErrorResponse schema missing %q:\n%s", token, clientErrorSchema)
 		}
 	}
 
