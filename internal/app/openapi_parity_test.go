@@ -562,6 +562,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
 		`"429":`,
 		"$ref: \"#/components/schemas/EbayProviderRunSearchErrorResponse\"",
+		`"405":`,
+		"$ref: \"#/components/schemas/EbayProviderRunMethodErrorResponse\"",
 	} {
 		if !strings.Contains(section, token) {
 			t.Fatalf("openapi /api/providers/ebay/run section missing %q:\n%s", token, section)
@@ -649,6 +651,19 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	} {
 		if !strings.Contains(clientErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunClientErrorResponse schema missing %q:\n%s", token, clientErrorSchema)
+		}
+	}
+
+	methodErrorSchema, ok := openAPIComponentSection(raw, "EbayProviderRunMethodErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunMethodErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [error]",
+		"error: { type: string, enum: [method_not_allowed] }",
+	} {
+		if !strings.Contains(methodErrorSchema, token) {
+			t.Fatalf("openapi EbayProviderRunMethodErrorResponse schema missing %q:\n%s", token, methodErrorSchema)
 		}
 	}
 
