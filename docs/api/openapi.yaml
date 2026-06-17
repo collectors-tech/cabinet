@@ -3406,6 +3406,8 @@ components:
         first_seen: { type: string }
         last_seen: { type: string }
         status: { type: string }
+        stock_state: { type: string, description: Normalized provider stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_count: { type: integer, description: Normalized provider stock quantity when available; -1 indicates unknown. }
         source: { type: string, description: Source provider id such as ebay. }
     MatchResult:
       type: object
