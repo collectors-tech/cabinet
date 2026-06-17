@@ -135,6 +135,7 @@ Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest st
 - **WHEN** the operator previews or imports buyer-interest payloads from the dialog
 - **THEN** Cabinet MUST call the buyer-interest preview/import endpoints with the edited payload, summarize Wishlist and Discovery destination counts, and show per-listing destination/provenance outcomes.
 - **AND** the dialog MUST keep remote write-back visibly blocked unless eBay write-back capability has been verified.
+- **AND** the OpenAPI contract MUST document both `/api/providers/ebay/buyer-interest/preview` and `/api/providers/ebay/buyer-interest/import` with reusable request/response schemas covering source account, listing inputs, destination mapping, provenance key, persisted local identifiers, summary counts, owned-inventory separation, and write-back blocker fields.
 
 ### Requirement INTEGRATION-026: eBay buyer-interest write-back MUST be capability gated
 Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay API capability has been verified for the active account and marketplace.
@@ -144,6 +145,7 @@ Cabinet SHALL only offer add/remove/watch-state write-back when the exact eBay A
 - **WHEN** a write-back action is evaluated, previewed through `POST /api/providers/ebay/buyer-interest/preview`, or persisted through `POST /api/providers/ebay/buyer-interest/import`
 - **THEN** Cabinet MUST report write-back as blocked with a capability-not-verified reason
 - **AND** it MUST NOT imply the remote eBay watch, saved, liked, or cart-like state was changed.
+- **AND** generated clients MUST be able to read the documented `write_back_capability`, `write_back_allowed`, and `write_back_blocker` fields from the buyer-interest OpenAPI schemas before rendering any remote write-back affordance.
 
 ### Requirement INTEGRATION-027: eBay seller operations MUST expose truthful capability-gated states
 Cabinet SHALL represent seller messages, notifications, sold orders, fulfilment, and offers as separate eBay seller operation capabilities so unavailable or read-only API support is not presented as a writable workflow.

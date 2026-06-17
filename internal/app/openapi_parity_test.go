@@ -37,6 +37,8 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/telegram/webhook/catalog-captures",
 		"/api/integrations/ebay/purchase-inbox/reviews",
 		"/api/integrations/ebay/purchase-inbox/actions",
+		"/api/providers/ebay/buyer-interest/preview",
+		"/api/providers/ebay/buyer-interest/import",
 		"/api/forwarding/packages",
 		"/api/forwarding/packages/import-csv",
 		"/api/forwarding/packages/import-email",
@@ -312,6 +314,106 @@ func TestOpenAPIDocumentsForwarderMatchSuggestionQueryContract(t *testing.T) {
 	} {
 		if !strings.Contains(suggestionSchema, token) {
 			t.Fatalf("openapi ForwarderPackageMatchSuggestion schema missing %q:\n%s", token, suggestionSchema)
+		}
+	}
+}
+
+func TestOpenAPIDocumentsEbayBuyerInterestContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	for path, operationID := range map[string]string{
+		"/api/providers/ebay/buyer-interest/preview": "previewEbayBuyerInterest",
+		"/api/providers/ebay/buyer-interest/import":  "importEbayBuyerInterest",
+	} {
+		section, ok := openAPIPathSection(raw, path)
+		if !ok {
+			t.Fatalf("openapi missing %s path in %s", path, specPath)
+		}
+		for _, token := range []string{
+			"operationId: " + operationID,
+			"$ref: \"#/components/schemas/EbayBuyerInterestRequest\"",
+			"$ref: \"#/components/schemas/EbayBuyerInterestResponse\"",
+		} {
+			if !strings.Contains(section, token) {
+				t.Fatalf("openapi %s section missing %q:\n%s", path, token, section)
+			}
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "EbayBuyerInterestRequest")
+	if !ok {
+		t.Fatalf("openapi missing EbayBuyerInterestRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"source_account: { type: string }",
+		"items:",
+		"$ref: \"#/components/schemas/EbayBuyerInterestInput\"",
+		"write_back_capability:",
+		"enum: [unsupported, unavailable, api_confirmed]",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi EbayBuyerInterestRequest schema missing %q:\n%s", token, requestSchema)
+		}
+	}
+
+	inputSchema, ok := openAPIComponentSection(raw, "EbayBuyerInterestInput")
+	if !ok {
+		t.Fatalf("openapi missing EbayBuyerInterestInput schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"listing_id: { type: string }",
+		"title: { type: string }",
+		"url: { type: string }",
+		"state:",
+		"enum: [watched, saved, liked, cart_like]",
+		"source_account: { type: string }",
+		"observed_at: { type: string }",
+		"write_back_capability:",
+	} {
+		if !strings.Contains(inputSchema, token) {
+			t.Fatalf("openapi EbayBuyerInterestInput schema missing %q:\n%s", token, inputSchema)
+		}
+	}
+
+	responseSchema, ok := openAPIComponentSection(raw, "EbayBuyerInterestResponse")
+	if !ok {
+		t.Fatalf("openapi missing EbayBuyerInterestResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"mode:",
+		"enum: [preview, import]",
+		"items:",
+		"summary:",
+		"write_back_allowed: { type: integer }",
+		"write_back_blocked: { type: integer }",
+		"$ref: \"#/components/schemas/EbayBuyerInterestMapping\"",
+	} {
+		if !strings.Contains(responseSchema, token) {
+			t.Fatalf("openapi EbayBuyerInterestResponse schema missing %q:\n%s", token, responseSchema)
+		}
+	}
+
+	mappingSchema, ok := openAPIComponentSection(raw, "EbayBuyerInterestMapping")
+	if !ok {
+		t.Fatalf("openapi missing EbayBuyerInterestMapping schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"source_provider: { type: string, enum: [ebay] }",
+		"source_account: { type: string }",
+		"listing_id: { type: string }",
+		"destination:",
+		"enum: [wishlist, discovery]",
+		"owned_inventory: { type: boolean }",
+		"write_back_allowed: { type: boolean }",
+		"write_back_blocker: { type: string }",
+		"provenance_key: { type: string }",
+		"persisted_id: { type: string }",
+		"item_id: { type: string }",
+		"candidate_id: { type: string }",
+	} {
+		if !strings.Contains(mappingSchema, token) {
+			t.Fatalf("openapi EbayBuyerInterestMapping schema missing %q:\n%s", token, mappingSchema)
 		}
 	}
 }

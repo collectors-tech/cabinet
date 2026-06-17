@@ -704,60 +704,46 @@ paths:
                       $ref: "#/components/schemas/MatchResult"
         "400":
           $ref: "#/components/responses/Error"
-  /api/providers/ebay/buyer-interest/import:
+  /api/providers/ebay/buyer-interest/preview:
     post:
       tags: [Integrations]
-      summary: Import eBay buyer-interest state into Wishlist and Discoveries
+      summary: Preview eBay buyer-interest state mapping without persistence
+      description: Maps watched, saved, liked, and cart-like eBay buyer-interest payloads to local Wishlist or Discoveries destinations while preserving provenance and write-back safety state.
+      operationId: previewEbayBuyerInterest
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [items]
-              properties:
-                source_account:
-                  type: string
-                write_back_capability:
-                  type: string
-                items:
-                  type: array
-                  items:
-                    type: object
-                    required: [listing_id]
-                    properties:
-                      listing_id:
-                        type: string
-                      title:
-                        type: string
-                      url:
-                        type: string
-                      state:
-                        type: string
-                      source_account:
-                        type: string
-                      observed_at:
-                        type: string
-                      write_back_capability:
-                        type: string
+              $ref: "#/components/schemas/EbayBuyerInterestRequest"
+      responses:
+        "200":
+          description: Buyer-interest preview result with destination and write-back summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayBuyerInterestResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/providers/ebay/buyer-interest/import:
+    post:
+      tags: [Integrations]
+      summary: Import eBay buyer-interest state into Wishlist and Discoveries
+      description: Persists eBay buyer-interest mappings into local Wishlist entries or Discoveries candidates without claiming remote eBay write-back unless capability is verified.
+      operationId: importEbayBuyerInterest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EbayBuyerInterestRequest"
       responses:
         "200":
           description: Import result with persisted Wishlist/Discovery identifiers
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  provider:
-                    type: string
-                  mode:
-                    type: string
-                  items:
-                    type: array
-                    items:
-                      type: object
-                  summary:
-                    type: object
+                $ref: "#/components/schemas/EbayBuyerInterestResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/providers/ebay/seller-operations/preview:
@@ -3710,6 +3696,76 @@ components:
         audit_trail:
           type: array
           items: { type: string }
+    EbayBuyerInterestRequest:
+      type: object
+      required: [items]
+      properties:
+        source_account: { type: string }
+        write_back_capability:
+          type: string
+          enum: [unsupported, unavailable, api_confirmed]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EbayBuyerInterestInput"
+    EbayBuyerInterestInput:
+      type: object
+      required: [listing_id]
+      properties:
+        listing_id: { type: string }
+        title: { type: string }
+        url: { type: string }
+        state:
+          type: string
+          enum: [watched, saved, liked, cart_like]
+        source_account: { type: string }
+        observed_at: { type: string }
+        write_back_capability:
+          type: string
+          enum: [unsupported, unavailable, api_confirmed]
+    EbayBuyerInterestResponse:
+      type: object
+      properties:
+        provider: { type: string, enum: [ebay] }
+        mode:
+          type: string
+          enum: [preview, import]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EbayBuyerInterestMapping"
+        summary:
+          type: object
+          properties:
+            wishlist: { type: integer }
+            discovery: { type: integer }
+            write_back_allowed: { type: integer }
+            write_back_blocked: { type: integer }
+    EbayBuyerInterestMapping:
+      type: object
+      properties:
+        listing_id: { type: string }
+        title: { type: string }
+        url: { type: string }
+        state:
+          type: string
+          enum: [watched, saved, liked, cart_like]
+        destination:
+          type: string
+          enum: [wishlist, discovery]
+        source_provider: { type: string, enum: [ebay] }
+        source_account: { type: string }
+        observed_at: { type: string }
+        provenance_key: { type: string }
+        write_back_capability:
+          type: string
+          enum: [unsupported, unavailable, api_confirmed]
+        write_back_allowed: { type: boolean }
+        write_back_blocker: { type: string }
+        owned_inventory: { type: boolean }
+        persisted_id: { type: string }
+        item_id: { type: string }
+        candidate_id: { type: string }
     EbaySellerOperationRequest:
       type: object
       required: [operation, action]
