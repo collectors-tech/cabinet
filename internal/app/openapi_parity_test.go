@@ -560,6 +560,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"$ref: \"#/components/schemas/EbayProviderRunClientErrorResponse\"",
 		`"401":`,
 		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
+		`"403":`,
+		"eBay provider credentials are rejected by the upstream API; the response preserves the structured auth error envelope while using 403 to distinguish forbidden credentials from missing credentials.",
 		`"429":`,
 		"$ref: \"#/components/schemas/EbayProviderRunSearchErrorResponse\"",
 		`"405":`,
