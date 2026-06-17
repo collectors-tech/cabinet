@@ -66,3 +66,56 @@ func TestAssistantOpenAIWorkflowPlanBindsIssue847Contracts(t *testing.T) {
 		}
 	}
 }
+
+func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) {
+	t.Parallel()
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	rows := map[string]string{}
+	for _, line := range strings.Split(string(traceRaw), "\n") {
+		for _, id := range []string{"ASSISTANT-EXECUTION-006", "ASSISTANT-EXECUTION-008"} {
+			if strings.HasPrefix(line, "| `"+id+"` ") {
+				rows[id] = line
+			}
+		}
+	}
+
+	requiredByID := map[string][]string{
+		"ASSISTANT-EXECUTION-006": {
+			"#1337",
+			"OpenAI readiness remains non-live-provider until verified API-key/Browser Auth/provider-test evidence exists",
+			"TestOpenAIProviderHealthReflectsProfileReadiness",
+			"TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof",
+			"TestChatCapabilitiesDiscoveryExposesGovernedRegistry",
+			"TestAssistantContentListingGenerationRunsStayPreviewFirst",
+			"TestAssistantImageCapabilityRunsPreserveOriginalAndAuditLinks",
+			"TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath",
+			"| partial |",
+		},
+		"ASSISTANT-EXECUTION-008": {
+			"#1337",
+			"External intake remains planned until authorized Telegram/OpenAI runtime execution is validated end-to-end",
+			"TestAssistantWorkflowRunsPersistLifecycleAndBulkResults",
+			"TestAssistantOpenAIWorkflowPlanBindsIssue847Contracts",
+			"TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath",
+			"| planned |",
+		},
+	}
+
+	for id, requiredFragments := range requiredByID {
+		row := rows[id]
+		if row == "" {
+			t.Fatalf("expected traceability row for %s", id)
+		}
+		for _, fragment := range requiredFragments {
+			if !strings.Contains(row, fragment) {
+				t.Fatalf("expected %s traceability row to include %q; row: %s", id, fragment, row)
+			}
+		}
+	}
+}
