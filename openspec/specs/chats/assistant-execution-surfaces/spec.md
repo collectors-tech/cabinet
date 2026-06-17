@@ -55,6 +55,13 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **AND** the UI/API MUST NOT mark Browser Auth connected from outbound navigation alone
 - **AND** provider tests MUST return truthful readiness evidence instead of passing only because a credential-like value exists
 
+#### Scenario: Record OpenAI provider-test evidence
+- **GIVEN** OpenAI API-key mode is selected for the active profile
+- **WHEN** Cabinet runs an OpenAI provider test
+- **THEN** Cabinet MUST call an OpenAI-compatible connectivity endpoint with the stored secret without returning the secret to clients
+- **AND** the response MUST include provider, profile, auth method, credential-present state, pass/fail status, timestamp, next action, and non-secret upstream failure evidence when the provider rejects the test
+- **AND** Browser Auth MUST remain setup-needed for provider-test evidence until a verified runtime provider-test adapter exists
+
 #### Scenario: Discover content and listing generation readiness
 - **GIVEN** content_generate and listing_draft_generate require OpenAI-backed processing
 - **WHEN** the assistant queries the governed capability registry before verified provider readiness exists

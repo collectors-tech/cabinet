@@ -88,8 +88,11 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 	requiredByID := map[string][]string{
 		"ASSISTANT-EXECUTION-006": {
 			"#1337",
-			"OpenAI readiness remains non-live-provider until verified API-key/Browser Auth/provider-test evidence exists",
+			"/api/provider/test",
+			"API-key provider-test evidence is executable and non-secret",
+			"Browser Auth readiness remains non-live-provider until a verified runtime provider-test adapter exists",
 			"TestOpenAIProviderHealthReflectsProfileReadiness",
+			"TestOpenAIProviderTestReturnsAuditableConnectivityEvidence",
 			"TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof",
 			"TestChatCapabilitiesDiscoveryExposesGovernedRegistry",
 			"TestAssistantContentListingGenerationRunsStayPreviewFirst",
