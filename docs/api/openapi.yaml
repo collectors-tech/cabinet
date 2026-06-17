@@ -635,11 +635,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [query_set_id]
-              properties:
-                query_set_id:
-                  type: string
+              $ref: "#/components/schemas/EbayProviderRunRequest"
       responses:
         "200":
           description: eBay provider run result
@@ -3219,6 +3215,11 @@ components:
           type: integer
           description: Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.
         query_set_id: { type: string }
+    EbayProviderRunRequest:
+      type: object
+      required: [query_set_id]
+      properties:
+        query_set_id: { type: string, description: Active-profile scanner query set id to run through the eBay provider. }
     EbayProviderRunResponse:
       type: object
       required: [query_set_id, provider, candidates, run]

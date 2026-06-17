@@ -554,7 +554,7 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	for _, token := range []string{
 		"summary: Run eBay saved-search provider",
 		"Runs an eBay-scoped saved search with active-profile credentials, persists normalized candidates, and returns the hydrated run snapshot.",
-		"required: [query_set_id]",
+		"$ref: \"#/components/schemas/EbayProviderRunRequest\"",
 		"$ref: \"#/components/schemas/EbayProviderRunResponse\"",
 		`"401":`,
 		"$ref: \"#/components/schemas/EbayProviderRunAuthErrorResponse\"",
@@ -563,6 +563,19 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	} {
 		if !strings.Contains(section, token) {
 			t.Fatalf("openapi /api/providers/ebay/run section missing %q:\n%s", token, section)
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "EbayProviderRunRequest")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [query_set_id]",
+		"query_set_id: { type: string, description: Active-profile scanner query set id to run through the eBay provider. }",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi EbayProviderRunRequest schema missing %q:\n%s", token, requestSchema)
 		}
 	}
 
