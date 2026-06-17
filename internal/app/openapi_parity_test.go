@@ -587,11 +587,32 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"required: [query_set_id, provider, candidates, run]",
 		"query_set_id: { type: string }",
 		"provider: { type: string, enum: [ebay] }",
-		"$ref: \"#/components/schemas/Candidate\"",
+		"$ref: \"#/components/schemas/EbayProviderRunCandidate\"",
 		"$ref: \"#/components/schemas/EbayProviderRunSnapshot\"",
 	} {
 		if !strings.Contains(runSchema, token) {
 			t.Fatalf("openapi EbayProviderRunResponse schema missing %q:\n%s", token, runSchema)
+		}
+	}
+
+	candidateSchema, ok := openAPIComponentSection(raw, "EbayProviderRunCandidate")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunCandidate schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count]",
+		"query_set_id: { type: string }",
+		"listing_id: { type: string }",
+		"price: { type: number }",
+		"observed_currency: { type: string, description: Normalized listing price currency captured from eBay Browse. }",
+		"shipping: { type: number }",
+		"seller: { type: string }",
+		"source: { type: string, enum: [ebay] }",
+		"stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }",
+		"stock_count: { type: integer }",
+	} {
+		if !strings.Contains(candidateSchema, token) {
+			t.Fatalf("openapi EbayProviderRunCandidate schema missing %q:\n%s", token, candidateSchema)
 		}
 	}
 

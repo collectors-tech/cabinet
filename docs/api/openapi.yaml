@@ -3229,9 +3229,29 @@ components:
         candidates:
           type: array
           items:
-            $ref: "#/components/schemas/Candidate"
+            $ref: "#/components/schemas/EbayProviderRunCandidate"
         run:
           $ref: "#/components/schemas/EbayProviderRunSnapshot"
+    EbayProviderRunCandidate:
+      type: object
+      required: [id, query_set_id, listing_id, title, price, observed_currency, shipping, url, image, seller, first_seen, last_seen, status, source, stock_state, stock_count]
+      properties:
+        id: { type: string }
+        query_set_id: { type: string }
+        listing_id: { type: string }
+        title: { type: string }
+        price: { type: number }
+        observed_currency: { type: string, description: Normalized listing price currency captured from eBay Browse. }
+        shipping: { type: number }
+        url: { type: string }
+        image: { type: string }
+        seller: { type: string }
+        first_seen: { type: string }
+        last_seen: { type: string }
+        status: { type: string }
+        source: { type: string, enum: [ebay] }
+        stock_state: { type: string, description: Normalized eBay stock state such as in_stock, low_stock, out_of_stock, or unknown. }
+        stock_count: { type: integer }
     EbayProviderRunSnapshot:
       type: object
       required: [saved, attempts, items_per_page_requested, items_per_page_effective, observed_page_size, page_count]
