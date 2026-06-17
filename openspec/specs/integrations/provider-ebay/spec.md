@@ -62,6 +62,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **WHEN** Cabinet renders the setup surface
 - **THEN** the UI MUST display auth mode, marketplace/region, token state, validation/health status, and a next action tied to saving credentials and validating health.
 - **AND** a ready eBay setup MUST direct the operator to run eBay query sets from Market Watch rather than implying that the setup dialog itself executes saved searches.
+- **AND** the profile settings OpenAPI contract MUST document the eBay setup keys `ebay_bearer_token`, `ebay_marketplace`, and `ebay_base_url` so setup clients do not have to infer provider credential and marketplace routing fields from UI code.
 
 #### Scenario: Market Watch manages eBay saved-query lifecycle
 - **GIVEN** the operator creates an eBay-scoped Market Watch query set
