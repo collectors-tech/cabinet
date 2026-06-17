@@ -783,6 +783,8 @@ func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 		"listing_id: { type: string }",
 		"url: { type: string }",
 		"seller: { type: string }",
+		"stock_state: { type: string",
+		"stock_count: { type: integer",
 		"source: { type: string, description: Source provider id such as ebay. }",
 	} {
 		if !strings.Contains(candidateSchema, token) {

@@ -43,6 +43,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the scanner query-set OpenAPI contract MUST document eBay-scoped saved-search inputs including `provider_scope=["ebay"]`, requested `items_per_page`, scheduling/enabled state, rate limits, and latest-run hydration metadata returned by list reloads.
 - **AND** the scheduled scanner run OpenAPI contract MUST document the execution summary returned after enabled scheduled saved searches run, including `run_id`, `query_sets_executed`, `candidates_collected`, and `failures`, so eBay-scoped scheduled query clients do not treat the response as an untyped object.
 - **AND** the scanner candidates and discovery action OpenAPI contracts MUST document eBay saved-search handoff provenance fields, including `source="ebay"`, `query_set_id`, listing URL, `source_provider`, `query_name`, and `provider_scope`.
+- **AND** the scanner candidate OpenAPI contract MUST document normalized eBay stock observation fields `stock_state` and `stock_count` alongside candidate price/source fields so Market Watch and Discoveries clients can render stock state without relying on undocumented response keys.
 - **AND** the discovery action response MUST return the applied `action`, `candidate_id`, and enriched audit metadata so clients can verify eBay source provider, query id, query name, provider scope, listing URL, source result URL, observed price/currency, and seller immediately after a Market Watch handoff.
 
 #### Scenario: Scanner run documents eBay auth error envelope
@@ -105,6 +106,7 @@ Cabinet SHALL persist stock/availability observations from eBay listing payloads
   - `stock_state`
   - `stock_count`
   - `last_seen`
+- **AND** scanner candidate read API documentation MUST expose `stock_state` and `stock_count` for saved-search clients that inspect eBay output details or downstream discoveries.
 
 ### Requirement INTEGRATION-025: eBay buyer-interest sync MUST preserve state and provenance
 Cabinet SHALL import eBay watched, saved, liked, and cart-like buyer-interest states without collapsing them into owned inventory.
