@@ -656,7 +656,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EbayProviderRunAuthErrorResponse"
         "403":
-          description: eBay provider credentials are rejected by the upstream API.
+          description: eBay provider credentials are rejected by the upstream API; the response preserves the structured auth error envelope while using 403 to distinguish forbidden credentials from missing credentials.
           content:
             application/json:
               schema:
