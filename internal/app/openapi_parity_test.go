@@ -622,6 +622,45 @@ func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsOpenAIProviderTestContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/provider/test")
+	if !ok {
+		t.Fatalf("openapi missing /api/provider/test path in %s", specPath)
+	}
+	for _, token := range []string{
+		"summary: Run provider connectivity test",
+		"ProviderTestResponse",
+		"enum: [openai]",
+		"Provider test failed or needs setup",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/provider/test section missing %q:\n%s", token, section)
+		}
+	}
+
+	schema, ok := openAPIComponentSection(raw, "ProviderTestResponse")
+	if !ok {
+		t.Fatalf("openapi missing ProviderTestResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [provider, status, code, provider_test_passed, checked_at]",
+		"OPENAI_PROVIDER_TEST_PASSED",
+		"OPENAI_PROVIDER_TEST_FAILED",
+		"OPENAI_BROWSER_AUTH_PROVIDER_TEST_UNAVAILABLE",
+		"provider_test_passed:",
+		"credential_present:",
+		"checked_at:",
+		"next_action:",
+	} {
+		if !strings.Contains(schema, token) {
+			t.Fatalf("openapi ProviderTestResponse schema missing %q:\n%s", token, schema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsEbaySetupSettingsKeys(t *testing.T) {
 	t.Parallel()
 

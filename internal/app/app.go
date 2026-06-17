@@ -2205,6 +2205,48 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(providerHealthResponse(health))
 	})
+	mux.HandleFunc("/api/provider/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Provider  string `json:"provider"`
+			ProfileID string `json:"profile_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		provider := strings.TrimSpace(req.Provider)
+		if provider == "" {
+			provider = "openai"
+		}
+		if !strings.EqualFold(provider, "openai") {
+			http.Error(w, `{"error":"unsupported_provider_test"}`, http.StatusBadRequest)
+			return
+		}
+		payload, statusCode := openAIProviderTest(r.Context(), profiles, aiSvc, strings.TrimSpace(req.ProfileID))
+		if statusCode >= 400 {
+			logSvc.Log(r.Context(), "error", "openai_provider_test_failed", map[string]any{
+				"profile_id": strings.TrimSpace(req.ProfileID),
+				"code":       payload["code"],
+				"status":     payload["status"],
+			})
+			if statusCode == http.StatusBadRequest && payload["code"] == "OPENAI_PROVIDER_TEST_FAILED" {
+				_, _ = conn.ExecContext(r.Context(), `INSERT INTO ai_failures(id, profile_id, message, created_at) VALUES (hex(randomblob(16)), ?, ?, CURRENT_TIMESTAMP)`, strings.TrimSpace(req.ProfileID), payload["message"])
+			}
+		} else {
+			logSvc.Log(r.Context(), "info", "openai_provider_test_passed", map[string]any{
+				"profile_id": strings.TrimSpace(req.ProfileID),
+				"code":       payload["code"],
+				"status":     payload["status"],
+			})
+		}
+		w.WriteHeader(statusCode)
+		_ = json.NewEncoder(w).Encode(payload)
+	})
 	mux.HandleFunc("/api/providers/registry", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -7824,6 +7866,105 @@ func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map
 		base["next_action"] = "connect_openai_api_key_or_browser_auth"
 		return base
 	}
+}
+
+func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc *ai.Service, profileID string) (map[string]any, int) {
+	base := map[string]any{
+		"provider":             "openai",
+		"provider_test_passed": false,
+		"checked_at":           time.Now().UTC().Format(time.RFC3339),
+	}
+	if profiles == nil {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before testing OpenAI."
+		base["next_action"] = "select_profile"
+		return base, http.StatusBadRequest
+	}
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		active, err := profiles.GetActiveProfile(ctx)
+		if err == nil {
+			profileID = strings.TrimSpace(active.ID)
+		}
+	}
+	if profileID == "" {
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_PROFILE_REQUIRED"
+		base["message"] = "Select an active profile before testing OpenAI."
+		base["next_action"] = "select_profile"
+		return base, http.StatusBadRequest
+	}
+	base["profile_id"] = profileID
+	settings, err := profiles.GetSettings(ctx, profileID)
+	if err != nil {
+		settings = map[string]string{}
+	}
+	activeMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	if activeMethod == "" {
+		activeMethod = strings.TrimSpace(settings["openai_active_auth_method"])
+	}
+	base["auth_method"] = activeMethod
+	baseURL := strings.TrimSpace(settings["openai_base_url"])
+	if baseURL != "" {
+		base["base_domain"] = providerBaseDomain(baseURL)
+	}
+
+	switch activeMethod {
+	case "api_key":
+		key, err := profiles.GetSecret(ctx, profileID, "openai_api_key")
+		if err != nil || strings.TrimSpace(key) == "" {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_API_KEY_MISSING"
+			base["credential_present"] = false
+			base["message"] = "OpenAI API-key mode is selected, but no API key secret is stored for the active profile."
+			base["next_action"] = "connect_openai_api_key"
+			return base, http.StatusBadRequest
+		}
+		base["credential_present"] = true
+		localAISvc := aiSvc
+		if localAISvc == nil || baseURL != "" {
+			localAISvc = ai.NewService(ai.Config{BaseURL: baseURL})
+		}
+		if err := localAISvc.TestConnectivity(ctx, key); err != nil {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI provider test failed: " + err.Error()
+			base["next_action"] = "review_openai_credentials_and_provider_status"
+			return base, http.StatusBadRequest
+		}
+		base["status"] = "ready"
+		base["code"] = "OPENAI_PROVIDER_TEST_PASSED"
+		base["message"] = "OpenAI provider test passed for the active profile."
+		base["next_action"] = "run_openai_workflow"
+		base["provider_test_passed"] = true
+		return base, http.StatusOK
+	case "browser_auth":
+		state := strings.TrimSpace(settings["openai.browser_auth_state"])
+		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
+		base["credential_present"] = artifactPresent
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_UNAVAILABLE"
+		base["message"] = "Browser Auth requires a verified runtime provider-test adapter before Cabinet can mark OpenAI live-provider tested."
+		base["next_action"] = "complete_browser_auth_provider_test_adapter"
+		return base, http.StatusBadRequest
+	default:
+		base["status"] = "needs_config"
+		base["code"] = "OPENAI_AUTH_METHOD_REQUIRED"
+		base["credential_present"] = false
+		base["message"] = "Choose OpenAI API-key mode or complete verified Browser Auth before running OpenAI provider tests."
+		base["next_action"] = "connect_openai_api_key_or_browser_auth"
+		return base, http.StatusBadRequest
+	}
+}
+
+func providerBaseDomain(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || strings.TrimSpace(u.Host) == "" {
+		return ""
+	}
+	return u.Host
 }
 
 func providerHealthResponse(health map[string]string) map[string]any {

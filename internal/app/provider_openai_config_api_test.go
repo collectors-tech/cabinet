@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -172,6 +173,95 @@ func TestOpenAIProviderHealthReflectsProfileReadiness(t *testing.T) {
 	}
 	if browserPayload["status"] != "needs_config" || browserPayload["code"] != "OPENAI_BROWSER_AUTH_PROOF_REQUIRED" {
 		t.Fatalf("expected browser proof-required health, got %+v", browserPayload)
+	}
+}
+
+func TestOpenAIProviderTestReturnsAuditableConnectivityEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIProviderTestProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+
+	missingSetup := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if missingSetup.Code != http.StatusBadRequest {
+		t.Fatalf("expected setup-needed status, got %d body=%s", missingSetup.Code, missingSetup.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.NewDecoder(missingSetup.Body).Decode(&missingPayload); err != nil {
+		t.Fatalf("decode missing setup payload: %v", err)
+	}
+	if missingPayload["status"] != "needs_config" || missingPayload["code"] != "OPENAI_AUTH_METHOD_REQUIRED" || missingPayload["provider_test_passed"] != false {
+		t.Fatalf("expected explicit setup-needed provider-test evidence, got %+v", missingPayload)
+	}
+
+	var seenAuth string
+	failProviderTest := true
+	openaiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			if failProviderTest {
+				http.Error(w, `{"error":"bad_upstream"}`, http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":[{"id":"gpt-4o-mini"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer openaiServer.Close()
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"api_key","openai_base_url":"`+openaiServer.URL+`"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	secret := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/secrets", strings.NewReader(`{"key":"openai_api_key","value":"sk-provider-test"}`), map[string]string{"Content-Type": "application/json"})
+	if secret.Code != http.StatusOK {
+		t.Fatalf("secret status=%d body=%s", secret.Code, secret.Body.String())
+	}
+
+	failed := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if failed.Code != http.StatusBadRequest {
+		t.Fatalf("expected failed provider-test status, got %d body=%s", failed.Code, failed.Body.String())
+	}
+	var failedPayload map[string]any
+	if err := json.NewDecoder(failed.Body).Decode(&failedPayload); err != nil {
+		t.Fatalf("decode failed provider-test payload: %v", err)
+	}
+	if failedPayload["status"] != "failed" || failedPayload["code"] != "OPENAI_PROVIDER_TEST_FAILED" || failedPayload["provider_test_passed"] != false || failedPayload["credential_present"] != true {
+		t.Fatalf("expected truthful failed provider-test evidence, got %+v", failedPayload)
+	}
+	if strings.Contains(failed.Body.String(), "sk-provider-test") {
+		t.Fatalf("provider-test response must not leak API key, body=%s", failed.Body.String())
+	}
+
+	failProviderTest = false
+	passed := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if passed.Code != http.StatusOK {
+		t.Fatalf("expected passed provider-test status, got %d body=%s", passed.Code, passed.Body.String())
+	}
+	var passedPayload map[string]any
+	if err := json.NewDecoder(passed.Body).Decode(&passedPayload); err != nil {
+		t.Fatalf("decode passed provider-test payload: %v", err)
+	}
+	if passedPayload["status"] != "ready" || passedPayload["code"] != "OPENAI_PROVIDER_TEST_PASSED" || passedPayload["provider_test_passed"] != true || passedPayload["auth_method"] != "api_key" {
+		t.Fatalf("expected ready provider-test evidence, got %+v", passedPayload)
+	}
+	if seenAuth != "Bearer sk-provider-test" {
+		t.Fatalf("expected provider test to call OpenAI-compatible endpoint with bearer auth, got %q", seenAuth)
+	}
+	if strings.Contains(passed.Body.String(), "sk-provider-test") {
+		t.Fatalf("provider-test success response must not leak API key, body=%s", passed.Body.String())
 	}
 }
 

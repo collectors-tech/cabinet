@@ -1327,6 +1327,36 @@ paths:
                 $ref: "#/components/schemas/ProviderHealthResponse"
         "400":
           $ref: "#/components/responses/Error"
+  /api/provider/test:
+    post:
+      tags: [Integrations]
+      summary: Run provider connectivity test
+      description: Runs a profile-scoped provider test and returns non-secret readiness evidence. OpenAI API-key mode performs an OpenAI-compatible connectivity check; Browser Auth remains setup-needed until a verified runtime provider-test adapter exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [openai]
+                profile_id:
+                  type: string
+      responses:
+        "200":
+          description: Provider test passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderTestResponse"
+        "400":
+          description: Provider test failed or needs setup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderTestResponse"
   /api/settings/reset-ignore-rules:
     post:
       tags: [Discovery]
@@ -3186,6 +3216,47 @@ components:
         updated_at:
           type: string
           nullable: true
+    ProviderTestResponse:
+      type: object
+      required: [provider, status, code, provider_test_passed, checked_at]
+      properties:
+        provider:
+          type: string
+          enum: [openai]
+        profile_id:
+          type: string
+        status:
+          type: string
+          enum: [ready, failed, needs_config]
+        code:
+          type: string
+          enum:
+            - OPENAI_PROVIDER_TEST_PASSED
+            - OPENAI_PROVIDER_TEST_FAILED
+            - OPENAI_PROFILE_REQUIRED
+            - OPENAI_AUTH_METHOD_REQUIRED
+            - OPENAI_API_KEY_MISSING
+            - OPENAI_BROWSER_AUTH_PROVIDER_TEST_UNAVAILABLE
+        auth_method:
+          type: string
+          nullable: true
+        credential_present:
+          type: boolean
+        provider_test_passed:
+          type: boolean
+        checked_at:
+          type: string
+          format: date-time
+        base_domain:
+          type: string
+          nullable: true
+        browser_auth_state:
+          type: string
+          nullable: true
+        message:
+          type: string
+        next_action:
+          type: string
     EbayProviderRunAuthErrorResponse:
       type: object
       required: [error, error_code, provider, message, next_action, query_set_id]
