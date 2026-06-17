@@ -687,6 +687,40 @@ func TestOpenAPIDocumentsEbayQuerySetContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayScheduledScannerRunContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/scanner/run/scheduled")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/run/scheduled path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Runs enabled scheduled saved searches for the active profile, including eBay-scoped Market Watch query sets, and returns deterministic execution counters.",
+		"$ref: \"#/components/schemas/ScheduledScannerRunResponse\"",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/scanner/run/scheduled section missing %q:\n%s", token, section)
+		}
+	}
+
+	responseSchema, ok := openAPIComponentSection(raw, "ScheduledScannerRunResponse")
+	if !ok {
+		t.Fatalf("openapi missing ScheduledScannerRunResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [run_id, query_sets_executed, candidates_collected, failures]",
+		"run_id: { type: string }",
+		"query_sets_executed: { type: integer }",
+		"candidates_collected: { type: integer }",
+		"failures: { type: integer }",
+	} {
+		if !strings.Contains(responseSchema, token) {
+			t.Fatalf("openapi ScheduledScannerRunResponse schema missing %q:\n%s", token, responseSchema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 	t.Parallel()
 

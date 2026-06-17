@@ -1254,13 +1254,14 @@ paths:
     post:
       tags: [Scanner]
       summary: Run scheduled scanner cycle
+      description: Runs enabled scheduled saved searches for the active profile, including eBay-scoped Market Watch query sets, and returns deterministic execution counters.
       responses:
         "200":
           description: Scheduled scanner run result
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/ScheduledScannerRunResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/scanner/failures:
@@ -3381,6 +3382,14 @@ components:
             last_run_at: { type: string }
             last_run_message: { type: string }
             last_candidate_count: { type: integer }
+    ScheduledScannerRunResponse:
+      type: object
+      required: [run_id, query_sets_executed, candidates_collected, failures]
+      properties:
+        run_id: { type: string }
+        query_sets_executed: { type: integer }
+        candidates_collected: { type: integer }
+        failures: { type: integer }
     Candidate:
       type: object
       properties:
