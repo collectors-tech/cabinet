@@ -554,6 +554,11 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"$ref: \"#/components/schemas/Candidate\"",
 		"saved: { type: integer }",
 		"attempts: { type: integer }",
+		"items_per_page_requested: { type: integer }",
+		"items_per_page_effective: { type: integer }",
+		"observed_page_size: { type: integer }",
+		"page_count: { type: integer }",
+		"items_per_page_warning: { type: string }",
 	} {
 		if !strings.Contains(runSchema, token) {
 			t.Fatalf("openapi EbayProviderRunResponse schema missing %q:\n%s", token, runSchema)

@@ -37,6 +37,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **GIVEN** an API client uses the provider-specific `POST /api/providers/ebay/run` route for an eBay-scoped saved search
 - **WHEN** the client reads the OpenAPI contract
 - **THEN** the contract MUST document the required `query_set_id` request field, `provider="ebay"`, persisted `candidates`, and `run` snapshot response fields.
+- **AND** the `run` snapshot response contract MUST document provider pagination metadata, including `items_per_page_requested`, `items_per_page_effective`, `observed_page_size`, `page_count`, and optional `items_per_page_warning`.
 - **AND** the contract MUST document provider auth failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_AUTH_MISSING` or `PROVIDER_AUTH_INVALID`, `query_set_id`, and `next_action="review_provider_credentials_and_health"`.
 - **AND** the contract MUST document non-auth Browse failures with `error="failed_to_run_ebay_provider"`, `PROVIDER_SEARCH_FAILED`, `query_set_id`, preserved upstream failure `message`, optional `retry_after_seconds`, and `next_action="check_provider_health_and_credentials"`.
 - **AND** the scanner query-set OpenAPI contract MUST document eBay-scoped saved-search inputs including `provider_scope=["ebay"]`, requested `items_per_page`, scheduling/enabled state, rate limits, and latest-run hydration metadata returned by list reloads.
