@@ -1170,6 +1170,228 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'blocked')
   })
 
+  it('INTEGRATION-027 + #842: previews and executes seller operation sync without remote write claims', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    })
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+            seller_operations: [
+              {
+                operation: 'messages',
+                capability: 'read_only',
+                read_available: true,
+                write_available: false,
+                confirmation_required: false,
+                blocker: 'ebay_seller_write_capability_not_verified',
+              },
+              {
+                operation: 'offers',
+                capability: 'confirmed_api',
+                read_available: true,
+                write_available: true,
+                confirmation_required: true,
+              },
+              {
+                operation: 'notifications',
+                capability: 'unverified',
+                read_available: false,
+                write_available: false,
+                confirmation_required: false,
+                blocker: 'ebay_seller_operation_capability_not_verified',
+              },
+            ],
+          },
+        ],
+      },
+    })
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    })
+    cy.intercept('POST', '/api/providers/ebay/seller-operations/preview', (req) => {
+      if (req.body.operation === 'messages') {
+        expect(req.body.action).to.eq('sync')
+        expect(req.body.confirmed).to.eq(false)
+        req.reply({
+          statusCode: 200,
+          body: {
+            provider: 'ebay',
+            mode: 'seller_operation_preview',
+            preview: {
+              operation: 'messages',
+              action: 'sync',
+              capability: 'read_only',
+              read_available: true,
+              write_available: false,
+              confirmed: false,
+              allowed: true,
+              remote_write: false,
+              blocker: 'ebay_seller_write_capability_not_verified',
+            },
+          },
+        })
+        return
+      }
+
+      expect(req.body.operation).to.eq('offers')
+      expect(req.body.action).to.eq('fulfill')
+      expect(req.body.confirmed).to.eq(true)
+      req.reply({
+        statusCode: 200,
+        body: {
+          provider: 'ebay',
+          mode: 'seller_operation_preview',
+          preview: {
+            operation: 'offers',
+            action: 'fulfill',
+            capability: 'confirmed_api',
+            read_available: true,
+            write_available: true,
+            confirmation_required: true,
+            confirmed: true,
+            allowed: true,
+            remote_write: true,
+          },
+        },
+      })
+    }).as('sellerOperationPreview')
+    cy.intercept('POST', '/api/providers/ebay/seller-operations/execute', (req) => {
+      if (req.body.operation === 'messages') {
+        expect(req.body.action).to.eq('sync')
+        expect(req.body.confirmed).to.eq(false)
+        req.reply({
+          statusCode: 200,
+          body: {
+            provider: 'ebay',
+            mode: 'seller_operation_execute',
+            execution: {
+              operation: 'messages',
+              action: 'sync',
+              capability: 'read_only',
+              allowed: true,
+              remote_write: false,
+              executed: true,
+              local_only: true,
+              status: 'local_read_sync_complete',
+              result: {
+                source: 'local_read_model',
+                records: [
+                  {
+                    id: 'msg-1',
+                    title: 'Buyer question about condition',
+                    kind: 'seller_message',
+                    status: 'needs_reply',
+                  },
+                ],
+                summary: { total: 1 },
+              },
+            },
+          },
+        })
+        return
+      }
+
+      expect(req.body.operation).to.eq('offers')
+      expect(req.body.action).to.eq('fulfill')
+      expect(req.body.confirmed).to.eq(true)
+      req.reply({
+        statusCode: 409,
+        body: {
+          provider: 'ebay',
+          mode: 'seller_operation_execute',
+          execution: {
+            operation: 'offers',
+            action: 'fulfill',
+            capability: 'confirmed_api',
+            allowed: false,
+            remote_write: true,
+            executed: false,
+            local_only: false,
+            status: 'blocked',
+            blocker: 'ebay_seller_operation_adapter_required',
+          },
+        },
+      })
+    }).as('sellerOperationExecute')
+
+    signIn()
+
+    cy.get('[data-testid="provider-open-ebay"]').click()
+    cy.get('[data-testid="ebay-seller-operations-panel"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .and('contain', 'External writes require confirmation')
+    cy.get('[data-testid="ebay-seller-operation-notifications"]').should(
+      'contain',
+      'ebay_seller_operation_capability_not_verified'
+    )
+    cy.get('[data-testid="ebay-seller-operation-preview-notifications"]').should(
+      'be.disabled'
+    )
+
+    cy.get('[data-testid="ebay-seller-operation-preview-messages"]').click()
+    cy.wait('@sellerOperationPreview')
+    cy.contains('Seller operation preview completed without remote write.').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="ebay-seller-operation-preview-result"]')
+      .should('contain', 'Preview: Messages')
+      .and('contain', 'Allowed: yes / Remote write: no')
+      .and('contain', 'ebay_seller_write_capability_not_verified')
+
+    cy.get('[data-testid="ebay-seller-operation-execute-messages"]').click()
+    cy.wait('@sellerOperationExecute')
+    cy.contains(
+      'Seller operation read-only sync completed locally without remote write.'
+    ).should('be.visible')
+    cy.get('[data-testid="ebay-seller-operation-execute-result"]')
+      .should('contain', 'Execute: Messages')
+      .and('contain', 'Executed: yes / Local only: yes')
+      .and('contain', 'local_read_sync_complete')
+    cy.get('[data-testid="ebay-seller-operation-read-result"]')
+      .should('contain', 'local_read_model')
+      .and('contain', 'Buyer question about condition')
+      .and('contain', 'seller_message / needs_reply')
+
+    cy.get('[data-testid="ebay-seller-operation-confirm-offers"]').click()
+    cy.wait('@sellerOperationPreview')
+    cy.get('[data-testid="ebay-seller-operation-preview-result"]')
+      .should('contain', 'Preview: Offers')
+      .and('contain', 'Allowed: yes / Remote write: yes')
+
+    cy.get('[data-testid="ebay-seller-operation-confirm-execute-offers"]').click()
+    cy.wait('@sellerOperationExecute')
+    cy.get('[data-testid="ebay-seller-operation-preview-error"]').should(
+      'contain',
+      'ebay_seller_operation_adapter_required'
+    )
+    cy.get('[data-testid="ebay-seller-operation-execute-result"]')
+      .should('contain', 'Execute: Offers')
+      .and('contain', 'Executed: no / Local only: no')
+      .and('contain', 'blocked')
+  })
+
   it('COMMERCE-LANDED-COST-001 + COMMERCE-LANDED-COST-003: previews landed-cost recommendations without mutation', () => {
     cy.intercept('GET', '/api/profiles/active', {
       statusCode: 200,
