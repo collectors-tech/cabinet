@@ -44,10 +44,10 @@ Cabinet SHALL open provider detail modal/drawer from card action to support inst
   - unavailable dialog sync represented as a disabled/explained action when provider discovery must be started from Market Watch query sets
   - save action that persists provider settings
 
-### Requirement INTEGRATION-022: Integrations screen MUST default to card interactions and keep URL-backed view state
-Cabinet SHALL default Integrations to cards and SHALL encode non-default view mode in route search state.
+### Requirement INTEGRATION-022: Integrations screen MUST default to table interactions and keep URL-backed view state
+Cabinet SHALL default Integrations to table rows and SHALL encode non-default cards view mode in route search state.
 
 #### Scenario: Open integrations without explicit view query
 - **GIVEN** authenticated user opens `/integrations` without `view` search parameter
 - **WHEN** integrations screen initializes
-- **THEN** cards view MUST render as default and rows view MUST only activate when `view=rows` is present
+- **THEN** rows/table view MUST render as default and cards view MUST only activate when `view=cards` is present
