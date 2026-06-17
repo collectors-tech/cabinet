@@ -3231,15 +3231,18 @@ components:
           items:
             $ref: "#/components/schemas/Candidate"
         run:
-          type: object
-          properties:
-            saved: { type: integer }
-            attempts: { type: integer }
-            items_per_page_requested: { type: integer }
-            items_per_page_effective: { type: integer }
-            observed_page_size: { type: integer }
-            page_count: { type: integer }
-            items_per_page_warning: { type: string }
+          $ref: "#/components/schemas/EbayProviderRunSnapshot"
+    EbayProviderRunSnapshot:
+      type: object
+      required: [saved, attempts, items_per_page_requested, items_per_page_effective, observed_page_size, page_count]
+      properties:
+        saved: { type: integer }
+        attempts: { type: integer }
+        items_per_page_requested: { type: integer }
+        items_per_page_effective: { type: integer }
+        observed_page_size: { type: integer }
+        page_count: { type: integer }
+        items_per_page_warning: { type: string }
     OkResponse:
       type: object
       properties:

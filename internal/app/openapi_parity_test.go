@@ -588,6 +588,19 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"query_set_id: { type: string }",
 		"provider: { type: string, enum: [ebay] }",
 		"$ref: \"#/components/schemas/Candidate\"",
+		"$ref: \"#/components/schemas/EbayProviderRunSnapshot\"",
+	} {
+		if !strings.Contains(runSchema, token) {
+			t.Fatalf("openapi EbayProviderRunResponse schema missing %q:\n%s", token, runSchema)
+		}
+	}
+
+	snapshotSchema, ok := openAPIComponentSection(raw, "EbayProviderRunSnapshot")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderRunSnapshot schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [saved, attempts, items_per_page_requested, items_per_page_effective, observed_page_size, page_count]",
 		"saved: { type: integer }",
 		"attempts: { type: integer }",
 		"items_per_page_requested: { type: integer }",
@@ -596,8 +609,8 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"page_count: { type: integer }",
 		"items_per_page_warning: { type: string }",
 	} {
-		if !strings.Contains(runSchema, token) {
-			t.Fatalf("openapi EbayProviderRunResponse schema missing %q:\n%s", token, runSchema)
+		if !strings.Contains(snapshotSchema, token) {
+			t.Fatalf("openapi EbayProviderRunSnapshot schema missing %q:\n%s", token, snapshotSchema)
 		}
 	}
 
