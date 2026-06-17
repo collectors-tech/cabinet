@@ -102,11 +102,14 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 		},
 		"ASSISTANT-EXECUTION-008": {
 			"#1337",
-			"External intake remains planned until authorized Telegram/OpenAI runtime execution is validated end-to-end",
+			"/api/telegram/catalog-captures",
+			"authorized Telegram catalog intake now persists workflow-run evidence",
+			"live Telegram/OpenAI external runtime execution remains blocked until authorized production-channel proof exists",
 			"TestAssistantWorkflowRunsPersistLifecycleAndBulkResults",
+			"TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization",
 			"TestAssistantOpenAIWorkflowPlanBindsIssue847Contracts",
 			"TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath",
-			"| planned |",
+			"| partial |",
 		},
 	}
 

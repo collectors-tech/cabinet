@@ -30,6 +30,8 @@ type ChatService interface {
 	GetActionPreview(ctx context.Context, profileID, previewID string) (chat.ActionPreview, error)
 	ApplyAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
 	CancelAction(ctx context.Context, in chat.ApplyActionInput) (chat.ApplyActionResult, error)
+	CreateWorkflowRun(ctx context.Context, in chat.CreateWorkflowRunInput) (chat.WorkflowRun, error)
+	UpdateWorkflowRun(ctx context.Context, in chat.UpdateWorkflowRunInput) (chat.WorkflowRun, error)
 	CreateInboxItem(ctx context.Context, item chat.InboxItem) (chat.InboxItem, error)
 }
 
@@ -140,6 +142,7 @@ type CaptureResult struct {
 	Message       chat.Message       `json:"message"`
 	Attachments   []chat.Attachment  `json:"attachments"`
 	Preview       chat.ActionPreview `json:"preview"`
+	WorkflowRun   chat.WorkflowRun   `json:"workflow_run"`
 	InboxItem     chat.InboxItem     `json:"inbox_item"`
 	TelegramReply TelegramReply      `json:"telegram_reply"`
 }
@@ -272,10 +275,55 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		return CaptureResult{}, err
 	}
 
+	workflowRun, err := s.chat.CreateWorkflowRun(ctx, chat.CreateWorkflowRunInput{
+		ProfileID:         profileID,
+		WorkflowID:        "telegram-catalog-capture-preview",
+		CapabilityID:      telegramCatalogCaptureCapability(in, draft),
+		SourceChannel:     "telegram",
+		SourceThreadID:    thread.ID,
+		SourceMessageID:   strings.TrimSpace(in.MessageID),
+		ConfirmationState: "pending",
+		Input: map[string]any{
+			"barcode":       strings.TrimSpace(in.Barcode),
+			"draft":         previewPayload(draft, in.Barcode),
+			"media_count":   len(attachments),
+			"grouping_hint": strings.TrimSpace(in.GroupingHint),
+		},
+		ProviderTrace: map[string]any{
+			"provider":       "openai",
+			"source_channel": "telegram",
+			"mode":           "governed_preview_before_apply",
+			"live_provider":  false,
+		},
+		BulkItems: telegramCatalogCaptureBulkItems(in.Media, attachments),
+	})
+	if err != nil {
+		return CaptureResult{}, err
+	}
+	workflowRun, err = s.chat.UpdateWorkflowRun(ctx, chat.UpdateWorkflowRunInput{
+		ProfileID:         profileID,
+		RunID:             workflowRun.ID,
+		Status:            "completed",
+		ConfirmationState: "pending",
+		ProviderTrace:     workflowRun.ProviderTrace,
+		Result: map[string]any{
+			"preview_id":         preview.ID,
+			"thread_id":          thread.ID,
+			"confirmation_state": "preview_required",
+			"review_url":         reviewURL(profileID, thread.ID, preview.ID),
+		},
+		BulkItems: workflowRun.BulkItems,
+	})
+	if err != nil {
+		return CaptureResult{}, err
+	}
+
 	reviewURL := reviewURL(profileID, thread.ID, preview.ID)
 	telegramReply := telegramReply(draft, reviewURL, preview.ID)
 	inboxMetadata := map[string]any{
 		"preview_id":         preview.ID,
+		"workflow_run_id":    workflowRun.ID,
+		"capability_id":      workflowRun.CapabilityID,
 		"source_channel":     "telegram",
 		"source_chat_id":     chatID,
 		"source_sender_id":   senderID,
@@ -311,6 +359,7 @@ func (s *Service) IngestCatalogCapture(ctx context.Context, in CaptureInput) (Ca
 		Message:       message,
 		Attachments:   attachments,
 		Preview:       preview,
+		WorkflowRun:   workflowRun,
 		InboxItem:     inboxItem,
 		TelegramReply: telegramReply,
 	}, nil
@@ -833,6 +882,44 @@ func telegramCallbackData(action, previewID string) string {
 		return ""
 	}
 	return "cabinet:catalog_capture:" + action + ":" + previewID
+}
+
+func telegramCatalogCaptureCapability(in CaptureInput, draft Draft) string {
+	if len(in.Media) > 0 {
+		return "catalog_add_from_photo"
+	}
+	if strings.TrimSpace(in.Barcode) != "" || strings.TrimSpace(draft.PartNumber) != "" {
+		return "catalog_add_from_barcode"
+	}
+	return "catalog_add_from_text"
+}
+
+func telegramCatalogCaptureBulkItems(media []MediaInput, attachments []chat.Attachment) []map[string]any {
+	if len(media) == 0 && len(attachments) == 0 {
+		return nil
+	}
+	count := len(media)
+	if len(attachments) > count {
+		count = len(attachments)
+	}
+	items := make([]map[string]any, 0, count)
+	for i := 0; i < count; i++ {
+		item := map[string]any{
+			"item_key": fmt.Sprintf("telegram-media-%d", i+1),
+			"status":   "completed",
+		}
+		if i < len(media) {
+			item["file_id"] = strings.TrimSpace(media[i].FileID)
+			item["file_unique_id"] = strings.TrimSpace(media[i].FileUniqueID)
+			item["kind"] = strings.TrimSpace(media[i].Kind)
+		}
+		if i < len(attachments) {
+			item["attachment_id"] = attachments[i].ID
+			item["filename"] = attachments[i].Filename
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 func parseTelegramCallbackData(raw string) (string, string, error) {
