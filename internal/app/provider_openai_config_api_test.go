@@ -95,6 +95,9 @@ func TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof(t 
 		t.Fatalf("decode registry payload: %v", err)
 	}
 	openai := findRegistryProvider(payload.Providers, "openai")
+	if got := fmt.Sprintf("%v", openai["state"]); got != "needs_config" {
+		t.Fatalf("OpenAI registry state must stay setup-needed without Browser Auth proof, got %q", got)
+	}
 	methods := openai["auth_methods"].(map[string]any)
 	browser := methods["browser_auth"].(map[string]any)
 	if got := fmt.Sprintf("%v", browser["state"]); got != "pending" {
@@ -160,6 +163,22 @@ func TestOpenAIProviderHealthReflectsProfileReadiness(t *testing.T) {
 	}
 	if _, leaked := readyPayload["secret"]; leaked {
 		t.Fatalf("OpenAI health payload must not expose secret material: %+v", readyPayload)
+	}
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var registryPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&registryPayload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(registryPayload.Providers, "openai")
+	methods := openai["auth_methods"].(map[string]any)
+	apiKey := methods["api_key"].(map[string]any)
+	if openai["state"] != "ready" || apiKey["connected"] != true || apiKey["credential_present"] != true {
+		t.Fatalf("expected registry to become ready only after API-key secret is stored, got provider=%+v api_key=%+v", openai, apiKey)
 	}
 
 	browserSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"browser_auth","openai.browser_auth_state":"pending","openai.browser_auth_artifact_present":"false"}}`), map[string]string{"Content-Type": "application/json"})

@@ -2259,6 +2259,9 @@ func New(cfg config.Config) (*App, error) {
 			if profileSettings, settingsErr := profiles.GetSettings(r.Context(), strings.TrimSpace(active.ID)); settingsErr == nil {
 				settings = profileSettings
 			}
+			if key, secretErr := profiles.GetSecret(r.Context(), strings.TrimSpace(active.ID), "openai_api_key"); secretErr == nil && strings.TrimSpace(key) != "" {
+				settings["openai.api_key_secret_present"] = "true"
+			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"providers": providerRegistryPayload(r.Context(), conn, scannerSvc, amazonMode, settings),
@@ -8012,6 +8015,12 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			familyOverrides = loaded
 		}
 	}
+	openAIActiveMethod := strings.TrimSpace(settings["openai.active_auth_method"])
+	openAIAPIKeyPresent := openAIActiveMethod == "api_key" && strings.EqualFold(strings.TrimSpace(settings["openai.api_key_secret_present"]), "true")
+	openAIBrowserState := strings.TrimSpace(settings["openai.browser_auth_state"])
+	openAIBrowserCredentialPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+	openAIBrowserReady := openAIActiveMethod == "browser_auth" && strings.EqualFold(openAIBrowserState, "connected") && openAIBrowserCredentialPresent
+	openAIReady := openAIAPIKeyPresent || openAIBrowserReady
 	base := []map[string]any{
 		{
 			"provider_id":         "openai",
@@ -8019,22 +8028,22 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"base_domain":         "platform.openai.com",
 			"api_family":          "ai_provider",
 			"api_support_profile": "browser_auth_or_api_key",
-			"active_mode":         strings.TrimSpace(settings["openai.active_auth_method"]),
+			"active_mode":         openAIActiveMethod,
 			"integration_mode":    "assistant_workflows",
 			"api_available":       true,
 			"auth_requirement":    "browser_auth_or_api_key",
 			"auth_mode":           "hybrid",
-			"active_auth_method":  strings.TrimSpace(settings["openai.active_auth_method"]),
+			"active_auth_method":  openAIActiveMethod,
 			"auth_methods": map[string]any{
 				"api_key": map[string]any{
-					"state":              map[bool]string{true: "connected", false: "setup_needed"}[strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key"],
-					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
-					"credential_present": strings.TrimSpace(settings["openai.active_auth_method"]) == "api_key",
+					"state":              map[bool]string{true: "connected", false: "setup_needed"}[openAIAPIKeyPresent],
+					"connected":          openAIAPIKeyPresent,
+					"credential_present": openAIAPIKeyPresent,
 				},
 				"browser_auth": map[string]any{
-					"state":              map[bool]string{true: strings.TrimSpace(settings["openai.browser_auth_state"]), false: "setup_needed"}[strings.TrimSpace(settings["openai.browser_auth_state"]) != ""],
-					"connected":          strings.TrimSpace(settings["openai.active_auth_method"]) == "browser_auth" && strings.TrimSpace(settings["openai.browser_auth_state"]) == "connected" && strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
-					"credential_present": strings.TrimSpace(settings["openai.browser_auth_artifact_present"]) == "true",
+					"state":              map[bool]string{true: openAIBrowserState, false: "setup_needed"}[openAIBrowserState != ""],
+					"connected":          openAIBrowserReady,
+					"credential_present": openAIBrowserCredentialPresent,
 					"setup_message":      "Browser Auth requires a verifiable callback/artifact before Cabinet marks OpenAI connected.",
 				},
 			},
@@ -8048,7 +8057,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"image_help":         true,
 				"content_generation": true,
 			},
-			"state":              map[bool]string{true: "ready", false: "needs_config"}[strings.TrimSpace(settings["openai.active_auth_method"]) != ""],
+			"state":              map[bool]string{true: "ready", false: "needs_config"}[openAIReady],
 			"setup_instructions": "Configure OpenAI with Browser Auth or an API key. Browser Auth stays setup-needed until Cabinet verifies an auth artifact/callback; navigation alone is never connected proof.",
 		},
 		{

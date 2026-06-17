@@ -53,6 +53,7 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **WHEN** the active profile lacks a verified API key, verified Browser Auth artifact, or passing provider test
 - **THEN** the capability MUST report setup-needed or unavailable state
 - **AND** the UI/API MUST NOT mark Browser Auth connected from outbound navigation alone
+- **AND** the provider registry MUST NOT report OpenAI ready from an active auth-method value unless the selected method also has verified credential/proof evidence
 - **AND** provider tests MUST return truthful readiness evidence instead of passing only because a credential-like value exists
 
 #### Scenario: Record OpenAI provider-test evidence
