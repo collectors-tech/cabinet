@@ -735,6 +735,12 @@ func (nilChatService) ApplyAction(context.Context, chat.ApplyActionInput) (chat.
 func (nilChatService) CancelAction(context.Context, chat.ApplyActionInput) (chat.ApplyActionResult, error) {
 	return chat.ApplyActionResult{}, nil
 }
+func (nilChatService) CreateWorkflowRun(context.Context, chat.CreateWorkflowRunInput) (chat.WorkflowRun, error) {
+	return chat.WorkflowRun{}, nil
+}
+func (nilChatService) UpdateWorkflowRun(context.Context, chat.UpdateWorkflowRunInput) (chat.WorkflowRun, error) {
+	return chat.WorkflowRun{}, nil
+}
 func (nilChatService) CreateInboxItem(context.Context, chat.InboxItem) (chat.InboxItem, error) {
 	return chat.InboxItem{}, nil
 }

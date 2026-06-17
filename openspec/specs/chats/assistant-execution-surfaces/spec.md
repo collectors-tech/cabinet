@@ -99,6 +99,7 @@ Cabinet MUST route Telegram-originated photo, barcode, text, or mixed catalog in
 - **GIVEN** a Telegram message contains item photos, barcode data, text notes, or a mixed capture session
 - **WHEN** Cabinet maps the sender/chat to an authorized profile
 - **THEN** the intake MUST create a draft preview through catalog_add_from_photo, catalog_add_from_barcode, or catalog_add_from_text capabilities before any catalog/inventory mutation
+- **AND** the intake MUST persist a queryable workflow-run audit record that binds the Telegram source message/thread, selected catalog_add_from_* capability, preview id, confirmation state, and non-secret provider trace
 - **AND** ambiguous recognition MUST ask for follow-up input rather than inventing item data
 - **AND** the audit trail MUST preserve source channel, sender/chat identity, media ids, proposed fields, confirmation decision, and applied item links
 

@@ -1956,6 +1956,9 @@ paths:
                       type: object
                   preview:
                     type: object
+                  workflow_run:
+                    type: object
+                    description: Assistant workflow-run audit record for the governed Telegram intake preview.
                   inbox_item:
                     type: object
                   telegram_reply:

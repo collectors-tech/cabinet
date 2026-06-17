@@ -65,6 +65,8 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 	if !strings.Contains(capture.Body.String(), `"source":"telegram_catalog_capture"`) ||
 		!strings.Contains(capture.Body.String(), `"confirmation_state":"preview_required"`) ||
+		!strings.Contains(capture.Body.String(), `"workflow_run"`) ||
+		!strings.Contains(capture.Body.String(), `"capability_id":"catalog_add_from_photo"`) ||
 		!strings.Contains(capture.Body.String(), `"telegram_reply"`) ||
 		!strings.Contains(capture.Body.String(), `"review_url":"/chats?profile_id=`) ||
 		!strings.Contains(capture.Body.String(), `"action_buttons"`) ||
@@ -81,6 +83,51 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 	if strings.Contains(items.Body.String(), "Limited Release Model") || strings.Contains(items.Body.String(), "9312345678901") {
 		t.Fatalf("telegram API capture must not create catalog item before confirmation, body=%s", items.Body.String())
+	}
+
+	var capturePayload struct {
+		Thread struct {
+			ID string `json:"id"`
+		} `json:"thread"`
+		Preview struct {
+			ID string `json:"id"`
+		} `json:"preview"`
+		WorkflowRun struct {
+			ID                string           `json:"id"`
+			CapabilityID      string           `json:"capability_id"`
+			SourceChannel     string           `json:"source_channel"`
+			SourceMessageID   string           `json:"source_message_id"`
+			Status            string           `json:"status"`
+			ConfirmationState string           `json:"confirmation_state"`
+			ProviderTrace     map[string]any   `json:"provider_trace"`
+			Result            map[string]any   `json:"result"`
+			BulkItems         []map[string]any `json:"bulk_items"`
+		} `json:"workflow_run"`
+	}
+	if err := json.NewDecoder(capture.Body).Decode(&capturePayload); err != nil {
+		t.Fatalf("decode capture payload: %v", err)
+	}
+	if capturePayload.WorkflowRun.ID == "" || capturePayload.WorkflowRun.Status != "completed" || capturePayload.WorkflowRun.ConfirmationState != "pending" {
+		t.Fatalf("expected completed pending-confirmation workflow run, got %+v", capturePayload.WorkflowRun)
+	}
+	if capturePayload.WorkflowRun.CapabilityID != "catalog_add_from_photo" || capturePayload.WorkflowRun.SourceChannel != "telegram" || capturePayload.WorkflowRun.SourceMessageID != "message-42" {
+		t.Fatalf("expected Telegram capability/source workflow audit fields, got %+v", capturePayload.WorkflowRun)
+	}
+	if capturePayload.WorkflowRun.ProviderTrace["live_provider"] != false || capturePayload.WorkflowRun.ProviderTrace["mode"] != "governed_preview_before_apply" {
+		t.Fatalf("expected non-live-provider preview trace, got %+v", capturePayload.WorkflowRun.ProviderTrace)
+	}
+	if capturePayload.WorkflowRun.Result["preview_id"] != capturePayload.Preview.ID || len(capturePayload.WorkflowRun.BulkItems) != 1 {
+		t.Fatalf("expected preview-linked workflow result and media bulk item, got %+v", capturePayload.WorkflowRun)
+	}
+
+	runs := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+capturePayload.Thread.ID, nil, nil)
+	if runs.Code != http.StatusOK {
+		t.Fatalf("list workflow runs status=%d body=%s", runs.Code, runs.Body.String())
+	}
+	if !strings.Contains(runs.Body.String(), capturePayload.WorkflowRun.ID) ||
+		!strings.Contains(runs.Body.String(), `"source_channel":"telegram"`) ||
+		!strings.Contains(runs.Body.String(), `"preview_id":"`+capturePayload.Preview.ID+`"`) {
+		t.Fatalf("expected Telegram intake workflow run to be queryable by thread, body=%s", runs.Body.String())
 	}
 }
 
