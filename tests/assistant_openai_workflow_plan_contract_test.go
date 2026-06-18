@@ -89,7 +89,9 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 		"ASSISTANT-EXECUTION-006": {
 			"#1337",
 			"/api/provider/test",
+			"/api/providers/registry",
 			"API-key provider-test evidence is executable and non-secret",
+			"provider registry readiness is gated by stored API-key secret or verified Browser Auth proof",
 			"Browser Auth readiness remains non-live-provider until a verified runtime provider-test adapter exists",
 			"TestOpenAIProviderHealthReflectsProfileReadiness",
 			"TestOpenAIProviderTestReturnsAuditableConnectivityEvidence",
