@@ -122,6 +122,57 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 	}
 }
 
+func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-005` ") || strings.HasPrefix(line, "| INTEGRATION-005 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-005")
+	}
+
+	requiredFragments := []string{
+		"Browse request headers/query criteria",
+		"blank keyword/exclusion trimming",
+		"structured auth and non-auth Browse error payload preservation",
+		"positive integer `Retry-After` timing",
+		"`/api/scanner/run` provider-error envelope",
+		"`/api/providers/ebay/run` saved-search candidate persistence",
+		"`/api/providers/registry` eBay setup readiness contract",
+		"degraded provider-health next action",
+		"Wishlist/Inventory provenance handoff",
+		"TestProviderSearchTrimsBlankCriteriaBeforeBrowseRequest",
+		"TestProviderSearchPreservesStructuredBrowseErrorPayload",
+		"TestScannerRunMapsEbayBrowseRetryAfterToProviderErrorEnvelope",
+		"TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance",
+		"TestOpenAPIDocumentsEbayScannerRunSearchErrorEnvelope",
+		"TestOpenAPIDocumentsEbayRegistrySetupReadinessContract",
+		"TestEbayRegistrySetupStatusReflectsDegradedProviderHealth",
+		"INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata",
+		"INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle",
+		"INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff response provenance",
+		"TestEbayProviderSearchFailureTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-005 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
