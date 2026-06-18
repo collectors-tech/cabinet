@@ -8257,7 +8257,7 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"health":            true,
 			},
 			"has_token":          strings.TrimSpace(settings["ebay_bearer_token"]) != "",
-			"setup_status":       ebaySetupStatus(settings),
+			"setup_status":       ebaySetupStatus(settings, ""),
 			"seller_operations":  ebay.SellerOperationStatuses(nil),
 			"state":              "ready",
 			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
@@ -8399,6 +8399,9 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 			"status":      lastRunStatus,
 			"finished_at": lastRunFinished,
 		}
+		if strings.EqualFold(providerID, "ebay") {
+			provider["setup_status"] = ebaySetupStatus(settings, healthStatus)
+		}
 		baseDomain := normalizeProviderDomain(fmt.Sprintf("%v", provider["base_domain"]))
 		if overrideFamily, ok := familyOverrides[baseDomain]; ok && strings.TrimSpace(overrideFamily) != "" {
 			provider["api_family"] = strings.TrimSpace(overrideFamily)
@@ -8456,7 +8459,7 @@ func defaultAUWebshopDomains() []string {
 	}
 }
 
-func ebaySetupStatus(settings map[string]string) map[string]any {
+func ebaySetupStatus(settings map[string]string, providerHealthStatus string) map[string]any {
 	hasToken := strings.TrimSpace(settings["ebay_bearer_token"]) != ""
 	marketplace := strings.TrimSpace(settings["ebay_marketplace"])
 	if marketplace == "" {
@@ -8473,6 +8476,14 @@ func ebaySetupStatus(settings map[string]string) map[string]any {
 		validationStatus = "ready"
 		healthState = "ready"
 		nextAction = "run_ebay_query_sets_from_market_watch"
+	}
+	if hasToken && marketplace != "unset" {
+		switch strings.ToLower(strings.TrimSpace(providerHealthStatus)) {
+		case "error", "failed", "degraded":
+			validationStatus = "degraded"
+			healthState = "degraded"
+			nextAction = "check_provider_health_and_credentials"
+		}
 	}
 	return map[string]any{
 		"auth_mode":         "api_key",
