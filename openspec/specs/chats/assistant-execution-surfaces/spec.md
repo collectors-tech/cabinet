@@ -62,6 +62,7 @@ Cabinet MUST treat OpenAI/API-key/Browser Auth readiness as provider evidence th
 - **THEN** Cabinet MUST call an OpenAI-compatible connectivity endpoint with the stored secret without returning the secret to clients
 - **AND** the response MUST include provider, profile, auth method, credential-present state, pass/fail status, timestamp, next action, and non-secret upstream failure evidence when the provider rejects the test
 - **AND** Browser Auth MUST remain setup-needed for provider-test evidence until a verified runtime provider-test adapter exists
+- **AND** Browser Auth provider-test adapter proof MUST remain tracked by #1345 until executable non-secret readiness evidence exists
 
 #### Scenario: Discover content and listing generation readiness
 - **GIVEN** content_generate and listing_draft_generate require OpenAI-backed processing
@@ -103,6 +104,7 @@ Cabinet MUST route Telegram-originated photo, barcode, text, or mixed catalog in
 - **AND** the intake MUST persist a queryable workflow-run audit record that binds the Telegram source message/thread, selected catalog_add_from_* capability, preview id, confirmation state, and non-secret provider trace
 - **AND** ambiguous recognition MUST ask for follow-up input rather than inventing item data
 - **AND** the audit trail MUST preserve source channel, sender/chat identity, media ids, proposed fields, confirmation decision, and applied item links
+- **AND** authorized Telegram/OpenAI external runtime proof MUST remain tracked by #1346 until a production-channel proof packet exists
 
 ### Requirement ASSISTANT-EXECUTION-009: Cabinet Agent app-control tools SHALL be discoverable and governed
 Cabinet Agent MUST expose safe app-control tools for main chat and side-panel Assistant UI through the same capability, preview, confirmation, and audit boundary as existing assistant actions.
