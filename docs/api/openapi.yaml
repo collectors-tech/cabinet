@@ -1308,6 +1308,20 @@ paths:
                 type: object
         "400":
           $ref: "#/components/responses/Error"
+  /api/providers/registry:
+    get:
+      tags: [Integrations]
+      summary: List provider registry
+      description: Returns canonical provider metadata for the active profile. eBay entries expose non-secret setup readiness for token presence, marketplace routing, validation state, provider health state, and next action without returning bearer token values.
+      responses:
+        "200":
+          description: Provider registry payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderRegistryResponse"
+        "400":
+          $ref: "#/components/responses/Error"
   /api/provider/health:
     get:
       tags: [Scanner]
@@ -3276,6 +3290,60 @@ components:
           nullable: true
           description: Upstream eBay Retry-After seconds when Browse rate limiting provides retry timing.
         query_set_id: { type: string }
+    ProviderRegistryResponse:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderRegistryEntry"
+    ProviderRegistryEntry:
+      type: object
+      required: [provider_id, display_name, auth_mode, capabilities, state]
+      properties:
+        provider_id: { type: string, example: ebay }
+        display_name: { type: string, example: eBay }
+        base_domain: { type: string, example: ebay.com }
+        api_family: { type: string, example: official_api }
+        api_support_profile: { type: string, example: rest_v1 }
+        active_mode: { type: string, example: official_api }
+        integration_mode: { type: string, example: official_api }
+        api_available: { type: boolean }
+        auth_requirement: { type: string, example: api_key }
+        auth_mode: { type: string, example: api_key }
+        capabilities:
+          type: object
+          additionalProperties:
+            type: boolean
+        has_token:
+          type: boolean
+          description: Non-secret eBay token-presence flag; bearer token values are never returned.
+        setup_status:
+          allOf:
+            - $ref: "#/components/schemas/EbayProviderSetupStatus"
+          description: Non-secret readiness summary for the eBay setup surface.
+        seller_operations:
+          type: array
+          items:
+            type: object
+        state: { type: string, example: ready }
+        setup_instructions: { type: string }
+    EbayProviderSetupStatus:
+      type: object
+      required: [auth_mode, marketplace, token_state, validation_status, health_state, next_action, base_url_set]
+      properties:
+        auth_mode: { type: string, enum: [api_key] }
+        marketplace: { type: string, example: EBAY_AU }
+        token_state: { type: string, enum: [stored, token_required] }
+        validation_status: { type: string, enum: [ready, needs_credentials] }
+        health_state: { type: string, enum: [ready, disabled] }
+        next_action:
+          type: string
+          enum: [run_ebay_query_sets_from_market_watch, save_ebay_credentials_and_marketplace]
+        base_url_set:
+          type: boolean
+          description: Indicates whether an eBay Browse base URL override is configured without exposing credential material.
     ProviderHealthResponse:
       type: object
       required: [provider, status, state]

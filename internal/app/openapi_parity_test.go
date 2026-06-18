@@ -623,6 +623,77 @@ func TestOpenAPIDocumentsEbayProviderHealthContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayRegistrySetupReadinessContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/providers/registry")
+	if !ok {
+		t.Fatalf("openapi missing /api/providers/registry path in %s", specPath)
+	}
+	for _, token := range []string{
+		"summary: List provider registry",
+		"ProviderRegistryResponse",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/providers/registry section missing %q:\n%s", token, section)
+		}
+	}
+
+	registrySchema, ok := openAPIComponentSection(raw, "ProviderRegistryResponse")
+	if !ok {
+		t.Fatalf("openapi missing ProviderRegistryResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [providers]",
+		"$ref: \"#/components/schemas/ProviderRegistryEntry\"",
+	} {
+		if !strings.Contains(registrySchema, token) {
+			t.Fatalf("openapi ProviderRegistryResponse schema missing %q:\n%s", token, registrySchema)
+		}
+	}
+
+	entrySchema, ok := openAPIComponentSection(raw, "ProviderRegistryEntry")
+	if !ok {
+		t.Fatalf("openapi missing ProviderRegistryEntry schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"provider_id: { type: string, example: ebay }",
+		"has_token:",
+		"$ref: \"#/components/schemas/EbayProviderSetupStatus\"",
+		"setup_status:",
+		"readiness summary for the eBay setup surface",
+	} {
+		if !strings.Contains(entrySchema, token) {
+			t.Fatalf("openapi ProviderRegistryEntry schema missing %q:\n%s", token, entrySchema)
+		}
+	}
+
+	setupSchema, ok := openAPIComponentSection(raw, "EbayProviderSetupStatus")
+	if !ok {
+		t.Fatalf("openapi missing EbayProviderSetupStatus schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [auth_mode, marketplace, token_state, validation_status, health_state, next_action, base_url_set]",
+		"auth_mode: { type: string, enum: [api_key] }",
+		"marketplace: { type: string, example: EBAY_AU }",
+		"token_state: { type: string, enum: [stored, token_required] }",
+		"validation_status: { type: string, enum: [ready, needs_credentials] }",
+		"health_state: { type: string, enum: [ready, disabled] }",
+		"next_action:",
+		"run_ebay_query_sets_from_market_watch",
+		"save_ebay_credentials_and_marketplace",
+		"base_url_set:",
+	} {
+		if !strings.Contains(setupSchema, token) {
+			t.Fatalf("openapi EbayProviderSetupStatus schema missing %q:\n%s", token, setupSchema)
+		}
+	}
+	if strings.Contains(setupSchema, "ebay_bearer_token") {
+		t.Fatalf("openapi EbayProviderSetupStatus must not document bearer token values:\n%s", setupSchema)
+	}
+}
+
 func TestOpenAPIDocumentsOpenAIProviderTestContract(t *testing.T) {
 	t.Parallel()
 
