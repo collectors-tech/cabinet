@@ -160,14 +160,14 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
-			ListingID:  it.ItemID,
-			Title:      it.Title,
+			ListingID:  strings.TrimSpace(it.ItemID),
+			Title:      strings.TrimSpace(it.Title),
 			Price:      price,
 			Currency:   strings.ToUpper(strings.TrimSpace(it.Price.Currency)),
 			Shipping:   shipping,
-			URL:        it.ItemWebURL,
-			Image:      it.Image.ImageURL,
-			Seller:     it.Seller.Username,
+			URL:        strings.TrimSpace(it.ItemWebURL),
+			Image:      strings.TrimSpace(it.Image.ImageURL),
+			Seller:     strings.TrimSpace(it.Seller.Username),
 			Source:     "ebay",
 			StockState: stockState,
 			StockCount: stockCount,
