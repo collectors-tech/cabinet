@@ -647,10 +647,23 @@ func TestOpenAPIDocumentsEbayRegistrySetupReadinessContract(t *testing.T) {
 	for _, token := range []string{
 		"required: [providers]",
 		"$ref: \"#/components/schemas/ProviderRegistryEntry\"",
+		"example:",
+		"provider_id: ebay",
+		"has_token: true",
+		"setup_status:",
+		"marketplace: EBAY_AU",
+		"token_state: stored",
+		"validation_status: ready",
+		"health_state: ready",
+		"next_action: run_ebay_query_sets_from_market_watch",
+		"base_url_set: false",
 	} {
 		if !strings.Contains(registrySchema, token) {
 			t.Fatalf("openapi ProviderRegistryResponse schema missing %q:\n%s", token, registrySchema)
 		}
+	}
+	if strings.Contains(registrySchema, "ebay_bearer_token") {
+		t.Fatalf("openapi ProviderRegistryResponse example must not document bearer token values:\n%s", registrySchema)
 	}
 
 	entrySchema, ok := openAPIComponentSection(raw, "ProviderRegistryEntry")
