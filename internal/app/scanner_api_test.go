@@ -454,6 +454,21 @@ func TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance(t *testing.T) 
 			t.Fatalf("expected message to preserve %q, got %q", want, message)
 		}
 	}
+
+	health := doRequest(t, a, http.MethodGet, "/api/provider/health?provider=ebay", nil, nil)
+	if health.Code != http.StatusOK {
+		t.Fatalf("provider health status=%d body=%s", health.Code, health.Body.String())
+	}
+	var healthPayload map[string]any
+	if err := json.NewDecoder(health.Body).Decode(&healthPayload); err != nil {
+		t.Fatalf("decode provider health payload: %v", err)
+	}
+	if healthPayload["state"] != "degraded" || healthPayload["last_error"] == nil {
+		t.Fatalf("expected degraded provider health with last_error, got %+v", healthPayload)
+	}
+	if got, ok := healthPayload["retry_after_seconds"].(float64); !ok || int(got) != 120 {
+		t.Fatalf("expected provider health retry_after_seconds=120, got %+v", healthPayload)
+	}
 }
 
 func TestScannerRunMapsEbayBrowseRetryAfterToProviderErrorEnvelope(t *testing.T) {

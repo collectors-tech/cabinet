@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ type QuerySet struct {
 	LastRunAt          string   `json:"last_run_at,omitempty"`
 	LastRunMessage     string   `json:"last_run_message,omitempty"`
 	LastCandidateCount int      `json:"last_candidate_count,omitempty"`
+}
+
+type retryAfterProviderError interface {
+	RetryAfter() int
 }
 
 type CandidateInput struct {
@@ -536,7 +541,7 @@ func (s *Service) RunNowForProfile(ctx context.Context, profileID, querySetID st
 			)
 			return result, persistErr
 		}
-		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error())
+		s.recordProviderHealth(ctx, "ebay", "error", lastErr.Error(), retryAfterSecondsFromError(lastErr))
 		s.logFailure(ctx, strings.TrimSpace(profileID), qs.ID, "ebay", lastErr.Error())
 		if attempt < maxAttempts {
 			sleep := time.Duration(1000/qs.RateLimitRPS) * time.Millisecond
@@ -759,28 +764,42 @@ func nextActionForProviderFailure(provider string) string {
 
 func (s *Service) ProviderHealth(ctx context.Context, provider string) (map[string]string, error) {
 	var status, msg, updated string
+	var retryAfterSeconds int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT status, message, updated_at
+		SELECT status, message, updated_at, retry_after_seconds
 		FROM provider_health WHERE provider = ?
-	`, provider).Scan(&status, &msg, &updated)
+	`, provider).Scan(&status, &msg, &updated, &retryAfterSeconds)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return map[string]string{"provider": provider, "status": "unknown", "message": ""}, nil
 		}
 		return nil, fmt.Errorf("provider health: %w", err)
 	}
-	return map[string]string{"provider": provider, "status": status, "message": msg, "updated_at": updated}, nil
+	return map[string]string{"provider": provider, "status": status, "message": msg, "updated_at": updated, "retry_after_seconds": fmt.Sprintf("%d", retryAfterSeconds)}, nil
 }
 
-func (s *Service) recordProviderHealth(ctx context.Context, provider, status, message string) {
+func (s *Service) recordProviderHealth(ctx context.Context, provider, status, message string, retryAfterSeconds ...int) {
+	retryAfter := 0
+	if len(retryAfterSeconds) > 0 && retryAfterSeconds[0] > 0 {
+		retryAfter = retryAfterSeconds[0]
+	}
 	_, _ = s.db.ExecContext(ctx, `
-		INSERT INTO provider_health(provider, status, message, updated_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO provider_health(provider, status, message, retry_after_seconds, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(provider) DO UPDATE SET
 			status = excluded.status,
 			message = excluded.message,
+			retry_after_seconds = excluded.retry_after_seconds,
 			updated_at = CURRENT_TIMESTAMP
-	`, provider, status, message)
+	`, provider, status, message, retryAfter)
+}
+
+func retryAfterSecondsFromError(err error) int {
+	var providerErr retryAfterProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr.RetryAfter()
+	}
+	return 0
 }
 
 func (s *Service) logFailure(ctx context.Context, profileID, querySetID, provider, message string) {
