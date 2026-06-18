@@ -3351,11 +3351,11 @@ components:
         auth_mode: { type: string, enum: [api_key] }
         marketplace: { type: string, example: EBAY_AU }
         token_state: { type: string, enum: [stored, token_required] }
-        validation_status: { type: string, enum: [ready, needs_credentials] }
-        health_state: { type: string, enum: [ready, disabled] }
+        validation_status: { type: string, enum: [ready, needs_credentials, degraded] }
+        health_state: { type: string, enum: [ready, disabled, degraded] }
         next_action:
           type: string
-          enum: [run_ebay_query_sets_from_market_watch, save_ebay_credentials_and_marketplace]
+          enum: [run_ebay_query_sets_from_market_watch, save_ebay_credentials_and_marketplace, check_provider_health_and_credentials]
         base_url_set:
           type: boolean
           description: Indicates whether an eBay Browse base URL override is configured without exposing credential material.
