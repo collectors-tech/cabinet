@@ -22,7 +22,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
   - and scanner run APIs MUST return `401` with `error_code="PROVIDER_AUTH_INVALID"` when bearer token is expired or rejected
 - **AND** the adapter MUST send the Browse request with bearer authorization, `Accept: application/json`, the configured eBay marketplace header, joined search keywords, max-price filter, exclusions, and the effective `items_per_page` limit from the saved query criteria.
 - **AND** the adapter MUST trim and ignore blank keyword or exclusion criteria before building the Browse request, and MUST reject a saved query that has no non-blank keyword criteria without calling eBay.
-- **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve that amount in the shared scanner candidate `shipping` field.
+- **AND** when Browse item summaries include `shippingOptions.shippingCost.value`, the adapter MUST preserve the first parseable amount in the shared scanner candidate `shipping` field, ignoring blank or unparseable shipping options before falling back to `0`.
 - **AND** scanner candidate persistence MUST store normalized eBay price currency in `scanner_candidates.observed_currency` for both newly inserted and refreshed candidates.
 - **AND** shared scanner candidate read APIs MUST expose the persisted normalized currency as `observed_currency` in eBay provider run and candidate-list responses.
 - **AND** Market Watch MUST display persisted scanner candidate prices and shipping with the `observed_currency` value returned by the candidate read API.

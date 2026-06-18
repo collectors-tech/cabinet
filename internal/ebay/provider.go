@@ -182,11 +182,18 @@ func normalizeShippingCost(options []struct {
 		Currency string `json:"currency"`
 	} `json:"shippingCost"`
 }) float64 {
-	if len(options) == 0 {
-		return 0
+	for _, option := range options {
+		raw := strings.TrimSpace(option.ShippingCost.Value)
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			continue
+		}
+		return value
 	}
-	value, _ := strconv.ParseFloat(strings.TrimSpace(options[0].ShippingCost.Value), 64)
-	return value
+	return 0
 }
 
 func browseErrorMessage(resp *http.Response) string {

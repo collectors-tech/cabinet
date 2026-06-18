@@ -181,6 +181,32 @@ func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	}
 }
 
+func TestProviderSearchUsesFirstParseableShippingCost(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|790|0","title":"Fallback Shipping Slot Car","price":{"value":"22.00","currency":"AUD"},"itemWebUrl":"https://ebay/item/790","seller":{"username":"seller3"},"shippingOptions":[{"shippingCost":{"value":"","currency":"AUD"}},{"shippingCost":{"value":"not-a-price","currency":"AUD"}},{"shippingCost":{"value":"11.25","currency":"AUD"}}]}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Shipping != 11.25 {
+		t.Fatalf("expected first parseable shipping cost 11.25, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchReturnsActionableAuthError(t *testing.T) {
 	t.Parallel()
 
