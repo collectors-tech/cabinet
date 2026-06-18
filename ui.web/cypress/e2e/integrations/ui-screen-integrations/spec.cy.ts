@@ -203,7 +203,11 @@ describe('ui-screen-integrations', () => {
               pricing: true,
               health: true,
             },
-            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            health: {
+              status: 'ok',
+              last_checked_at: '2026-03-01T00:00:00Z',
+              next_action: 'retry_after_backoff',
+            },
             last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
           },
           {

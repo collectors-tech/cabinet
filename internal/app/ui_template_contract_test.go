@@ -647,6 +647,8 @@ func TestIntegrationsEbaySetupStatusPanelContract(t *testing.T) {
 		"data-testid='ebay-setup-readiness-state'",
 		"Health state:",
 		"data-testid='ebay-setup-next-action'",
+		"setupStatus?.next_action ??",
+		"editingProvider.health?.next_action",
 		"formatEbaySetupNextAction(setupNextAction)",
 		"base_url_set?: boolean",
 		"setupStatus?.base_url_set",

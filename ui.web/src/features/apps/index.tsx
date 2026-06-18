@@ -2501,8 +2501,8 @@ export function Apps({
                                 ? 'stored token on file'
                                 : 'token required'
                         const setupNextAction =
-                          editingProvider.health?.next_action ??
-                          setupStatus?.next_action
+                          setupStatus?.next_action ??
+                          editingProvider.health?.next_action
                         const validationStatus =
                           setupStatus?.validation_status ??
                           editingProvider.health?.status ??
