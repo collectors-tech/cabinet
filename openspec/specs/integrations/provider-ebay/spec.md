@@ -72,6 +72,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the profile settings OpenAPI contract MUST document the eBay setup keys `ebay_bearer_token`, `ebay_marketplace`, and `ebay_base_url` so setup clients do not have to infer provider credential and marketplace routing fields from UI code.
 - **AND** the provider registry MUST expose eBay setup readiness without leaking the bearer token, including `has_token`, `auth_mode`, `marketplace`, `token_state`, `validation_status`, `health_state`, and `next_action`.
 - **AND** when provider health has a recorded eBay error for an otherwise credentialed setup, provider registry `setup_status` MUST report `validation_status="degraded"`, `health_state="degraded"`, and `next_action="check_provider_health_and_credentials"` instead of presenting the setup as ready.
+- **AND** the setup UI MUST render registry `setup_status` values for auth mode, marketplace, token state, validation status, health state, and next-action guidance so degraded provider-health recovery is visible before the operator retries a Market Watch run.
 
 #### Scenario: Market Watch manages eBay saved-query lifecycle
 - **GIVEN** the operator creates an eBay-scoped Market Watch query set

@@ -108,11 +108,38 @@ type ProviderRecord = {
     retry_after_seconds?: number | null
     next_action?: string | null
   }
+  setup_status?: {
+    auth_mode?: string
+    marketplace?: string
+    token_state?: string
+    validation_status?: string
+    health_state?: string
+    next_action?: string
+    base_url_override_configured?: boolean
+  }
   last_run?: {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
     finished_at?: string | null
   }
   seller_operations?: SellerOperationStatus[]
+}
+
+const formatEbaySetupNextAction = (nextAction?: string | null) => {
+  switch (nextAction) {
+    case 'run_ebay_query_sets_from_market_watch':
+    case 'run_market_watch_query_sets':
+      return 'Ready for Market Watch runs'
+    case 'check_provider_health_and_credentials':
+      return 'Check provider health and credentials'
+    case 'review_provider_credentials_and_health':
+      return 'Review credentials and provider health'
+    case 'retry_after_backoff':
+      return 'Wait for retry backoff before running eBay query sets'
+    case 'save_ebay_credentials_and_marketplace':
+      return 'Save credentials and marketplace, then validate health'
+    default:
+      return 'Save credentials, then validate health'
+  }
 }
 
 type IntegrationForm = {
@@ -2021,7 +2048,10 @@ export function Apps({
                   Support Profile:{' '}
                   {editingProvider.api_support_profile ?? 'unknown'}
                 </p>
-                <p>Readiness: {editingProvider.health?.state ?? editingProvider.state}</p>
+                <p>
+                  Readiness:{' '}
+                  {editingProvider.health?.state ?? editingProvider.state}
+                </p>
                 <p>Health: {editingProvider.health?.status ?? 'unknown'}</p>
                 {editingProvider.health?.message ? (
                   <p>Message: {editingProvider.health.message}</p>
@@ -2032,8 +2062,8 @@ export function Apps({
                 {typeof editingProvider.health?.retry_after_seconds ===
                 'number' ? (
                   <p>
-                    Retry after:{' '}
-                    {editingProvider.health.retry_after_seconds} seconds
+                    Retry after: {editingProvider.health.retry_after_seconds}{' '}
+                    seconds
                   </p>
                 ) : null}
                 {editingProvider.health?.next_action ? (
@@ -2460,44 +2490,75 @@ export function Apps({
                       className='rounded-md border p-3 text-xs'
                       data-testid='ebay-setup-status-panel'
                     >
-                      <div className='flex flex-wrap items-start justify-between gap-3'>
-                        <div>
-                          <p className='font-medium'>eBay setup status</p>
-                          <p className='text-muted-foreground'>
-                            Verify credentials, marketplace, token state, and
-                            provider health before running eBay query sets.
-                          </p>
-                        </div>
-                        <span
-                          className='rounded bg-muted px-2 py-1 text-muted-foreground'
-                          data-testid='ebay-setup-next-action'
-                        >
-                          {editingProvider.health?.status === 'ok' &&
-                          editingProvider.has_token
-                            ? 'Ready for Market Watch runs'
-                            : 'Save credentials, then validate health'}
-                        </span>
-                      </div>
-                      <div className='mt-3 grid gap-2 sm:grid-cols-2'>
-                        <p data-testid='ebay-setup-auth-mode'>
-                          Auth mode: {editingProvider.auth_mode}
-                        </p>
-                        <p data-testid='ebay-setup-marketplace'>
-                          Marketplace / Region: {form.marketplace || 'unset'}
-                        </p>
-                        <p data-testid='ebay-setup-token-state'>
-                          Token state:{' '}
-                          {editingProvider.has_token && !replaceToken
+                      {(() => {
+                        const setupStatus = editingProvider.setup_status
+                        const tokenState =
+                          editingProvider.has_token && !replaceToken
                             ? 'stored token on file'
                             : form.token.trim()
                               ? 'new token pending save'
-                              : 'token required'}
-                        </p>
-                        <p data-testid='ebay-setup-health-state'>
-                          Validation status:{' '}
-                          {editingProvider.health?.status ?? 'unknown'}
-                        </p>
-                      </div>
+                              : setupStatus?.token_state === 'stored'
+                                ? 'stored token on file'
+                                : 'token required'
+                        const setupNextAction =
+                          editingProvider.health?.next_action ??
+                          setupStatus?.next_action
+                        const validationStatus =
+                          setupStatus?.validation_status ??
+                          editingProvider.health?.status ??
+                          'unknown'
+                        const healthState =
+                          setupStatus?.health_state ??
+                          editingProvider.health?.state ??
+                          editingProvider.state
+                        return (
+                          <>
+                            <div className='flex flex-wrap items-start justify-between gap-3'>
+                              <div>
+                                <p className='font-medium'>eBay setup status</p>
+                                <p className='text-muted-foreground'>
+                                  Verify credentials, marketplace, token state,
+                                  and provider health before running eBay query
+                                  sets.
+                                </p>
+                              </div>
+                              <span
+                                className='rounded bg-muted px-2 py-1 text-muted-foreground'
+                                data-testid='ebay-setup-next-action'
+                              >
+                                {formatEbaySetupNextAction(setupNextAction)}
+                              </span>
+                            </div>
+                            <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                              <p data-testid='ebay-setup-auth-mode'>
+                                Auth mode:{' '}
+                                {setupStatus?.auth_mode ??
+                                  editingProvider.auth_mode}
+                              </p>
+                              <p data-testid='ebay-setup-marketplace'>
+                                Marketplace / Region:{' '}
+                                {setupStatus?.marketplace ||
+                                  form.marketplace ||
+                                  'unset'}
+                              </p>
+                              <p data-testid='ebay-setup-token-state'>
+                                Token state: {tokenState}
+                              </p>
+                              <p data-testid='ebay-setup-health-state'>
+                                Validation status: {validationStatus}
+                              </p>
+                              <p data-testid='ebay-setup-readiness-state'>
+                                Health state: {healthState}
+                              </p>
+                              {setupStatus?.base_url_override_configured ? (
+                                <p data-testid='ebay-setup-base-url-override'>
+                                  Base URL override configured
+                                </p>
+                              ) : null}
+                            </div>
+                          </>
+                        )
+                      })()}
                     </section>
                   ) : null}
                   {editingProvider.provider_id === 'ebay' ? (

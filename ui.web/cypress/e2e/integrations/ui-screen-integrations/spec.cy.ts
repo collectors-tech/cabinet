@@ -819,6 +819,14 @@ describe('ui-screen-integrations', () => {
               pricing: true,
               health: true,
             },
+            setup_status: {
+              auth_mode: 'api_key',
+              marketplace: 'EBAY_AU',
+              token_state: 'stored',
+              validation_status: 'degraded',
+              health_state: 'degraded',
+              next_action: 'check_provider_health_and_credentials',
+            },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
             last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
           },
@@ -841,10 +849,11 @@ describe('ui-screen-integrations', () => {
       .scrollIntoView()
       .should('contain', 'eBay setup status')
       .and('contain', 'Auth mode: api_key')
-      .and('contain', 'Marketplace / Region: AU')
+      .and('contain', 'Marketplace / Region: EBAY_AU')
       .and('contain', 'Token state: stored token on file')
-      .and('contain', 'Validation status: ok')
-      .and('contain', 'Ready for Market Watch runs')
+      .and('contain', 'Validation status: degraded')
+      .and('contain', 'Health state: degraded')
+      .and('contain', 'Check provider health and credentials')
     cy.contains('button', 'Validate').scrollIntoView().should('be.visible')
     cy.contains('button', 'Sync').scrollIntoView().should('be.disabled')
     cy.contains('Sync runs from Market Watch query sets.')
