@@ -21,7 +21,7 @@ Settings SHALL support direct navigation to canonical section routes, with `/set
 #### Scenario: Render canonical settings sections
 - **GIVEN** settings screen loads
 - **WHEN** sidebar navigation renders
-- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, `Storage`, `Operations`, and `Billing` with stable route mapping
+- **THEN** UI MUST include sections `Profile`, `Account`, `Appearance`, `Notifications`, `Display`, `Storage`, `Categories`, `Operations`, and `Billing` with stable route mapping
 
 ### Requirement UI-SCREEN-SETTINGS-003: Settings shell SHALL support deterministic route-level states
 
@@ -83,4 +83,5 @@ Detailed interaction specs are split per section:
 - `settings/notifications/spec.md`
 - `settings/display/spec.md`
 - `settings/storage/spec.md`
+- `settings/categories/spec.md`
 - `settings/billing/spec.md`
