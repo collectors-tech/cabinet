@@ -131,6 +131,140 @@ func TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization(t *testin
 	}
 }
 
+func TestTelegramExternalIntakeProofRequiresAuthorizedProviderEvidence(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	create := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Telegram Proof API"}`), map[string]string{"Content-Type": "application/json"})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", create.Code, create.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+p.ID+"/settings", strings.NewReader(`{
+		"settings":{
+			"telegram.catalog_capture.sender_id":"proof-sender",
+			"telegram.catalog_capture.chat_id":"proof-chat"
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	capture := doRequest(t, a, http.MethodPost, "/api/telegram/catalog-captures", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"proof-sender",
+		"chat_id":"proof-chat",
+		"message_id":"proof-message-1",
+		"text":"Please draft from this proof packet.",
+		"barcode":"9312345678999",
+		"draft":{"part_number":"PROOF-001","title":"Proof Packet Draft","brand":"AFX","category":"Slot Cars"}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if capture.Code != http.StatusCreated {
+		t.Fatalf("capture status=%d body=%s", capture.Code, capture.Body.String())
+	}
+	var capturePayload struct {
+		Thread struct {
+			ID string `json:"id"`
+		} `json:"thread"`
+		Preview struct {
+			ID string `json:"id"`
+		} `json:"preview"`
+	}
+	if err := json.NewDecoder(capture.Body).Decode(&capturePayload); err != nil {
+		t.Fatalf("decode capture payload: %v", err)
+	}
+
+	missingProof := doRequest(t, a, http.MethodPost, "/api/telegram/external-intake-proofs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"proof-sender",
+		"chat_id":"proof-chat",
+		"source_thread_id":"`+capturePayload.Thread.ID+`",
+		"source_message_id":"proof-message-1",
+		"capability_id":"catalog_add_from_text",
+		"preview_id":"`+capturePayload.Preview.ID+`",
+		"confirmation_state":"pending",
+		"provider_trace":{"provider":"openai","live_provider":true}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if missingProof.Code != http.StatusBadRequest {
+		t.Fatalf("missing proof status=%d body=%s", missingProof.Code, missingProof.Body.String())
+	}
+	if !strings.Contains(missingProof.Body.String(), `"error":"invalid_external_intake_proof"`) ||
+		!strings.Contains(missingProof.Body.String(), `"missing_fields"`) {
+		t.Fatalf("expected invalid proof response with missing fields, body=%s", missingProof.Body.String())
+	}
+
+	proof := doRequest(t, a, http.MethodPost, "/api/telegram/external-intake-proofs", strings.NewReader(`{
+		"profile_id":"`+p.ID+`",
+		"sender_id":"proof-sender",
+		"chat_id":"proof-chat",
+		"source_thread_id":"`+capturePayload.Thread.ID+`",
+		"source_message_id":"proof-message-1",
+		"capability_id":"catalog_add_from_text",
+		"preview_id":"`+capturePayload.Preview.ID+`",
+		"confirmation_state":"pending",
+		"proof_approved":true,
+		"provider_trace":{
+			"provider":"openai",
+			"live_provider":true,
+			"request_id":"req_proof_123",
+			"result_id":"result_proof_123",
+			"model":"gpt-4o-mini",
+			"credential_returned":false
+		}
+	}`), map[string]string{"Content-Type": "application/json"})
+	if proof.Code != http.StatusCreated {
+		t.Fatalf("proof status=%d body=%s", proof.Code, proof.Body.String())
+	}
+	var proofPayload struct {
+		WorkflowRun struct {
+			ID                string         `json:"id"`
+			WorkflowID        string         `json:"workflow_id"`
+			CapabilityID      string         `json:"capability_id"`
+			SourceChannel     string         `json:"source_channel"`
+			SourceThreadID    string         `json:"source_thread_id"`
+			SourceMessageID   string         `json:"source_message_id"`
+			Status            string         `json:"status"`
+			ConfirmationState string         `json:"confirmation_state"`
+			ProviderTrace     map[string]any `json:"provider_trace"`
+			Result            map[string]any `json:"result"`
+		} `json:"workflow_run"`
+	}
+	if err := json.NewDecoder(proof.Body).Decode(&proofPayload); err != nil {
+		t.Fatalf("decode proof payload: %v", err)
+	}
+	run := proofPayload.WorkflowRun
+	if run.ID == "" || run.WorkflowID != "telegram-openai-external-intake-proof" || run.Status != "completed" {
+		t.Fatalf("expected completed proof workflow run, got %+v", run)
+	}
+	if run.CapabilityID != "catalog_add_from_text" || run.SourceChannel != "telegram" || run.SourceThreadID != capturePayload.Thread.ID || run.SourceMessageID != "proof-message-1" {
+		t.Fatalf("expected source/capability proof metadata, got %+v", run)
+	}
+	if run.ProviderTrace["provider"] != "openai" || run.ProviderTrace["live_provider"] != true || run.ProviderTrace["credential_returned"] != false || run.ProviderTrace["request_id"] == "" {
+		t.Fatalf("expected non-secret OpenAI provider proof trace, got %+v", run.ProviderTrace)
+	}
+	if _, leaked := run.ProviderTrace["api_key"]; leaked {
+		t.Fatalf("proof trace must not return secret material, got %+v", run.ProviderTrace)
+	}
+	if run.Result["preview_id"] != capturePayload.Preview.ID || run.Result["proof_packet"] != "authorized_telegram_openai_external_intake" {
+		t.Fatalf("expected preview-linked proof result, got %+v", run.Result)
+	}
+
+	list := doRequest(t, a, http.MethodGet, "/api/chat/workflow-runs?profile_id="+p.ID+"&thread_id="+capturePayload.Thread.ID, nil, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list workflow runs status=%d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), run.ID) ||
+		!strings.Contains(list.Body.String(), `"proof_packet":"authorized_telegram_openai_external_intake"`) ||
+		strings.Contains(list.Body.String(), "sk-") {
+		t.Fatalf("expected queryable non-secret proof run, body=%s", list.Body.String())
+	}
+}
+
 func TestTelegramCatalogCaptureAPIPreservesLookupEvidence(t *testing.T) {
 	t.Parallel()
 

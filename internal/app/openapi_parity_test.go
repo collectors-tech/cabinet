@@ -34,6 +34,7 @@ func TestOpenAPIDocumentsRuntimeEndpoints(t *testing.T) {
 		"/api/ai/toggle",
 		"/api/ai/suggest/photo",
 		"/api/telegram/catalog-captures",
+		"/api/telegram/external-intake-proofs",
 		"/api/telegram/webhook/catalog-captures",
 		"/api/integrations/ebay/purchase-inbox/reviews",
 		"/api/integrations/ebay/purchase-inbox/actions",

@@ -4784,6 +4784,89 @@ func New(cfg config.Config) (*App, error) {
 		}
 		_ = json.NewEncoder(w).Encode(result)
 	})
+	mux.HandleFunc("/api/telegram/external-intake-proofs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		var req telegramExternalIntakeProofRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			return
+		}
+		if missing := missingTelegramExternalIntakeProofFields(req); len(missing) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "invalid_external_intake_proof",
+				"missing_fields": missing,
+				"next_action":    "provide_authorized_runtime_source_and_non_secret_openai_provider_evidence",
+			})
+			return
+		}
+		authorizer := profileSettingsTelegramAuthorizer{profiles: profiles, profileID: req.ProfileID}
+		if _, err := authorizer.AuthorizeTelegramCapture(r.Context(), req.SenderID, req.ChatID); err != nil {
+			if errors.Is(err, telegramcapture.ErrUnauthorizedSender) {
+				http.Error(w, `{"error":"telegram_sender_not_authorized"}`, http.StatusForbidden)
+				return
+			}
+			http.Error(w, `{"error":"failed_to_authorize_telegram_sender"}`, http.StatusBadRequest)
+			return
+		}
+		thread, err := chatSvc.GetThread(r.Context(), req.ProfileID, req.SourceThreadID)
+		if err != nil {
+			http.Error(w, `{"error":"source_thread_not_found"}`, http.StatusBadRequest)
+			return
+		}
+		preview, err := chatSvc.GetActionPreview(r.Context(), req.ProfileID, req.PreviewID)
+		if err != nil || preview.ThreadID != thread.ID {
+			http.Error(w, `{"error":"preview_not_found_for_source_thread"}`, http.StatusBadRequest)
+			return
+		}
+		run, err := chatSvc.CreateWorkflowRun(r.Context(), chat.CreateWorkflowRunInput{
+			ProfileID:         req.ProfileID,
+			WorkflowID:        "telegram-openai-external-intake-proof",
+			CapabilityID:      strings.TrimSpace(req.CapabilityID),
+			SourceChannel:     "telegram",
+			SourceThreadID:    thread.ID,
+			SourceMessageID:   strings.TrimSpace(req.SourceMessageID),
+			ConfirmationState: req.ConfirmationState,
+			Input: map[string]any{
+				"sender_id":    strings.TrimSpace(req.SenderID),
+				"chat_id":      strings.TrimSpace(req.ChatID),
+				"preview_id":   strings.TrimSpace(req.PreviewID),
+				"proof_source": "approved_runtime_packet",
+			},
+			ProviderTrace: nonSecretProviderTrace(req.ProviderTrace),
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_create_external_intake_proof"}`, http.StatusBadRequest)
+			return
+		}
+		run, err = chatSvc.UpdateWorkflowRun(r.Context(), chat.UpdateWorkflowRunInput{
+			ProfileID:         req.ProfileID,
+			RunID:             run.ID,
+			Status:            "completed",
+			ConfirmationState: req.ConfirmationState,
+			ProviderTrace:     run.ProviderTrace,
+			Result: map[string]any{
+				"proof_packet":       "authorized_telegram_openai_external_intake",
+				"preview_id":         strings.TrimSpace(req.PreviewID),
+				"thread_id":          thread.ID,
+				"source_message_id":  strings.TrimSpace(req.SourceMessageID),
+				"confirmation_state": strings.TrimSpace(req.ConfirmationState),
+			},
+		})
+		if err != nil {
+			http.Error(w, `{"error":"failed_to_complete_external_intake_proof"}`, http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":           true,
+			"workflow_run": run,
+		})
+	})
 	mux.HandleFunc("/api/chat/threads", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
@@ -10811,6 +10894,19 @@ type telegramCatalogCaptureCallbackRequest struct {
 	CallbackData string `json:"callback_data"`
 }
 
+type telegramExternalIntakeProofRequest struct {
+	ProfileID         string         `json:"profile_id"`
+	SenderID          string         `json:"sender_id"`
+	ChatID            string         `json:"chat_id"`
+	SourceThreadID    string         `json:"source_thread_id"`
+	SourceMessageID   string         `json:"source_message_id"`
+	CapabilityID      string         `json:"capability_id"`
+	PreviewID         string         `json:"preview_id"`
+	ConfirmationState string         `json:"confirmation_state"`
+	ProofApproved     bool           `json:"proof_approved"`
+	ProviderTrace     map[string]any `json:"provider_trace"`
+}
+
 type profileSettingsTelegramAuthorizer struct {
 	profiles  *profile.Repository
 	profileID string
@@ -10913,6 +11009,104 @@ func telegramCatalogCaptureMedia(media []telegramCatalogCaptureMediaRequest) ([]
 		})
 	}
 	return out, nil
+}
+
+func missingTelegramExternalIntakeProofFields(req telegramExternalIntakeProofRequest) []string {
+	var missing []string
+	requiredStrings := map[string]string{
+		"profile_id":         req.ProfileID,
+		"sender_id":          req.SenderID,
+		"chat_id":            req.ChatID,
+		"source_thread_id":   req.SourceThreadID,
+		"source_message_id":  req.SourceMessageID,
+		"capability_id":      req.CapabilityID,
+		"preview_id":         req.PreviewID,
+		"confirmation_state": req.ConfirmationState,
+	}
+	names := make([]string, 0, len(requiredStrings))
+	for name := range requiredStrings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if strings.TrimSpace(requiredStrings[name]) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if !req.ProofApproved {
+		missing = append(missing, "proof_approved")
+	}
+	if !isTelegramCatalogCapability(req.CapabilityID) {
+		missing = append(missing, "capability_id.catalog_add_from")
+	}
+	if !isAllowedExternalProofConfirmation(req.ConfirmationState) {
+		missing = append(missing, "confirmation_state.valid")
+	}
+	if provider, _ := req.ProviderTrace["provider"].(string); strings.TrimSpace(provider) != "openai" {
+		missing = append(missing, "provider_trace.provider")
+	}
+	if !truthy(req.ProviderTrace["live_provider"]) {
+		missing = append(missing, "provider_trace.live_provider")
+	}
+	if requestID, _ := req.ProviderTrace["request_id"].(string); strings.TrimSpace(requestID) == "" {
+		missing = append(missing, "provider_trace.request_id")
+	}
+	if resultID, _ := req.ProviderTrace["result_id"].(string); strings.TrimSpace(resultID) == "" {
+		missing = append(missing, "provider_trace.result_id")
+	}
+	if value, ok := req.ProviderTrace["credential_returned"]; !ok || truthy(value) {
+		missing = append(missing, "provider_trace.credential_returned_false")
+	}
+	for _, key := range []string{"api_key", "token", "secret", "authorization"} {
+		if _, ok := req.ProviderTrace[key]; ok {
+			missing = append(missing, "provider_trace.no_"+key)
+		}
+	}
+	return missing
+}
+
+func isTelegramCatalogCapability(capabilityID string) bool {
+	switch strings.TrimSpace(capabilityID) {
+	case "catalog_add_from_photo", "catalog_add_from_barcode", "catalog_add_from_text":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedExternalProofConfirmation(state string) bool {
+	switch strings.TrimSpace(state) {
+	case "pending", "confirmed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func truthy(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func nonSecretProviderTrace(in map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range in {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "api_key", "token", "secret", "authorization":
+			continue
+		default:
+			out[key] = value
+		}
+	}
+	out["credential_returned"] = false
+	out["proof_packet"] = "authorized_telegram_openai_external_intake"
+	return out
 }
 
 func (a *App) close() error {
