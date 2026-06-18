@@ -8256,6 +8256,8 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 				"pricing":           true,
 				"health":            true,
 			},
+			"has_token":          strings.TrimSpace(settings["ebay_bearer_token"]) != "",
+			"setup_status":       ebaySetupStatus(settings),
 			"seller_operations":  ebay.SellerOperationStatuses(nil),
 			"state":              "ready",
 			"setup_instructions": "Add eBay API token and marketplace, validate health, then run scanner query sets.",
@@ -8451,6 +8453,35 @@ func defaultAUWebshopDomains() []string {
 		"mrtoys.com.au",
 		"hobbyco.com.au",
 		"metrohobbies.com.au",
+	}
+}
+
+func ebaySetupStatus(settings map[string]string) map[string]any {
+	hasToken := strings.TrimSpace(settings["ebay_bearer_token"]) != ""
+	marketplace := strings.TrimSpace(settings["ebay_marketplace"])
+	if marketplace == "" {
+		marketplace = "unset"
+	}
+	tokenState := "token_required"
+	validationStatus := "needs_credentials"
+	healthState := "disabled"
+	nextAction := "save_ebay_credentials_and_marketplace"
+	if hasToken {
+		tokenState = "stored"
+	}
+	if hasToken && marketplace != "unset" {
+		validationStatus = "ready"
+		healthState = "ready"
+		nextAction = "run_ebay_query_sets_from_market_watch"
+	}
+	return map[string]any{
+		"auth_mode":         "api_key",
+		"marketplace":       marketplace,
+		"token_state":       tokenState,
+		"validation_status": validationStatus,
+		"health_state":      healthState,
+		"next_action":       nextAction,
+		"base_url_set":      strings.TrimSpace(settings["ebay_base_url"]) != "",
 	}
 }
 
