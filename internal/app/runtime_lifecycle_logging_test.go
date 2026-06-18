@@ -89,6 +89,11 @@ func TestRuntimeLifecycleMetadataAndStructuredLogs(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 	}
+	failureResp, err := http.Post(resolvedURL+"/api/profiles", "application/json", strings.NewReader(`{`)) //nolint:gosec // local runtime test endpoint
+	if err != nil {
+		t.Fatalf("POST /api/profiles invalid JSON error = %v", err)
+	}
+	_ = failureResp.Body.Close()
 
 	cancel()
 	select {
@@ -159,13 +164,20 @@ func TestRuntimeLifecycleMetadataAndStructuredLogs(t *testing.T) {
 	if !containsPath(accessLines, "/api/runtime") {
 		t.Fatalf("expected /api/runtime access log entry, got %+v", accessLines)
 	}
+	if !containsAccessContract(accessLines, "/api/runtime") {
+		t.Fatalf("expected /api/runtime access log to include bounded request metadata, got %+v", accessLines)
+	}
 
 	errorLogPath, err := singleTimestampedLogPath(filepath.Join(base, "logs"), "cabinet.error.*.log")
 	if err != nil {
 		t.Fatalf("find error log: %v", err)
 	}
-	if _, err := os.Stat(errorLogPath); err != nil {
-		t.Fatalf("stat error log: %v", err)
+	errorLines, err := readStructuredLogLines(errorLogPath)
+	if err != nil {
+		t.Fatalf("read error log: %v", err)
+	}
+	if !containsHTTPFailure(errorLines, "/api/profiles", http.StatusBadRequest) {
+		t.Fatalf("expected non-2xx /api/profiles request failure in error log, got %+v", errorLines)
 	}
 	for _, legacy := range []string{"cabinet.runtime.log", "cabinet.access.log", "cabinet.error.log"} {
 		if _, err := os.Stat(filepath.Join(base, legacy)); err == nil {
@@ -201,4 +213,47 @@ func containsPath(lines []map[string]any, path string) bool {
 		}
 	}
 	return false
+}
+
+func containsAccessContract(lines []map[string]any, path string) bool {
+	for _, line := range lines {
+		if fmt.Sprint(line["path"]) != path {
+			continue
+		}
+		if fmt.Sprint(line["method"]) == "" || getIntFromMeta(line["status"]) == 0 {
+			return false
+		}
+		if _, ok := line["durationMs"]; !ok {
+			return false
+		}
+		for _, key := range []string{"requestId", "profile", "logSetId", "accessLog"} {
+			if isBlankLogValue(line[key]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func containsHTTPFailure(lines []map[string]any, path string, status int) bool {
+	for _, line := range lines {
+		if fmt.Sprint(line["event"]) != "http_failure" {
+			continue
+		}
+		if fmt.Sprint(line["path"]) != path || getIntFromMeta(line["status"]) != status {
+			continue
+		}
+		for _, key := range []string{"method", "requestId", "logSetId"} {
+			if isBlankLogValue(line[key]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func isBlankLogValue(value any) bool {
+	return value == nil || strings.TrimSpace(fmt.Sprint(value)) == "" || fmt.Sprint(value) == "<nil>"
 }
