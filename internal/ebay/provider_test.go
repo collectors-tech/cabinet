@@ -155,6 +155,48 @@ func TestProviderSearchNormalizesSparseCandidateMetadata(t *testing.T) {
 	}
 }
 
+func TestProviderSearchTrimsBrowseStringMetadata(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":" v1|trimmed|0 ","title":"  Trimmed Slot Car  ","price":{"value":"12.50","currency":" aud "},"itemWebUrl":" https://ebay/item/trimmed ","image":{"imageUrl":" https://img/trimmed.jpg "},"seller":{"username":" seller-trimmed "}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	got := items[0]
+	if got.ListingID != "v1|trimmed|0" {
+		t.Fatalf("expected trimmed listing id, got %q", got.ListingID)
+	}
+	if got.Title != "Trimmed Slot Car" {
+		t.Fatalf("expected trimmed title, got %q", got.Title)
+	}
+	if got.Currency != "AUD" {
+		t.Fatalf("expected trimmed uppercase currency AUD, got %q", got.Currency)
+	}
+	if got.URL != "https://ebay/item/trimmed" {
+		t.Fatalf("expected trimmed item URL, got %q", got.URL)
+	}
+	if got.Image != "https://img/trimmed.jpg" {
+		t.Fatalf("expected trimmed image URL, got %q", got.Image)
+	}
+	if got.Seller != "seller-trimmed" {
+		t.Fatalf("expected trimmed seller username, got %q", got.Seller)
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 
