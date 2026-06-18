@@ -1331,7 +1331,7 @@ paths:
     post:
       tags: [Integrations]
       summary: Run provider connectivity test
-      description: Runs a profile-scoped provider test and returns non-secret readiness evidence. OpenAI API-key mode performs an OpenAI-compatible connectivity check; Browser Auth remains setup-needed until a verified runtime provider-test adapter exists.
+      description: Runs a profile-scoped provider test and returns non-secret readiness evidence. OpenAI API-key mode performs an OpenAI-compatible connectivity check; Browser Auth requires connected auth state, a verified auth artifact flag, and a passed non-secret provider-test proof artifact.
       requestBody:
         required: true
         content:
@@ -3239,7 +3239,10 @@ components:
             - OPENAI_PROFILE_REQUIRED
             - OPENAI_AUTH_METHOD_REQUIRED
             - OPENAI_API_KEY_MISSING
-            - OPENAI_BROWSER_AUTH_PROVIDER_TEST_UNAVAILABLE
+            - OPENAI_BROWSER_AUTH_PROVIDER_TEST_PROOF_REQUIRED
+            - OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED
+            - OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED
+            - OPENAI_BROWSER_AUTH_PROOF_REQUIRED
         auth_method:
           type: string
           nullable: true
@@ -3254,6 +3257,12 @@ components:
           type: string
           nullable: true
         browser_auth_state:
+          type: string
+          nullable: true
+        provider_test_state:
+          type: string
+          nullable: true
+        provider_test_artifact_id:
           type: string
           nullable: true
         message:

@@ -284,6 +284,91 @@ func TestOpenAIProviderTestReturnsAuditableConnectivityEvidence(t *testing.T) {
 	}
 }
 
+func TestOpenAIBrowserAuthProviderTestRequiresVerifiedProof(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"OpenAIBrowserAuthProviderTestProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.active_auth_method":"browser_auth","openai.browser_auth_state":"connected","openai.browser_auth_artifact_present":"true"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+	missingProof := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if missingProof.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing browser proof status, got %d body=%s", missingProof.Code, missingProof.Body.String())
+	}
+	var missingPayload map[string]any
+	if err := json.NewDecoder(missingProof.Body).Decode(&missingPayload); err != nil {
+		t.Fatalf("decode missing browser proof payload: %v", err)
+	}
+	if missingPayload["status"] != "needs_config" || missingPayload["code"] != "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PROOF_REQUIRED" || missingPayload["provider_test_passed"] != false || missingPayload["credential_present"] != true {
+		t.Fatalf("expected setup-needed browser provider-test proof evidence, got %+v", missingPayload)
+	}
+
+	failedSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.browser_auth_provider_test_state":"failed","openai.browser_auth_provider_test_artifact_id":"browser-proof-failed","openai.browser_auth_provider_test_message":"adapter rejected browser session"}}`), map[string]string{"Content-Type": "application/json"})
+	if failedSettings.Code != http.StatusOK {
+		t.Fatalf("failed proof settings status=%d body=%s", failedSettings.Code, failedSettings.Body.String())
+	}
+	failedProof := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if failedProof.Code != http.StatusBadRequest {
+		t.Fatalf("expected failed browser proof status, got %d body=%s", failedProof.Code, failedProof.Body.String())
+	}
+	var failedPayload map[string]any
+	if err := json.NewDecoder(failedProof.Body).Decode(&failedPayload); err != nil {
+		t.Fatalf("decode failed browser proof payload: %v", err)
+	}
+	if failedPayload["status"] != "failed" || failedPayload["code"] != "OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED" || failedPayload["provider_test_passed"] != false || failedPayload["provider_test_artifact_id"] != "browser-proof-failed" {
+		t.Fatalf("expected failed browser provider-test evidence, got %+v", failedPayload)
+	}
+
+	passedSettings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"openai.browser_auth_provider_test_state":"passed","openai.browser_auth_provider_test_artifact_id":"browser-proof-pass","openai.browser_auth_provider_test_message":"browser auth adapter proof accepted"}}`), map[string]string{"Content-Type": "application/json"})
+	if passedSettings.Code != http.StatusOK {
+		t.Fatalf("passed proof settings status=%d body=%s", passedSettings.Code, passedSettings.Body.String())
+	}
+	passedProof := doRequest(t, a, http.MethodPost, "/api/provider/test", strings.NewReader(`{"provider":"openai","profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if passedProof.Code != http.StatusOK {
+		t.Fatalf("expected passed browser proof status, got %d body=%s", passedProof.Code, passedProof.Body.String())
+	}
+	var passedPayload map[string]any
+	if err := json.NewDecoder(passedProof.Body).Decode(&passedPayload); err != nil {
+		t.Fatalf("decode passed browser proof payload: %v", err)
+	}
+	if passedPayload["status"] != "ready" || passedPayload["code"] != "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED" || passedPayload["provider_test_passed"] != true || passedPayload["auth_method"] != "browser_auth" {
+		t.Fatalf("expected ready browser provider-test evidence, got %+v", passedPayload)
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var registryPayload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&registryPayload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	openai := findRegistryProvider(registryPayload.Providers, "openai")
+	methods := openai["auth_methods"].(map[string]any)
+	browser := methods["browser_auth"].(map[string]any)
+	if openai["state"] != "ready" || browser["connected"] != true || browser["provider_test_passed"] != true || browser["provider_test_artifact_id"] != "browser-proof-pass" {
+		t.Fatalf("expected registry to report browser auth ready only after passed proof, got provider=%+v browser=%+v", openai, browser)
+	}
+	if strings.Contains(passedProof.Body.String(), "sk-") {
+		t.Fatalf("browser provider-test response must not expose secret-like material, body=%s", passedProof.Body.String())
+	}
+}
+
 func TestEbayRegistryExposesSellerOperationCapabilityStatuses(t *testing.T) {
 	t.Parallel()
 
