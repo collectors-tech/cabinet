@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { DatabaseProfileIcon } from '@/assets/database-profile-icon'
 
 type TeamSwitcherProps = {
   teams: {
@@ -29,6 +30,10 @@ function profilePlanLabel(name: string) {
   return /showcase|sample|demo/i.test(name)
     ? 'Showcase sample data'
     : 'Database'
+}
+
+function profileTestIdSlug(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
@@ -219,7 +224,12 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
             >
               <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
-                <activeTeam.logo className='size-4' />
+                <DatabaseProfileIcon
+                  className='size-8'
+                  label={`${activeTeam.name} database profile`}
+                  testId='active-profile-db-icon'
+                  variant='dark'
+                />
               </div>
               <div className='grid flex-1 text-start text-sm leading-tight'>
                 <span
@@ -250,14 +260,19 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
             {availableWorkspaces.map((team, index) => (
               <DropdownMenuItem
                 key={team.name}
-                data-testid={`team-option-${team.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                data-testid={`team-option-${profileTestIdSlug(team.name)}`}
                 onClick={() => {
                   void switchProfile(team.name)
                 }}
                 className='gap-2 p-2'
               >
                 <div className='flex size-6 items-center justify-center rounded-sm border'>
-                  <team.logo className='size-4 shrink-0' />
+                  <DatabaseProfileIcon
+                    className='size-6 shrink-0'
+                    label={`${team.name} database profile`}
+                    testId={`team-option-${profileTestIdSlug(team.name)}-icon`}
+                    variant='theme'
+                  />
                 </div>
                 <div className='grid flex-1 text-start leading-tight'>
                   <span>{team.name}</span>
