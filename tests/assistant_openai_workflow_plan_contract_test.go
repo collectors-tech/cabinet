@@ -88,11 +88,12 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 	requiredByID := map[string][]string{
 		"ASSISTANT-EXECUTION-006": {
 			"#1337",
+			"#1345",
 			"/api/provider/test",
 			"/api/providers/registry",
 			"API-key provider-test evidence is executable and non-secret",
 			"provider registry readiness is gated by stored API-key secret or verified Browser Auth proof",
-			"Browser Auth readiness remains non-live-provider until a verified runtime provider-test adapter exists",
+			"Browser Auth provider-test adapter proof is tracked by #1345",
 			"TestOpenAIProviderHealthReflectsProfileReadiness",
 			"TestOpenAIProviderTestReturnsAuditableConnectivityEvidence",
 			"TestOpenAIRegistryUsesPersistedActiveMethodWithoutBrowserNavigationProof",
@@ -104,9 +105,10 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 		},
 		"ASSISTANT-EXECUTION-008": {
 			"#1337",
+			"#1346",
 			"/api/telegram/catalog-captures",
 			"authorized Telegram catalog intake now persists workflow-run evidence",
-			"live Telegram/OpenAI external runtime execution remains blocked until authorized production-channel proof exists",
+			"authorized Telegram/OpenAI external runtime proof is tracked by #1346",
 			"TestAssistantWorkflowRunsPersistLifecycleAndBulkResults",
 			"TestTelegramCatalogCaptureAPIRequiresPersistedSenderAuthorization",
 			"TestAssistantOpenAIWorkflowPlanBindsIssue847Contracts",
