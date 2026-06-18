@@ -149,3 +149,13 @@ The shell database/profile switcher SHALL keep an existing selected database pro
 - **WHEN** the user selects an existing non-active database profile
 - **THEN** the active profile API SHALL report the selected profile
 - **AND** the selected database label SHALL remain visible in Inventory, Wishlist, Collections, Settings, Chats, and Integrations
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-017: Browser and install metadata SHALL use approved Cabinet icon assets
+Cabinet SHALL publish approved Cabinet app icon assets through browser favicon and install metadata without retaining stale template or prior app icon references.
+
+#### Scenario: Browser and install metadata expose current Cabinet branding
+- **GIVEN** the app shell HTML and static image assets are served
+- **WHEN** a browser resolves favicon, touch icon, and web app manifest metadata
+- **THEN** SVG favicons MUST use the approved Cabinet light and dark icon variants
+- **AND** PNG, ICO, touch icon, and web app manifest assets MUST resolve from the approved Cabinet favicon package
+- **AND** app install metadata MUST use `Cabinet` naming and Cabinet theme colors
