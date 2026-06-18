@@ -826,6 +826,7 @@ describe('ui-screen-integrations', () => {
               validation_status: 'degraded',
               health_state: 'degraded',
               next_action: 'check_provider_health_and_credentials',
+              base_url_set: true,
             },
             health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
             last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
@@ -853,6 +854,7 @@ describe('ui-screen-integrations', () => {
       .and('contain', 'Token state: stored token on file')
       .and('contain', 'Validation status: degraded')
       .and('contain', 'Health state: degraded')
+      .and('contain', 'Base URL override configured')
       .and('contain', 'Check provider health and credentials')
     cy.contains('button', 'Validate').scrollIntoView().should('be.visible')
     cy.contains('button', 'Sync').scrollIntoView().should('be.disabled')

@@ -115,7 +115,7 @@ type ProviderRecord = {
     validation_status?: string
     health_state?: string
     next_action?: string
-    base_url_override_configured?: boolean
+    base_url_set?: boolean
   }
   last_run?: {
     status: 'idle' | 'running' | 'success' | 'failed' | 'never' | string
@@ -2550,7 +2550,7 @@ export function Apps({
                               <p data-testid='ebay-setup-readiness-state'>
                                 Health state: {healthState}
                               </p>
-                              {setupStatus?.base_url_override_configured ? (
+                              {setupStatus?.base_url_set ? (
                                 <p data-testid='ebay-setup-base-url-override'>
                                   Base URL override configured
                                 </p>

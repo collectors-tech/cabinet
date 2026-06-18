@@ -153,6 +153,7 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 		"`/api/scanner/run` provider-error envelope",
 		"`/api/providers/ebay/run` saved-search candidate persistence",
 		"`/api/providers/registry` eBay setup readiness contract",
+		"setup_status.base_url_set",
 		"degraded provider-health next action",
 		"eBay setup UI status panel renders registry `setup_status` readiness",
 		"Wishlist/Inventory provenance handoff",
