@@ -8121,6 +8121,7 @@ func providerHealthResponse(health map[string]string) map[string]any {
 	status := strings.TrimSpace(health["status"])
 	message := strings.TrimSpace(health["message"])
 	updatedAt := strings.TrimSpace(health["updated_at"])
+	retryAfterRaw := strings.TrimSpace(health["retry_after_seconds"])
 	if status == "" {
 		status = "unknown"
 	}
@@ -8143,13 +8144,20 @@ func providerHealthResponse(health map[string]string) map[string]any {
 		updated = updatedAt
 	}
 
+	var retryAfter any
+	if retryAfterRaw != "" {
+		if parsed, err := strconv.Atoi(retryAfterRaw); err == nil && parsed > 0 {
+			retryAfter = parsed
+		}
+	}
+
 	return map[string]any{
 		"provider":            provider,
 		"status":              status,
 		"state":               state,
 		"message":             message,
 		"last_error":          lastError,
-		"retry_after_seconds": nil,
+		"retry_after_seconds": retryAfter,
 		"updated_at":          updated,
 	}
 }

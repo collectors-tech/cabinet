@@ -257,6 +257,7 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 			provider TEXT PRIMARY KEY,
 			status TEXT NOT NULL,
 			message TEXT NOT NULL DEFAULT '',
+			retry_after_seconds INTEGER NOT NULL DEFAULT 0,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS scanner_failures (
@@ -764,6 +765,10 @@ func OpenAndMigrate(ctx context.Context, path string) (*sql.DB, error) {
 	if err := ensureColumn(ctx, tx, tx, "scanner_failures", "profile_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure scanner_failures.profile_id: %w", err)
+	}
+	if err := ensureColumn(ctx, tx, tx, "provider_health", "retry_after_seconds", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ensure provider_health.retry_after_seconds: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_scanner_failures_profile_id ON scanner_failures(profile_id);`); err != nil {
 		conn.Close()

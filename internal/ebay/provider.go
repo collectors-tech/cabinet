@@ -47,6 +47,13 @@ func (e *ProviderError) Error() string {
 	return "ebay provider error"
 }
 
+func (e *ProviderError) RetryAfter() int {
+	if e == nil {
+		return 0
+	}
+	return e.RetryAfterSeconds
+}
+
 func NewProvider(cfg ProviderConfig) *Provider {
 	base := strings.TrimSpace(cfg.BaseURL)
 	if base == "" {
