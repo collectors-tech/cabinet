@@ -106,7 +106,13 @@ Cabinet MUST route Telegram-originated photo, barcode, text, or mixed catalog in
 - **AND** the intake MUST persist a queryable workflow-run audit record that binds the Telegram source message/thread, selected catalog_add_from_* capability, preview id, confirmation state, and non-secret provider trace
 - **AND** ambiguous recognition MUST ask for follow-up input rather than inventing item data
 - **AND** the audit trail MUST preserve source channel, sender/chat identity, media ids, proposed fields, confirmation decision, and applied item links
-- **AND** authorized Telegram/OpenAI external runtime proof MUST remain tracked by #1346 until a production-channel proof packet exists
+- **AND** authorized Telegram/OpenAI external runtime proof MUST be recorded through an approved production-channel proof packet that verifies persisted sender/chat authorization, binds an existing source thread and preview, requires a catalog_add_from_* capability, rejects incomplete provider evidence, and stores only non-secret OpenAI request/result trace data
+
+#### Scenario: Record authorized Telegram/OpenAI production proof packet
+- **GIVEN** a Telegram catalog capture preview exists for the authorized sender/chat and active profile
+- **WHEN** an approved external-intake proof packet is submitted for that source message/thread, preview id, catalog_add_from_* capability, and OpenAI provider result
+- **THEN** Cabinet MUST reject the packet unless proof approval, provider=openai, live-provider evidence, request id, result id, and credential-returned=false are present
+- **AND** Cabinet MUST persist a completed, queryable workflow-run record with source_channel=telegram, the source thread/message, selected capability, preview id, confirmation state, and non-secret provider trace
 
 ### Requirement ASSISTANT-EXECUTION-009: Cabinet Agent app-control tools SHALL be discoverable and governed
 Cabinet Agent MUST expose safe app-control tools for main chat and side-panel Assistant UI through the same capability, preview, confirmation, and audit boundary as existing assistant actions.

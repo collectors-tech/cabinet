@@ -2093,6 +2093,84 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+  /api/telegram/external-intake-proofs:
+    post:
+      tags: [Telegram]
+      summary: Record an authorized Telegram/OpenAI external intake proof packet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - profile_id
+                - sender_id
+                - chat_id
+                - source_thread_id
+                - source_message_id
+                - capability_id
+                - preview_id
+                - confirmation_state
+                - proof_approved
+                - provider_trace
+              properties:
+                profile_id:
+                  type: string
+                sender_id:
+                  type: string
+                chat_id:
+                  type: string
+                source_thread_id:
+                  type: string
+                source_message_id:
+                  type: string
+                capability_id:
+                  type: string
+                  enum: [catalog_add_from_photo, catalog_add_from_barcode, catalog_add_from_text]
+                preview_id:
+                  type: string
+                confirmation_state:
+                  type: string
+                  enum: [pending, confirmed, cancelled]
+                proof_approved:
+                  type: boolean
+                  description: Must be true after the runtime path has authorized the source and provider proof packet.
+                provider_trace:
+                  type: object
+                  required: [provider, live_provider, request_id, result_id, credential_returned]
+                  properties:
+                    provider:
+                      type: string
+                      enum: [openai]
+                    live_provider:
+                      type: boolean
+                    request_id:
+                      type: string
+                    result_id:
+                      type: string
+                    model:
+                      type: string
+                    credential_returned:
+                      type: boolean
+                      enum: [false]
+      responses:
+        "201":
+          description: Proof packet accepted and persisted as a completed workflow run
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  workflow_run:
+                    type: object
+                    description: Completed assistant workflow-run proof record with non-secret provider trace.
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /api/telegram/webhook/catalog-captures:
     post:
       tags: [Telegram]
