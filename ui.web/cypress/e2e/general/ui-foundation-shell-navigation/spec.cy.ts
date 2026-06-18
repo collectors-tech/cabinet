@@ -513,27 +513,61 @@ describe('ui-foundation-shell-navigation', () => {
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
 
     cy.get('[data-testid="sidebar-nav-link-chats"]').should('be.visible')
-    cy.get('[data-testid="sidebar-nav-label-chats"]').should('contain', 'Chats')
+    cy.get('[data-testid="sidebar-nav-link-chats"]').should(
+      'have.attr',
+      'aria-label',
+      'Chats'
+    )
+    cy.get('[data-testid="sidebar-nav-label-chats"]').should('not.exist')
     cy.get('[data-testid="sidebar-nav-badge-chats"]').should('contain', '3')
 
     cy.get('[data-testid="sidebar-nav-link-chats"]').then(($link) => {
       const linkRect = $link[0].getBoundingClientRect()
 
-      cy.get('[data-testid="sidebar-nav-label-chats"]').then(($label) => {
-        const labelRect = $label[0].getBoundingClientRect()
+      cy.get('[data-testid="sidebar-nav-badge-chats"]').then(($badge) => {
+        const badgeRect = $badge[0].getBoundingClientRect()
 
-        cy.get('[data-testid="sidebar-nav-badge-chats"]').then(($badge) => {
-          const badgeRect = $badge[0].getBoundingClientRect()
-
-          expect(badgeRect.left, 'badge sits after label').to.be.greaterThan(
-            labelRect.right + 8
-          )
-          expect(linkRect.right - badgeRect.right, 'badge hugs row end').to.be.lessThan(24)
-          expect(labelRect.right, 'label stays clear of badge area').to.be.lessThan(
-            badgeRect.left - 8
-          )
-        })
+        expect(linkRect.right - badgeRect.right, 'badge hugs row end').to.be.lessThan(24)
+        expect(badgeRect.left, 'badge stays in trailing affordance area').to.be.greaterThan(
+          linkRect.left + linkRect.width / 2
+        )
       })
     })
+  })
+
+  it('UI-FOUNDATION-SHELL-NAVIGATION-018 renders primary navigation as icon-only accessible controls', () => {
+    signInTo('/inventory/')
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+
+    const iconOnlyLinks = [
+      ['dashboard', 'Dashboard'],
+      ['inventory', 'Inventory'],
+      ['media', 'Media'],
+      ['collections', 'Collections'],
+      ['wishlist', 'Wishlist'],
+      ['discoveries', 'Discoveries'],
+      ['market-watch', 'Market Watch'],
+      ['purchases', 'Purchases'],
+      ['integrations', 'Integrations'],
+      ['chats', 'Chats'],
+      ['users', 'Users'],
+      ['reports', 'Reports'],
+    ] as const
+
+    iconOnlyLinks.forEach(([key, label]) => {
+      cy.get(`[data-testid="sidebar-nav-link-${key}"]`)
+        .scrollIntoView()
+        .should('be.visible')
+        .and('have.attr', 'aria-label', label)
+        .within(() => {
+          cy.get('svg').should('be.visible')
+          cy.get(`[data-testid="sidebar-nav-label-${key}"]`).should('not.exist')
+        })
+    })
+
+    cy.get('[data-testid="sidebar-nav-link-inventory"]')
+      .should('have.attr', 'data-active', 'true')
+      .focus()
+      .should('be.focused')
   })
 })
