@@ -3298,6 +3298,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProviderRegistryEntry"
+      example:
+        providers:
+          - provider_id: ebay
+            display_name: eBay
+            auth_mode: api_key
+            has_token: true
+            state: ready
+            setup_status:
+              auth_mode: api_key
+              marketplace: EBAY_AU
+              token_state: stored
+              validation_status: ready
+              health_state: ready
+              next_action: run_ebay_query_sets_from_market_watch
+              base_url_set: false
     ProviderRegistryEntry:
       type: object
       required: [provider_id, display_name, auth_mode, capabilities, state]
