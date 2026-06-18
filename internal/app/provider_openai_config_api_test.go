@@ -408,6 +408,67 @@ func TestEbayRegistryExposesSellerOperationCapabilityStatuses(t *testing.T) {
 	}
 }
 
+func TestEbayRegistryExposesSetupReadinessWithoutCredentialLeak(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"EbayRegistrySetupProfile"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var profile struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	activate := doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+profile.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if activate.Code != http.StatusOK {
+		t.Fatalf("activate profile status=%d body=%s", activate.Code, activate.Body.String())
+	}
+	settings := doRequest(t, a, http.MethodPut, "/api/profiles/"+profile.ID+"/settings", strings.NewReader(`{"settings":{"ebay_bearer_token":"secret-ebay-token","ebay_marketplace":"EBAY_AU","ebay_base_url":"https://api.ebay.example"}}`), map[string]string{"Content-Type": "application/json"})
+	if settings.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settings.Code, settings.Body.String())
+	}
+
+	registry := doRequest(t, a, http.MethodGet, "/api/providers/registry", nil, nil)
+	if registry.Code != http.StatusOK {
+		t.Fatalf("registry status=%d body=%s", registry.Code, registry.Body.String())
+	}
+	var payload struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.NewDecoder(registry.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry payload: %v", err)
+	}
+	ebay := findRegistryProvider(payload.Providers, "ebay")
+	if ebay == nil {
+		t.Fatalf("expected ebay provider in registry payload: %+v", payload.Providers)
+	}
+	if fmt.Sprintf("%v", ebay["has_token"]) != "true" {
+		t.Fatalf("expected ebay registry token presence flag, got %+v", ebay)
+	}
+	setup, ok := ebay["setup_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected setup_status map, got %#v", ebay["setup_status"])
+	}
+	for key, want := range map[string]string{
+		"auth_mode":         "api_key",
+		"marketplace":       "EBAY_AU",
+		"token_state":       "stored",
+		"health_state":      "ready",
+		"validation_status": "ready",
+		"next_action":       "run_ebay_query_sets_from_market_watch",
+	} {
+		if got := fmt.Sprintf("%v", setup[key]); got != want {
+			t.Fatalf("setup_status[%s] got %q want %q; setup=%+v", key, got, want, setup)
+		}
+	}
+	if strings.Contains(registry.Body.String(), "secret-ebay-token") {
+		t.Fatalf("registry response must not leak eBay bearer token: %s", registry.Body.String())
+	}
+}
+
 func TestTelegramRegistryExposesCaptureChannelSetupState(t *testing.T) {
 	t.Parallel()
 

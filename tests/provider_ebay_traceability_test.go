@@ -82,9 +82,11 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 		"INTEGRATION-005": {
 			"internal/ebay/provider.go",
 			"/api/providers/ebay/run",
+			"/api/providers/registry",
 			"/api/scanner/query-sets",
 			"TestOpenAPIDocumentsEbayProviderRunContract",
 			"TestOpenAPIDocumentsEbaySavedSearchHandoffContract",
+			"TestEbayRegistryExposesSetupReadinessWithoutCredentialLeak",
 			"INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle",
 			"TestEbayProviderTraceabilityImplemented",
 			"| implemented |",
