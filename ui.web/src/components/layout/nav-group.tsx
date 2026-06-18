@@ -90,11 +90,16 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         asChild
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
-        className={item.badge ? 'pe-9' : undefined}
+        size='sm'
+        className={item.badge ? 'justify-center pe-9' : 'justify-center'}
       >
-        <Link to={item.url} onClick={() => setOpenMobile(false)}>
+        <Link
+          to={item.url}
+          aria-label={item.title}
+          title={item.title}
+          onClick={() => setOpenMobile(false)}
+        >
           {item.icon && <item.icon />}
-          <span data-testid={`sidebar-nav-label-${itemKey}`}>{item.title}</span>
           {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
         </Link>
       </SidebarMenuButton>
@@ -120,13 +125,12 @@ function SidebarMenuCollapsible({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
+            aria-label={item.title}
             tooltip={item.title}
-            className={item.badge ? 'pe-9' : undefined}
+            size='sm'
+            className={item.badge ? 'justify-center pe-9' : 'justify-center'}
           >
             {item.icon && <item.icon />}
-            <span data-testid={`sidebar-nav-label-${itemKey}`}>
-              {item.title}
-            </span>
             {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
             <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 rtl:rotate-180' />
           </SidebarMenuButton>
@@ -140,10 +144,15 @@ function SidebarMenuCollapsible({
                   <SidebarMenuSubButton
                     asChild
                     isActive={checkIsActive(href, subItem)}
+                    className='justify-center'
                   >
-                    <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
+                    <Link
+                      to={subItem.url}
+                      aria-label={subItem.title}
+                      title={subItem.title}
+                      onClick={() => setOpenMobile(false)}
+                    >
                       {subItem.icon && <subItem.icon />}
-                      <span>{subItem.title}</span>
                       {subItem.badge && (
                         <NavBadge itemKey={subItemKey}>
                           {subItem.badge}
@@ -174,14 +183,13 @@ function SidebarMenuCollapsedDropdown({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
+            aria-label={item.title}
             tooltip={item.title}
             isActive={checkIsActive(href, item)}
-            className={item.badge ? 'pe-9' : undefined}
+            size='sm'
+            className={item.badge ? 'justify-center pe-9' : 'justify-center'}
           >
             {item.icon && <item.icon />}
-            <span data-testid={`sidebar-nav-label-${itemKey}`}>
-              {item.title}
-            </span>
             {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
             <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>

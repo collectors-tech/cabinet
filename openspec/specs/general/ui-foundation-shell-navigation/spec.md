@@ -159,3 +159,14 @@ Cabinet SHALL publish approved Cabinet app icon assets through browser favicon a
 - **THEN** SVG favicons MUST use the approved Cabinet light and dark icon variants
 - **AND** PNG, ICO, touch icon, and web app manifest assets MUST resolve from the approved Cabinet favicon package
 - **AND** app install metadata MUST use `Cabinet` naming and Cabinet theme colors
+
+### Requirement UI-FOUNDATION-SHELL-NAVIGATION-018: Primary navigation links SHALL render as icon-only controls
+Cabinet SHALL render authenticated primary app navigation links as icon-only controls while preserving stable accessible names, tooltips, active-route affordances, and keyboard focus affordances.
+
+#### Scenario: Primary app navigation is icon-only and accessible
+- **GIVEN** the authenticated shell sidebar is visible
+- **WHEN** primary app navigation links render in the Navigation workspace
+- **THEN** each link MUST show its icon without visible text label content
+- **AND** each link MUST expose a stable accessible name matching the destination label
+- **AND** the active route state MUST remain visually detectable through the shell nav active affordance
+- **AND** keyboard focus MUST remain visible on each icon-only navigation control
