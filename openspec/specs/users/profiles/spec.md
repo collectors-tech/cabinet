@@ -48,10 +48,11 @@ Selecting an existing database profile from the authenticated shell switcher SHA
 - **AND** Inventory, Wishlist, Collections, Settings, Chats, and Integrations SHALL show the selected database profile as the active shell context
 
 ### Requirement PROFILES-006: Cabinet SHALL distinguish showcase sample profiles from working profiles
-Showcase, demo, or sample-data profiles SHALL be visibly labelled as sample context anywhere the authenticated shell presents them beside normal working database profiles.
+Showcase, demo, or sample-data profiles SHALL be visibly labelled as sample context anywhere the authenticated shell presents them beside normal working database profiles. When the shell presents a Showcase DB profile in the database/profile switcher, it SHALL use the approved DB icon treatment with dark and light variants selected for the active visual context.
 
 #### Scenario: Showcase profile context is explicit in switcher
 - **GIVEN** an authenticated user can choose between `Primary DB` and `Showcase DB`
 - **WHEN** the user opens the database/profile switcher
 - **THEN** `Primary DB` SHALL be labelled as a normal database
 - **AND** `Showcase DB` SHALL be labelled as showcase sample data before and after selection
+- **AND** `Showcase DB` SHALL render the approved DB profile icon with accessible database-profile text and contrast-appropriate dark/light variants

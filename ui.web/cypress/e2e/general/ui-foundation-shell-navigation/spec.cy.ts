@@ -483,6 +483,28 @@ describe('ui-foundation-shell-navigation', () => {
       'contain',
       'Showcase sample data'
     )
+    cy.get('[data-testid="active-profile-db-icon"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Showcase DB database profile')
+    cy.get('[data-testid="active-profile-db-icon-variant"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'dark'
+    )
+    visibleByTestId('team-switcher-trigger').click()
+    cy.get('[data-testid="team-option-showcase-db-icon"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Showcase DB database profile')
+    cy.get('[data-testid="team-option-showcase-db-icon-light"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'light'
+    )
+    cy.get('[data-testid="team-option-showcase-db-icon-dark"]').should(
+      'have.attr',
+      'data-db-icon-variant',
+      'dark'
+    )
   })
 
   it('UI-FOUNDATION-SHELL-NAVIGATION-011 fills available shell width on wide desktop viewport by default', () => {
