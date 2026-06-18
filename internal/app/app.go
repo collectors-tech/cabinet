@@ -7847,19 +7847,40 @@ func openAIProviderHealth(ctx context.Context, profiles *profile.Repository) map
 	case "browser_auth":
 		state := strings.TrimSpace(settings["openai.browser_auth_state"])
 		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		proofState, proofArtifactID, proofMessage, proofPassed := openAIBrowserAuthProviderTestProof(settings)
 		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
 		base["credential_present"] = artifactPresent
-		if strings.EqualFold(state, "connected") && artifactPresent {
+		base["provider_test_passed"] = proofPassed
+		if proofArtifactID != "" {
+			base["provider_test_artifact_id"] = proofArtifactID
+		}
+		if proofState != "" {
+			base["provider_test_state"] = proofState
+		}
+		if strings.EqualFold(state, "connected") && artifactPresent && proofPassed {
 			base["status"] = "ready"
-			base["code"] = "OPENAI_BROWSER_AUTH_VERIFIED"
-			base["message"] = "OpenAI Browser Auth has verified profile proof."
-			base["next_action"] = "run_openai_test"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED"
+			base["message"] = "OpenAI Browser Auth has verified profile proof and passed provider-test evidence."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "run_openai_workflow"
+			return base
+		}
+		if strings.EqualFold(state, "connected") && artifactPresent && strings.EqualFold(proofState, "failed") {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI Browser Auth provider-test proof failed."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "review_browser_auth_provider_test_proof"
 			return base
 		}
 		base["status"] = "needs_config"
 		base["code"] = "OPENAI_BROWSER_AUTH_PROOF_REQUIRED"
-		base["message"] = "Browser Auth requires a verifiable callback or artifact before Cabinet marks OpenAI ready."
-		base["next_action"] = "complete_browser_auth_verification"
+		base["message"] = "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI ready."
+		base["next_action"] = "complete_browser_auth_provider_test_adapter"
 		return base
 	default:
 		base["status"] = "needs_config"
@@ -7945,11 +7966,46 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 	case "browser_auth":
 		state := strings.TrimSpace(settings["openai.browser_auth_state"])
 		artifactPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
+		proofState, proofArtifactID, proofMessage, proofPassed := openAIBrowserAuthProviderTestProof(settings)
 		base["browser_auth_state"] = map[bool]string{true: state, false: "setup_needed"}[state != ""]
 		base["credential_present"] = artifactPresent
+		if proofArtifactID != "" {
+			base["provider_test_artifact_id"] = proofArtifactID
+		}
+		if proofState != "" {
+			base["provider_test_state"] = proofState
+		}
+		if !strings.EqualFold(state, "connected") || !artifactPresent {
+			base["status"] = "needs_config"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROOF_REQUIRED"
+			base["message"] = "Browser Auth requires a verified callback or artifact before provider-test proof can be accepted."
+			base["next_action"] = "complete_browser_auth_verification"
+			return base, http.StatusBadRequest
+		}
+		if strings.EqualFold(proofState, "failed") && proofArtifactID != "" {
+			base["status"] = "failed"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_FAILED"
+			base["message"] = "OpenAI Browser Auth provider-test proof failed."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "review_browser_auth_provider_test_proof"
+			return base, http.StatusBadRequest
+		}
+		if proofPassed {
+			base["status"] = "ready"
+			base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PASSED"
+			base["message"] = "OpenAI Browser Auth provider-test proof passed for the active profile."
+			if proofMessage != "" {
+				base["message"] = proofMessage
+			}
+			base["next_action"] = "run_openai_workflow"
+			base["provider_test_passed"] = true
+			return base, http.StatusOK
+		}
 		base["status"] = "needs_config"
-		base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_UNAVAILABLE"
-		base["message"] = "Browser Auth requires a verified runtime provider-test adapter before Cabinet can mark OpenAI live-provider tested."
+		base["code"] = "OPENAI_BROWSER_AUTH_PROVIDER_TEST_PROOF_REQUIRED"
+		base["message"] = "Browser Auth requires a verified runtime provider-test adapter proof before Cabinet can mark OpenAI live-provider tested."
 		base["next_action"] = "complete_browser_auth_provider_test_adapter"
 		return base, http.StatusBadRequest
 	default:
@@ -7960,6 +8016,13 @@ func openAIProviderTest(ctx context.Context, profiles *profile.Repository, aiSvc
 		base["next_action"] = "connect_openai_api_key_or_browser_auth"
 		return base, http.StatusBadRequest
 	}
+}
+
+func openAIBrowserAuthProviderTestProof(settings map[string]string) (string, string, string, bool) {
+	state := strings.ToLower(strings.TrimSpace(settings["openai.browser_auth_provider_test_state"]))
+	artifactID := strings.TrimSpace(settings["openai.browser_auth_provider_test_artifact_id"])
+	message := strings.TrimSpace(settings["openai.browser_auth_provider_test_message"])
+	return state, artifactID, message, state == "passed" && artifactID != ""
 }
 
 func providerBaseDomain(raw string) string {
@@ -8019,7 +8082,8 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 	openAIAPIKeyPresent := openAIActiveMethod == "api_key" && strings.EqualFold(strings.TrimSpace(settings["openai.api_key_secret_present"]), "true")
 	openAIBrowserState := strings.TrimSpace(settings["openai.browser_auth_state"])
 	openAIBrowserCredentialPresent := strings.EqualFold(strings.TrimSpace(settings["openai.browser_auth_artifact_present"]), "true")
-	openAIBrowserReady := openAIActiveMethod == "browser_auth" && strings.EqualFold(openAIBrowserState, "connected") && openAIBrowserCredentialPresent
+	openAIBrowserProofState, openAIBrowserProofArtifactID, _, openAIBrowserProviderTestPassed := openAIBrowserAuthProviderTestProof(settings)
+	openAIBrowserReady := openAIActiveMethod == "browser_auth" && strings.EqualFold(openAIBrowserState, "connected") && openAIBrowserCredentialPresent && openAIBrowserProviderTestPassed
 	openAIReady := openAIAPIKeyPresent || openAIBrowserReady
 	base := []map[string]any{
 		{
@@ -8041,10 +8105,13 @@ func providerRegistryPayload(ctx context.Context, conn *sql.DB, scannerSvc *scan
 					"credential_present": openAIAPIKeyPresent,
 				},
 				"browser_auth": map[string]any{
-					"state":              map[bool]string{true: openAIBrowserState, false: "setup_needed"}[openAIBrowserState != ""],
-					"connected":          openAIBrowserReady,
-					"credential_present": openAIBrowserCredentialPresent,
-					"setup_message":      "Browser Auth requires a verifiable callback/artifact before Cabinet marks OpenAI connected.",
+					"state":                     map[bool]string{true: openAIBrowserState, false: "setup_needed"}[openAIBrowserState != ""],
+					"connected":                 openAIBrowserReady,
+					"credential_present":        openAIBrowserCredentialPresent,
+					"provider_test_passed":      openAIBrowserProviderTestPassed,
+					"provider_test_state":       openAIBrowserProofState,
+					"provider_test_artifact_id": openAIBrowserProofArtifactID,
+					"setup_message":             "Browser Auth requires a verifiable callback/artifact and provider-test proof before Cabinet marks OpenAI connected.",
 				},
 			},
 			"model_options": []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-5.3-codex"},
