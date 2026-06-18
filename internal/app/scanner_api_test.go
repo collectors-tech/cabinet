@@ -492,7 +492,7 @@ func TestScannerRunMapsEbayBrowseRetryAfterToProviderErrorEnvelope(t *testing.T)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", "45")
 		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = w.Write([]byte(`{"errors":[{"message":"rate limit reached"}]}`))
+		_, _ = w.Write([]byte(`{"errors":[{"errorId":12002,"domain":"API_BROWSE","category":"REQUEST","message":"rate limit reached","longMessage":"Retry after the provider window resets"}]}`))
 	}))
 	defer ebayStub.Close()
 
@@ -543,8 +543,17 @@ func TestScannerRunMapsEbayBrowseRetryAfterToProviderErrorEnvelope(t *testing.T)
 	if payload["error_code"] != "PROVIDER_SEARCH_FAILED" || payload["provider"] != "ebay" {
 		t.Fatalf("unexpected scanner provider error payload: %+v", payload)
 	}
+	if payload["next_action"] != "check_provider_health_and_credentials" {
+		t.Fatalf("expected provider-health next action, got %+v", payload)
+	}
 	if got, ok := payload["retry_after_seconds"].(float64); !ok || int(got) != 45 {
 		t.Fatalf("expected retry_after_seconds=45, got %+v", payload)
+	}
+	message, _ := payload["message"].(string)
+	for _, want := range []string{"12002", "API_BROWSE", "REQUEST", "rate limit reached", "Retry after the provider window resets"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("expected scanner run message to preserve %q, got %q", want, message)
+		}
 	}
 }
 
