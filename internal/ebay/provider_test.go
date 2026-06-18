@@ -197,6 +197,32 @@ func TestProviderSearchTrimsBrowseStringMetadata(t *testing.T) {
 	}
 }
 
+func TestProviderSearchTrimsBrowsePriceValue(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"v1|price-trim|0","title":"Price Trim Slot Car","price":{"value":" 37.50 ","currency":"AUD"},"itemWebUrl":"https://ebay/item/price-trim","seller":{"username":"seller-price"}}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewProvider(ProviderConfig{
+		BaseURL:     srv.URL,
+		BearerToken: "token",
+		Marketplace: "EBAY_AU",
+	})
+	items, err := p.Search(context.Background(), scanner.QuerySet{Keywords: []string{"slot", "car"}})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one normalized item, got %+v", items)
+	}
+	if items[0].Price != 37.50 {
+		t.Fatalf("expected trimmed Browse price 37.50, got %+v", items[0])
+	}
+}
+
 func TestProviderSearchNormalizesShippingCost(t *testing.T) {
 	t.Parallel()
 
