@@ -124,6 +124,19 @@ function Test-TcpPortOpen([int]$port) {
   }
 }
 
+function ConvertFrom-JobString($value) {
+  if ($null -eq $value) {
+    return $null
+  }
+  if ($value -is [string]) {
+    return $value
+  }
+  if ($value.PSObject.Properties.Name -contains "Value") {
+    return [string]$value.Value
+  }
+  return [string]$value
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourceCommit = Get-SourceCommit $repoRoot
 $runStartedAt = Get-Date
@@ -394,8 +407,11 @@ if ($UseContainerImage) {
     exit 1
   }
 
+  $skipImagePreflightForFixture = $FailureFixtureStage -eq "container_start" -or $FailureFixtureStage -eq "runtime_health"
   $imagePreflightError = $null
-  if ($FailureFixtureStage -eq "container_image") {
+  if ($skipImagePreflightForFixture) {
+    Write-Host "[cypress-matrix] Skipping container image preflight for forced $FailureFixtureStage fixture."
+  } elseif ($FailureFixtureStage -eq "container_image") {
     $imagePreflightError = "Failure fixture forced container_image failure for image $ContainerImage."
   } elseif (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     $imagePreflightError = "Docker CLI is unavailable. Install Docker or make docker available on PATH before running container-backed lanes."
@@ -835,11 +851,11 @@ $cleanLaneResults = @(
       container_command = $_.container_command
       container_started = $_.container_started
       container_kept = $_.container_kept
-      source_commit = $_.source_commit
-      cypress_fixture_mode = $_.cypress_fixture_mode
-      failure_stage = $_.failure_stage
-      error_message = $_.error_message
-      log_dir = $_.log_dir
+      source_commit = ConvertFrom-JobString ($_.source_commit)
+      cypress_fixture_mode = ConvertFrom-JobString ($_.cypress_fixture_mode)
+      failure_stage = ConvertFrom-JobString ($_.failure_stage)
+      error_message = ConvertFrom-JobString ($_.error_message)
+      log_dir = ConvertFrom-JobString ($_.log_dir)
       results = $_.results
       exit_code = $_.exit_code
     }
