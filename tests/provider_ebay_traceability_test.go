@@ -280,6 +280,40 @@ func TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented(t *testing.T) 
 	}
 }
 
+func TestEbaySetupDocsTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-005` ") || strings.HasPrefix(line, "| INTEGRATION-005 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-005")
+	}
+
+	requiredFragments := []string{
+		"Help Center Integrations guide documents eBay bearer-token setup, marketplace/region, base URL override state, validation, Market Watch run path, auth/search diagnostics, and live-credential limitations",
+		"TestIntegrationsGuideDocumentsEbaySetupWorkflow",
+		"TestEbaySetupDocsTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-005 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
