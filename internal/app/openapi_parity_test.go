@@ -906,8 +906,13 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		t.Fatalf("openapi missing EbayProviderRunMethodErrorResponse schema in %s", specPath)
 	}
 	for _, token := range []string{
-		"required: [error]",
+		"required: [error, error_code, provider, message, next_action, allowed_method]",
 		"error: { type: string, enum: [method_not_allowed] }",
+		"error_code: { type: string, enum: [method_not_allowed] }",
+		"provider: { type: string, enum: [ebay] }",
+		"message: { type: string, description: Human-readable recovery guidance for retrying the eBay provider run with the supported method. }",
+		"next_action: { type: string, enum: [retry_with_post] }",
+		"allowed_method: { type: string, enum: [POST] }",
 	} {
 		if !strings.Contains(methodErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunMethodErrorResponse schema missing %q:\n%s", token, methodErrorSchema)

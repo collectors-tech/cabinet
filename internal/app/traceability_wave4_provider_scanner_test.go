@@ -695,6 +695,21 @@ func TestWave4EbayRunRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
 	if got, _ := payload["error"].(string); got != "method_not_allowed" {
 		t.Fatalf("expected method_not_allowed payload, got %+v", payload)
 	}
+	if got, _ := payload["error_code"].(string); got != "method_not_allowed" {
+		t.Fatalf("expected matching error_code method_not_allowed, got %+v", payload)
+	}
+	if got, _ := payload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in method error payload, got %+v", payload)
+	}
+	if got, _ := payload["allowed_method"].(string); got != http.MethodPost {
+		t.Fatalf("expected allowed_method POST in method error payload, got %+v", payload)
+	}
+	if got, _ := payload["next_action"].(string); got != "retry_with_post" {
+		t.Fatalf("expected next_action retry_with_post, got %+v", payload)
+	}
+	if got, _ := payload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in method error payload, got %+v", payload)
+	}
 }
 
 func TestWave4AUWebshopStockExtractionContract(t *testing.T) {
