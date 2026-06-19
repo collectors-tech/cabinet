@@ -447,6 +447,76 @@ func TestWave4EbayRunRejectsNonEbayScopedQuerySet(t *testing.T) {
 	}
 }
 
+func TestWave4EbayRunRejectsInvalidConfiguredItemsPerPage(t *testing.T) {
+	t.Parallel()
+
+	ebayStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("eBay provider route must not call Browse when configured items_per_page is invalid")
+	}))
+	defer ebayStub.Close()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Wave4EbayInvalidPageSize"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+	saveSettings := doRequest(
+		t,
+		a,
+		http.MethodPut,
+		"/api/profiles/"+p.ID+"/settings",
+		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"test-token","ebay_marketplace":"EBAY_AU","integration.ebay.items_per_page":"many"}}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if saveSettings.Code != http.StatusOK {
+		t.Fatalf("save ebay settings status=%d body=%s", saveSettings.Code, saveSettings.Body.String())
+	}
+
+	createQuery := doRequest(t, a, http.MethodPost, "/api/scanner/query-sets", strings.NewReader(`{"name":"eBay Invalid Page Size","keywords":["afx"],"provider_scope":["ebay"],"region":"AU","enabled":true}`), map[string]string{"Content-Type": "application/json"})
+	if createQuery.Code != http.StatusCreated {
+		t.Fatalf("create query set status=%d body=%s", createQuery.Code, createQuery.Body.String())
+	}
+	var qs map[string]any
+	if err := json.NewDecoder(createQuery.Body).Decode(&qs); err != nil {
+		t.Fatalf("decode query set: %v", err)
+	}
+	querySetID, _ := qs["id"].(string)
+	if querySetID == "" {
+		t.Fatal("expected query set id")
+	}
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"`+querySetID+`"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run with invalid items_per_page expected 400, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode invalid page-size payload: %v", err)
+	}
+	if got, _ := payload["error"].(string); got != "invalid_ebay_items_per_page" {
+		t.Fatalf("expected invalid_ebay_items_per_page, got %+v", payload)
+	}
+	if got, _ := payload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in invalid page-size payload, got %+v", payload)
+	}
+	if got, _ := payload["query_set_id"].(string); got != querySetID {
+		t.Fatalf("expected query_set_id %q in invalid page-size payload, got %+v", querySetID, payload)
+	}
+	if got, _ := payload["setting"].(string); got != "integration.ebay.items_per_page" {
+		t.Fatalf("expected setting integration.ebay.items_per_page, got %+v", payload)
+	}
+	if got, _ := payload["next_action"].(string); got != "update_ebay_items_per_page" {
+		t.Fatalf("expected next_action update_ebay_items_per_page, got %+v", payload)
+	}
+}
+
 func TestWave4AUWebshopStockExtractionContract(t *testing.T) {
 	t.Parallel()
 

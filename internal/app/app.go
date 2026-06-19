@@ -2604,17 +2604,27 @@ func New(cfg config.Config) (*App, error) {
 			return
 		}
 		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
-			if value, parseErr := strconv.Atoi(raw); parseErr == nil {
-				qs.ItemsPerPage = value
-				if _, updateErr := scannerSvc.UpdateQuerySetForProfile(
-					r.Context(),
-					profileID,
-					qs.ID,
-					qs,
-				); updateErr != nil {
-					http.Error(w, `{"error":"failed_to_apply_provider_items_per_page"}`, http.StatusBadRequest)
-					return
-				}
+			value, parseErr := strconv.Atoi(raw)
+			if parseErr != nil || value <= 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":        "invalid_ebay_items_per_page",
+					"provider":     "ebay",
+					"query_set_id": qs.ID,
+					"setting":      providerSettingsKeys("ebay").ItemsPerPageKey,
+					"next_action":  "update_ebay_items_per_page",
+				})
+				return
+			}
+			qs.ItemsPerPage = value
+			if _, updateErr := scannerSvc.UpdateQuerySetForProfile(
+				r.Context(),
+				profileID,
+				qs.ID,
+				qs,
+			); updateErr != nil {
+				http.Error(w, `{"error":"failed_to_apply_provider_items_per_page"}`, http.StatusBadRequest)
+				return
 			}
 		}
 		provider := ebay.NewProvider(ebay.ProviderConfig{
