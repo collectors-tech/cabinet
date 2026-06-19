@@ -83,6 +83,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** when provider health has a recorded eBay error for an otherwise credentialed setup, provider registry `setup_status` MUST report `validation_status="degraded"`, `health_state="degraded"`, and `next_action="check_provider_health_and_credentials"` instead of presenting the setup as ready.
 - **AND** the setup UI MUST render registry `setup_status` values for auth mode, marketplace, token state, validation status, health state, and next-action guidance so degraded provider-health recovery is visible before the operator retries a Market Watch run.
 - **AND** when `setup_status.next_action` is present, the setup UI MUST prefer it over provider-health fallback next-action metadata so registry readiness guidance is not replaced by stale health telemetry.
+- **AND** the Help Center Integrations guide MUST document eBay setup steps for bearer-token handling, marketplace/region, base URL override state, validation status, Market Watch run path, auth/search failure diagnostics, and live-credential limitations.
 
 #### Scenario: Market Watch manages eBay saved-query lifecycle
 - **GIVEN** the operator creates an eBay-scoped Market Watch query set

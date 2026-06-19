@@ -122,3 +122,37 @@ func TestHelpCenterDocumentsInventoryTaxonomyWorkflow(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationsGuideDocumentsEbaySetupWorkflow(t *testing.T) {
+	t.Parallel()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file location: runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), ".."))
+	path := filepath.Join(repoRoot, "docs", "help-center", "sections", "integrations.md")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read integrations guide: %v", err)
+	}
+	content := strings.ToLower(string(data))
+
+	for _, requiredTerm := range []string{
+		"ebay setup",
+		"bearer token",
+		"marketplace",
+		"base url override",
+		"validate",
+		"market watch",
+		"provider_auth_missing",
+		"provider_auth_invalid",
+		"provider_search_failed",
+		"live credential",
+	} {
+		if !strings.Contains(content, requiredTerm) {
+			t.Fatalf("integrations guide must document eBay setup term %q", requiredTerm)
+		}
+	}
+}
