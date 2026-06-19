@@ -669,6 +669,12 @@ paths:
                 $ref: "#/components/schemas/EbayProviderRunSearchErrorResponse"
         "405":
           description: eBay provider saved-search runs only accept POST.
+          headers:
+            Allow:
+              description: Supported method for the provider run endpoint.
+              schema:
+                type: string
+                enum: [POST]
           content:
             application/json:
               schema:
