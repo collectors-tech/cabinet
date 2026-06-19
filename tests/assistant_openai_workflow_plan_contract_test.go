@@ -134,3 +134,53 @@ func TestAssistantExecutionTraceabilityRowsNameCurrentClosurePath(t *testing.T) 
 		}
 	}
 }
+
+func TestAssistantUIDirectionTraceabilityRowIsActionable(t *testing.T) {
+	t.Parallel()
+
+	tracePath := filepath.Join("..", "openspec", "traceability.md")
+	traceRaw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(traceRaw), "\n") {
+		if strings.HasPrefix(line, "| `UI-SCREEN-CHAT-COPILOT-018` ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatal("expected traceability row for UI-SCREEN-CHAT-COPILOT-018")
+	}
+
+	requiredFragments := []string{
+		"#1205",
+		"#1140",
+		"#1148",
+		"#1133",
+		"assistant-ui.com",
+		"https://www.assistant-ui.com/examples/ai-sdk",
+		"primary UI reference",
+		"Cabinet Go APIs",
+		"context",
+		"persistence",
+		"audit",
+		"preview/confirm/apply safety",
+		"Future affected main chat or side-panel Assistant issues/PRs",
+		"send",
+		"persisted reload/history",
+		"setup-needed/provider state",
+		"context/attachment preservation",
+		"explicit preview/apply/cancel safety",
+		"compact/full behavior consistency",
+		"visual/interaction comparison",
+		"| planned |",
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected UI-SCREEN-CHAT-COPILOT-018 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
