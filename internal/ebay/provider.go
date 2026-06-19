@@ -156,7 +156,7 @@ func (p *Provider) Search(ctx context.Context, q scanner.QuerySet) ([]scanner.Ca
 
 	out := make([]scanner.CandidateInput, 0, len(payload.ItemSummaries))
 	for _, it := range payload.ItemSummaries {
-		price, _ := strconv.ParseFloat(it.Price.Value, 64)
+		price, _ := strconv.ParseFloat(strings.TrimSpace(it.Price.Value), 64)
 		shipping := normalizeShippingCost(it.ShippingOptions)
 		stockState, stockCount := normalizeAvailability(it.EstimatedAvailabilities)
 		out = append(out, scanner.CandidateInput{
