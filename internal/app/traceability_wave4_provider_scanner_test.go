@@ -439,11 +439,17 @@ func TestWave4EbayRunRejectsNonEbayScopedQuerySet(t *testing.T) {
 	if got, _ := payload["error"].(string); got != "query_set_not_scoped_to_ebay" {
 		t.Fatalf("expected query_set_not_scoped_to_ebay, got %+v", payload)
 	}
+	if got, _ := payload["error_code"].(string); got != "query_set_not_scoped_to_ebay" {
+		t.Fatalf("expected matching error_code query_set_not_scoped_to_ebay, got %+v", payload)
+	}
 	if got, _ := payload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in scope guard payload, got %+v", payload)
 	}
 	if got, _ := payload["query_set_id"].(string); got != querySetID {
 		t.Fatalf("expected query_set_id %q in scope guard payload, got %+v", querySetID, payload)
+	}
+	if got, _ := payload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in scope guard payload, got %+v", payload)
 	}
 }
 
@@ -503,6 +509,9 @@ func TestWave4EbayRunRejectsInvalidConfiguredItemsPerPage(t *testing.T) {
 	if got, _ := payload["error"].(string); got != "invalid_ebay_items_per_page" {
 		t.Fatalf("expected invalid_ebay_items_per_page, got %+v", payload)
 	}
+	if got, _ := payload["error_code"].(string); got != "invalid_ebay_items_per_page" {
+		t.Fatalf("expected matching error_code invalid_ebay_items_per_page, got %+v", payload)
+	}
 	if got, _ := payload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in invalid page-size payload, got %+v", payload)
 	}
@@ -514,6 +523,9 @@ func TestWave4EbayRunRejectsInvalidConfiguredItemsPerPage(t *testing.T) {
 	}
 	if got, _ := payload["next_action"].(string); got != "update_ebay_items_per_page" {
 		t.Fatalf("expected next_action update_ebay_items_per_page, got %+v", payload)
+	}
+	if got, _ := payload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in invalid page-size payload, got %+v", payload)
 	}
 }
 
@@ -544,6 +556,9 @@ func TestWave4EbayRunInvalidQuerySetReturnsActionableClientEnvelope(t *testing.T
 	if got, _ := payload["error"].(string); got != "invalid_query_set_id" {
 		t.Fatalf("expected invalid_query_set_id, got %+v", payload)
 	}
+	if got, _ := payload["error_code"].(string); got != "invalid_query_set_id" {
+		t.Fatalf("expected matching error_code invalid_query_set_id, got %+v", payload)
+	}
 	if got, _ := payload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in invalid query-set payload, got %+v", payload)
 	}
@@ -552,6 +567,9 @@ func TestWave4EbayRunInvalidQuerySetReturnsActionableClientEnvelope(t *testing.T
 	}
 	if got, _ := payload["next_action"].(string); got != "select_existing_ebay_query_set" {
 		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", payload)
+	}
+	if got, _ := payload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in invalid query-set payload, got %+v", payload)
 	}
 }
 
@@ -582,6 +600,9 @@ func TestWave4EbayRunMissingQuerySetReturnsActionableClientEnvelope(t *testing.T
 	if got, _ := payload["error"].(string); got != "missing_query_set_id" {
 		t.Fatalf("expected missing_query_set_id, got %+v", payload)
 	}
+	if got, _ := payload["error_code"].(string); got != "missing_query_set_id" {
+		t.Fatalf("expected matching error_code missing_query_set_id, got %+v", payload)
+	}
 	if got, _ := payload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in missing query-set payload, got %+v", payload)
 	}
@@ -590,6 +611,9 @@ func TestWave4EbayRunMissingQuerySetReturnsActionableClientEnvelope(t *testing.T
 	}
 	if got, _ := payload["next_action"].(string); got != "select_existing_ebay_query_set" {
 		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", payload)
+	}
+	if got, _ := payload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in missing query-set payload, got %+v", payload)
 	}
 }
 
@@ -609,6 +633,9 @@ func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T
 	if got, _ := invalidPayload["error"].(string); got != "invalid_json" {
 		t.Fatalf("expected invalid_json, got %+v", invalidPayload)
 	}
+	if got, _ := invalidPayload["error_code"].(string); got != "invalid_json" {
+		t.Fatalf("expected matching error_code invalid_json, got %+v", invalidPayload)
+	}
 	if got, _ := invalidPayload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in invalid JSON payload, got %+v", invalidPayload)
 	}
@@ -617,6 +644,9 @@ func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T
 	}
 	if got, _ := invalidPayload["next_action"].(string); got != "select_existing_ebay_query_set" {
 		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", invalidPayload)
+	}
+	if got, _ := invalidPayload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in invalid JSON payload, got %+v", invalidPayload)
 	}
 
 	missingProfile := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"ebay-q-1"}`), map[string]string{"Content-Type": "application/json"})
@@ -630,6 +660,9 @@ func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T
 	if got, _ := profilePayload["error"].(string); got != "active_profile_not_set" {
 		t.Fatalf("expected active_profile_not_set, got %+v", profilePayload)
 	}
+	if got, _ := profilePayload["error_code"].(string); got != "active_profile_not_set" {
+		t.Fatalf("expected matching error_code active_profile_not_set, got %+v", profilePayload)
+	}
 	if got, _ := profilePayload["provider"].(string); got != "ebay" {
 		t.Fatalf("expected provider ebay in missing profile payload, got %+v", profilePayload)
 	}
@@ -638,6 +671,9 @@ func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T
 	}
 	if got, _ := profilePayload["next_action"].(string); got != "select_active_profile" {
 		t.Fatalf("expected next_action select_active_profile, got %+v", profilePayload)
+	}
+	if got, _ := profilePayload["message"].(string); got == "" {
+		t.Fatalf("expected actionable message in missing profile payload, got %+v", profilePayload)
 	}
 }
 
