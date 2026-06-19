@@ -593,6 +593,54 @@ func TestWave4EbayRunMissingQuerySetReturnsActionableClientEnvelope(t *testing.T
 	}
 }
 
+func TestWave4EbayRunBootstrapErrorsReturnActionableClientEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	invalidJSON := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":`), map[string]string{"Content-Type": "application/json"})
+	if invalidJSON.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run invalid JSON expected 400, got %d body=%s", invalidJSON.Code, invalidJSON.Body.String())
+	}
+	var invalidPayload map[string]any
+	if err := json.NewDecoder(invalidJSON.Body).Decode(&invalidPayload); err != nil {
+		t.Fatalf("decode invalid JSON payload: %v", err)
+	}
+	if got, _ := invalidPayload["error"].(string); got != "invalid_json" {
+		t.Fatalf("expected invalid_json, got %+v", invalidPayload)
+	}
+	if got, _ := invalidPayload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in invalid JSON payload, got %+v", invalidPayload)
+	}
+	if got, _ := invalidPayload["query_set_id"].(string); got != "" {
+		t.Fatalf("expected empty query_set_id in invalid JSON payload, got %+v", invalidPayload)
+	}
+	if got, _ := invalidPayload["next_action"].(string); got != "select_existing_ebay_query_set" {
+		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", invalidPayload)
+	}
+
+	missingProfile := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"ebay-q-1"}`), map[string]string{"Content-Type": "application/json"})
+	if missingProfile.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run without active profile expected 400, got %d body=%s", missingProfile.Code, missingProfile.Body.String())
+	}
+	var profilePayload map[string]any
+	if err := json.NewDecoder(missingProfile.Body).Decode(&profilePayload); err != nil {
+		t.Fatalf("decode missing profile payload: %v", err)
+	}
+	if got, _ := profilePayload["error"].(string); got != "active_profile_not_set" {
+		t.Fatalf("expected active_profile_not_set, got %+v", profilePayload)
+	}
+	if got, _ := profilePayload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in missing profile payload, got %+v", profilePayload)
+	}
+	if got, _ := profilePayload["query_set_id"].(string); got != "ebay-q-1" {
+		t.Fatalf("expected parsed query_set_id in missing profile payload, got %+v", profilePayload)
+	}
+	if got, _ := profilePayload["next_action"].(string); got != "select_active_profile" {
+		t.Fatalf("expected next_action select_active_profile, got %+v", profilePayload)
+	}
+}
+
 func TestWave4EbayRunRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
 	t.Parallel()
 

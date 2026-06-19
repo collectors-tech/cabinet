@@ -2571,7 +2571,13 @@ func New(cfg config.Config) (*App, error) {
 			QuerySetID string `json:"query_set_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "invalid_json",
+				"provider":     "ebay",
+				"query_set_id": "",
+				"next_action":  "select_existing_ebay_query_set",
+			})
 			return
 		}
 		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
@@ -2587,13 +2593,25 @@ func New(cfg config.Config) (*App, error) {
 		}
 		active, err := profiles.GetActiveProfile(r.Context())
 		if err != nil {
-			http.Error(w, `{"error":"active_profile_not_set"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "active_profile_not_set",
+				"provider":     "ebay",
+				"query_set_id": req.QuerySetID,
+				"next_action":  "select_active_profile",
+			})
 			return
 		}
 		profileID := strings.TrimSpace(active.ID)
 		settings, err := profiles.GetSettings(r.Context(), profileID)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_get_settings"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "failed_to_get_settings",
+				"provider":     "ebay",
+				"query_set_id": req.QuerySetID,
+				"next_action":  "retry_profile_settings",
+			})
 			return
 		}
 		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
