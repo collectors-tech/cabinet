@@ -179,11 +179,13 @@ function parseActionErrorPayload(
       provider?: unknown
       query_set_id?: unknown
       setting?: unknown
+      message?: unknown
     }
     for (const [label, value] of [
       ['provider', values.provider],
       ['query_set_id', values.query_set_id],
       ['setting', values.setting],
+      ['message', values.message],
       ['next_action', values.next_action],
     ]) {
       if (typeof value === 'string' && value.trim().length > 0) {
