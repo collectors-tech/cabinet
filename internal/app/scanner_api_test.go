@@ -77,6 +77,35 @@ func TestScannerRetryFailuresEndpoint(t *testing.T) {
 	}
 }
 
+func TestScannerFailuresRejectsUnsupportedMethodsWithGuidance(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	resp := doRequest(t, a, http.MethodPost, "/api/scanner/failures", strings.NewReader(`{}`), map[string]string{"Content-Type": "application/json"})
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected method not allowed, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if got := resp.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("expected Allow GET, got %q", got)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode method error payload: %v body=%s", err, resp.Body.String())
+	}
+	for key, expected := range map[string]any{
+		"error":          "method_not_allowed",
+		"error_code":     "method_not_allowed",
+		"provider":       "ebay",
+		"message":        "Use GET to list scanner failure snapshots before retrying eBay saved-search failures.",
+		"next_action":    "retry_with_get",
+		"allowed_method": http.MethodGet,
+	} {
+		if got := payload[key]; got != expected {
+			t.Fatalf("expected %s=%v, got %v in %+v", key, expected, got, payload)
+		}
+	}
+}
+
 func TestScannerQuerySetUpdateAndDeleteEndpoints(t *testing.T) {
 	t.Parallel()
 

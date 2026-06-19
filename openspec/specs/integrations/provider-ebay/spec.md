@@ -117,6 +117,7 @@ Cabinet SHALL report eBay provider health and recent failure telemetry via provi
 - **AND** OpenAPI MUST document the provider-health response so clients can route eBay setup, degraded health, and retry guidance without treating it as an untyped object.
 - **AND** scanner failure snapshots for provider `ebay` MUST expose deterministic retry guidance with `next_action="check_provider_health_and_credentials"` while preserving the raw failure reason.
 - **AND** the scanner failure list OpenAPI contract MUST expose reusable `ScannerFailuresResponse` and `ScannerFailure` schemas covering query set id, provider, message, raw reason, failure timestamps, retry guidance, and next action.
+- **AND** unsupported scanner failure list methods MUST return `405`, `Allow: GET`, and a structured method-error envelope with `provider="ebay"`, `next_action="retry_with_get"`, and `allowed_method="GET"` so clients do not treat failure-list writes as accepted.
 - **AND** the scanner failure retry OpenAPI contract MUST document the retry request and accepted response fields, including `query_set_id` and `retry_started`, so clients can confirm the requested eBay saved-search recovery attempt was accepted.
 
 ### Requirement INTEGRATION-007: eBay provider MUST capture stock observations when available

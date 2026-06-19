@@ -205,6 +205,8 @@ func TestOpenAPIDocumentsScannerFailureRetryGuidance(t *testing.T) {
 	requiredTokens := []string{
 		"Failure entries",
 		"$ref: \"#/components/schemas/ScannerFailuresResponse\"",
+		`"405":`,
+		"$ref: \"#/components/schemas/ScannerFailuresMethodErrorResponse\"",
 	}
 	for _, token := range requiredTokens {
 		if !strings.Contains(section, token) {
@@ -239,6 +241,23 @@ func TestOpenAPIDocumentsScannerFailureRetryGuidance(t *testing.T) {
 	} {
 		if !strings.Contains(failureSchema, token) {
 			t.Fatalf("openapi ScannerFailure schema missing %q:\n%s", token, failureSchema)
+		}
+	}
+
+	methodSchema, ok := openAPIComponentSection(raw, "ScannerFailuresMethodErrorResponse")
+	if !ok {
+		t.Fatalf("openapi missing ScannerFailuresMethodErrorResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [error, error_code, provider, message, next_action, allowed_method]",
+		"error: { type: string, enum: [method_not_allowed] }",
+		"error_code: { type: string, enum: [method_not_allowed] }",
+		"provider: { type: string, enum: [ebay] }",
+		"next_action: { type: string, enum: [retry_with_get] }",
+		"allowed_method: { type: string, enum: [GET] }",
+	} {
+		if !strings.Contains(methodSchema, token) {
+			t.Fatalf("openapi ScannerFailuresMethodErrorResponse schema missing %q:\n%s", token, methodSchema)
 		}
 	}
 }

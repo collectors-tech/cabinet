@@ -2139,7 +2139,16 @@ func New(cfg config.Config) (*App, error) {
 	mux.HandleFunc("/api/scanner/failures", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
-			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"provider":       "ebay",
+				"message":        "Use GET to list scanner failure snapshots before retrying eBay saved-search failures.",
+				"next_action":    "retry_with_get",
+				"allowed_method": http.MethodGet,
+			})
 			return
 		}
 		active, _ := profiles.GetActiveProfile(r.Context())
