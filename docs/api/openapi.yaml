@@ -1275,6 +1275,12 @@ paths:
                 $ref: "#/components/schemas/ScannerFailuresResponse"
         "400":
           $ref: "#/components/responses/Error"
+        "405":
+          description: Unsupported method for scanner failure listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerFailuresMethodErrorResponse"
   /api/scanner/failures/retry:
     post:
       tags: [Scanner]
@@ -3705,6 +3711,16 @@ components:
         last_error_at: { type: string }
         retry_guidance: { type: string, example: "Check provider health, credentials, and retry the operation." }
         next_action: { type: string, example: check_provider_health_and_credentials }
+    ScannerFailuresMethodErrorResponse:
+      type: object
+      required: [error, error_code, provider, message, next_action, allowed_method]
+      properties:
+        error: { type: string, enum: [method_not_allowed] }
+        error_code: { type: string, enum: [method_not_allowed] }
+        provider: { type: string, enum: [ebay] }
+        message: { type: string, description: Human-readable recovery guidance for listing eBay scanner failure snapshots with the supported method. }
+        next_action: { type: string, enum: [retry_with_get] }
+        allowed_method: { type: string, enum: [GET] }
     Candidate:
       type: object
       properties:
