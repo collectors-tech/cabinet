@@ -2579,7 +2579,14 @@ func New(cfg config.Config) (*App, error) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "method_not_allowed"})
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":          "method_not_allowed",
+				"error_code":     "method_not_allowed",
+				"provider":       "ebay",
+				"allowed_method": http.MethodPost,
+				"next_action":    "retry_with_post",
+				"message":        "Run eBay saved-search providers with POST and a query_set_id request body.",
+			})
 			return
 		}
 		var req struct {
