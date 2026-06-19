@@ -2593,6 +2593,20 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
 			return
 		}
+		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
+			if value, parseErr := strconv.Atoi(raw); parseErr == nil {
+				qs.ItemsPerPage = value
+				if _, updateErr := scannerSvc.UpdateQuerySetForProfile(
+					r.Context(),
+					profileID,
+					qs.ID,
+					qs,
+				); updateErr != nil {
+					http.Error(w, `{"error":"failed_to_apply_provider_items_per_page"}`, http.StatusBadRequest)
+					return
+				}
+			}
+		}
 		provider := ebay.NewProvider(ebay.ProviderConfig{
 			BaseURL:     settings["ebay_base_url"],
 			BearerToken: settings["ebay_bearer_token"],

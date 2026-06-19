@@ -279,6 +279,9 @@ func TestWave4EbayRunPersistsSavedSearchCandidates(t *testing.T) {
 		if got := r.URL.Query().Get("q"); got != "afx" {
 			t.Fatalf("expected query q=afx, got %q", got)
 		}
+		if got := r.URL.Query().Get("limit"); got != "37" {
+			t.Fatalf("expected provider-run Browse limit from integration.ebay.items_per_page, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"itemSummaries":[{"itemId":"ebay-1001","title":"AFX Slot Car eBay Listing","price":{"value":"29.95","currency":"AUD"},"itemWebUrl":"https://www.ebay.com.au/itm/ebay-1001","image":{"imageUrl":"https://example.test/ebay-1001.jpg"},"seller":{"username":"seller-one"},"estimatedAvailabilities":[{"estimatedAvailabilityStatus":"LIMITED_STOCK","estimatedAvailableQuantity":2}]}]}`))
 	}))
@@ -301,7 +304,7 @@ func TestWave4EbayRunPersistsSavedSearchCandidates(t *testing.T) {
 		a,
 		http.MethodPut,
 		"/api/profiles/"+p.ID+"/settings",
-		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"test-token","ebay_marketplace":"EBAY_AU"}}`),
+		strings.NewReader(`{"settings":{"ebay_base_url":"`+ebayStub.URL+`","ebay_bearer_token":"test-token","ebay_marketplace":"EBAY_AU","integration.ebay.items_per_page":"37"}}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if saveSettings.Code != http.StatusOK {
@@ -350,6 +353,12 @@ func TestWave4EbayRunPersistsSavedSearchCandidates(t *testing.T) {
 	}
 	if got, ok := runPayload.Run["saved"].(float64); !ok || int(got) != 1 {
 		t.Fatalf("expected run saved=1, got %+v", runPayload.Run)
+	}
+	if got, ok := runPayload.Run["items_per_page_requested"].(float64); !ok || int(got) != 37 {
+		t.Fatalf("expected provider-run items_per_page_requested=37, got %+v", runPayload.Run)
+	}
+	if got, ok := runPayload.Run["items_per_page_effective"].(float64); !ok || int(got) != 37 {
+		t.Fatalf("expected provider-run items_per_page_effective=37, got %+v", runPayload.Run)
 	}
 
 	reloaded := doRequest(t, a, http.MethodGet, "/api/scanner/query-sets", nil, nil)

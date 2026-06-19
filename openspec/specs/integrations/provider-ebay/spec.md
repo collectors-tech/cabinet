@@ -32,6 +32,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** provider run APIs MUST route `PROVIDER_SEARCH_FAILED` responses to `next_action="check_provider_health_and_credentials"` instead of credential-only review while preserving the structured upstream Browse message.
 - **AND** when eBay Browse returns a positive integer `Retry-After` header on a provider search failure, provider run APIs MUST preserve it as `retry_after_seconds` so clients can show deterministic retry timing instead of generic recovery text only.
 - **AND** the provider-specific `POST /api/providers/ebay/run` saved-search route MUST persist normalized eBay candidates into the shared scanner/Discoveries candidate store with `source="ebay"` and hydrate the query-set latest-run snapshot.
+- **AND** the provider-specific run route MUST apply the active profile's configured `integration.ebay.items_per_page` value before executing Browse so provider-run pagination matches the eBay setup configuration and run summary.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
 
 #### Scenario: Provider run route is documented for client integrations
