@@ -517,6 +517,26 @@ func TestWave4EbayRunRejectsInvalidConfiguredItemsPerPage(t *testing.T) {
 	}
 }
 
+func TestWave4EbayRunRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	run := doRequest(t, a, http.MethodGet, "/api/providers/ebay/run", nil, nil)
+	if run.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("eBay run unsupported method expected 405, got %d body=%s", run.Code, run.Body.String())
+	}
+	if got := run.Header().Get("Allow"); got != http.MethodPost {
+		t.Fatalf("expected Allow header POST for eBay provider run method error, got %q", got)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode method error payload: %v", err)
+	}
+	if got, _ := payload["error"].(string); got != "method_not_allowed" {
+		t.Fatalf("expected method_not_allowed payload, got %+v", payload)
+	}
+}
+
 func TestWave4AUWebshopStockExtractionContract(t *testing.T) {
 	t.Parallel()
 

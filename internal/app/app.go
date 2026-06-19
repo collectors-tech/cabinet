@@ -2562,7 +2562,9 @@ func New(cfg config.Config) (*App, error) {
 	mux.HandleFunc("/api/providers/ebay/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
-			http.Error(w, `{"error":"method_not_allowed"}`, http.StatusMethodNotAllowed)
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "method_not_allowed"})
 			return
 		}
 		var req struct {

@@ -796,6 +796,10 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		`"429":`,
 		"$ref: \"#/components/schemas/EbayProviderRunSearchErrorResponse\"",
 		`"405":`,
+		"headers:",
+		"Allow:",
+		"Supported method for the provider run endpoint.",
+		"enum: [POST]",
 		"$ref: \"#/components/schemas/EbayProviderRunMethodErrorResponse\"",
 	} {
 		if !strings.Contains(section, token) {
