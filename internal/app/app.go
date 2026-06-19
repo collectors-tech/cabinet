@@ -2593,6 +2593,16 @@ func New(cfg config.Config) (*App, error) {
 			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
 			return
 		}
+		if !providerScopeIncludes(qs.ProviderScope, "ebay") {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "query_set_not_scoped_to_ebay",
+				"provider":     "ebay",
+				"query_set_id": qs.ID,
+				"next_action":  "choose_ebay_scoped_query_set",
+			})
+			return
+		}
 		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
 			if value, parseErr := strconv.Atoi(raw); parseErr == nil {
 				qs.ItemsPerPage = value
@@ -7843,6 +7853,19 @@ func firstProviderInScope(scope []string) string {
 		}
 	}
 	return ""
+}
+
+func providerScopeIncludes(scope []string, providerID string) bool {
+	want := strings.TrimSpace(strings.ToLower(providerID))
+	if want == "" {
+		return false
+	}
+	for _, raw := range scope {
+		if strings.TrimSpace(strings.ToLower(raw)) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func entitlementFeaturesFromPlan(plan string) []string {

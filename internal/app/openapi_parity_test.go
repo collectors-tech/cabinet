@@ -878,9 +878,11 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 	}
 	for _, token := range []string{
 		"error:",
-		"enum: [invalid_json, missing_query_set_id, active_profile_not_set, failed_to_get_settings, invalid_query_set_id, failed_to_list_ebay_candidates]",
+		"enum: [invalid_json, missing_query_set_id, active_profile_not_set, failed_to_get_settings, invalid_query_set_id, query_set_not_scoped_to_ebay, failed_to_list_ebay_candidates]",
 		"query_set_id:",
 		"description: Active-profile scanner query set id when the request was parsed and resolved before the failure.",
+		"provider: { type: string, enum: [ebay] }",
+		"next_action: { type: string, enum: [choose_ebay_scoped_query_set] }",
 	} {
 		if !strings.Contains(clientErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunClientErrorResponse schema missing %q:\n%s", token, clientErrorSchema)
