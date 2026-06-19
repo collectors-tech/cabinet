@@ -141,6 +141,44 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 	}
 }
 
+func TestEbayScannerFailureListTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-006` ") || strings.HasPrefix(line, "| INTEGRATION-006 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-006")
+	}
+
+	requiredFragments := []string{
+		"ScannerFailuresResponse",
+		"ScannerFailure",
+		"query set id, provider, message, raw failure reason, failure timestamps, retry guidance, and next action",
+		"TestOpenAPIDocumentsScannerFailureRetryGuidance",
+		"TestOpenAPIDocumentsEbayScannerFailureRetryContract",
+		"UI-SCREEN-SCANNER-002 exposes provider health and failure retry",
+		"TestEbayScannerFailureListTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-006 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
