@@ -203,14 +203,42 @@ func TestOpenAPIDocumentsScannerFailureRetryGuidance(t *testing.T) {
 	}
 
 	requiredTokens := []string{
-		"failures:",
-		"retry_guidance:",
-		"next_action:",
-		"check_provider_health_and_credentials",
+		"Failure entries",
+		"$ref: \"#/components/schemas/ScannerFailuresResponse\"",
 	}
 	for _, token := range requiredTokens {
 		if !strings.Contains(section, token) {
 			t.Fatalf("openapi scanner failures contract missing %q:\n%s", token, section)
+		}
+	}
+
+	responseSchema, ok := openAPIComponentSection(raw, "ScannerFailuresResponse")
+	if !ok {
+		t.Fatalf("openapi missing ScannerFailuresResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [failures]",
+		"$ref: \"#/components/schemas/ScannerFailure\"",
+	} {
+		if !strings.Contains(responseSchema, token) {
+			t.Fatalf("openapi ScannerFailuresResponse schema missing %q:\n%s", token, responseSchema)
+		}
+	}
+
+	failureSchema, ok := openAPIComponentSection(raw, "ScannerFailure")
+	if !ok {
+		t.Fatalf("openapi missing ScannerFailure schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [query_set_id, provider, message, reason, last_error_at, retry_guidance, next_action]",
+		"query_set_id: { type: string }",
+		"provider: { type: string, example: ebay }",
+		"reason: { type: string, description: Raw provider failure reason preserved for diagnostics. }",
+		"retry_guidance: { type: string, example: \"Check provider health, credentials, and retry the operation.\" }",
+		"next_action: { type: string, example: check_provider_health_and_credentials }",
+	} {
+		if !strings.Contains(failureSchema, token) {
+			t.Fatalf("openapi ScannerFailure schema missing %q:\n%s", token, failureSchema)
 		}
 	}
 }
