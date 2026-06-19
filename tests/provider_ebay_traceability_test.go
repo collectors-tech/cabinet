@@ -196,6 +196,40 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 	}
 }
 
+func TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-005` ") || strings.HasPrefix(line, "| INTEGRATION-005 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-005")
+	}
+
+	requiredFragments := []string{
+		"Market Watch actionable provider-run `message` diagnostics",
+		"INTEGRATION-005 + #827 surfaces eBay provider-run actionable message diagnostics",
+		"TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-005 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
