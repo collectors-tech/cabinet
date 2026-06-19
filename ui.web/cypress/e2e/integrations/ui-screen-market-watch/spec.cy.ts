@@ -650,6 +650,7 @@ describe('integrations/ui-screen-market-watch', () => {
           message:
             'eBay Browse API request failed: 12000 API rate limit reached',
           next_action: 'check_provider_health_and_credentials',
+          retry_after_seconds: 120,
         },
       })
     }).as('runEbaySearchFailure')
@@ -670,6 +671,7 @@ describe('integrations/ui-screen-market-watch', () => {
         'Review credentials only if provider health reports an auth problem.'
       )
       .and('contain', 'PROVIDER_SEARCH_FAILED')
+      .and('contain', 'retry_after_seconds: 120')
       .and('not.contain', 'Market Watch action was denied.')
       .and('not.contain', 'Sign in again')
   })
