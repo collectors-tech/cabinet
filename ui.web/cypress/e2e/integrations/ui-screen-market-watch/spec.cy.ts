@@ -756,6 +756,7 @@ describe('integrations/ui-screen-market-watch', () => {
           error: 'invalid_query_set_id',
           provider: 'ebay',
           query_set_id: 'qs-mw-ebay-stale',
+          message: 'Choose an existing eBay saved query before running Market Watch.',
           next_action: 'select_existing_ebay_query_set',
         },
       })
@@ -773,6 +774,7 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('contain', 'invalid_query_set_id')
       .and('contain', 'provider: ebay')
       .and('contain', 'query_set_id: qs-mw-ebay-stale')
+      .and('contain', 'message: Choose an existing eBay saved query before running Market Watch.')
       .and('contain', 'next_action: select_existing_ebay_query_set')
       .and('not.contain', 'Market Watch action was denied.')
       .and('not.contain', 'Sign in again')
