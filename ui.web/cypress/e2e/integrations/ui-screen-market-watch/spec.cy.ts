@@ -778,6 +778,51 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
+  it('INTEGRATION-005 + #827 surfaces eBay provider run method diagnostics', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-method',
+            name: 'eBay Method Diagnostic',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: { failures: [] },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok', state: 'ready', provider: 'ebay' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-method')
+      req.reply({
+        statusCode: 405,
+        headers: { Allow: 'POST' },
+        body: { error: 'method_not_allowed' },
+      })
+    }).as('runEbayMethodError')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-method"]').click()
+    cy.wait('@runEbayMethodError')
+
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Run failed.')
+      .and('contain', 'Verify provider health and credentials.')
+      .and('contain', 'Validate query set configuration, then retry.')
+      .and('contain', 'method_not_allowed')
+      .and('not.contain', 'Market Watch action was denied.')
+      .and('not.contain', 'Sign in again')
+  })
+
   it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata and observed-currency output', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
