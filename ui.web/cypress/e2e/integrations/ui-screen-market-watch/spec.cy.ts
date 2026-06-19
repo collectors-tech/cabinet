@@ -674,7 +674,7 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
-  it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata', () => {
+  it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata and observed-currency output', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -710,6 +710,7 @@ describe('integrations/ui-screen-market-watch', () => {
               title: 'Aurora HO slot car lot',
               source: 'ebay',
               price: 42,
+              shipping: 7.5,
               observed_currency: 'AUD',
               url: 'https://www.ebay.example/itm/ebay-ho-1',
               stock_state: 'in_stock',
@@ -722,6 +723,7 @@ describe('integrations/ui-screen-market-watch', () => {
               title: 'Tyco HO track bundle',
               source: 'ebay',
               price: 64,
+              shipping: 0,
               observed_currency: 'AUD',
               url: 'https://www.ebay.example/itm/ebay-ho-2',
               stock_state: 'low_stock',
@@ -763,6 +765,12 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.contains('24').should('be.visible')
       cy.contains('Aurora HO slot car lot').should('be.visible')
       cy.contains('ebay').should('be.visible')
+      cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
+        cy.contains('td', '42.00 AUD').should('be.visible')
+        cy.contains('td', '7.50 AUD').should('be.visible')
+        cy.contains('td', '64.00 AUD').should('be.visible')
+        cy.contains('td', '0.00 AUD').should('be.visible')
+      })
     })
   })
 
