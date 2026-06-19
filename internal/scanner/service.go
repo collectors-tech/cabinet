@@ -176,6 +176,13 @@ func (s *Service) UpdateQuerySetForProfile(ctx context.Context, profileID, id st
 		return QuerySet{}, fmt.Errorf("name and keywords are required")
 	}
 	if len(in.ProviderScope) == 0 {
+		existing, err := s.GetQuerySetForProfile(ctx, strings.TrimSpace(profileID), strings.TrimSpace(id))
+		if err != nil {
+			return QuerySet{}, err
+		}
+		in.ProviderScope = existing.ProviderScope
+	}
+	if len(in.ProviderScope) == 0 {
 		in.ProviderScope = defaultProviderScope(in.Region)
 	}
 	in.ProviderScope = normalizeProviderScope(in.ProviderScope)

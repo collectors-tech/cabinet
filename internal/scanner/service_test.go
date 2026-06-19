@@ -154,6 +154,44 @@ func TestRunNowPersistsObservedCurrency(t *testing.T) {
 	}
 }
 
+func TestUpdateQuerySetPreservesProviderScopeWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.OpenAndMigrate(context.Background(), filepath.Join(t.TempDir(), "cabinet.db"))
+	if err != nil {
+		t.Fatalf("OpenAndMigrate() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	svc := NewService(conn)
+	created, err := svc.CreateQuerySetForProfile(context.Background(), "profile-a", QuerySet{
+		Name:          "eBay Slot Cars",
+		Keywords:      []string{"afx"},
+		ProviderScope: []string{"ebay"},
+		ScheduleCron:  "0 */6 * * *",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateQuerySetForProfile() error = %v", err)
+	}
+
+	updated, err := svc.UpdateQuerySetForProfile(context.Background(), "profile-a", created.ID, QuerySet{
+		Name:         "eBay Slot Cars Edited",
+		Keywords:     []string{"afx", "mega g+"},
+		ScheduleCron: "30 */8 * * *",
+		Enabled:      true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateQuerySetForProfile() error = %v", err)
+	}
+	if len(updated.ProviderScope) != 1 || updated.ProviderScope[0] != "ebay" {
+		t.Fatalf("expected omitted provider scope update to preserve [ebay], got %+v", updated.ProviderScope)
+	}
+	if updated.ScheduleCron != "30 */8 * * *" {
+		t.Fatalf("expected updated schedule to persist, got %+v", updated)
+	}
+}
+
 func TestRunScheduled(t *testing.T) {
 	t.Parallel()
 

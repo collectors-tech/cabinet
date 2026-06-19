@@ -90,6 +90,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **WHEN** the query is created, edited with schedule changes, and deleted
 - **THEN** each create/update request MUST preserve `provider_scope=["ebay"]`
 - **AND** schedule edits MUST persist with the saved eBay query instead of clearing provider scope or falling back to another provider.
+- **AND** API updates that omit `provider_scope` MUST preserve the saved eBay query's existing provider scope instead of defaulting to a broader multi-provider scope.
 
 #### Scenario: Market Watch preserves eBay output handoff provenance
 - **GIVEN** an eBay-scoped Market Watch run returns normalized saved-search output candidates with `source="ebay"`
