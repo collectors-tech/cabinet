@@ -314,6 +314,45 @@ func TestEbaySetupDocsTraceabilityImplemented(t *testing.T) {
 	}
 }
 
+func TestEbayDefaultSiteSearchHandoffTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `DEFAULT-SITE-SEARCH-006` ") || strings.HasPrefix(line, "| DEFAULT-SITE-SEARCH-006 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for DEFAULT-SITE-SEARCH-006")
+	}
+
+	requiredFragments := []string{
+		"eBay source/query provenance",
+		"Discoveries, Wishlist, and Inventory handoff",
+		"source provider, query-set id, query name, saved provider scope, and listing URL",
+		"OpenAPI candidate/action provenance contracts",
+		"TestOpenAPIDocumentsEbaySavedSearchHandoffContract",
+		"TestApplySavedSearchActionsRetainAuditProvenance",
+		"DEFAULT-SITE-SEARCH-006 hands off saved-search output to discoveries wishlist and inventory flows",
+		"TestEbayDefaultSiteSearchHandoffTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected DEFAULT-SITE-SEARCH-006 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
