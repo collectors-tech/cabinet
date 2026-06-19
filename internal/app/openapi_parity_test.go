@@ -889,7 +889,7 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"setting:",
 		"enum: [integration.ebay.items_per_page]",
 		"description: Active-profile setup setting that blocked the provider run.",
-		"next_action: { type: string, enum: [choose_ebay_scoped_query_set, update_ebay_items_per_page] }",
+		"next_action: { type: string, enum: [select_existing_ebay_query_set, choose_ebay_scoped_query_set, update_ebay_items_per_page] }",
 	} {
 		if !strings.Contains(clientErrorSchema, token) {
 			t.Fatalf("openapi EbayProviderRunClientErrorResponse schema missing %q:\n%s", token, clientErrorSchema)

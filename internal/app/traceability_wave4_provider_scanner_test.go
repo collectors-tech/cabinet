@@ -517,6 +517,44 @@ func TestWave4EbayRunRejectsInvalidConfiguredItemsPerPage(t *testing.T) {
 	}
 }
 
+func TestWave4EbayRunInvalidQuerySetReturnsActionableClientEnvelope(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Wave4EbayInvalidQuerySetEnvelope"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"missing-ebay-query"}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run with invalid query set expected 400, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode invalid query-set payload: %v", err)
+	}
+	if got, _ := payload["error"].(string); got != "invalid_query_set_id" {
+		t.Fatalf("expected invalid_query_set_id, got %+v", payload)
+	}
+	if got, _ := payload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in invalid query-set payload, got %+v", payload)
+	}
+	if got, _ := payload["query_set_id"].(string); got != "missing-ebay-query" {
+		t.Fatalf("expected parsed query_set_id in invalid query-set payload, got %+v", payload)
+	}
+	if got, _ := payload["next_action"].(string); got != "select_existing_ebay_query_set" {
+		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", payload)
+	}
+}
+
 func TestWave4EbayRunRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
 	t.Parallel()
 

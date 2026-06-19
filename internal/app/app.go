@@ -2592,7 +2592,13 @@ func New(cfg config.Config) (*App, error) {
 		}
 		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
 		if err != nil {
-			http.Error(w, `{"error":"invalid_query_set_id"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "invalid_query_set_id",
+				"provider":     "ebay",
+				"query_set_id": req.QuerySetID,
+				"next_action":  "select_existing_ebay_query_set",
+			})
 			return
 		}
 		if !providerScopeIncludes(qs.ProviderScope, "ebay") {
