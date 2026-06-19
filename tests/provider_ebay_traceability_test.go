@@ -184,6 +184,7 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 		"INTEGRATION-005 + #827 surfaces eBay provider run method diagnostics",
 		"method-error diagnostics include provider, next_action, and allowed_method",
 		"INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata",
+		"INTEGRATION-005 + #827 surfaces eBay retry-after provider run diagnostics",
 		"INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle",
 		"INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff response provenance",
 		"TestEbayProviderSearchFailureTraceabilityImplemented",

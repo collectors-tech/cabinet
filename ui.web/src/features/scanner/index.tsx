@@ -180,6 +180,7 @@ function parseActionErrorPayload(
       query_set_id?: unknown
       setting?: unknown
       message?: unknown
+      retry_after_seconds?: unknown
     }
     for (const [label, value] of [
       ['provider', values.provider],
@@ -191,6 +192,13 @@ function parseActionErrorPayload(
       if (typeof value === 'string' && value.trim().length > 0) {
         diagnostics.push(`${label}: ${value.trim()}`)
       }
+    }
+    if (
+      typeof values.retry_after_seconds === 'number' &&
+      Number.isFinite(values.retry_after_seconds) &&
+      values.retry_after_seconds > 0
+    ) {
+      diagnostics.push(`retry_after_seconds: ${values.retry_after_seconds}`)
     }
     for (const value of [values.error_code, values.error]) {
       if (typeof value === 'string' && value.trim().length > 0) {
