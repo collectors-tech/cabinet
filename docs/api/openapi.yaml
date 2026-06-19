@@ -1295,23 +1295,20 @@ paths:
     post:
       tags: [Scanner]
       summary: Retry scanner failures for a query set
+      description: Accepts retry requests for failed saved searches, including eBay provider failures surfaced through provider health and Market Watch retry guidance.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [query_set_id]
-              properties:
-                query_set_id:
-                  type: string
+              $ref: "#/components/schemas/ScannerFailureRetryRequest"
       responses:
         "200":
           description: Retry accepted
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/ScannerFailureRetryResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/providers/registry:
@@ -3693,6 +3690,17 @@ components:
         query_sets_executed: { type: integer }
         candidates_collected: { type: integer }
         failures: { type: integer }
+    ScannerFailureRetryRequest:
+      type: object
+      required: [query_set_id]
+      properties:
+        query_set_id: { type: string }
+    ScannerFailureRetryResponse:
+      type: object
+      required: [retry_started, query_set_id]
+      properties:
+        retry_started: { type: boolean }
+        query_set_id: { type: string }
     Candidate:
       type: object
       properties:

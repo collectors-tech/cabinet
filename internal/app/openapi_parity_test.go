@@ -1057,6 +1057,52 @@ func TestOpenAPIDocumentsEbayScheduledScannerRunContract(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsEbayScannerFailureRetryContract(t *testing.T) {
+	t.Parallel()
+
+	specPath, raw := readOpenAPISpec(t)
+	section, ok := openAPIPathSection(raw, "/api/scanner/failures/retry")
+	if !ok {
+		t.Fatalf("openapi missing /api/scanner/failures/retry path in %s", specPath)
+	}
+	for _, token := range []string{
+		"Accepts retry requests for failed saved searches, including eBay provider failures surfaced through provider health and Market Watch retry guidance.",
+		"$ref: \"#/components/schemas/ScannerFailureRetryRequest\"",
+		"$ref: \"#/components/schemas/ScannerFailureRetryResponse\"",
+	} {
+		if !strings.Contains(section, token) {
+			t.Fatalf("openapi /api/scanner/failures/retry section missing %q:\n%s", token, section)
+		}
+	}
+
+	requestSchema, ok := openAPIComponentSection(raw, "ScannerFailureRetryRequest")
+	if !ok {
+		t.Fatalf("openapi missing ScannerFailureRetryRequest schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [query_set_id]",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(requestSchema, token) {
+			t.Fatalf("openapi ScannerFailureRetryRequest schema missing %q:\n%s", token, requestSchema)
+		}
+	}
+
+	responseSchema, ok := openAPIComponentSection(raw, "ScannerFailureRetryResponse")
+	if !ok {
+		t.Fatalf("openapi missing ScannerFailureRetryResponse schema in %s", specPath)
+	}
+	for _, token := range []string{
+		"required: [retry_started, query_set_id]",
+		"retry_started: { type: boolean }",
+		"query_set_id: { type: string }",
+	} {
+		if !strings.Contains(responseSchema, token) {
+			t.Fatalf("openapi ScannerFailureRetryResponse schema missing %q:\n%s", token, responseSchema)
+		}
+	}
+}
+
 func TestOpenAPIDocumentsEbaySavedSearchHandoffContract(t *testing.T) {
 	t.Parallel()
 
