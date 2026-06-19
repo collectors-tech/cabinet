@@ -884,7 +884,7 @@ func TestOpenAPIDocumentsEbayProviderRunContract(t *testing.T) {
 		"error:",
 		"enum: [invalid_json, missing_query_set_id, active_profile_not_set, failed_to_get_settings, invalid_query_set_id, query_set_not_scoped_to_ebay, invalid_ebay_items_per_page, failed_to_apply_provider_items_per_page, failed_to_list_ebay_candidates]",
 		"query_set_id:",
-		"description: Active-profile scanner query set id when the request was parsed and resolved before the failure.",
+		"description: Trimmed active-profile scanner query set id when it was parsed or resolved before the failure; blank for missing-query diagnostics.",
 		"provider: { type: string, enum: [ebay] }",
 		"setting:",
 		"enum: [integration.ebay.items_per_page]",

@@ -555,6 +555,44 @@ func TestWave4EbayRunInvalidQuerySetReturnsActionableClientEnvelope(t *testing.T
 	}
 }
 
+func TestWave4EbayRunMissingQuerySetReturnsActionableClientEnvelope(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	createProfile := doRequest(t, a, http.MethodPost, "/api/profiles", strings.NewReader(`{"name":"Wave4EbayMissingQuerySetEnvelope"}`), map[string]string{"Content-Type": "application/json"})
+	if createProfile.Code != http.StatusCreated {
+		t.Fatalf("create profile status=%d body=%s", createProfile.Code, createProfile.Body.String())
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createProfile.Body).Decode(&p); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	_ = doRequest(t, a, http.MethodPut, "/api/profiles/active", strings.NewReader(`{"profile_id":"`+p.ID+`"}`), map[string]string{"Content-Type": "application/json"})
+
+	run := doRequest(t, a, http.MethodPost, "/api/providers/ebay/run", strings.NewReader(`{"query_set_id":"   "}`), map[string]string{"Content-Type": "application/json"})
+	if run.Code != http.StatusBadRequest {
+		t.Fatalf("eBay run with missing query set expected 400, got %d body=%s", run.Code, run.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(run.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode missing query-set payload: %v", err)
+	}
+	if got, _ := payload["error"].(string); got != "missing_query_set_id" {
+		t.Fatalf("expected missing_query_set_id, got %+v", payload)
+	}
+	if got, _ := payload["provider"].(string); got != "ebay" {
+		t.Fatalf("expected provider ebay in missing query-set payload, got %+v", payload)
+	}
+	if got, _ := payload["query_set_id"].(string); got != "" {
+		t.Fatalf("expected trimmed empty query_set_id in missing query-set payload, got %+v", payload)
+	}
+	if got, _ := payload["next_action"].(string); got != "select_existing_ebay_query_set" {
+		t.Fatalf("expected next_action select_existing_ebay_query_set, got %+v", payload)
+	}
+}
+
 func TestWave4EbayRunRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
 	t.Parallel()
 
