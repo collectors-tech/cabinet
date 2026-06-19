@@ -1272,23 +1272,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [failures]
-                properties:
-                  failures:
-                    type: array
-                    items:
-                      type: object
-                      required: [query_set_id, provider, message, reason, last_error_at, retry_guidance, next_action]
-                      properties:
-                        query_set_id: { type: string }
-                        provider: { type: string, example: ebay }
-                        message: { type: string }
-                        reason: { type: string }
-                        created_at: { type: string }
-                        last_error_at: { type: string }
-                        retry_guidance: { type: string, example: "Check provider health, credentials, and retry the operation." }
-                        next_action: { type: string, example: check_provider_health_and_credentials }
+                $ref: "#/components/schemas/ScannerFailuresResponse"
         "400":
           $ref: "#/components/responses/Error"
   /api/scanner/failures/retry:
@@ -3701,6 +3685,26 @@ components:
       properties:
         retry_started: { type: boolean }
         query_set_id: { type: string }
+    ScannerFailuresResponse:
+      type: object
+      required: [failures]
+      properties:
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScannerFailure"
+    ScannerFailure:
+      type: object
+      required: [query_set_id, provider, message, reason, last_error_at, retry_guidance, next_action]
+      properties:
+        query_set_id: { type: string }
+        provider: { type: string, example: ebay }
+        message: { type: string }
+        reason: { type: string, description: Raw provider failure reason preserved for diagnostics. }
+        created_at: { type: string }
+        last_error_at: { type: string }
+        retry_guidance: { type: string, example: "Check provider health, credentials, and retry the operation." }
+        next_action: { type: string, example: check_provider_health_and_credentials }
     Candidate:
       type: object
       properties:
