@@ -2576,7 +2576,13 @@ func New(cfg config.Config) (*App, error) {
 		}
 		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
 		if req.QuerySetID == "" {
-			http.Error(w, `{"error":"missing_query_set_id"}`, http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":        "missing_query_set_id",
+				"provider":     "ebay",
+				"query_set_id": req.QuerySetID,
+				"next_action":  "select_existing_ebay_query_set",
+			})
 			return
 		}
 		active, err := profiles.GetActiveProfile(r.Context())
