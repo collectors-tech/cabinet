@@ -40,6 +40,7 @@ type ActionFeedback = {
   summary: string
   actions: string[]
   diagnosticCode?: string
+  diagnostics?: string[]
 }
 
 type Candidate = {
@@ -165,25 +166,44 @@ type CreateQueryValidation = {
   keywords?: string
 }
 
-function parseErrorCode(payload: unknown, fallback: string): string {
+function parseActionErrorPayload(
+  payload: unknown,
+  fallback: string
+): { code: string; diagnostics: string[] } {
+  const diagnostics: string[] = []
   if (payload && typeof payload === 'object') {
     const values = payload as {
       error?: unknown
       error_code?: unknown
+      next_action?: unknown
+      provider?: unknown
+      query_set_id?: unknown
+      setting?: unknown
+    }
+    for (const [label, value] of [
+      ['provider', values.provider],
+      ['query_set_id', values.query_set_id],
+      ['setting', values.setting],
+      ['next_action', values.next_action],
+    ]) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        diagnostics.push(`${label}: ${value.trim()}`)
+      }
     }
     for (const value of [values.error_code, values.error]) {
       if (typeof value === 'string' && value.trim().length > 0) {
-        return value.trim()
+        return { code: value.trim(), diagnostics }
       }
     }
   }
-  return fallback
+  return { code: fallback, diagnostics }
 }
 
 function mapScannerActionError(
   operation: 'run' | 'retry',
   status: number,
-  errorCode: string
+  errorCode: string,
+  diagnostics: string[] = []
 ): ActionFeedback {
   if (
     operation === 'run' &&
@@ -196,6 +216,7 @@ function mapScannerActionError(
         'Review credentials only if provider health reports an auth problem.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (operation === 'run' && status === 400) {
@@ -206,6 +227,7 @@ function mapScannerActionError(
         'Review provider health and credentials before retrying.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (operation === 'retry' && status === 400) {
@@ -216,6 +238,7 @@ function mapScannerActionError(
         'Re-run the query set directly after fixing provider inputs.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (status === 401 || status === 403) {
@@ -226,6 +249,7 @@ function mapScannerActionError(
         'Sign in again if the provider is ready and the request is still denied.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   if (status >= 500) {
@@ -236,6 +260,7 @@ function mapScannerActionError(
         'Check diagnostics for provider/runtime health.',
       ],
       diagnosticCode: errorCode,
+      diagnostics,
     }
   }
   return {
@@ -245,6 +270,7 @@ function mapScannerActionError(
       'Validate query set configuration, then retry.',
     ],
     diagnosticCode: errorCode,
+    diagnostics,
   }
 }
 
@@ -583,13 +609,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `scheduled_run_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('scheduled_run_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('run', response.status, code, diagnostics)
+      )
       return
     }
     const payload = (await response.json()) as {
@@ -708,14 +742,25 @@ export function Scanner() {
       if (!providerResponse.ok) {
         const fallbackCode = `${providerRunRoute.provider}_run_failed_${providerResponse.status}`
         let code = fallbackCode
+        let diagnostics: string[] = []
         try {
-          code = parseErrorCode(await providerResponse.json(), fallbackCode)
+          const parsed = parseActionErrorPayload(
+            await providerResponse.json(),
+            fallbackCode
+          )
+          code = parsed.code
+          diagnostics = parsed.diagnostics
         } catch {
           code = fallbackCode
         }
         setActionStatus('run_failed')
         setActionFeedback(
-          mapScannerActionError('run', providerResponse.status, code)
+          mapScannerActionError(
+            'run',
+            providerResponse.status,
+            code,
+            diagnostics
+          )
         )
         setRunMetaByQuerySet((current) => ({
           ...current,
@@ -770,13 +815,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `run_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('run_failed')
-      setActionFeedback(mapScannerActionError('run', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('run', response.status, code, diagnostics)
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySet.id]: { status: 'failed' },
@@ -823,13 +876,21 @@ export function Scanner() {
     if (!response.ok) {
       const fallbackCode = `retry_failed_${response.status}`
       let code = fallbackCode
+      let diagnostics: string[] = []
       try {
-        code = parseErrorCode(await response.json(), fallbackCode)
+        const parsed = parseActionErrorPayload(
+          await response.json(),
+          fallbackCode
+        )
+        code = parsed.code
+        diagnostics = parsed.diagnostics
       } catch {
         code = fallbackCode
       }
       setActionStatus('retry_failed')
-      setActionFeedback(mapScannerActionError('retry', response.status, code))
+      setActionFeedback(
+        mapScannerActionError('retry', response.status, code, diagnostics)
+      )
       setRunMetaByQuerySet((current) => ({
         ...current,
         [querySetID]: { status: 'failed' },
@@ -1969,6 +2030,13 @@ export function Scanner() {
               >
                 <summary>Diagnostics</summary>
                 <p className='mt-1'>{actionFeedback.diagnosticCode}</p>
+                {actionFeedback.diagnostics?.length ? (
+                  <ul className='mt-1 list-disc ps-4'>
+                    {actionFeedback.diagnostics.map((diagnostic) => (
+                      <li key={diagnostic}>{diagnostic}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </details>
             ) : null}
           </div>

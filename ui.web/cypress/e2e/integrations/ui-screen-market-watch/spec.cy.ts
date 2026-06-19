@@ -674,6 +674,58 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
+  it('INTEGRATION-005 + #827 surfaces eBay setup page-size validation diagnostics', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-page-size-invalid',
+            name: 'eBay Invalid Page Size',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: { failures: [] },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok', state: 'ready', provider: 'ebay' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-page-size-invalid')
+      req.reply({
+        statusCode: 400,
+        body: {
+          error: 'invalid_ebay_items_per_page',
+          provider: 'ebay',
+          query_set_id: 'qs-mw-ebay-page-size-invalid',
+          setting: 'integration.ebay.items_per_page',
+          next_action: 'update_ebay_items_per_page',
+        },
+      })
+    }).as('runEbayInvalidPageSize')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-page-size-invalid"]').click()
+    cy.wait('@runEbayInvalidPageSize')
+
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Run failed due to query validation.')
+      .and('contain', 'Check query keywords and exclusions.')
+      .and('contain', 'Review provider health and credentials before retrying.')
+      .and('contain', 'invalid_ebay_items_per_page')
+      .and('contain', 'setting: integration.ebay.items_per_page')
+      .and('contain', 'next_action: update_ebay_items_per_page')
+      .and('not.contain', 'Market Watch action was denied.')
+      .and('not.contain', 'Sign in again')
+  })
+
   it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata and observed-currency output', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,

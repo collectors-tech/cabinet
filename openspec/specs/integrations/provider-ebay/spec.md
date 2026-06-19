@@ -35,6 +35,7 @@ Cabinet SHALL execute eBay listing queries using profile-scoped credentials and 
 - **AND** the provider-specific run route MUST reject saved query sets whose `provider_scope` does not include `ebay` with `error="query_set_not_scoped_to_ebay"`, `provider="ebay"`, the resolved `query_set_id`, and `next_action="choose_ebay_scoped_query_set"` before calling Browse.
 - **AND** the provider-specific run route MUST apply the active profile's configured `integration.ebay.items_per_page` value before executing Browse so provider-run pagination matches the eBay setup configuration and run summary.
 - **AND** the provider-specific run route MUST reject malformed or non-positive active-profile `integration.ebay.items_per_page` values with `error="invalid_ebay_items_per_page"`, `setting="integration.ebay.items_per_page"`, the resolved `query_set_id`, and `next_action="update_ebay_items_per_page"` before calling Browse.
+- **AND** Market Watch run feedback MUST preserve the eBay setup page-size validation diagnostic fields, including `setting` and `next_action`, so operators can fix the setup value without treating it as a credential denial.
 - **AND** eBay saved-search output handoff MUST preserve eBay source attribution when the user sends a candidate to Discoveries, Wishlist, or Inventory.
 
 #### Scenario: Provider run route is documented for client integrations
