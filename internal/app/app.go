@@ -2561,6 +2561,21 @@ func New(cfg config.Config) (*App, error) {
 	})
 	mux.HandleFunc("/api/providers/ebay/run", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		writeClientError := func(status int, errorCode, querySetID, nextAction, message string, fields map[string]any) {
+			w.WriteHeader(status)
+			payload := map[string]any{
+				"error":        errorCode,
+				"error_code":   errorCode,
+				"provider":     "ebay",
+				"query_set_id": strings.TrimSpace(querySetID),
+				"next_action":  nextAction,
+				"message":      message,
+			}
+			for key, value := range fields {
+				payload[key] = value
+			}
+			_ = json.NewEncoder(w).Encode(payload)
+		}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -2571,80 +2586,39 @@ func New(cfg config.Config) (*App, error) {
 			QuerySetID string `json:"query_set_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "invalid_json",
-				"provider":     "ebay",
-				"query_set_id": "",
-				"next_action":  "select_existing_ebay_query_set",
-			})
+			writeClientError(http.StatusBadRequest, "invalid_json", "", "select_existing_ebay_query_set", "The eBay provider run request body must be valid JSON.", nil)
 			return
 		}
 		req.QuerySetID = strings.TrimSpace(req.QuerySetID)
 		if req.QuerySetID == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "missing_query_set_id",
-				"provider":     "ebay",
-				"query_set_id": req.QuerySetID,
-				"next_action":  "select_existing_ebay_query_set",
-			})
+			writeClientError(http.StatusBadRequest, "missing_query_set_id", req.QuerySetID, "select_existing_ebay_query_set", "Select an existing eBay query set before running the provider.", nil)
 			return
 		}
 		active, err := profiles.GetActiveProfile(r.Context())
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "active_profile_not_set",
-				"provider":     "ebay",
-				"query_set_id": req.QuerySetID,
-				"next_action":  "select_active_profile",
-			})
+			writeClientError(http.StatusBadRequest, "active_profile_not_set", req.QuerySetID, "select_active_profile", "Select an active profile before running eBay saved searches.", nil)
 			return
 		}
 		profileID := strings.TrimSpace(active.ID)
 		settings, err := profiles.GetSettings(r.Context(), profileID)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "failed_to_get_settings",
-				"provider":     "ebay",
-				"query_set_id": req.QuerySetID,
-				"next_action":  "retry_profile_settings",
-			})
+			writeClientError(http.StatusBadRequest, "failed_to_get_settings", req.QuerySetID, "retry_profile_settings", "Profile settings could not be loaded for the eBay provider run.", nil)
 			return
 		}
 		qs, err := scannerSvc.GetQuerySetForProfile(r.Context(), profileID, req.QuerySetID)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "invalid_query_set_id",
-				"provider":     "ebay",
-				"query_set_id": req.QuerySetID,
-				"next_action":  "select_existing_ebay_query_set",
-			})
+			writeClientError(http.StatusBadRequest, "invalid_query_set_id", req.QuerySetID, "select_existing_ebay_query_set", "The selected eBay query set no longer exists for the active profile.", nil)
 			return
 		}
 		if !providerScopeIncludes(qs.ProviderScope, "ebay") {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":        "query_set_not_scoped_to_ebay",
-				"provider":     "ebay",
-				"query_set_id": qs.ID,
-				"next_action":  "choose_ebay_scoped_query_set",
-			})
+			writeClientError(http.StatusBadRequest, "query_set_not_scoped_to_ebay", qs.ID, "choose_ebay_scoped_query_set", "Choose a query set whose provider scope includes eBay.", nil)
 			return
 		}
 		if raw := strings.TrimSpace(settings[providerSettingsKeys("ebay").ItemsPerPageKey]); raw != "" {
 			value, parseErr := strconv.Atoi(raw)
 			if parseErr != nil || value <= 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error":        "invalid_ebay_items_per_page",
-					"provider":     "ebay",
-					"query_set_id": qs.ID,
-					"setting":      providerSettingsKeys("ebay").ItemsPerPageKey,
-					"next_action":  "update_ebay_items_per_page",
+				writeClientError(http.StatusBadRequest, "invalid_ebay_items_per_page", qs.ID, "update_ebay_items_per_page", "Update the eBay setup page size to a positive integer before running this query.", map[string]any{
+					"setting": providerSettingsKeys("ebay").ItemsPerPageKey,
 				})
 				return
 			}
@@ -2655,7 +2629,9 @@ func New(cfg config.Config) (*App, error) {
 				qs.ID,
 				qs,
 			); updateErr != nil {
-				http.Error(w, `{"error":"failed_to_apply_provider_items_per_page"}`, http.StatusBadRequest)
+				writeClientError(http.StatusBadRequest, "failed_to_apply_provider_items_per_page", qs.ID, "update_ebay_items_per_page", "The eBay setup page size could not be applied to this query set.", map[string]any{
+					"setting": providerSettingsKeys("ebay").ItemsPerPageKey,
+				})
 				return
 			}
 		}
@@ -2692,7 +2668,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		candidates, err := scannerSvc.ListCandidatesByProfile(r.Context(), profileID, qs.ID)
 		if err != nil {
-			http.Error(w, `{"error":"failed_to_list_ebay_candidates"}`, http.StatusBadRequest)
+			writeClientError(http.StatusBadRequest, "failed_to_list_ebay_candidates", qs.ID, "select_existing_ebay_query_set", "The eBay run completed but persisted candidates could not be reloaded.", nil)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
