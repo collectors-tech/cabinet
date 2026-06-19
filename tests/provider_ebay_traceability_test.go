@@ -105,8 +105,10 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 		"INTEGRATION-006": {
 			"/api/provider/health?provider=ebay",
 			"latest positive eBay Browse `Retry-After` timing",
+			"scanner failure retry request/accepted response fields",
 			"TestEbayProviderRunMapsBrowseFailureToProviderHealthGuidance",
 			"TestOpenAPIDocumentsEbayProviderHealthContract",
+			"TestOpenAPIDocumentsEbayScannerFailureRetryContract",
 			"INTEGRATION-006 + #1289: displays eBay provider-health readiness aliases and recovery guidance",
 			"UI-SCREEN-SCANNER-002 exposes provider health and failure retry",
 			"TestEbayProviderTraceabilityImplemented",
