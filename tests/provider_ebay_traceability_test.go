@@ -176,6 +176,7 @@ func TestEbayProviderSearchFailureTraceabilityImplemented(t *testing.T) {
 		"TestProviderSearchTrimsBrowsePriceValue",
 		"TestOpenAPIDocumentsEbayRegistrySetupReadinessContract",
 		"TestEbayRegistrySetupStatusReflectsDegradedProviderHealth",
+		"INTEGRATION-005 + #827 surfaces eBay invalid query-set diagnostics",
 		"INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata",
 		"INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle",
 		"INTEGRATION-005 + UI-SCREEN-MARKET-WATCH-009 + UI-SCREEN-MARKET-WATCH-010 preserves eBay output handoff response provenance",

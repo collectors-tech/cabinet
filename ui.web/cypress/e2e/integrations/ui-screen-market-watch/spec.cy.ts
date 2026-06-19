@@ -726,6 +726,58 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
+  it('INTEGRATION-005 + #827 surfaces eBay invalid query-set diagnostics', () => {
+    cy.intercept('GET', '/api/scanner/query-sets', {
+      statusCode: 200,
+      body: {
+        query_sets: [
+          {
+            id: 'qs-mw-ebay-stale',
+            name: 'eBay Stale Saved Query',
+            keywords: ['afx'],
+            provider_scope: ['ebay'],
+          },
+        ],
+      },
+    }).as('querySets')
+    cy.intercept('GET', '/api/scanner/failures', {
+      statusCode: 200,
+      body: { failures: [] },
+    }).as('failures')
+    cy.intercept('GET', '/api/provider/health?provider=ebay', {
+      statusCode: 200,
+      body: { status: 'ok', state: 'ready', provider: 'ebay' },
+    }).as('providerHealth')
+    cy.intercept('POST', '/api/providers/ebay/run', (req) => {
+      expect(req.body.query_set_id).to.equal('qs-mw-ebay-stale')
+      req.reply({
+        statusCode: 400,
+        body: {
+          error: 'invalid_query_set_id',
+          provider: 'ebay',
+          query_set_id: 'qs-mw-ebay-stale',
+          next_action: 'select_existing_ebay_query_set',
+        },
+      })
+    }).as('runEbayInvalidQuerySet')
+
+    signInToMarketWatch()
+    cy.wait(['@querySets', '@failures', '@providerHealth'])
+    cy.get('[data-testid="scanner-run-qs-mw-ebay-stale"]').click()
+    cy.wait('@runEbayInvalidQuerySet')
+
+    cy.get('[data-testid="scanner-action-feedback"]')
+      .should('contain', 'Run failed due to query validation.')
+      .and('contain', 'Check query keywords and exclusions.')
+      .and('contain', 'Review provider health and credentials before retrying.')
+      .and('contain', 'invalid_query_set_id')
+      .and('contain', 'provider: ebay')
+      .and('contain', 'query_set_id: qs-mw-ebay-stale')
+      .and('contain', 'next_action: select_existing_ebay_query_set')
+      .and('not.contain', 'Market Watch action was denied.')
+      .and('not.contain', 'Sign in again')
+  })
+
   it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata and observed-currency output', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
