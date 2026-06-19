@@ -523,7 +523,7 @@ paths:
     put:
       tags: [Scanner]
       summary: Update scanner query set
-      description: Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set.
+      description: Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set. When `provider_scope` is omitted from an update, the existing saved provider scope is preserved so eBay-only query edits do not widen to the default multi-provider scope.
       parameters:
         - in: path
           name: querySetID

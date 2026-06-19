@@ -978,8 +978,13 @@ func TestOpenAPIDocumentsEbayQuerySetContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("openapi missing /api/scanner/query-sets/{querySetID} path in %s", specPath)
 	}
-	if !strings.Contains(updateSection, "Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set.") {
-		t.Fatalf("openapi /api/scanner/query-sets/{querySetID} section missing update description:\n%s", updateSection)
+	for _, token := range []string{
+		"Updates saved-search filters, provider scope, pagination, schedule, enabled state, and rate-limit controls for an active-profile query set.",
+		"When `provider_scope` is omitted from an update, the existing saved provider scope is preserved so eBay-only query edits do not widen to the default multi-provider scope.",
+	} {
+		if !strings.Contains(updateSection, token) {
+			t.Fatalf("openapi /api/scanner/query-sets/{querySetID} section missing update token %q:\n%s", token, updateSection)
+		}
 	}
 
 	inputSchema, ok := openAPIComponentSection(raw, "ScannerQuerySetInput")
