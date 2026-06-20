@@ -55,6 +55,8 @@ type Candidate = {
   observed_currency?: string
   url?: string
   source_url?: string
+  stock_state?: string
+  stock_count?: number
   stock_status?: string
   status?: string
   handoff_state?: string
@@ -1031,8 +1033,18 @@ export function Scanner() {
     return currency ? `${shipping} ${currency}` : shipping
   }
 
-  const formatCandidateStock = (candidate: Candidate) =>
-    candidate.stock_status?.trim() || candidate.status?.trim() || 'Not provided'
+  const formatCandidateStock = (candidate: Candidate) => {
+    const stockState =
+      candidate.stock_state?.trim() ||
+      candidate.stock_status?.trim() ||
+      candidate.status?.trim()
+    if (!stockState) {
+      return 'Not provided'
+    }
+    return typeof candidate.stock_count === 'number'
+      ? `${stockState} (${candidate.stock_count})`
+      : stockState
+  }
 
   const formatCandidateHandoff = (candidate: Candidate) =>
     candidate.handoff_state?.trim() ||

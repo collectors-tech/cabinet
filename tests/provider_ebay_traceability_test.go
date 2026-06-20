@@ -123,6 +123,7 @@ func TestEbayProviderTraceabilityImplemented(t *testing.T) {
 			"stock_count",
 			"TestProviderSearchNormalizesCandidates",
 			"TestOpenAPIDocumentsEbaySavedSearchHandoffContract",
+			"INTEGRATION-005 + INTEGRATION-007 + #827 surfaces eBay provider run pagination metadata, observed-currency output, and stock state",
 			"TestEbayProviderTraceabilityImplemented",
 			"| implemented |",
 		},

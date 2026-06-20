@@ -827,7 +827,7 @@ describe('integrations/ui-screen-market-watch', () => {
       .and('not.contain', 'Sign in again')
   })
 
-  it('INTEGRATION-005 + #827 surfaces eBay provider run pagination metadata and observed-currency output', () => {
+  it('INTEGRATION-005 + INTEGRATION-007 + #827 surfaces eBay provider run pagination metadata, observed-currency output, and stock state', () => {
     cy.intercept('GET', '/api/scanner/query-sets', {
       statusCode: 200,
       body: {
@@ -921,8 +921,10 @@ describe('integrations/ui-screen-market-watch', () => {
       cy.get('[data-testid="market-watch-output-results-table"]').within(() => {
         cy.contains('td', '42.00 AUD').should('be.visible')
         cy.contains('td', '7.50 AUD').should('be.visible')
+        cy.contains('td', 'in_stock (2)').should('be.visible')
         cy.contains('td', '64.00 AUD').should('be.visible')
         cy.contains('td', '0.00 AUD').should('be.visible')
+        cy.contains('td', 'low_stock (1)').should('be.visible')
       })
     })
   })
