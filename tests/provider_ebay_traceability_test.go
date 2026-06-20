@@ -353,6 +353,46 @@ func TestEbayDefaultSiteSearchHandoffTraceabilityImplemented(t *testing.T) {
 	}
 }
 
+func TestEbaySavedQueryLifecycleTraceabilityImplemented(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	var row string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "| `INTEGRATION-005` ") || strings.HasPrefix(line, "| INTEGRATION-005 ") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("expected traceability row for INTEGRATION-005")
+	}
+
+	requiredFragments := []string{
+		"eBay saved-query create/edit/schedule/delete lifecycle",
+		"provider_scope=[\"ebay\"]",
+		"schedule_cron, enabled, rate_limit_rps, and latest-run hydration metadata",
+		"omitted provider-scope updates preserving existing eBay scope",
+		"TestOpenAPIDocumentsEbayQuerySetContract",
+		"TestUpdateQuerySetPreservesProviderScopeWhenOmitted",
+		"TestDefaultSiteSearchScheduledRefreshPersistsRunSnapshot",
+		"INTEGRATION-005 + #827 manages eBay saved-query create edit schedule and delete lifecycle",
+		"TestEbaySavedQueryLifecycleTraceabilityImplemented",
+		"| implemented |",
+	}
+
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(row, fragment) {
+			t.Fatalf("expected INTEGRATION-005 traceability row to include %q; row: %s", fragment, row)
+		}
+	}
+}
+
 func TestEbaySellerOperationsTraceabilityImplemented(t *testing.T) {
 	t.Parallel()
 
