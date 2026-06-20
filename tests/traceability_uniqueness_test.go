@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -41,5 +42,111 @@ func TestImplementedIntegrationTraceabilityIDsAreUnique(t *testing.T) {
 	}
 	if len(duplicates) > 0 {
 		t.Fatalf("implemented integration traceability IDs must be unique, found duplicates: %s", strings.Join(duplicates, ", "))
+	}
+}
+
+func TestRemainingTraceabilityBacklogRowsAreExplicit(t *testing.T) {
+	t.Parallel()
+
+	traceabilityPath := filepath.Join("..", "openspec", "traceability.md")
+	raw, err := os.ReadFile(traceabilityPath)
+	if err != nil {
+		t.Fatalf("read traceability: %v", err)
+	}
+
+	idPattern := regexp.MustCompile("^\\| `?([^`| ]+)`? \\|")
+	allowed := map[string][]string{
+		"UI-SCREEN-CHAT-COPILOT-018": {
+			"| planned |",
+			"#1205",
+			"Future affected main chat or side-panel Assistant issues/PRs",
+			"TestAssistantUIDirectionTraceabilityRowIsActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"PROVIDER-WORKFLOW-001": {
+			"| partial |",
+			"#827",
+			"#841",
+			"#842",
+			"live credential/capability evidence",
+			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"PROVIDER-WORKFLOW-002": {
+			"| partial |",
+			"#827",
+			"#841",
+			"#842",
+			"live credential/capability evidence",
+			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"PROVIDER-WORKFLOW-003": {
+			"| partial |",
+			"#827",
+			"#841",
+			"#842",
+			"verified credentials",
+			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"PROVIDER-WORKFLOW-004": {
+			"| partial |",
+			"#827",
+			"#841",
+			"#842",
+			"live credential/capability evidence",
+			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+		"PROVIDER-WORKFLOW-FULL-ASSESSMENT": {
+			"| partial |",
+			"#827",
+			"#841",
+			"#842",
+			"live credential/capability evidence",
+			"TestProviderWorkflowTraceabilityPartialRowsAreActionable",
+			"TestRemainingTraceabilityBacklogRowsAreExplicit",
+		},
+	}
+
+	seen := map[string]bool{}
+	var unexpected []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if !strings.HasPrefix(line, "| ") || (!strings.Contains(line, "| partial |") && !strings.Contains(line, "| planned |")) {
+			continue
+		}
+		matches := idPattern.FindStringSubmatch(line)
+		if len(matches) != 2 {
+			unexpected = append(unexpected, line)
+			continue
+		}
+		id := matches[1]
+		requiredFragments, ok := allowed[id]
+		if !ok {
+			unexpected = append(unexpected, id)
+			continue
+		}
+		seen[id] = true
+		for _, fragment := range requiredFragments {
+			if !strings.Contains(line, fragment) {
+				t.Fatalf("expected %s non-implemented traceability row to include %q; row: %s", id, fragment, line)
+			}
+		}
+	}
+	if len(unexpected) > 0 {
+		sort.Strings(unexpected)
+		t.Fatalf("unexpected non-implemented traceability rows: %s", strings.Join(unexpected, ", "))
+	}
+
+	var missing []string
+	for id := range allowed {
+		if !seen[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Fatalf("expected allowed non-implemented traceability rows to remain explicit: %s", strings.Join(missing, ", "))
 	}
 }
