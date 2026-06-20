@@ -271,6 +271,7 @@ func TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented(t *testing.T) 
 		"Market Watch actionable provider-run `message` diagnostics",
 		"INTEGRATION-005 + #827 surfaces eBay provider-run actionable message diagnostics",
 		"TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented",
+		"setup page-size validation diagnostics that route to setup correction instead of credential review",
 		"| implemented |",
 	}
 

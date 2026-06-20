@@ -232,6 +232,18 @@ function mapScannerActionError(
     }
   }
   if (operation === 'run' && status === 400) {
+    if (errorCode === 'invalid_ebay_items_per_page') {
+      return {
+        summary: 'Run failed due to query validation.',
+        actions: [
+          'Check query keywords and exclusions.',
+          'Update the eBay setup page size before retrying.',
+          'Provider credentials are not the recovery step for this setup validation error.',
+        ],
+        diagnosticCode: errorCode,
+        diagnostics,
+      }
+    }
     return {
       summary: 'Run failed due to query validation.',
       actions: [
