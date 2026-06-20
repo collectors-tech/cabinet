@@ -244,6 +244,18 @@ function mapScannerActionError(
         diagnostics,
       }
     }
+    if (errorCode === 'invalid_query_set_id') {
+      return {
+        summary: 'Run failed due to query validation.',
+        actions: [
+          'Select an existing eBay saved query before retrying.',
+          'Refresh Market Watch if the query was deleted or changed elsewhere.',
+          'Provider credentials are not the recovery step for this saved-query validation error.',
+        ],
+        diagnosticCode: errorCode,
+        diagnostics,
+      }
+    }
     return {
       summary: 'Run failed due to query validation.',
       actions: [
