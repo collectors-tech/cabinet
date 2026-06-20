@@ -203,6 +203,7 @@ export function UserAuthForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
+        noValidate
         className={cn('grid gap-3', className)}
         {...props}
       >
@@ -211,9 +212,15 @@ export function UserAuthForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel htmlFor='email'>Email</FormLabel>
               <FormControl>
-                <Input placeholder='name@example.com' {...field} />
+                <Input
+                  id='email'
+                  type='email'
+                  autoComplete='username'
+                  placeholder='name@example.com'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -224,9 +231,11 @@ export function UserAuthForm({
           name='password'
           render={({ field }) => (
             <FormItem className='relative'>
-              <FormLabel>Password</FormLabel>
+              <FormLabel htmlFor='password'>Password</FormLabel>
               <FormControl>
                 <PasswordInput
+                  id='password'
+                  autoComplete='current-password'
                   placeholder='********'
                   toggleTestId='sign-in-password-toggle'
                   {...field}
@@ -243,7 +252,7 @@ export function UserAuthForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        <Button className='mt-2' type='submit' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
           Sign in
         </Button>
