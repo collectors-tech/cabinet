@@ -81,8 +81,9 @@ function NavBadge({
 }
 
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
-  const { setOpenMobile } = useSidebar()
+  const { state, isMobile, setOpenMobile } = useSidebar()
   const itemKey = navTestKey(item.testIdKey || item.title)
+  const isIconOnly = state === 'collapsed' && !isMobile
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -91,7 +92,15 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
         size='sm'
-        className={item.badge ? 'justify-center pe-9' : 'justify-center'}
+        className={
+          isIconOnly
+            ? item.badge
+              ? 'justify-center pe-9'
+              : 'justify-center'
+            : item.badge
+              ? 'pe-9'
+              : undefined
+        }
       >
         <Link
           to={item.url}
@@ -100,6 +109,11 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
           onClick={() => setOpenMobile(false)}
         >
           {item.icon && <item.icon />}
+          {!isIconOnly ? (
+            <span data-testid={`sidebar-nav-label-${itemKey}`}>
+              {item.title}
+            </span>
+          ) : null}
           {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
         </Link>
       </SidebarMenuButton>
@@ -114,8 +128,9 @@ function SidebarMenuCollapsible({
   item: NavCollapsible
   href: string
 }) {
-  const { setOpenMobile } = useSidebar()
+  const { state, isMobile, setOpenMobile } = useSidebar()
   const itemKey = navTestKey(item.testIdKey || item.title)
+  const isIconOnly = state === 'collapsed' && !isMobile
   return (
     <Collapsible
       asChild
@@ -128,9 +143,12 @@ function SidebarMenuCollapsible({
             aria-label={item.title}
             tooltip={item.title}
             size='sm'
-            className={item.badge ? 'justify-center pe-9' : 'justify-center'}
+            className={item.badge ? 'pe-9' : undefined}
           >
             {item.icon && <item.icon />}
+            <span data-testid={`sidebar-nav-label-${itemKey}`}>
+              {item.title}
+            </span>
             {item.badge && <NavBadge itemKey={itemKey}>{item.badge}</NavBadge>}
             <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 rtl:rotate-180' />
           </SidebarMenuButton>
@@ -144,7 +162,7 @@ function SidebarMenuCollapsible({
                   <SidebarMenuSubButton
                     asChild
                     isActive={checkIsActive(href, subItem)}
-                    className='justify-center'
+                    className={isIconOnly ? 'justify-center' : undefined}
                   >
                     <Link
                       to={subItem.url}
@@ -153,6 +171,11 @@ function SidebarMenuCollapsible({
                       onClick={() => setOpenMobile(false)}
                     >
                       {subItem.icon && <subItem.icon />}
+                      {!isIconOnly ? (
+                        <span data-testid={`sidebar-nav-label-${subItemKey}`}>
+                          {subItem.title}
+                        </span>
+                      ) : null}
                       {subItem.badge && (
                         <NavBadge itemKey={subItemKey}>
                           {subItem.badge}
