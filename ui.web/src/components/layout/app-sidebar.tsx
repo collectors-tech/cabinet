@@ -71,7 +71,7 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
-  const { state: sidebarState, isMobile } = useSidebar()
+  const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
   const { activeWorkspace, setActiveWorkspace } = useShellWorkspace()
   const isCollapsedSidebar = sidebarState === 'collapsed' && !isMobile
@@ -142,6 +142,16 @@ export function AppSidebar() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (
+      activeWorkspace === 'navigation' &&
+      sidebarState === 'collapsed' &&
+      !isMobile
+    ) {
+      setOpen(true)
+    }
+  }, [activeWorkspace, isMobile, setOpen, sidebarState])
 
   useEffect(() => {
     const profileScope = authUser?.email || authUser?.accountNo || 'local'
