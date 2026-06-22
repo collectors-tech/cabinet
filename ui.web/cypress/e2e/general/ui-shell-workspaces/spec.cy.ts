@@ -9,26 +9,42 @@ describe('general/ui-shell-workspaces', () => {
       shellWorkspace: 'navigation',
     })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-workspace-icon-rail"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-bell"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Open notification inbox')
+    cy.get('[data-testid="sidebar-nav-link-inventory"]').should('be.visible')
   }
 
-  it('UI-SHELL-WORKSPACES-001 switches Navigation, Assistant, and Inbox in the left workspace region', () => {
+  it('UI-SHELL-WORKSPACES-001 switches Navigation and Assistant with an icon-only rail', () => {
     openInventory()
     cy.get('[data-testid="shell-workspace-navigation"]').should('have.attr', 'data-active', 'true')
     cy.get('[data-testid="sidebar-nav-link-inventory"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-icon-rail"]')
+      .should('be.visible')
+      .within(() => {
+        cy.contains('Nav').should('not.exist')
+        cy.contains('Assistant').should('not.exist')
+        cy.contains('Inbox').should('not.exist')
+      })
 
     cy.get('[data-testid="shell-workspace-assistant"]').click()
     cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')
     cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
     cy.get('[data-testid="shell-assistant-compose-input"]').should('exist')
 
-    cy.get('[data-testid="shell-workspace-inbox"]').click()
-    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
-    cy.get('[data-testid="shell-inbox-workspace"]').should('exist')
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'Notifications and asynchronous assistant outcomes').should('exist')
+    cy.get('[data-testid="shell-workspace-icon-rail"] [data-testid="shell-workspace-bell"]')
+      .should('have.attr', 'aria-label', 'Open notification inbox')
+      .and('have.attr', 'title', 'Open notification inbox')
+      .within(() => {
+        cy.get('[data-testid="shell-workspace-bell-badge"]').should('be.visible')
+      })
+    cy.get('[data-testid="shell-workspace-icon-rail"] [data-testid="shell-workspace-bell"]').click({ force: true })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.get('[data-testid="shell-workspace-inbox"]').should('not.exist')
 
     cy.get('[data-testid="shell-workspace-navigation"]').click()
     cy.get('[data-testid="shell-workspace-navigation"]').should('have.attr', 'data-active', 'true')
-    cy.get('[data-testid="sidebar-nav-link-inventory"]').should('be.visible')
   })
 
   it('UI-SHELL-WORKSPACES-002 activates Assistant workspace from header without route loss', () => {
@@ -60,47 +76,51 @@ describe('general/ui-shell-workspaces', () => {
     cy.get('[data-testid="shell-assistant-route-context"]').should('contain', '/wishlist')
   })
 
-  it('UI-SHELL-WORKSPACES-004 keeps Assistant, Inbox, and /chats semantics distinct', () => {
+  it('UI-SHELL-WORKSPACES-004 keeps Assistant and /chats semantics distinct while Inbox is bell-routed', () => {
     openInventory()
     cy.get('[data-testid="shell-workspace-assistant"]').click()
-    cy.contains('[data-testid="shell-assistant-workspace"]', 'Route-aware agent for database work, evidence checks, and item links.').should('exist')
+    cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
+    cy.get('[data-testid="shell-assistant-compose-input"]').should('exist')
 
-    cy.get('[data-testid="shell-workspace-inbox"]').click()
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'simple catch-up list').should('exist')
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'Assistant Thread').should('not.exist')
+    cy.get('[data-testid="shell-workspace-icon-rail"] [data-testid="shell-workspace-bell"]').click({ force: true })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.contains('Notification Inbox').should('be.visible')
+    cy.get('[data-testid="shell-workspace-inbox"]').should('not.exist')
 
     cy.visit('/chats')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
-    cy.contains('Persistent profile-scoped conversation threads backed by Cabinet runtime.').should('be.visible')
-    cy.contains('Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.').should('be.visible')
-    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
+    cy.contains(
+      'Persistent profile-scoped conversation threads backed by Cabinet runtime.'
+    ).should('exist')
+    cy.contains(
+      'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.'
+    ).should('exist')
   })
 
-  it('UI-SHELL-WORKSPACES-005 gives Inbox empty state actionable next steps', () => {
+  it('UI-SHELL-WORKSPACES-005 opens the durable Inbox page from the bell-only top affordance', () => {
     openInventory()
-    cy.get('[data-testid="shell-workspace-inbox"]').click()
-
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'No inbox items yet.').should('be.visible')
-    cy.get('[data-testid="shell-inbox-refresh"]').should('be.visible')
-    cy.get('[data-testid="shell-inbox-open-chats"]').should('be.visible')
-    cy.get('[data-testid="shell-inbox-open-assistant-workspace"]').should('be.visible').click()
-    cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
+    cy.get('[data-testid="shell-workspace-icon-rail"] [data-testid="shell-workspace-bell"]').click({ force: true })
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.get('[data-testid="notification-inbox-page"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-filters"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-list-pane"]').should('be.visible')
+    cy.get('[data-testid="notification-inbox-detail-pane"]').should('be.visible')
   })
 
-  it('UI-SHELL-WORKSPACES-006 persists the selected workspace to the active profile across reload and section changes', () => {
+  it('UI-SHELL-WORKSPACES-006 persists the Assistant workspace to the active profile across reload and section changes', () => {
     openInventory()
-    cy.get('[data-testid="shell-workspace-inbox"]').click()
-    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
-    cy.window().its('localStorage').invoke('getItem', 'cabinet.shell.workspace.active.e2e-profile-001').should('eq', 'inbox')
+    cy.get('[data-testid="shell-workspace-assistant"]').click()
+    cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')
+    cy.window().its('localStorage').invoke('getItem', 'cabinet.shell.workspace.active.e2e-profile-001').should('eq', 'assistant')
 
     cy.reload()
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
-    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
-    cy.contains('[data-testid="shell-inbox-workspace"]', 'Notifications and asynchronous assistant outcomes').should('exist')
+    cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="shell-assistant-workspace"]').should('exist')
 
     cy.visit('/settings/profile')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/settings\/profile\/?$/)
-    cy.get('[data-testid="shell-workspace-inbox"]').should('have.attr', 'data-active', 'true')
+    cy.get('[data-testid="shell-workspace-assistant"]').should('have.attr', 'data-active', 'true')
     cy.contains('Profile settings').should('be.visible')
   })
 })
