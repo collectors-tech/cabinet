@@ -26,6 +26,15 @@ Media cards SHALL include details required for review and assignment workflows.
 - **WHEN** card renders details panel
 - **THEN** card MUST include thumbnail/preview, upload timestamp, analysis status, confidence indicator (when analyzed), and quick actions (`analyze`, `assign`, `open`, `archive`)
 
+#### Scenario: Use media item quick actions
+- **GIVEN** a Media workspace item exposes row or card quick actions
+- **WHEN** user clicks Analyze for an item that is not already analysis-ready
+- **THEN** Cabinet MUST start or open a visible media analysis workflow for that exact media item and show workflow status instead of leaving the action as a dead control
+- **AND** analysis-ready items MUST present Analyze as unavailable with an accessible disabled state
+- **WHEN** user clicks Assign for an unlinked item
+- **THEN** Cabinet MUST open the assignment flow scoped to that exact media item
+- **AND** already-linked or unavailable items MUST present Assign as unavailable with an accessible disabled state
+
 ### Requirement MEDIA-LINKAGE-001: Media linkage state SHALL be deterministic across inventory and wishlist targets
 Cabinet SHALL classify each media asset into stable linkage states for filtering and assignment logic.
 

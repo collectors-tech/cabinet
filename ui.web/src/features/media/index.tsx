@@ -69,6 +69,7 @@ import {
   DataTablePagination,
   DataTableToolbar,
 } from '@/components/data-table'
+import { useShellWorkspace } from '@/context/shell-workspace-provider'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -120,6 +121,13 @@ type AssignmentPreview = {
   applied?: boolean
 }
 
+type AnalysisWorkflowRun = {
+  id: string
+  status: 'queued' | 'running' | 'needs_input' | 'completed' | 'failed' | 'cancelled'
+  capability_id: string
+  provider_trace?: Record<string, string>
+}
+
 type MediaViewMode = 'cards' | 'rows'
 
 const MEDIA_VIEW_MODE_STORAGE_KEY = 'cabinet.viewMode.media'
@@ -158,11 +166,13 @@ function buildMediaColumns({
   selectedAssetSet,
   onToggleAssetSelection,
   onAssign,
+  onAnalyze,
   onEdit,
 }: {
   selectedAssetSet: Set<string>
   onToggleAssetSelection: (assetID: string, checked: boolean) => void
   onAssign: (asset: MediaAsset) => void
+  onAnalyze: (asset: MediaAsset) => void
   onEdit: (asset: MediaAsset) => void
 }): ColumnDef<MediaAsset>[] {
   return [
@@ -295,6 +305,12 @@ function buildMediaColumns({
             aria-label={`Analyze ${row.original.title}`}
             data-testid={`media-row-analyze-${row.original.id}`}
             disabled={row.original.analysis_status === 'ready'}
+            title={
+              row.original.analysis_status === 'ready'
+                ? 'Analysis is already ready'
+                : 'Start media analysis'
+            }
+            onClick={() => onAnalyze(row.original)}
           >
             <WandSparkles />
           </Button>
@@ -305,6 +321,11 @@ function buildMediaColumns({
             aria-label={`Assign ${row.original.title}`}
             data-testid={`media-row-assign-${row.original.id}`}
             disabled={row.original.linkage_state !== 'unlinked'}
+            title={
+              row.original.linkage_state === 'unlinked'
+                ? 'Assign media'
+                : 'Media is already linked'
+            }
             onClick={() => onAssign(row.original)}
           >
             <Link2 />
@@ -327,6 +348,7 @@ function buildMediaColumns({
 }
 
 export function Media() {
+  const { activeProfileId } = useShellWorkspace()
   const [filter, setFilter] = useState<'all' | 'unlinked'>('all')
   const [viewMode, setViewMode] = useState<MediaViewMode>(() => {
     if (typeof window === 'undefined') return 'rows'
@@ -359,6 +381,12 @@ export function Media() {
   const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(
     null
   )
+  const [analysisAsset, setAnalysisAsset] = useState<MediaAsset | null>(null)
+  const [analysisRun, setAnalysisRun] = useState<AnalysisWorkflowRun | null>(
+    null
+  )
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
   const [addMediaOpen, setAddMediaOpen] = useState(false)
   const [addMediaFile, setAddMediaFile] = useState<File | null>(null)
   const [addMediaTitle, setAddMediaTitle] = useState('')
@@ -565,6 +593,50 @@ export function Media() {
     setAssignmentSuccess(null)
   }, [])
 
+  const openAnalysis = useCallback(
+    async (asset: MediaAsset) => {
+      setAnalysisAsset(asset)
+      setAnalysisRun(null)
+      setAnalysisError(null)
+      setAnalysisLoading(true)
+      setAssignmentSuccess(null)
+      try {
+        const response = await fetch('/api/chat/workflow-runs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: activeProfileId,
+            workflow_id: 'openai-image-analyze',
+            capability_id: 'image_analyze',
+            source_channel: 'media_workspace',
+            confirmation_state: 'not_required',
+            input: {
+              media_id: asset.id,
+              analysis_goal: 'identify visible item details',
+            },
+            provider_trace: {
+              provider: 'openai',
+              setup_needed: 'provider_test_required',
+              media_access: 'read',
+            },
+          }),
+        })
+        if (!response.ok) {
+          throw new Error(`media_analysis_${response.status}`)
+        }
+        const payload = (await response.json()) as AnalysisWorkflowRun
+        setAnalysisRun(payload)
+      } catch (err) {
+        setAnalysisError(
+          err instanceof Error ? err.message : 'media_analysis_failed'
+        )
+      } finally {
+        setAnalysisLoading(false)
+      }
+    },
+    [activeProfileId]
+  )
+
   const openMetadataEditor = useCallback((asset: MediaAsset) => {
     setEditAsset(asset)
     setEditTitle(asset.title)
@@ -594,9 +666,16 @@ export function Media() {
         selectedAssetSet,
         onToggleAssetSelection: toggleAssetSelection,
         onAssign: openAssignment,
+        onAnalyze: openAnalysis,
         onEdit: openMetadataEditor,
       }),
-    [openAssignment, openMetadataEditor, selectedAssetSet, toggleAssetSelection]
+    [
+      openAnalysis,
+      openAssignment,
+      openMetadataEditor,
+      selectedAssetSet,
+      toggleAssetSelection,
+    ]
   )
 
   const table = useReactTable({
@@ -1009,6 +1088,12 @@ export function Media() {
                       aria-label={`Analyze ${asset.title}`}
                       data-testid={`media-analyze-${asset.id}`}
                       disabled={asset.analysis_status === 'ready'}
+                      title={
+                        asset.analysis_status === 'ready'
+                          ? 'Analysis is already ready'
+                          : 'Start media analysis'
+                      }
+                      onClick={() => void openAnalysis(asset)}
                     >
                       <WandSparkles />
                     </Button>
@@ -1019,6 +1104,11 @@ export function Media() {
                       aria-label={`Assign ${asset.title}`}
                       data-testid={`media-assign-${asset.id}`}
                       disabled={asset.linkage_state !== 'unlinked'}
+                      title={
+                        asset.linkage_state === 'unlinked'
+                          ? 'Assign media'
+                          : 'Media is already linked'
+                      }
                       onClick={() => openAssignment(asset)}
                     >
                       <Link2 />
@@ -1365,6 +1455,70 @@ export function Media() {
                 data-testid='media-add-save-action'
               >
                 {addMediaSaving ? 'Saving...' : 'Save media'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={analysisAsset !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAnalysisAsset(null)
+              setAnalysisRun(null)
+              setAnalysisError(null)
+              setAnalysisLoading(false)
+            }
+          }}
+        >
+          <DialogContent data-testid='media-analysis-dialog'>
+            <DialogHeader>
+              <DialogTitle>Analyze media</DialogTitle>
+            </DialogHeader>
+            <div className='space-y-4'>
+              <div className='text-sm text-muted-foreground'>
+                {analysisAsset?.title}
+              </div>
+              {analysisLoading ? (
+                <div
+                  className='rounded-md border p-3 text-sm'
+                  data-testid='media-analysis-loading'
+                >
+                  Starting image analysis workflow...
+                </div>
+              ) : null}
+              {analysisRun ? (
+                <div
+                  className='space-y-2 rounded-md border p-3 text-sm'
+                  data-testid='media-analysis-result'
+                >
+                  <div className='font-medium'>Analysis workflow queued</div>
+                  <div className='text-muted-foreground'>
+                    Run {analysisRun.id} is {analysisRun.status} for media{' '}
+                    {analysisAsset?.id}.
+                  </div>
+                  <div className='text-muted-foreground'>
+                    Provider setup can continue from the Assistant workflow
+                    surface without mutating this media asset.
+                  </div>
+                </div>
+              ) : null}
+              {analysisError ? (
+                <div
+                  className='rounded-md border border-destructive/40 p-3 text-sm text-destructive'
+                  data-testid='media-analysis-error'
+                >
+                  {analysisError}
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                variant='outline'
+                onClick={() => setAnalysisAsset(null)}
+                disabled={analysisLoading}
+              >
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>
