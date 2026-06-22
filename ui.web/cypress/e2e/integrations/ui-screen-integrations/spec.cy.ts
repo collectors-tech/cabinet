@@ -96,7 +96,8 @@ describe('ui-screen-integrations', () => {
     )
     cy.get('[data-testid="integrations-header-add"]')
       .should('be.visible')
-      .and('contain', 'Add Integration')
+      .and('have.attr', 'aria-label', 'Add integration')
+      .and('not.contain.text', 'Add Integration')
 
     cy.get('input[placeholder="Filter providers..."]').clear().type('bonza')
     cy.get('[data-testid="provider-row-au-webshop-bonzaslotcars-com-au"]').should(
@@ -113,6 +114,88 @@ describe('ui-screen-integrations', () => {
     )
     cy.contains('button', 'Rows').click()
     cy.get('table').should('be.visible')
+  })
+
+  it('UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first', () => {
+    cy.intercept('GET', '/api/profiles/active', {
+      statusCode: 200,
+      body: { id: 'profile-e2e-001', name: 'E2E Local' },
+    }).as('activeProfile')
+    cy.intercept('GET', '/api/providers/registry', {
+      statusCode: 200,
+      body: {
+        providers: [
+          {
+            provider_id: 'ebay',
+            display_name: 'eBay',
+            base_domain: 'ebay.com',
+            integration_mode: 'official_api',
+            auth_mode: 'api_key',
+            state: 'ready',
+            has_token: true,
+            setup_instructions: 'Configure eBay token and marketplace.',
+            capabilities: {
+              search: true,
+              stock_observation: false,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'ok', last_checked_at: '2026-03-01T00:00:00Z' },
+            last_run: { status: 'success', finished_at: '2026-03-01T00:00:00Z' },
+          },
+          {
+            provider_id: 'au-webshop-acercmodels-com',
+            display_name: 'acercmodels.com',
+            base_domain: 'acercmodels.com',
+            integration_mode: 'web_ingestion',
+            auth_mode: 'none',
+            state: 'ready',
+            has_token: false,
+            setup_instructions: 'Configure Acerc Models catalog ingestion.',
+            capabilities: {
+              search: true,
+              stock_observation: true,
+              pricing: true,
+              health: true,
+            },
+            health: { status: 'unknown', last_checked_at: null },
+            last_run: { status: 'never', finished_at: null },
+          },
+        ],
+      },
+    }).as('registry')
+    cy.intercept('GET', '/api/profiles/*/settings', {
+      statusCode: 200,
+      body: { settings: { 'integration.ebay.enabled': 'true' } },
+    }).as('settings')
+
+    signIn()
+    cy.wait('@activeProfile')
+    cy.wait('@registry')
+    cy.wait('@settings')
+
+    cy.get('[data-testid="integrations-header-add"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Add integration')
+      .and('not.contain.text', 'Add Integration')
+      .click()
+
+    cy.get('[data-testid="integrations-provider-selector"]')
+      .should('be.visible')
+      .and('contain', 'Add Integration')
+      .and('contain', 'Choose a provider')
+      .and('contain', 'acercmodels.com')
+      .and('not.contain', 'Base URL')
+    cy.get('[role="dialog"]').should('not.contain', 'Items per page')
+
+    cy.get(
+      '[data-testid="integrations-provider-selector-option-au-webshop-acercmodels-com"]'
+    ).click()
+    cy.get('[data-testid="integrations-provider-selector"]').should('not.exist')
+    cy.get('[role="dialog"]')
+      .should('contain', 'acercmodels.com')
+      .and('contain', 'Base URL')
+      .and('contain', 'Items per page')
   })
 
   it('UI-SCREEN-INTEGRATIONS-011 + #1112: paginates the full-page configured integrations table', () => {

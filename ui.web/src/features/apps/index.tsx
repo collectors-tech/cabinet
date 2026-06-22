@@ -44,6 +44,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -485,10 +490,7 @@ function providerSettingsKeys(providerID: string) {
 function providerSettingAliases(providerID: string) {
   const keys = providerSettingsKeys(providerID)
   return {
-    enabledKeys: [
-      keys.enabledKey,
-      `integration.${providerID}.enabled`,
-    ],
+    enabledKeys: [keys.enabledKey, `integration.${providerID}.enabled`],
     baseURLKeys: [keys.baseURLKey, `integration.${providerID}.base_url`],
     tokenKeys: [keys.tokenKey, `integration.${providerID}.token`],
     marketplaceKeys: [
@@ -618,6 +620,7 @@ export function Apps({
   const [editingProviderID, setEditingProviderID] = useState<string | null>(
     null
   )
+  const [providerSelectorOpen, setProviderSelectorOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -795,7 +798,9 @@ export function Apps({
     filteredProviders.length,
     tableStart + paginatedProviders.length
   )
-  const addIntegrationTarget = addableProviders[0] ?? sortedProviders[0] ?? null
+  const providerCatalogProviders = addableProviders.length
+    ? addableProviders
+    : sortedProviders
 
   useEffect(() => {
     setTablePage((page) => Math.min(page, tablePageCount))
@@ -1663,20 +1668,22 @@ export function Apps({
           className='ms-auto flex items-center gap-4'
           data-header-title-avoid='true'
         >
-          <Button
-            type='button'
-            size='sm'
-            data-testid='integrations-header-add'
-            disabled={!addIntegrationTarget}
-            onClick={() => {
-              if (addIntegrationTarget) {
-                openIntegration(addIntegrationTarget)
-              }
-            }}
-          >
-            <Plus className='size-4' />
-            <span className='hidden sm:inline'>Add Integration</span>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                size='icon'
+                data-testid='integrations-header-add'
+                aria-label='Add integration'
+                title='Add integration'
+                disabled={!sortedProviders.length}
+                onClick={() => setProviderSelectorOpen(true)}
+              >
+                <Plus className='size-4' aria-hidden='true' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add integration</TooltipContent>
+          </Tooltip>
           <LanguageSwitch />
           <ThemeSwitch />
           <ConfigDrawer />
@@ -2086,6 +2093,44 @@ export function Apps({
           </ul>
         ) : null}
       </Main>
+
+      <Dialog
+        open={providerSelectorOpen}
+        onOpenChange={setProviderSelectorOpen}
+      >
+        <DialogContent data-testid='integrations-provider-selector'>
+          <DialogHeader>
+            <DialogTitle>Add Integration</DialogTitle>
+            <DialogDescription>
+              Choose a provider before opening provider-specific setup.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-2'>
+            {providerCatalogProviders.map((provider) => (
+              <Button
+                key={provider.provider_id}
+                type='button'
+                variant='outline'
+                className='h-auto justify-start px-3 py-2 text-left'
+                data-testid={`integrations-provider-selector-option-${provider.provider_id}`}
+                onClick={() => {
+                  setProviderSelectorOpen(false)
+                  openIntegration(provider)
+                }}
+              >
+                <span className='flex min-w-0 flex-col items-start'>
+                  <span className='truncate font-medium'>
+                    {provider.display_name}
+                  </span>
+                  <span className='truncate text-xs text-muted-foreground'>
+                    {provider.base_domain}
+                  </span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={editingProvider !== null}
