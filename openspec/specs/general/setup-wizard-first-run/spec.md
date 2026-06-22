@@ -163,7 +163,8 @@ Storage form step MUST expose default exe-local storage, optional custom data pa
 #### Scenario: Exe-local default storage
 - **GIVEN** setup wizard storage step is active
 - **WHEN** step first renders
-- **THEN** storage mode MUST default to `exe_local`
+- **THEN** storage mode MUST default to runtime value `exe_local`
+- **AND** the user-facing storage mode label MUST read `local`
 - **AND** data directory preview MUST resolve to `<exe_dir>/data`
 - **AND** portable mode toggle MUST be visible and off by default
 

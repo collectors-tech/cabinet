@@ -152,6 +152,10 @@ describe('SETUP-WIZ', () => {
 
       cy.get('[data-testid="setup-step-indicator"]').should('contain.text', 'STEP 2 OF 6');
       cy.get('[data-testid="setup-storage-mode"]').should('have.value', 'exe_local');
+      cy.get('[data-testid="setup-storage-mode"] option:selected').should(
+        'have.text',
+        'local'
+      );
       cy.get('[data-testid="setup-storage-data-dir-preview"]')
         .should('be.visible')
         .and('contain.text', statusResponse.body.default_storage_data_dir);
