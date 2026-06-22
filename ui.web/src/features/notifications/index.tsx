@@ -181,8 +181,8 @@ function itemFromToastHistory(
     title: record.title,
     summary: record.summary || `${sourceLabel(record.level)} toast`,
     metadata: {
-      category: 'system',
-      source_label: 'Toast History',
+      category: record.category || 'system',
+      source_label: record.source_label || 'Toast History',
       detail: record.summary || record.title,
       local_toast: true,
       level: record.level,
