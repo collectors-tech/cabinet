@@ -56,7 +56,7 @@ Cabinet SHALL expose a first-class authenticated `/purchases` route, label the p
 - **THEN** Cabinet MUST show Purchases as the route title, expose a table shell with purchase/source/price/status/tracking/action columns, and provide a `+` add action that opens a creation/import dialog with New, CSV, and Email modes.
 - **AND** primary navigation and command navigation MUST expose the route with the user-facing `Purchases` label.
 - **AND** captured-review and purchase-source-match tooling MUST stay collapsed or hidden by default so the initial workspace is table-first instead of a stacked import/reconciliation toolbox.
-- **AND** users MUST be able to deliberately open captured purchase review and source-match tooling from explicit Purchases toolbar controls.
+- **AND** users MUST be able to deliberately open add/import, captured purchase review, and source-match tooling from explicit Purchases controls in the standard page header action area, without a duplicate in-body Purchases title or description block above the table.
 
 ### Requirement COMMERCE-RECONCILIATION-007: Purchases SHALL support table filtering and row state actions
 Cabinet SHALL let users narrow the Purchases table by purchase text/source/status signals and expose row-level controls for common review state markers before deeper edit/persistence workflows are completed.

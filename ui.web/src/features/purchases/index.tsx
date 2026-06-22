@@ -1529,27 +1529,15 @@ export function Purchases() {
           iconTestId='purchases-page-icon'
         />
         <div
-          className='ms-auto flex items-center space-x-4'
+          className='ms-auto flex min-w-0 items-center gap-3'
           data-header-title-avoid='true'
         >
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      <Main>
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Purchases</h1>
-            <p className='text-muted-foreground'>
-              Track purchases from eBay, Amazon, CSV, email, desktop imports,
-              and manual entries in one review-first workspace.
-            </p>
-          </div>
-          <div className='flex flex-wrap items-center gap-2'>
+          <div
+            className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+            data-testid='purchases-global-header-actions'
+          >
             <Button
+              size='sm'
               data-testid='purchases-add-button'
               onClick={() => setAddDialogOpen(true)}
               aria-label='Add purchase'
@@ -1558,6 +1546,7 @@ export function Purchases() {
               Add
             </Button>
             <Button
+              size='sm'
               variant='outline'
               data-testid='purchases-source-matches-toggle'
               onClick={() => setSourceMatchesOpen((current) => !current)}
@@ -1567,6 +1556,7 @@ export function Purchases() {
               Source matches
             </Button>
             <Button
+              size='sm'
               variant='outline'
               data-testid='purchase-inbox-load-reviews'
               onClick={openCapturedReviews}
@@ -1581,10 +1571,24 @@ export function Purchases() {
               Load captured reviews
             </Button>
           </div>
+          <Separator
+            orientation='vertical'
+            className='h-6'
+            data-testid='purchases-header-action-separator'
+          />
+          <div className='flex items-center gap-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ConfigDrawer />
+            <ProfileDropdown />
+          </div>
         </div>
+      </Header>
+
+      <Main className='space-y-4'>
         {manualPurchaseResult ? (
           <div
-            className='mt-3 rounded-md border bg-muted/30 p-3 text-sm'
+            className='rounded-md border bg-muted/30 p-3 text-sm'
             data-testid='purchases-manual-draft-result'
           >
             {manualPurchaseResult}
@@ -1592,7 +1596,7 @@ export function Purchases() {
         ) : null}
 
         <div
-          className='mt-4 overflow-x-auto rounded-md border'
+          className='overflow-x-auto rounded-md border'
           data-testid='purchases-table-shell'
         >
           <div
