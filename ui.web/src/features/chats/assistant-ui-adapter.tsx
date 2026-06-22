@@ -165,6 +165,7 @@ export function CabinetAssistantUiComposer({
           size='icon'
           data-testid={testIds?.sendButton ?? 'shell-assistant-send-button'}
           aria-label='Send assistant message'
+          title='Send assistant message'
           disabled={composer.disabled}
         >
           <Send className='h-4 w-4' />
