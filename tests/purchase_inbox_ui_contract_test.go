@@ -33,6 +33,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 		"purchase-inbox-confirm-dialog",
 		"purchases-header-title",
 		"purchases-page-icon",
+		"purchases-global-header-actions",
 		"Load captured reviews",
 		"requires_confirmation",
 		"Confirmation required",
@@ -62,6 +63,7 @@ func TestPurchaseInboxUIContract(t *testing.T) {
 
 	requiredCypressSnippets := []string{
 		"COMMERCE-RECONCILIATION-006",
+		"purchases-global-header-actions",
 		"COMMERCE-RECONCILIATION-009",
 		"COMMERCE-RECONCILIATION-010",
 		"COMMERCE-RECONCILIATION-011",

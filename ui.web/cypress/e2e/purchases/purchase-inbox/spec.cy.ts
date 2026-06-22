@@ -25,6 +25,10 @@ describe('purchases/purchase-inbox', () => {
       'Purchases'
     )
     cy.get('[data-testid="purchases-page-icon"]').should('be.visible')
+    cy.get('[data-testid="purchases-global-header-actions"]')
+      .parents('header')
+      .should('exist')
+    cy.get('main').find('h1').should('not.exist')
     cy.get('[data-testid="sidebar-nav-link-purchases"]')
       .should('contain', 'Purchases')
       .should('have.attr', 'href', '/purchases')
