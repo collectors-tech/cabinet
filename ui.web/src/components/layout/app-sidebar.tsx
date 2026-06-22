@@ -1,7 +1,9 @@
 import { useEffect, useState, type DragEvent } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowDown,
   ArrowUp,
+  Bell,
   Eye,
   EyeOff,
   GripVertical,
@@ -70,6 +72,7 @@ function moveKeyToIndex(order: string[], key: string, targetIndex: number) {
 }
 
 export function AppSidebar() {
+  const navigate = useNavigate()
   const { collapsible, variant } = useLayout()
   const { state: sidebarState, isMobile, setOpen } = useSidebar()
   const { t } = useTranslation('nav')
@@ -329,6 +332,10 @@ export function AppSidebar() {
     }),
     items: group.items.map(translateItem),
   }))
+  const openNotificationInbox = () => {
+    setActiveWorkspace('navigation')
+    void navigate({ to: '/inbox' })
+  }
   const activeWorkspaceIcon =
     activeWorkspace === 'assistant'
       ? MessageSquare
@@ -380,6 +387,13 @@ export function AppSidebar() {
                   <span>Assistant</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  data-testid='shell-workspace-menu-bell'
+                  onClick={openNotificationInbox}
+                >
+                  <Bell className='h-4 w-4' />
+                  <span>Open Inbox</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   data-testid='shell-workspace-menu-inbox'
                   onClick={() => setActiveWorkspace('inbox')}
                 >
@@ -389,7 +403,7 @@ export function AppSidebar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className='grid grid-cols-3 gap-2'>
+            <div className='grid grid-cols-[1fr_1fr_1fr_auto] gap-2'>
               <button
                 type='button'
                 data-testid='shell-workspace-navigation'
@@ -421,6 +435,16 @@ export function AppSidebar() {
               >
                 <Inbox className='h-3.5 w-3.5' />
                 Inbox
+              </button>
+              <button
+                type='button'
+                aria-label='Open Notification Inbox'
+                title='Open Notification Inbox'
+                data-testid='shell-workspace-bell'
+                className='inline-flex items-center justify-center rounded-md border px-2 py-1 text-xs hover:bg-muted'
+                onClick={openNotificationInbox}
+              >
+                <Bell className='h-3.5 w-3.5' />
               </button>
             </div>
           )}
