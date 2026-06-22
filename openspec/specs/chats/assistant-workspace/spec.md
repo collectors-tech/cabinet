@@ -66,6 +66,14 @@ The 2026-06-13 Cabinet product direction further requires the side-panel Assista
 - **THEN** it MUST reuse the same Cabinet assistant visual language for header, thread controls, composer, prompt/action affordances, and governed tool/action cards without crowding the current page context
 - **AND** compact visual alignment MUST NOT weaken persisted thread/message ownership, provider/model readiness, route context, or explicit preview/confirm/apply boundaries
 
+#### Scenario: Compact Assistant panel uses icon-only chrome controls
+- **GIVEN** issue #1438 requires the shell Assistant panel to match the compact workspace chrome direction
+- **WHEN** the shell Assistant side-panel renders
+- **THEN** the panel header MUST use the visible title `Chat`
+- **AND** header actions for new thread, mute/quiet state, and close MUST be icon-only controls with accessible names/tooltips
+- **AND** the panel MUST expose a compact assistant identity/status card, conversation selector, readable dark message area, fixed bottom composer with icon-only send, and a collapsed `Action Timeline` disclosure row
+- **AND** the panel MUST preserve Cabinet chat thread persistence, route context, provider/model metadata, and governed preview/confirm/apply action boundaries
+
 ### Requirement ASSISTANT-WORKSPACE-007: Assistant SHALL expose governed action execution results with persistence proof
 Assistant workspace capability/action cards MUST make preview, confirmation, execution state, and applied result links visible in the compact side-panel while preserving Cabinet's preview-before-apply mutation boundary.
 

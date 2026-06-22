@@ -10,8 +10,14 @@ describe('chats/assistant-workspace', () => {
 
   function openAssistantWorkspace() {
     cy.intercept('POST', '/api/chat/threads').as('assistantBootstrapThread')
-    cy.get('[data-testid="shell-chat-toggle"]').click()
-    cy.wait('@assistantBootstrapThread', { timeout: 20000 })
+    cy.get('[data-testid="active-profile-status"]', { timeout: 20000 }).should(
+      'not.contain',
+      'Loading profiles'
+    )
+    cy.get('[data-testid="shell-chat-toggle"]').click({ force: true })
+    cy.get('[data-testid="shell-assistant-modal-content"]', {
+      timeout: 20000,
+    }).should('be.visible')
     cy.get('[data-testid="shell-assistant-thread-id"]', {
       timeout: 20000,
     }).should(($threadId) => {
@@ -269,6 +275,67 @@ describe('chats/assistant-workspace', () => {
     cy.get('[data-testid="shell-assistant-action-card"]').should(
       'contain',
       'ADAPT-1133'
+    )
+  })
+
+  it('ASSISTANT-WORKSPACE-005 keeps the compact Assistant panel dark, icon-only, and operational', () => {
+    bootstrapInventory()
+    openAssistantWorkspace()
+
+    cy.get('[data-testid="shell-assistant-modal-content"]')
+      .should('be.visible')
+      .and('have.class', 'bg-slate-950')
+      .and('have.class', 'w-[min(22rem,calc(100vw-1.5rem))]')
+    cy.get('[data-testid="shell-assistant-panel-title"]').should(
+      'contain',
+      'Chat'
+    )
+    cy.get('[data-testid="shell-assistant-identity-card"]').within(() => {
+      cy.get('[data-testid="shell-assistant-agent-name"]').should(
+        'contain',
+        'Cabinet Assistant'
+      )
+      cy.get('[data-testid="shell-assistant-agent-role"]').should(
+        'contain',
+        'Route-aware workspace aide'
+      )
+      cy.get('[data-testid="shell-assistant-runtime-state"]').should(
+        'contain',
+        'Connected'
+      )
+    })
+    cy.get('[data-testid="shell-assistant-thread-select"]').should(
+      'be.visible'
+    )
+    ;[
+      ['shell-assistant-new-thread', 'New assistant thread'],
+      ['shell-assistant-mute-toggle', 'Mute assistant workspace updates'],
+      ['shell-assistant-close', 'Close assistant workspace'],
+      ['shell-assistant-send-button', 'Send assistant message'],
+    ].forEach(([testId, label]) => {
+      cy.get(`[data-testid="${testId}"]`)
+        .should('have.attr', 'aria-label', label)
+        .and('have.attr', 'title', label)
+        .should(($control) => {
+          expect($control.text().trim()).to.eq('')
+        })
+    })
+    cy.get('[data-testid="shell-assistant-ui-composer-primitive"]')
+      .should('be.visible')
+      .and('have.attr', 'data-sending', 'false')
+    cy.get('[data-testid="shell-assistant-compose-input"]').should(
+      'have.attr',
+      'placeholder',
+      'Ask Cabinet to update, find, or link records...'
+    )
+    cy.get('[data-testid="shell-assistant-action-timeline"]')
+      .should('contain', 'Action Timeline')
+      .and('not.have.attr', 'open')
+    cy.get('[data-testid="shell-assistant-close"]').click()
+    cy.get('[data-testid="shell-workspace-navigation"]').should(
+      'have.attr',
+      'data-active',
+      'true'
     )
   })
 

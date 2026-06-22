@@ -12,10 +12,11 @@ import {
   ExternalLink,
   GitBranchPlus,
   MessageSquarePlus,
-  RotateCcw,
   ShieldAlert,
   Sparkles,
+  VolumeX,
   Wand2,
+  X,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useShellWorkspace } from '@/context/shell-workspace-provider'
@@ -172,7 +173,7 @@ async function loadAssistantDefaultSettings(profileId: string) {
 }
 
 export function AssistantWorkspacePanel() {
-  const { activeProfileId } = useShellWorkspace()
+  const { activeProfileId, setActiveWorkspace } = useShellWorkspace()
   const navigate = useNavigate()
   const authUser = useAuthStore((state) => state.auth.user)
   const location = useRouterState({
@@ -744,7 +745,7 @@ export function AssistantWorkspacePanel() {
 
   return (
     <div
-      className='space-y-3 px-2 py-2'
+      className='px-2 py-2'
       data-testid='shell-assistant-workspace'
     >
       <AssistantRuntimeProvider runtime={assistantRuntime}>
@@ -769,11 +770,11 @@ export function AssistantWorkspacePanel() {
             </AssistantModalPrimitive.Trigger>
           </AssistantModalPrimitive.Anchor>
           <AssistantModalPrimitive.Content
-            side='bottom'
+            side='right'
             align='start'
             sideOffset={8}
             collisionPadding={12}
-            className='z-50 flex h-[min(42rem,calc(100vh-10rem))] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border bg-card shadow-lg outline-none'
+            className='z-50 flex h-[min(44rem,calc(100vh-7rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl outline-none'
             data-testid='shell-assistant-modal-content'
           >
             <section
@@ -781,27 +782,26 @@ export function AssistantWorkspacePanel() {
               data-testid='shell-assistant-codex-chat'
             >
               <div
-                className='border-b bg-muted/20 p-3'
+                className='border-b border-slate-800 bg-slate-950 p-3'
                 data-testid='shell-chat-rail'
               >
-                <div className='flex items-start justify-between gap-2'>
-                  <div className='min-w-0'>
-                    <div className='flex items-center gap-2'>
-                      <Sparkles className='h-4 w-4 text-primary' />
-                      <h2 className='font-semibold'>Assistant</h2>
-                    </div>
-                    <p className='mt-1 text-xs text-muted-foreground'>
-                      Route-aware agent for database work, evidence checks, and
-                      item links.
-                    </p>
-                  </div>
+                <div className='flex items-center justify-between gap-2'>
+                  <h2
+                    className='flex min-w-0 items-center gap-2 text-sm font-semibold tracking-normal text-slate-100'
+                    data-testid='shell-assistant-panel-title'
+                  >
+                    <Sparkles className='h-4 w-4 text-cyan-300' />
+                    <span>Chat</span>
+                  </h2>
                   <div className='flex items-center gap-1'>
                     <Button
                       type='button'
-                      variant='outline'
+                      variant='ghost'
                       size='icon'
                       data-testid='shell-assistant-new-thread'
                       aria-label='New assistant thread'
+                      title='New assistant thread'
+                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
                       onClick={() => void handleNewThread()}
                       disabled={loading || sending || !activeProfileId}
                     >
@@ -811,21 +811,67 @@ export function AssistantWorkspacePanel() {
                       type='button'
                       variant='ghost'
                       size='icon'
-                      aria-label='Reset assistant thread'
-                      title='Reset assistant thread'
-                      onClick={() => void handleNewThread()}
-                      disabled={loading || sending || !activeProfileId}
+                      data-testid='shell-assistant-mute-toggle'
+                      aria-label='Mute assistant workspace updates'
+                      title='Mute assistant workspace updates'
+                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
                     >
-                      <RotateCcw className='h-3.5 w-3.5' />
+                      <VolumeX className='h-3.5 w-3.5' />
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      data-testid='shell-assistant-close'
+                      aria-label='Close assistant workspace'
+                      title='Close assistant workspace'
+                      className='h-8 w-8 text-slate-300 hover:bg-slate-800 hover:text-white'
+                      onClick={() => setActiveWorkspace('navigation')}
+                    >
+                      <X className='h-3.5 w-3.5' />
                     </Button>
                   </div>
                 </div>
 
+                <div
+                  className='mt-3 rounded-lg border border-slate-800 bg-slate-900/70 p-3'
+                  data-testid='shell-assistant-identity-card'
+                >
+                  <div className='flex items-start gap-2'>
+                    <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-cyan-300'>
+                      <Bot className='h-4 w-4' />
+                    </div>
+                    <div className='min-w-0 flex-1'>
+                      <p
+                        className='truncate text-sm font-medium text-slate-100'
+                        data-testid='shell-assistant-agent-name'
+                      >
+                        Cabinet Assistant
+                      </p>
+                      <p
+                        className='text-xs text-slate-400'
+                        data-testid='shell-assistant-agent-role'
+                      >
+                        Route-aware workspace aide
+                      </p>
+                      <p
+                        className='mt-1 flex items-center gap-1 text-[11px] text-emerald-300'
+                        data-testid='shell-assistant-runtime-state'
+                      >
+                        <span className='h-1.5 w-1.5 rounded-full bg-emerald-300' />
+                        {activeProfileId ? 'Connected' : 'Waiting for profile'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <label className='mt-3 block space-y-1 text-xs'>
-                  <span className='font-medium text-foreground'>Chat</span>
+                  <span className='font-medium text-slate-300'>
+                    Conversation
+                  </span>
                   <select
                     data-testid='shell-assistant-thread-select'
-                    className='w-full rounded-md border bg-background px-2 py-1.5'
+                    className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100'
                     value={threadId}
                     onChange={(e) => void handleSelectThread(e.target.value)}
                     disabled={loading || sending || threads.length === 0}
@@ -845,7 +891,7 @@ export function AssistantWorkspacePanel() {
                   <Badge
                     variant='outline'
                     data-testid='shell-assistant-context-chip'
-                    className='max-w-full justify-start gap-1 truncate'
+                    className='max-w-full justify-start gap-1 truncate border-slate-700 bg-slate-900 text-slate-300'
                   >
                     <GitBranchPlus className='h-3 w-3 shrink-0' />
                     <span
@@ -856,7 +902,7 @@ export function AssistantWorkspacePanel() {
                   <Badge
                     variant='secondary'
                     data-testid='shell-assistant-model-chip'
-                    className='max-w-full justify-start gap-1 truncate'
+                    className='max-w-full justify-start gap-1 truncate bg-slate-800 text-slate-200'
                   >
                     <Bot className='h-3 w-3 shrink-0' />
                     <span
@@ -877,12 +923,12 @@ export function AssistantWorkspacePanel() {
 
                 <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
                   <label className='space-y-1'>
-                    <span className='font-medium text-foreground'>
+                    <span className='font-medium text-slate-300'>
                       Provider
                     </span>
                     <select
                       data-testid='shell-assistant-provider-select'
-                      className='w-full rounded-md border bg-background px-2 py-1'
+                      className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
                       value={provider}
                       onChange={(e) =>
                         void handleProviderChange(e.target.value)
@@ -896,10 +942,10 @@ export function AssistantWorkspacePanel() {
                     </select>
                   </label>
                   <label className='space-y-1'>
-                    <span className='font-medium text-foreground'>Model</span>
+                    <span className='font-medium text-slate-300'>Model</span>
                     <select
                       data-testid='shell-assistant-model-select'
-                      className='w-full rounded-md border bg-background px-2 py-1'
+                      className='w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100'
                       value={model}
                       onChange={(e) => void handleModelChange(e.target.value)}
                     >
@@ -912,7 +958,7 @@ export function AssistantWorkspacePanel() {
                   </label>
                 </div>
 
-                <div className='mt-3 grid gap-1 text-[11px] text-muted-foreground'>
+                <div className='mt-3 grid gap-1 text-[11px] text-slate-400'>
                   <span>
                     Profile:{' '}
                     <span data-testid='shell-assistant-profile-scope'>
@@ -939,7 +985,7 @@ export function AssistantWorkspacePanel() {
                 </div>
                 {navigationAction ? (
                   <div
-                    className='mt-3 rounded-md border bg-background p-3 text-sm'
+                    className='mt-3 rounded-md border border-slate-800 bg-slate-900 p-3 text-sm'
                     data-testid='shell-assistant-navigation-action'
                   >
                     <div className='flex items-start gap-2'>
@@ -956,7 +1002,7 @@ export function AssistantWorkspacePanel() {
                           type='button'
                           size='sm'
                           variant='outline'
-                          className='mt-2'
+                          className='mt-2 border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800'
                           data-testid='shell-assistant-navigation-action-open'
                           onClick={() =>
                             void navigate({ to: navigationAction.target })
@@ -971,18 +1017,18 @@ export function AssistantWorkspacePanel() {
                 ) : null}
               </div>
 
-              <ScrollArea className='min-h-0 flex-1 p-3'>
+              <ScrollArea className='min-h-0 flex-1 bg-slate-950 p-3'>
                 <div
                   className='space-y-4 pb-2'
                   data-testid='shell-assistant-message-list'
                 >
                   {loading ? (
-                    <p className='text-sm text-muted-foreground'>
-                      Loading assistant workspace...
-                    </p>
+                      <p className='text-sm text-slate-400'>
+                        Loading assistant workspace...
+                      </p>
                   ) : null}
                   {!loading && messages.length === 0 ? (
-                    <div className='rounded-2xl border border-dashed p-3 text-sm text-muted-foreground'>
+                    <div className='rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400'>
                       Ask Cabinet to update records, create drafts, search
                       inventory, and return links to the items it touched.
                     </div>
@@ -990,24 +1036,24 @@ export function AssistantWorkspacePanel() {
                   <CabinetAssistantUiMessageList messages={messages} />
 
                   <div
-                    className='rounded-2xl border bg-muted/10 p-3 text-xs'
+                    className='rounded-lg border border-slate-800 bg-slate-900/70 p-3 text-xs'
                     data-testid='shell-assistant-execution-panel'
                   >
                     <div className='flex items-center justify-between gap-2'>
                       <div className='flex items-center gap-2 font-medium'>
-                        <Wand2 className='h-4 w-4 text-primary' />
+                        <Wand2 className='h-4 w-4 text-cyan-300' />
                         Agent actions
                       </div>
                       <Badge
                         variant='outline'
-                        className='uppercase'
+                        className='border-slate-700 bg-slate-950 text-slate-300 uppercase'
                         data-testid='shell-assistant-execution-state'
                       >
                         {executionState}
                       </Badge>
                     </div>
                     <p
-                      className='mt-2 text-muted-foreground'
+                      className='mt-2 text-slate-400'
                       data-testid='shell-assistant-permission-guidance'
                     >
                       {permissionGuidance}
@@ -1015,6 +1061,7 @@ export function AssistantWorkspacePanel() {
                     <div className='mt-3 grid gap-2'>
                       <Input
                         data-testid='shell-assistant-preview-part-number'
+                        className='border-slate-700 bg-slate-950 text-slate-100'
                         value={actionPartNumber}
                         onChange={(e) => setActionPartNumber(e.target.value)}
                         placeholder='Part number'
@@ -1022,6 +1069,7 @@ export function AssistantWorkspacePanel() {
                       />
                       <Input
                         data-testid='shell-assistant-preview-title'
+                        className='border-slate-700 bg-slate-950 text-slate-100'
                         value={actionTitle}
                         onChange={(e) => setActionTitle(e.target.value)}
                         placeholder='Item title'
@@ -1056,7 +1104,7 @@ export function AssistantWorkspacePanel() {
                     </div>
                     {actionPreview ? (
                       <div
-                        className='mt-3 rounded-xl border bg-background p-2'
+                        className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
                         data-testid='shell-assistant-action-card'
                       >
                         <div
@@ -1071,7 +1119,7 @@ export function AssistantWorkspacePanel() {
                     ) : null}
                     {applyResult ? (
                       <div
-                        className='mt-3 rounded-xl border bg-background p-2'
+                        className='mt-3 rounded-lg border border-slate-800 bg-slate-950 p-2'
                         data-testid='shell-assistant-apply-result'
                       >
                         <div className='flex items-start gap-2'>
@@ -1105,12 +1153,12 @@ export function AssistantWorkspacePanel() {
                       </div>
                     ) : null}
                     <div
-                      className='mt-3 flex items-start gap-2 rounded-xl border border-dashed p-2 text-muted-foreground'
+                      className='mt-3 flex items-start gap-2 rounded-lg border border-dashed border-slate-700 p-2 text-slate-400'
                       data-testid='shell-assistant-permission-boundary'
                     >
                       <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
                       <div>
-                        <p className='font-medium text-foreground'>
+                        <p className='font-medium text-slate-100'>
                           Permission boundary
                         </p>
                         <p>
@@ -1121,19 +1169,31 @@ export function AssistantWorkspacePanel() {
                       </div>
                     </div>
                   </div>
+                  <details
+                    className='rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300'
+                    data-testid='shell-assistant-action-timeline'
+                  >
+                    <summary className='cursor-pointer list-none font-medium'>
+                      Action Timeline
+                    </summary>
+                    <p className='mt-2 text-slate-400'>
+                      Previewed and applied actions appear here after the user
+                      confirms a governed operation.
+                    </p>
+                  </details>
                 </div>
               </ScrollArea>
 
               {error ? (
                 <p
-                  className='px-3 pb-2 text-xs text-destructive'
+                  className='px-3 pb-2 text-xs text-red-300'
                   data-testid='shell-assistant-error'
                 >
                   {error}
                 </p>
               ) : null}
 
-              <div className='border-t bg-background/80 p-3'>
+              <div className='border-t border-slate-800 bg-slate-950 p-3'>
                 <CabinetAssistantUiComposer
                   composer={{
                     disabled: !threadId || loading || sending,
