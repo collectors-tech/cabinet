@@ -1680,7 +1680,7 @@ export function Tasks({
         fixed
         data-testid={isWishlistRoute ? 'wishlist-shell-header' : undefined}
       >
-        <Search />
+        <Search className={isWishlistRoute ? 'max-sm:hidden' : undefined} />
         {isWishlistRoute ? (
           <HeaderTitle
             title={title}

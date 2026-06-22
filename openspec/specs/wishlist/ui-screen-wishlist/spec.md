@@ -56,6 +56,19 @@ Wishlist SHALL provide compact icon-only header actions for creating a wishlist 
 - **AND** header actions MUST expose accessible labels without visible text labels
 - **AND** Wishlist MUST NOT render an adjacent `Create` menu
 
+### Requirement UI-SCREEN-WISHLIST-021: Wishlist screen SHALL show a visible page header title
+
+Wishlist SHALL render a visible page header title that follows the shared Cabinet
+page-header pattern without replacing compact header actions.
+
+#### Scenario: Wishlist page header title
+
+- **GIVEN** user is on `/wishlist`
+- **WHEN** the page header renders at desktop or mobile width
+- **THEN** the header MUST show a visible `Wishlist` title
+- **AND** the title MUST include the wishlist page icon
+- **AND** the compact wishlist header actions MUST remain available
+
 ### Requirement UI-SCREEN-WISHLIST-005: Wishlist collection creation SHALL use the header modal
 
 Wishlist SHALL support collection creation from the header collection icon and MUST NOT render inline collection creation controls inside the table toolbar.
