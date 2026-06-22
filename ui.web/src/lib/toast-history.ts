@@ -12,6 +12,8 @@ export type ToastHistoryRecord = {
   level: ToastHistoryLevel
   title: string
   summary?: string
+  source_label?: string
+  category?: string
   created_at: string
 }
 
@@ -128,6 +130,20 @@ export function recordToastHistory(
     },
     ...loadToastHistory(),
   ])
+}
+
+export function recordNotificationHistory(
+  record: Omit<ToastHistoryRecord, 'id' | 'created_at' | 'level'> & {
+    level?: ToastHistoryLevel
+  }
+) {
+  recordToastHistory({
+    level: record.level ?? 'info',
+    title: record.title,
+    summary: record.summary,
+    source_label: record.source_label,
+    category: record.category,
+  })
 }
 
 function recordPromiseResolution(

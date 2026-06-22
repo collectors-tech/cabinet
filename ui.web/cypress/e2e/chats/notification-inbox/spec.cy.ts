@@ -402,6 +402,47 @@ describe('chats/notification-inbox', () => {
       .and('contain', 'Toast History')
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves confirmation dialog warnings in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
+      path: '/dashboard/',
+    })
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
+
+    cy.get('[data-testid="profile-dropdown-trigger"]:visible').first().click()
+    cy.contains('[data-slot="dropdown-menu-item"]', 'Sign out').click()
+    cy.get('[role="alertdialog"]')
+      .should('be.visible')
+      .and('contain', 'Sign out')
+      .and('contain', 'Are you sure you want to sign out?')
+    cy.contains('button', 'Cancel').click()
+
+    cy.visit('/inbox/')
+    cy.wait('@loadNotifications')
+    cy.get('[data-testid="notification-inbox-search"]').type('Sign out')
+    cy.get('[data-testid="notification-inbox-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Sign out')
+      .and('contain', 'Dialog History')
+      .and('contain', 'system')
+    cy.get('[data-testid="notification-inbox-row"]').first().click()
+    cy.get('[data-testid="notification-inbox-detail-pane"]')
+      .should('contain', 'Sign out')
+      .and('contain', 'Are you sure you want to sign out?')
+      .and('contain', 'Dialog History')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-003 expands detail and preserves linked target navigation', () => {
     bootInbox()
 
