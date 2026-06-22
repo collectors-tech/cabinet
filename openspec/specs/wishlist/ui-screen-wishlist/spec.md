@@ -189,6 +189,22 @@ Wishlist create SHALL accept a draft with only `Title` populated, create the bac
 - **AND** the create panel MUST close after persistence succeeds
 - **AND** the UI MUST NOT show generic `Wishlist save failed` copy for this valid title-only draft
 
+### Requirement UI-SCREEN-WISHLIST-022: Wishlist edit panel navigation SHALL update in place
+
+Wishlist edit side panel Previous/Next navigation SHALL keep the active side
+panel open while replacing the form data and highlighted row with the newly
+selected wishlist entry.
+
+#### Scenario: Navigate wishlist edit panel entries
+
+- **GIVEN** wishlist rows view is loaded with at least two visible wishlist entries
+- **AND** the user opens the `Edit Wishlist Entry` side panel for one row
+- **WHEN** the user clicks `Previous` or `Next` in the side panel
+- **THEN** the same side panel instance MUST remain open without closing and reopening
+- **AND** the form fields MUST update to the newly selected wishlist entry
+- **AND** the highlighted wishlist row MUST move to the entry currently shown in the side panel
+- **AND** existing close and save behavior MUST remain available
+
 ## Use-Case IDs and E2E Mapping
 
 | UC ID     | Flow                             | Expected Result                                                                                                        | E2E Mapping                                                                                                                                            |
@@ -200,3 +216,4 @@ Wishlist create SHALL accept a draft with only `Title` populated, create the bac
 | UC-WSH-17 | Edit wishlist Cost and Quantity  | Inline numeric fields support keyboard entry plus accessible fixed-width stepper controls with lower-bound constraints | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-017 edits cost and quantity with stable stepper controls` |
 | UC-WSH-18 | Show row thumbnails              | Rows render stable decorative thumbnails with deterministic fallback styling                                            | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-018 renders compact deterministic row thumbnails`        |
 | UC-WSH-19 | Create title-only wishlist entry | Title-only drafts persist with generated metadata and no generic failure copy                                           | implemented: `ui.web/cypress/e2e/wishlist/ui-screen-wishlist/spec.cy.ts` `UI-SCREEN-WISHLIST-019 creates a title-only wishlist entry`                  |
+| UC-WSH-22 | Navigate edit panel entries      | Previous/Next updates the side-panel form in place and moves the active row highlight                                  | implemented: `ui.web/cypress/e2e/wishlist/wishlist-row-side-panel/spec.cy.ts` `opens a right-side edit panel on double click and navigates visible records` |

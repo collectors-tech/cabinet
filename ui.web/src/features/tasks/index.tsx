@@ -2029,6 +2029,11 @@ export function Tasks({
           <TasksTable
             data={displayedData}
             routePath={routePath}
+            currentRecordID={
+              isWishlistRoute && dialogOpen === 'update'
+                ? (currentDialogRow?.itemID ?? currentDialogRow?.id)
+                : undefined
+            }
             onEditRow={(task, navigationRows) => {
               setDialogNavigationRows(navigationRows ?? displayedData)
               setCurrentDialogRow(task)
