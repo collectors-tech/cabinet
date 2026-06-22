@@ -92,6 +92,12 @@ export const sidebarData: SidebarData = {
           icon: ScanSearch,
         },
         {
+          title: 'Inbox',
+          testIdKey: 'inbox',
+          url: '/inbox',
+          icon: Bell,
+        },
+        {
           title: 'Purchases',
           testIdKey: 'purchases',
           url: '/purchases',
