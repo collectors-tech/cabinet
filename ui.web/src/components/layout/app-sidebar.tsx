@@ -424,13 +424,12 @@ export function AppSidebar() {
               >
                 <MessageSquare className='h-4 w-4' aria-hidden />
               </button>
-              <button
-                type='button'
+              <a
+                href='/inbox'
                 aria-label='Open notification inbox'
                 title='Open notification inbox'
                 data-testid='shell-workspace-bell'
                 className='relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-slate-200 focus-visible:outline-none'
-                onClick={openNotificationInbox}
               >
                 <Bell className='h-4 w-4' aria-hidden />
                 <span
@@ -438,7 +437,7 @@ export function AppSidebar() {
                   className='absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-400 ring-1 ring-slate-950'
                   data-testid='shell-workspace-bell-badge'
                 />
-              </button>
+              </a>
             </div>
           )}
         </div>

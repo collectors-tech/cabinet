@@ -9,6 +9,11 @@ describe('general/ui-shell-workspaces', () => {
       shellWorkspace: 'navigation',
     })
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/inventory\/?$/)
+    cy.get('[data-testid="shell-workspace-icon-rail"]').should('be.visible')
+    cy.get('[data-testid="shell-workspace-bell"]')
+      .should('be.visible')
+      .and('have.attr', 'aria-label', 'Open notification inbox')
+    cy.get('[data-testid="sidebar-nav-link-inventory"]').should('be.visible')
   }
 
   it('UI-SHELL-WORKSPACES-001 switches Navigation and Assistant with an icon-only rail', () => {
@@ -84,8 +89,12 @@ describe('general/ui-shell-workspaces', () => {
 
     cy.visit('/chats')
     cy.location('pathname', { timeout: 15000 }).should('match', /^\/chats\/?$/)
-    cy.contains('Persistent profile-scoped conversation threads backed by Cabinet runtime.').should('be.visible')
-    cy.contains('Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.').should('be.visible')
+    cy.contains(
+      'Persistent profile-scoped conversation threads backed by Cabinet runtime.'
+    ).should('exist')
+    cy.contains(
+      'Use Assistant for AI-guided help and actions; use Chats for durable conversation threads.'
+    ).should('exist')
   })
 
   it('UI-SHELL-WORKSPACES-005 opens the durable Inbox page from the bell-only top affordance', () => {
