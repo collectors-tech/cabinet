@@ -70,3 +70,12 @@ The Notification Inbox MUST render a compact two-pane operating layout with filt
 - **WHEN** the route renders
 - **THEN** it MUST show filter buttons with inline counts, stat counters, a search field, table-style paginated rows, a total message count below the table, and a selected notification detail pane
 - **AND** page actions such as refresh, mark all visible as read, clear all, and show hidden MUST be icon-only with accessible names/tooltips.
+
+### Requirement UI-SCREEN-NOTIFICATION-INBOX-008: Notification-like UI events SHALL be preserved in Inbox history
+Cabinet notification-like UI events, including toast messages and promise-based success/failure feedback, MUST be captured into the Notification Inbox history so immediate feedback is not the only record. Captured records MUST include a source label, event time, level/category metadata, title, and detail or lifecycle summary sufficient for later review from the Inbox route.
+
+#### Scenario: Toast lifecycle events appear in Inbox
+- **GIVEN** a user triggers a promise-based UI feedback flow
+- **WHEN** the feedback shows loading and then settles
+- **THEN** the Notification Inbox MUST include the captured feedback lifecycle records
+- **AND** the records MUST show source, time, level/category metadata, and detail sufficient to identify the event after the toast disappears.
