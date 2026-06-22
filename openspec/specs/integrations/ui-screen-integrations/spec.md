@@ -57,6 +57,24 @@ Integrations table rows SHALL provide distinct single-click, double-click, and r
 - **THEN** the provider configuration dialog MUST open
 - **AND** row details/edit dialogs MUST NOT open from the nested action click
 
+### Requirement UI-SCREEN-INTEGRATIONS-015: Add Integration SHALL use icon-only header action and provider selection first
+Integrations screen SHALL expose the page header Add Integration action as an icon-only control with tooltip and accessible label, and SHALL require explicit provider selection before opening provider-specific setup.
+
+#### Scenario: Header Add Integration action is icon-only
+- **GIVEN** integrations route is loaded
+- **WHEN** the page header action area renders
+- **THEN** the Add Integration action MUST render without visible button text
+- **AND** the action MUST preserve an accessible label and tooltip for `Add integration`
+
+#### Scenario: Add Integration opens provider selector before provider setup
+- **GIVEN** integrations route is loaded with a provider registry containing configured and catalog providers
+- **WHEN** user activates the header Add Integration action
+- **THEN** the screen MUST show provider selection/catalog UI first
+- **AND** provider-specific setup fields such as Base URL or Items per page MUST NOT render until the user selects a provider
+- **WHEN** the user selects a provider from the selector
+- **THEN** the provider-specific setup dialog MUST open for that selected provider
+- **AND** the flow MUST NOT default straight into `acercmodels.com` or any other first registry provider without selection
+
 ### Requirement UI-SCREEN-INTEGRATIONS-011: Integrations screen SHALL use a paginated full-height configured integrations table as the primary provider list
 Integrations screen SHALL render the primary configured integrations list as a scan-friendly full-height table with pagination and stable operational columns.
 
@@ -235,3 +253,4 @@ Integrations provider configuration dialogs MUST render stable visible labels as
 | UC-INT-UI-18 | Use row interaction surfaces | Table row single-click opens details, double-click opens edit, selected context is URL-backed, and nested row actions do not trigger row dialogs | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-014 + UC-INT-UI-18: separates row details edit and action dialogs` |
 | UC-INT-UI-19 | Hydrate direct route empty filter state | Shared `/integrations/` URL with no matching providers shows deterministic no-match table state, stable zero-result pagination, and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-19: shows deterministic empty state for direct route filters` |
 | UC-INT-UI-20 | Hydrate direct route empty cards state | Shared `/integrations/` URL with no matching providers in cards view shows explicit no-match feedback and preserved query context | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-013 + UC-INT-UI-20: shows deterministic empty state for direct route filters in cards view` |
+| UC-INT-UI-21 | Add Integration provider-selection-first flow | Header action is icon-only/no visible text, opens provider selector first, and only opens selected provider setup after selection | `cypress/e2e/integrations/ui-screen-integrations/spec.cy.ts` `UI-SCREEN-INTEGRATIONS-015 + #1435: Add Integration is icon-only and opens provider selection first` |
