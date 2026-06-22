@@ -60,6 +60,66 @@ const baseItems: StubItem[] = [
   },
 ]
 
+const denseInboxItems: StubItem[] = [
+  ...baseItems,
+  {
+    id: 'notice-mention-review',
+    status: 'unread',
+    source: 'assistant_mention',
+    title: 'Mention review requested',
+    summary: 'A workspace mention needs follow-up.',
+    created_at: '2026-06-08T05:00:00Z',
+    updated_at: '2026-06-08T05:00:00Z',
+    metadata: {
+      category: 'mention',
+      source_label: 'Mentions',
+      detail: 'A teammate mentioned this workspace review.',
+    },
+  },
+  {
+    id: 'notice-system-warning',
+    status: 'read',
+    source: 'runtime_system',
+    title: 'Background sync warning',
+    summary: 'A background process reported a retryable warning.',
+    created_at: '2026-06-08T04:00:00Z',
+    updated_at: '2026-06-08T04:00:00Z',
+    metadata: {
+      category: 'system',
+      source_label: 'Runtime',
+      detail: 'The sync retried and completed on the second attempt.',
+    },
+  },
+  {
+    id: 'notice-import-failed',
+    status: 'unread',
+    source: 'purchase_import',
+    title: 'Import failed validation',
+    summary: 'One row needs correction before it can be imported.',
+    created_at: '2026-06-08T03:00:00Z',
+    updated_at: '2026-06-08T03:00:00Z',
+    metadata: {
+      category: 'notification',
+      source_label: 'Imports',
+      detail: 'The CSV row is missing a required identifier.',
+    },
+  },
+  {
+    id: 'notice-hidden-deploy',
+    status: 'archived',
+    source: 'runtime_system',
+    title: 'Hidden deploy note',
+    summary: 'Previously cleared runtime note.',
+    created_at: '2026-06-08T02:00:00Z',
+    updated_at: '2026-06-08T02:00:00Z',
+    metadata: {
+      category: 'system',
+      source_label: 'Runtime',
+      detail: 'This record stays recoverable after clear/archive.',
+    },
+  },
+]
+
 describe('chats/notification-inbox', () => {
   function bootInbox(
     items: StubItem[] = baseItems,
@@ -160,7 +220,7 @@ describe('chats/notification-inbox', () => {
     cy.get('[data-testid="notification-inbox-page"]').should(
       'have.attr',
       'data-layout',
-      'full-height-split'
+      'dense-two-pane'
     )
     cy.get('[data-testid="notification-inbox-list-pane"]').should('be.visible')
     cy.get('[data-testid="notification-inbox-detail-pane"]').should('be.visible')
@@ -209,6 +269,89 @@ describe('chats/notification-inbox', () => {
     cy.get('[data-testid="notification-inbox-empty-state"]')
       .should('be.visible')
       .and('contain', 'No system or runtime notices are waiting.')
+  })
+
+  it('UI-SCREEN-NOTIFICATION-INBOX-007 + #1438 keeps dense Inbox actions icon-only and clearing recoverable', () => {
+    bootInbox(denseInboxItems)
+
+    cy.get('[data-testid="notification-inbox-page"]').should(
+      'have.attr',
+      'data-layout',
+      'dense-two-pane'
+    )
+    cy.get('[data-testid="notification-inbox-filter-all"]')
+      .should('contain', 'All')
+      .and('contain', '6')
+    cy.get('[data-testid="notification-inbox-filter-unread"]').should(
+      'contain',
+      '4'
+    )
+    ;[
+      'notification-inbox-refresh',
+      'notification-inbox-bulk-read',
+      'notification-inbox-clear-visible',
+      'notification-inbox-show-hidden',
+    ].forEach((testId) => {
+      cy.get(`[data-testid="${testId}"]`)
+        .should('have.attr', 'aria-label')
+        .and('not.be.empty')
+      cy.get(`[data-testid="${testId}"]`).invoke('text').should('match', /^\s*$/)
+    })
+
+    cy.get('[data-testid="notification-inbox-row"]').should('have.length', 5)
+    cy.get('[data-testid="notification-inbox-total-count"]').should(
+      'contain',
+      '6 total messages'
+    )
+    cy.get('[data-testid="notification-inbox-pagination"]').should(
+      'contain',
+      'Page 1 of 2'
+    )
+    cy.get('[data-testid="notification-inbox-next-page"]').click()
+    cy.get('[data-testid="notification-inbox-row"]')
+      .should('have.length', 1)
+      .and('contain', 'Background sync warning')
+    cy.get('[data-testid="notification-inbox-prev-page"]').click()
+
+    cy.contains(
+      '[data-testid="notification-inbox-row"]',
+      'Assistant price review is ready'
+    ).click()
+    cy.get('[data-testid="notification-inbox-detail-empty"]').should('not.exist')
+    cy.get('[data-testid="notification-inbox-detail-pane"]')
+      .should('contain', 'Assistant price review is ready')
+      .and('contain', 'Mark handled')
+      .and('contain', 'Delete')
+
+    cy.get('[data-testid="notification-inbox-clear-visible"]').click()
+    cy.wait([
+      '@updateNotification',
+      '@updateNotification',
+      '@updateNotification',
+      '@updateNotification',
+      '@updateNotification',
+      '@updateNotification',
+    ])
+    cy.get('[data-testid="notification-inbox-empty-state"]').should(
+      'be.visible'
+    )
+    cy.get('[data-testid="notification-inbox-total-count"]').should(
+      'contain',
+      '0 total messages'
+    )
+    cy.get('[data-testid="notification-inbox-show-hidden"]').click()
+    cy.get('[data-testid="notification-inbox-total-count"]').should(
+      'contain',
+      '7 total messages'
+    )
+    cy.get('[data-testid="notification-inbox-row"]').should('have.length', 5)
+    cy.get('[data-testid="notification-inbox-search"]')
+      .clear()
+      .type('Hidden deploy note')
+    cy.get('[data-testid="notification-inbox-list"]').should(
+      'contain',
+      'Hidden deploy note'
+    )
   })
 
   it('UI-SCREEN-NOTIFICATION-INBOX-003 expands detail and preserves linked target navigation', () => {
