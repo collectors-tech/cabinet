@@ -126,7 +126,11 @@ export function TasksDialogs({
       {currentRow && (
         <>
           <TasksMutateDrawer
-            key={`task-update-${currentRow.id}`}
+            key={
+              isWishlistRoute
+                ? 'wishlist-update-panel'
+                : `task-update-${currentRow.id}`
+            }
             open={open === 'update'}
             onOpenChange={(isOpen) => {
               if (isOpen) {
