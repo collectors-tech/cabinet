@@ -15,12 +15,10 @@ export type ToastHistoryRecord = {
   created_at: string
 }
 
-type ToastLike<TArgs extends readonly unknown[]> = {
-  message?: (...args: TArgs) => unknown
-  success?: (...args: TArgs) => unknown
-  error?: (...args: TArgs) => unknown
-  info?: (...args: TArgs) => unknown
-  warning?: (...args: TArgs) => unknown
+type ToastMethod = (...args: unknown[]) => unknown
+
+type ToastLike = Partial<Record<ToastHistoryLevel, ToastMethod>> & {
+  promise?: ToastMethod
 }
 
 const MAX_TOAST_HISTORY = 100
@@ -40,12 +38,41 @@ function normalizeText(value: unknown) {
   return ''
 }
 
+function titleFromValue(value: unknown, fallback: string) {
+  return normalizeText(value).trim() || fallback
+}
+
 function summaryFromOptions(value: unknown) {
   if (!value || typeof value !== 'object') {
     return ''
   }
   const candidate = value as { description?: unknown }
   return normalizeText(candidate.description)
+}
+
+function promiseMessage(
+  value: unknown,
+  fallback: string
+): { title: string; summary?: string } {
+  if (typeof value === 'string') {
+    return { title: value }
+  }
+  if (!value || typeof value !== 'object') {
+    return { title: fallback }
+  }
+  const candidate = value as {
+    loading?: unknown
+    success?: unknown
+    error?: unknown
+    description?: unknown
+  }
+  const title =
+    titleFromValue(candidate.loading, '') ||
+    titleFromValue(candidate.success, '') ||
+    titleFromValue(candidate.error, '') ||
+    fallback
+  const summary = normalizeText(candidate.description)
+  return { title, summary: summary || undefined }
 }
 
 function toastId() {
@@ -103,21 +130,40 @@ export function recordToastHistory(
   ])
 }
 
-export function installToastHistoryCapture<TArgs extends readonly unknown[]>(
-  toast: ToastLike<TArgs>
+function recordPromiseResolution(
+  value: unknown,
+  level: 'success' | 'error',
+  fallback: string
 ) {
+  if (typeof value === 'string') {
+    recordToastHistory({
+      level,
+      title: value,
+      summary: 'Promise toast settled and was preserved in Inbox history.',
+    })
+    return
+  }
+  recordToastHistory({
+    level,
+    title: fallback,
+    summary: 'Promise toast settled and was preserved in Inbox history.',
+  })
+}
+
+export function installToastHistoryCapture(toast: unknown) {
   if (installed) {
     return
   }
   installed = true
+  const toastLike = toast as ToastLike
   ;(
     ['message', 'success', 'error', 'info', 'warning'] as ToastHistoryLevel[]
   ).forEach((level) => {
-    const original = toast[level]
+    const original = toastLike[level]
     if (!original) {
       return
     }
-    toast[level] = (...args: TArgs) => {
+    toastLike[level] = (...args: unknown[]) => {
       recordToastHistory({
         level,
         title: normalizeText(args[0]),
@@ -126,4 +172,40 @@ export function installToastHistoryCapture<TArgs extends readonly unknown[]>(
       return original(...args)
     }
   })
+  const originalPromise = toastLike.promise
+  if (originalPromise) {
+    toastLike.promise = (...args: unknown[]) => {
+      const [, messages] = args
+      const loading = promiseMessage(messages, 'Async notification started')
+      recordToastHistory({
+        level: 'info',
+        title: loading.title,
+        summary:
+          loading.summary ||
+          'Promise toast started and was preserved in Inbox history.',
+      })
+
+      Promise.resolve(args[0])
+        .then(() => {
+          const success =
+            messages && typeof messages === 'object'
+              ? (messages as { success?: unknown }).success
+              : undefined
+          recordPromiseResolution(
+            success,
+            'success',
+            'Async notification completed'
+          )
+        })
+        .catch(() => {
+          const error =
+            messages && typeof messages === 'object'
+              ? (messages as { error?: unknown }).error
+              : undefined
+          recordPromiseResolution(error, 'error', 'Async notification failed')
+        })
+
+      return originalPromise(...args)
+    }
+  }
 }

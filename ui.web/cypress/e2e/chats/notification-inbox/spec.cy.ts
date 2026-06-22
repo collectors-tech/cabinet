@@ -127,6 +127,7 @@ describe('chats/notification-inbox', () => {
   ) {
     cy.viewport(1400, 900)
     cy.e2eReset()
+    cy.clearLocalStorage('cabinet.toastHistory.v1')
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
@@ -156,6 +157,10 @@ describe('chats/notification-inbox', () => {
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inbox/',
     })
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
+    })
     cy.wait('@loadNotifications')
   }
 
@@ -175,6 +180,7 @@ describe('chats/notification-inbox', () => {
   it('UI-SCREEN-NOTIFICATION-INBOX-007 + #1426 exposes Inbox as primary nav with bell navigation, search, split detail, and toast history', () => {
     cy.viewport(1366, 768)
     cy.e2eReset()
+    cy.clearLocalStorage('cabinet.toastHistory.v1')
     cy.e2eBootstrap()
     cy.e2eSetSetupState('present')
     cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
@@ -226,7 +232,7 @@ describe('chats/notification-inbox', () => {
     cy.get('[data-testid="notification-inbox-detail-pane"]').should('be.visible')
     cy.get('[data-testid="notification-inbox-search"]')
       .should('be.visible')
-      .type('toast')
+      .type('Wishlist row')
     cy.get('[data-testid="notification-inbox-row"]')
       .should('have.length', 1)
       .and('contain', 'Wishlist row updated.')
@@ -354,6 +360,48 @@ describe('chats/notification-inbox', () => {
     )
   })
 
+  it('UI-SCREEN-NOTIFICATION-INBOX-008 + #1438 preserves promise toast feedback in Inbox history', () => {
+    cy.viewport(1366, 768)
+    cy.e2eReset()
+    cy.e2eBootstrap()
+    cy.e2eSetSetupState('present')
+    cy.intercept('GET', '/api/chat/inbox?profile_id=*', {
+      statusCode: 200,
+      body: { items: [] },
+    }).as('loadNotifications')
+
+    cy.visit('/forgot-password')
+    cy.get('input[name="email"]').clear().type('e2e-toast-capture@example.com')
+    cy.get('[data-testid="forgot-password-submit"]').click()
+    cy.contains('Sending email...').should('be.visible')
+    cy.contains('Email sent to e2e-toast-capture@example.com', {
+      timeout: 5000,
+    }).should('be.visible')
+
+    cy.visit('/sign-in?redirect=%2Finbox')
+    cy.get('input[name="email"]').clear().type('e2e-inbox-toast@example.com')
+    cy.get('input[name="password"]').clear().type('password123')
+    cy.contains('button', 'Sign in').click()
+    cy.location('pathname', { timeout: 15000 }).should('match', /^\/inbox\/?$/)
+    cy.wait('@loadNotifications')
+
+    cy.get('[data-testid="notification-inbox-search"]').type('Async')
+    cy.get('[data-testid="notification-inbox-row"]')
+      .should('have.length.at.least', 1)
+      .first()
+      .should('contain', 'Async notification completed')
+      .and('contain', 'Toast History')
+      .and('contain', 'system')
+    cy.get('[data-testid="notification-inbox-row"]').first().click()
+    cy.get('[data-testid="notification-inbox-detail-pane"]')
+      .should('contain', 'Async notification completed')
+      .and(
+        'contain',
+        'Promise toast settled and was preserved in Inbox history.'
+      )
+      .and('contain', 'Toast History')
+  })
+
   it('UI-SCREEN-NOTIFICATION-INBOX-003 expands detail and preserves linked target navigation', () => {
     bootInbox()
 
@@ -418,6 +466,10 @@ describe('chats/notification-inbox', () => {
     }).as('loadNotificationsFailure')
     cy.useBootstrappedProfile('e2e-profile-001', 'E2E Local', {
       path: '/inbox/',
+    })
+    cy.window().then((win) => {
+      win.localStorage.removeItem('cabinet.toastHistory.v1')
+      win.dispatchEvent(new Event('cabinet:toast-history'))
     })
     cy.wait('@loadNotificationsFailure')
     cy.get('[data-testid="notification-inbox-error-state"]')
