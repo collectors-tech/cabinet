@@ -682,7 +682,7 @@ export function SignIn() {
                     }
                     data-testid='setup-storage-mode'
                   >
-                    <option value='exe_local'>exe_local</option>
+                    <option value='exe_local'>local</option>
                     <option value='custom'>custom</option>
                   </select>
                 </label>
