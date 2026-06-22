@@ -272,6 +272,7 @@ func TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented(t *testing.T) 
 		"INTEGRATION-005 + #827 surfaces eBay provider-run actionable message diagnostics",
 		"TestEbayProviderRunMessageDiagnosticsTraceabilityImplemented",
 		"setup page-size validation diagnostics that route to setup correction instead of credential review",
+		"invalid query-set diagnostics that route to saved-query selection instead of credential review",
 		"| implemented |",
 	}
 
