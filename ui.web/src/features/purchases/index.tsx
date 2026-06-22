@@ -34,6 +34,11 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header, HeaderTitle } from '@/components/layout/header'
@@ -1536,40 +1541,60 @@ export function Purchases() {
             className='flex min-w-0 flex-wrap items-center justify-end gap-2'
             data-testid='purchases-global-header-actions'
           >
-            <Button
-              size='sm'
-              data-testid='purchases-add-button'
-              onClick={() => setAddDialogOpen(true)}
-              aria-label='Add purchase'
-            >
-              <Plus className='mr-2 h-4 w-4' />
-              Add
-            </Button>
-            <Button
-              size='sm'
-              variant='outline'
-              data-testid='purchases-source-matches-toggle'
-              onClick={() => setSourceMatchesOpen((current) => !current)}
-              aria-expanded={sourceMatchesOpen}
-            >
-              <Truck className='mr-2 h-4 w-4' />
-              Source matches
-            </Button>
-            <Button
-              size='sm'
-              variant='outline'
-              data-testid='purchase-inbox-load-reviews'
-              onClick={openCapturedReviews}
-              disabled={loading}
-              aria-expanded={capturedReviewsOpen}
-            >
-              {loading ? (
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              ) : (
-                <RefreshCw className='mr-2 h-4 w-4' />
-              )}
-              Load captured reviews
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size='icon'
+                  data-testid='purchases-add-button'
+                  onClick={() => setAddDialogOpen(true)}
+                  aria-label='Add purchase'
+                  title='Add purchase'
+                >
+                  <Plus className='h-4 w-4' aria-hidden='true' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Add purchase</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size='icon'
+                  variant='outline'
+                  data-testid='purchases-source-matches-toggle'
+                  onClick={() => setSourceMatchesOpen((current) => !current)}
+                  aria-expanded={sourceMatchesOpen}
+                  aria-label='Review source matches'
+                  title='Review source matches'
+                >
+                  <Truck className='h-4 w-4' aria-hidden='true' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Review source matches</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size='icon'
+                  variant='outline'
+                  data-testid='purchase-inbox-load-reviews'
+                  onClick={openCapturedReviews}
+                  disabled={loading}
+                  aria-expanded={capturedReviewsOpen}
+                  aria-label='Review captured purchases'
+                  title='Review captured purchases'
+                >
+                  {loading ? (
+                    <Loader2
+                      className='h-4 w-4 animate-spin'
+                      aria-hidden='true'
+                    />
+                  ) : (
+                    <RefreshCw className='h-4 w-4' aria-hidden='true' />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Review captured purchases</TooltipContent>
+            </Tooltip>
           </div>
           <Separator
             orientation='vertical'
