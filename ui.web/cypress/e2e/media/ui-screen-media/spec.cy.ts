@@ -176,6 +176,75 @@ describe('ui-screen-media', () => {
       .and('contain', 'slot-car-front-media-sl.jpg')
   })
 
+  it('UI-SCREEN-MEDIA-003 wires Media quick actions to analysis and assignment UI', () => {
+    cy.intercept('GET', '/api/media/assets', {
+      statusCode: 200,
+      body: mediaResponse,
+    }).as('mediaAssets')
+    cy.intercept('POST', '/api/chat/workflow-runs', (req) => {
+      expect(req.body).to.include({
+        workflow_id: 'openai-image-analyze',
+        capability_id: 'image_analyze',
+        source_channel: 'media_workspace',
+        confirmation_state: 'not_required',
+      })
+      expect(req.body.profile_id).to.be.a('string').and.not.equal('')
+      expect(req.body.input).to.deep.equal({
+        media_id: 'media-wishlist-reference',
+        analysis_goal: 'identify visible item details',
+      })
+      expect(req.body.provider_trace).to.include({
+        provider: 'openai',
+        setup_needed: 'provider_test_required',
+        media_access: 'read',
+      })
+      req.reply({
+        statusCode: 201,
+        body: {
+          id: 'workflow-run-media-analysis-1',
+          status: 'queued',
+          capability_id: 'image_analyze',
+          provider_trace: {
+            provider: 'openai',
+            setup_needed: 'provider_test_required',
+            media_access: 'read',
+          },
+        },
+      })
+    }).as('analysisWorkflow')
+
+    openMediaWorkspace()
+    cy.visit('/media/')
+    cy.wait('@mediaAssets')
+
+    cy.get('[data-testid="media-row-analyze-media-wishlist-reference"]')
+      .should('be.enabled')
+      .and('have.attr', 'aria-label', 'Analyze Wanted chassis reference')
+      .click()
+    cy.wait('@analysisWorkflow')
+    cy.get('[data-testid="media-analysis-dialog"]')
+      .should('be.visible')
+      .and('contain', 'Wanted chassis reference')
+    cy.get('[data-testid="media-analysis-result"]')
+      .should('contain', 'Analysis workflow queued')
+      .and('contain', 'workflow-run-media-analysis-1')
+      .and('contain', 'media-wishlist-reference')
+    cy.get('[data-testid="media-row-assign-media-wishlist-reference"]')
+      .should('be.disabled')
+      .and('have.attr', 'aria-label', 'Assign Wanted chassis reference')
+    cy.get('[data-testid="media-analysis-dialog"]')
+      .contains('button', 'Close')
+      .click()
+
+    cy.get('[data-testid="media-row-assign-media-slot-car-front"]')
+      .should('be.enabled')
+      .and('have.attr', 'aria-label', 'Assign AFX Mustang front view')
+      .click()
+    cy.get('[data-testid="media-assignment-dialog"]')
+      .should('be.visible')
+      .and('contain', 'AFX Mustang front view')
+  })
+
   it('UI-SCREEN-MEDIA-012 keeps Media cards compact and responsive', () => {
     cy.intercept('GET', '/api/media/assets', {
       statusCode: 200,
